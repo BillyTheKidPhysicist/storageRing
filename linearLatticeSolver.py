@@ -4,85 +4,19 @@
 
 from particleTracing import ParticleTrace
 import sympy as sym
-import numpy.linalg as npl
 import numpy as np
 import matplotlib.pyplot as plt
-import multiprocessing as mp
 import matplotlib
-import time
+from magnet import Magnet
+from particleTracing import ParticleTrace
 
 import sys
 
 
 class LinearLatticeSolver:
-    class Magnet:
-        def __init__(self, LL, type, args):
-            #LL: Linear Lattice object
-            #type:# type of magnet, string
-            #args: user provided arguments for magnet such as pole strength, length etc.
-
-            self.type = type  # type of magnet, DRIFT,FOCUS,BEND,COMBINER
-            self.Length = None  # to keep track of length
-            self.z = sym.symbols('Delta_z')  # variable to hold onto z variable used in self.Mz
-            self.params = []  # input parameters. The order needs to be conserved and is extremely important
-            self.unpack_Arguments(
-                args)  # fill up self.params with the supplied arguments. Handling the sympy objects appropiately
-            self.M = self.calc_M(LL)  # calculate the sympy matrix
-            self.M_Funcz, self.Mz = self.calc_M_Of_z(LL)
-
-        def unpack_Arguments(self, args): #takes the arguments provided by user in each magnet addition are finds which are
-                                            #sympy and which are numeric and sorts them correctly
-            for i in range(len(args)):
-                if isinstance(args[i], tuple(sym.core.all_classes)):  # if the variable is a sympy symbol
-                    self.params.append(args[i])
-                else:
-                    self.params.append(args[i])
-            self.Length = self.params[0]
-
-        def calc_M_Of_z(self, LL): #calculate a function that returns the transformation matrix for the element at a given z
-                                    #where z is distance along optical axis
-            #LL: outer Linear Lattice class
-            sympyArguments = []  # collect all the sympy variables in the matrix, including the NEW one self.L.
-            # order is extremely important
-            for item in self.params:
-                # test to see if the parameter is a sympy variable
-                if isinstance(item, tuple(sym.core.all_classes)):  # check if it's a sympy object
-                    sympyArguments.append(item)
-            Mnew = self.calc_M(LL, useZ=True)
-            args = [self.z]
-            args.extend(LL.sympyVariableList)  # add the other variables which appear
-            temp1 = sym.lambdify(args, Mnew, 'numpy')  # make function version
-            temp2 = Mnew  # sympy version
-            return temp1, temp2
-
-        def calc_M(self, LL, useZ=False):
-            # PL: outer Linear Lattice class
-            # useZ: wether or not to replace the length of the magnet with the user provided value, or a new value.
-            #       this is used to create a matrix function that depends on an arpitray magnet length
-            if self.type == 'DRIFT':  # if drift type magnet
-                if useZ == True:
-                    L = self.z  # length of magnet
-                else:
-                    L = self.params[0]
-                return sym.Matrix([[1, L], [0, 1]])
-            if self.type == 'LENS':  # if focusing magnet, probably a hexapole
-                if useZ == True:
-                    L = self.z
-                else:
-                    L = self.params[0]
-                Bp = self.params[1]  # field strength at pole face, B_pole
-                rp = self.params[2]  # bore radius, r_bore
-                kappa = 2 * LL.u0 * Bp / (LL.m * LL.v0 ** 2 * rp ** 2)  # 'spring constant' of the magnet
-                phi = sym.sqrt(kappa) * L
-                C = sym.cos(phi)
-                S = sym.sin(phi) / sym.sqrt(kappa)
-                Cd = -sym.sqrt(kappa) * sym.sin(phi)
-                Sd = sym.cos(phi)
-                return sym.Matrix([[C, S], [Cd, Sd]])
-
 
     def __init__(self,v0=None):
-
+        self.type='LINEAR' #this to so the magnet class knows what's calling it
         self.m=1.1650341e-26
         self.u0=9.274009994E-24
 
@@ -120,7 +54,7 @@ class LinearLatticeSolver:
         # rp: radius of bore inside magnet
         self.numElements += 1
         args = [L, Bp, rp]
-        el = self.Magnet(self, 'LENS', args)
+        el = Magnet(self, 'LENS', args)
         self.lattice.append(el)
 
 
@@ -129,7 +63,7 @@ class LinearLatticeSolver:
         # L: length of drift region
         self.numElements += 1
         args = [L]
-        el = self.Magnet(self, 'DRIFT', args)
+        el = Magnet(self, 'DRIFT', args)
         self.lattice.append(el)
 
 
@@ -155,6 +89,9 @@ class LinearLatticeSolver:
         if self.began == False:
             print("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
             sys.exit()
+        if self.lattice[-1].type == "DRIFT":
+            print('THE LAST ELEMENT CANNOT BE A DRIFT')
+            sys.exit()
         self.M_Tot = self.compute_M_Total()
         self.M_Tot_N = sym.lambdify(self.sympyVariableList, self.M_Tot,
                                     'numpy')  # numeric version of M_Total that takes in arguments
@@ -172,18 +109,12 @@ class LinearLatticeSolver:
         self.totalLengthArrayFunc = sym.lambdify(self.sympyVariableList, temp,'numpy')
         self.lengthArrayFunc = sym.lambdify(self.sympyVariableList, temp1,'numpy')
         # for image distance and image magnification depends on wether there is a drift region at the end or not
-        if self.lattice[-1].type=="DRIFT": #need to exclude for image distance and image magnification function
-            self.MTemp=self.compute_M_Total(trimFromEnd=1) #matrix without drift
-            self.imageDistanceFunc=sym.lambdify(self.sympyVariableList,-self.MTemp[0,1]/self.MTemp[1,1],'numpy')
-            Li = -self.MTemp[0, 1] / self.MTemp[1, 1]
-            Mtemp2 = sym.Matrix([[1, Li], [0, 1]])  @ self.M_Tot #end matrix with drift length equal to focus
-            self.imageMagnificationFunc = sym.lambdify(self.sympyVariableList, Mtemp2[0, 0], 'numpy')
-        else:
-            self.imageDistanceFunc=sym.lambdify(self.sympyVariableList,-self.M_Tot[0,1]/self.M_Tot[1,1],'numpy')
-            Li = -self.M_Tot[0, 1] / self.M_Tot[1, 1]
-            Mtemp = sym.Matrix([[1, Li], [0, 1], [0, 1]])
-            Mtemp = Mtemp @ self.M_Tot
-            self.imageMagnificationFunc = sym.lambdify(self.sympyVariableList, Mtemp[0, 0], 'numpy')
+
+        self.imageDistanceFunc=sym.lambdify(self.sympyVariableList,-self.M_Tot[0,1]/self.M_Tot[1,1],'numpy')
+        Li = -self.M_Tot[0, 1] / self.M_Tot[1, 1]
+        Mtemp = sym.Matrix([[1, Li], [0, 1], [0, 1]])
+        Mtemp = Mtemp @ self.M_Tot
+        self.imageMagnificationFunc = sym.lambdify(self.sympyVariableList, Mtemp[0, 0], 'numpy')
         self.angularMagnificationFunc = sym.lambdify(self.sympyVariableList, self.M_Tot[1,1], 'numpy')
 
     def Variable(self, symbol):
@@ -233,7 +164,7 @@ class LinearLatticeSolver:
         else:
             print("not a valid output!")
             sys.exit()
-    def generate_2D_Output_Plot(self,xMin,xMax,yMin,yMax,output,numPoints=1000,trimUpper=None,trimLower=None,zUnits='cm'):
+    def generate_2D_Output_Plot(self,xMin,xMax,yMin,yMax,output,numPoints=1000,trimUpper=None,trimLower=None):
         plotData = self.compute_Output_Grid(xMin, xMax, yMin, yMax,output, numPoints=numPoints)
 
         #condition the data
@@ -477,14 +408,11 @@ if __name__ == '__main__':
     LLS.add_Drift(1)
     LLS.add_Focus(.4,.5,rp2)
     LLS.end_Lattice()
-    print(rp1,rp2 )
-    print(LLS.imageDistanceFunc())
 
 
-    PT = ParticleTrace(LLS, T=25)
-    t1=time.time()
-    print(PT.find_Particle_Distributions(3))
-    print(time.time()-t1)
+    PT = ParticleTrace(LLS,200,0.01)
+    print(PT.find_Particle_Distributions(3.5))
+
     #print(PT.find_Spot_Sizes())
 
 
