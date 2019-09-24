@@ -13,102 +13,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import matplotlib
-
 import sys
+from magnet import Magnet
 
 
 
 class PeriodicLatticeSolver:
-    class Magnet:
-        def __init__(self, PeriodicLattice, type,args):
-            self.type=type #type of magnet, DRIFT,FOCUS,BEND,COMBINER
-            self.Length = None  # to keep track of length
-            self.z = sym.symbols('Delta_z')  # variable to hold onto z variable used in self.Mz
-            self.params = []  # input parameters. The order needs to be conserved and is extremely important
-            self.unpack_Arguments(args) #fill up self.params with the supplied arguments. Handling the sympy objects appropiately
-            self.M = self.calc_M(PeriodicLattice)  # calculate the sympy matrix
-            self.M_Funcz, self.Mz = self.calc_M_Of_z(PeriodicLattice)
-        def unpack_Arguments(self, args):
-            for i in range(len(args)):
-                if isinstance(args[i], tuple(sym.core.all_classes)): #if the variable is a sympy symbol
-                    self.params.append(args[i])
-                else:
-                    self.params.append(args[i])
-            self.Length = self.params[0]
-        def calc_M_Of_z(self, PL):
-            sympyArguments = []  # collect all the sympy variables in the matrix, including the NEW one self.L.
-                                #order is extremely important
-            for item in self.params:
-                # test to see if the parameter is a sympy variable
-                if isinstance(item, tuple(sym.core.all_classes)): #check if it's a sympy object
-                    sympyArguments.append(item)
-            Mnew = self.calc_M(PL, useZ=True)
-            args=[self.z]
-            args.extend(PL.sympyVariableList) #add the other variables which appear
-            temp1 = sym.lambdify(args, Mnew, 'numpy')  # make function version
-            temp2 = Mnew  # sympy version
-            return temp1, temp2
-        def calc_M(self, PL, useZ=False):
-            #PL: outer particle lattice class
-            #useZ: wether or not to replace the length of the magnet with the user provided value, or a new value.
-            #       this is used to create a matrix function that depends on an arbitray magnet length
-            if self.type=='DRIFT': #if drift type magnet
-                if useZ == True:
-                    L = self.z #length of magnet
-                else:
-                    L = self.params[0]
-                return sym.Matrix([[1, L, 0], [0, 1, 0], [0, 0, 1]])
-            if self.type=='FOCUSER': #if focusing magnet, probably a hexapole
-                if useZ == True:
-                    L = self.z
-                else:
-                    L = self.params[0]
-                Bp = self.params[1] #field strength at pole face, B_pole
-                rb = self.params[2] #bore radius, r_bore
-                kappa = 2 * PL.u0 * Bp / (PL.m * PL.v0 ** 2 * rb ** 2) #'spring constant' of the magnet
-                phi = sym.sqrt(kappa) * L
-                C = sym.cos(phi)
-                S = sym.sin(phi) / sym.sqrt(kappa)
-                Cd = -sym.sqrt(kappa) * sym.sin(phi)
-                Sd = sym.cos(phi)
-                return sym.Matrix([[C, S, 0], [Cd, Sd, 0], [0, 0, 1]])
-            if self.type=='COMBINER': #combiner magnet, ie Stern Gerlacht magnet. Made by Collin. Have yet to characterise fully
-                                        #as of now it's basically a square bender, which seems to be mostly true based on Comsol
-                                        #except it is square. Rather than add the matrices to account for that, which is small
-                                        #I will wait till we characterize it in a general way
-
-                                        #VERY temporarily, it's a drift region
-                if useZ == True:
-                    L = self.z #length of magnet
-                else:
-                    L = self.params[0]
-                return sym.Matrix([[1, L, 0], [0, 1, 0], [0, 0, 1]])
-
-            if self.type=='BENDER': #bending magnet. Will probably be a quadrupole cut in half, this introduces
-                                    #a gradient in the force in addition to the bending force. The total norm of the field is written
-                                    #as B0=.5*Bdd*r^2, where Bdd is the second derivative of the field.thus k=Bdd*u0/m*v^2
-                if useZ == True:
-                    L = self.z
-                else:
-                    L =self.params[0] * self.params[1]#angle*r
-                r0 = self.params[1]
-                Bdd = self.params[2]
-                k = PL.u0 * Bdd / (PL.m * PL.v0 ** 2)
-                k0 = 1 / r0
-                kappa = k + k0 ** 2
-                phi = sym.sqrt(kappa) * L
-                C = sym.cos(phi)
-                S = sym.sin(phi)/sym.sqrt(kappa)
-                Cd = -sym.sin(phi)*sym.sqrt(kappa)
-                Sd = sym.cos(phi)
-                D = (1 - sym.cos(phi)) / (r0 * kappa)  # dispersion
-                Dd = (sym.sin(phi)) / (r0 * sym.sqrt(kappa))
-                return sym.Matrix([[C, S, D], [Cd, Sd, Dd], [0, 0, 1]])
-
-
-
-
     def __init__(self):
+        self.type = 'PERIODIC'  # this to so the magnet class knows what's calling it
         self.m = 1.16503E-26
         self.u0 = 9.274009E-24
         self.k=1.38064852E-23
@@ -133,7 +45,7 @@ class PeriodicLatticeSolver:
         #rp: radius of bore inside magnet
         self.numElements += 1
         args = [L, Bp, rp]
-        el = self.Magnet(self, 'FOCUSER',args)
+        el = Magnet(self, 'LENS',args)
         self.lattice.append(el)
 
     def add_Bend(self, ang, r0, Bdd):
@@ -143,14 +55,14 @@ class PeriodicLatticeSolver:
                 #this is used instead of Bp and rp because the bending region will probably not be a simple revolved hexapole
         self.numElements += 1
         args = [ang, r0, Bdd]
-        el = self.Magnet(self,'BENDER', args)
+        el = Magnet(self,'BEND', args)
         self.lattice.append(el)
 
     def add_Drift(self, L):
         #L: length of drift region
         self.numElements += 1
         args = [L]
-        el = self.Magnet(self,'DRIFT', args)
+        el = Magnet(self,'DRIFT', args)
         self.lattice.append(el)
     def add_Combiner(self,Ld):
         #Ld: drift region size
@@ -158,15 +70,8 @@ class PeriodicLatticeSolver:
         self.numElements += 1
         L=.187+Ld #fixed length plus drift
         args = [L]
-        el = self.Magnet(self,'COMBINER', args)
+        el = Magnet(self,'COMBINER', args)
         self.lattice.append(el)
-
-
-    def get_Element_Names(self):
-        namesList = []
-        for item in self.lattice:
-            namesList.append(item.type)
-        return namesList
 
     def compute_M_Total(self): #computes total transfer matric. numeric or symbolic
         M=sym.Matrix([[1,0,0],[0,1,0],[0,0,1]]) #starting matrix, identity
@@ -334,7 +239,6 @@ class PeriodicLatticeSolver:
             return EtaArr
     def generate_2D_Stability_Plot(self, xMin, xMax, yMin, yMax, numPoints=500):
         plotData=self.compute_Stability_Grid(xMin, xMax, yMin, yMax, numPoints=numPoints)
-        print(plotData.shape)
         plotData=np.transpose(plotData)
         plotData=np.flip(plotData,axis=0)
         plt.imshow(plotData, extent=[xMin,xMax, yMin,yMax], aspect=(xMax-xMin) / (yMax-yMin))
@@ -362,57 +266,71 @@ class PeriodicLatticeSolver:
         else:  # any other magnet
             M = self.lattice[index].M_Funcz(z - totalLengthArray[index - 1],*args) @ M
         return M
-    def generate_Envelope_Graph(self,*args):
-        totalLengthArray=self.totalLengthArrayFunc(*args)
-        zArr,y1=self.compute_Beta_Of_z_Array(*args)
-        zArr, y2 = self.compute_Eta_Of_z_Array(*args)
-        y3=[]
-        for i in range(zArr.shape[0]):
-            y3.append(np.trapz(1/(y1[:i])**2,x=zArr[:i])/(2*np.pi))
+    def _graph_Helper(self,plotType,*args,emittance=None): #used to plot different functions witout repetativeness of code
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        totalLengthArray = self.totalLengthArrayFunc(*args)
+        zArr, y1 = self.compute_Beta_Of_z_Array(*args) #compute beta array
+        zArr, y2 = self.compute_Eta_Of_z_Array(*args) #compute periodic dispersion array
+        #y3 = [] #to hold tune array
+        #for i in range(zArr.shape[0]):
+        #    y3.append(np.trapz(1 / (y1[:i]) ** 2, x=zArr[:i]) / (2 * np.pi))
+        #y3=np.asarray(y3)
 
-        #end=totalLengthArray[self.combinerIndex]
-        #start=totalLengthArray[self.combinerIndex-1]
-        #startIndex=np.argmax(zArr-start>0)
-        #endIndex=np.argmax(zArr - end > 0)
-        #betaCombiner=np.min(y1[startIndex:endIndex])
-        emittance=.001#self.emmitance_Function(betaCombiner)
+        if plotType=="BETA AND ETA":
+            y2 = y2 * 1000  # dispersion shift is the periodic dispersion times the velocity shift. convert to mm
+            ax1Name='Beta'
+            ax1yLable='Beta, m^2'
+            ax2Name='Eta'
+            ax2yLable='Eta, mm'
+            xLable='Nominal trajectory distance,m'
+            titleString='Beta and Eta versus trajectory'
+            ax2 = ax1.twinx()
+            ax1.plot(zArr, y1, c='black', label=ax1Name)
+            ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
+            lines, labels = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines + lines2, labels + labels2, loc=4)
+            ax1.set_xlabel(xLable)
+            ax1.set_ylabel(ax1yLable, color='black')
+            ax2.set_ylabel(ax2yLable, color='black')
 
-
-        #y1=np.sqrt(y1*emittance) #the envelope is the square root of  emittance times the square root of the beta function
-        y1=y1*1000 #convert to mm
-        y2=y2*self.delta*1000 #dispersion shift is the periodic dispersion times the velocity shift. convert to mm
-        fig, ax1 = plt.subplots(figsize=(10,5))
-        ax2=ax1.twinx()
-        ax3=ax1.twinx()
-
-        ax1.plot(zArr, y1, c='black', label='betatron oscillation')
-        ax2.plot(zArr, y2,c='red',alpha=1,linestyle=':',label='RMS dispersion shift')
-        #ax3.plot(zArr, y, c='blue', alpha=.5, linestyle='-.', label='envelope')
-
-        lines, labels = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        lines3, labels3 = ax3.get_legend_handles_labels()
-        ax1.legend(lines + lines2+lines3, labels + labels2+labels3,loc=4)
-        ax3.get_yaxis().set_visible(False)
+        #if plotType=="ENVELOPE":
 
 
-        titleString="Beam envelope in mm\n"
-        titleString+="Emittance is "+str(np.round(emittance,6))+". Delta is "+str(self.delta)+'. Total tune is '+str(np.round(y3[-1],2))+'.'
-        titleString+=" Time of flight ~"+str(int(1000*zArr[-1]/self.v0))+" ms"
-        plt.title(titleString)
+
+
+        #ax2 = ax1.twinx()
+        #ax3 = ax1.twinx()
+#
+        #ax1.plot(zArr, y1, c='black', label=ax1Name)
+        #ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
+        ## ax3.plot(zArr, y, c='blue', alpha=.5, linestyle='-.', label='envelope')
+#
+        #lines, labels = ax1.get_legend_handles_labels()
+        #lines2, labels2 = ax2.get_legend_handles_labels()
+        #lines3, labels3 = ax3.get_legend_handles_labels()
+        #ax1.legend(lines + lines2 + lines3, labels + labels2 + labels3, loc=4)
+        #ax3.get_yaxis().set_visible(False)
+
+        #titleString = "Beam envelope in mm\n"
+        #titleString += "Emittance is " + str(np.round(emittance, 6)) + ". Delta is " + str(
+        #    self.delta) + '. Total tune is ' + str(np.round(y3[-1], 2)) + '.'
+        #titleString += " Time of flight ~" + str(int(1000 * zArr[-1] / self.v0)) + " ms"
+
         for i in range(self.numElements):
-            if i==0:
-                center=totalLengthArray[0]/2
+            if i == 0:
+                center = totalLengthArray[0] / 2
             else:
-                center=(totalLengthArray[i-1]+totalLengthArray[i])/2
-            plt.axvline(totalLengthArray[i],c='black',linestyle=':')
-            ax1.text(center,np.max(y1),self.lattice[i].type,rotation=45)
-        ax1.set_xlabel('Nominal trajectory distance,m')
-        ax1.set_ylabel('Betraton envelope,mm', color='black')
-        ax2.set_ylabel('Dispersion shift,mm', color='black')
+                center = (totalLengthArray[i - 1] + totalLengthArray[i]) / 2
+            plt.axvline(totalLengthArray[i], c='black', linestyle=':')
+            ax1.text(center, np.max(y1), self.lattice[i].type, rotation=45)
+        #ax1.set_xlabel('Nominal trajectory distance,m')
+        #ax1.set_ylabel('Betraton envelope,mm', color='black')
+        #ax2.set_ylabel('Dispersion shift,mm', color='black')
+        plt.title(titleString)
         plt.show()
-
-
+    def generate_Beta_And_Eta_Plot(self,*args):
+        self.graph_Helper("BETA AND ETA",*args)
     def _compute_Tune_Parallel(self,coords,gridPos,results):
         for i in range(len(coords)):
             try: #in case there is imaginary numbers
@@ -537,116 +455,60 @@ class PeriodicLatticeSolver:
     #0 is as far away as possible, 1 is exactly on resonance
     #the precedure is to see how close the tune is to an integer multiples of 1/res. ie a 2nd order resonance(res =2) can occure
     # when the tune is 1,1.5,2,2.5 etc and is maximally far off resonance when the tuen is 1.25,1.75,2.25 etc
-    #args--
     #tune: the given tune to analyze
     #res: the order of resonance interested in. 1,2,3,4 etc. 1 is pure bend, 2 is pure focus, 3 is pure corrector etc.
         resFact=1/res #What the remainder is compare to
         tuneRem = tune - tune.astype(int)  # tune remainder, the integer value doens't matter
         tuneResFactArr = 1-np.abs(2*(tuneRem-np.round(tuneRem/resFact)*resFact)/resFact)  # relative nearness to resonances
         return tuneResFactArr
+    def _generate_2D_Output_Plot(self,xMin,xMax,yMin,yMax,output,elementIndex,useLogScale=False,numPoints=1000):
+        plotData = self._compute_Output_Grid(xMin, xMax, yMin, yMax,output,elementIndex, numPoints=numPoints)
+        if output=='BETA MIN':
+            if useLogScale == True:
+                plotData = np.log10(plotData)
+            plotData = np.transpose(plotData)
+            plotData = np.flip(plotData, axis=0)
+            masked_array = np.ma.masked_where(plotData == np.nan, plotData)
+            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
+            cmap.set_bad(color='grey')
+            plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
+                       aspect=(xMax - xMin) / (yMax - yMin))
+            plt.colorbar()
+            plt.show()
 
-    def _compute_Dispersion_Max_Parallel(self, coords, gridPos, elementIndex, results):
-        # parallel helper routine. Processes can finish in random order so it's important to keep track of the order
-        #
+        if output=="DISPERSION MIN":
+            plotData = np.transpose(plotData)
+            plotData = np.flip(plotData, axis=0)
+            plotData = plotData * self.delta*1000
+            # data can be excessively large
+            plotData[plotData > 100] = 100  # clip dispersions over 500mm
+            plotData[plotData < .1] = .1  # clip dispersion under .1 mm
+            if useLogScale == True:
+                plotData = np.log10(plotData)
+            masked_array = np.ma.masked_where(plotData == np.nan, plotData)
+            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
+            cmap.set_bad(color='grey')
+            plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
+                       aspect=(xMax - xMin) / (yMax - yMin))
+            plt.colorbar()
+            plt.show()
 
-        # coords: coordinates of the calculation
-        # gridPos: position in the plot of the calculation. So I don't need to track the order of solution, just plop the results
-        # where it belongs
-        for i in range(len(coords)):
-            try:  # in case there is imaginary numbers
-                betaMin = np.max(self.compute_Eta_Of_z_Array(*coords[i], elementIndex=elementIndex, returnZarr=False))
-                results.append([gridPos[i], betaMin])
-            except:
-                results.append([gridPos[i], np.nan])
 
-    def compute_Dispersion_Max_Grid(self, xMin, xMax, yMin, yMax,whichElement=None,  numPoints=25):
-        # function that makes a grid of minimum envelope sizes for a given element
-        # whichElement: which element to analyze, 1st,2nd,3rd, etc
-        # numPoints: number of points along each axis
-        if whichElement!=None:
-            elementIndex = whichElement - 1  # to adjust to computer style where 1st is actually zeroth in an array
-
-        stableCoords = []
-        gridPosList = []
-        x = np.linspace(xMin, xMax, num=numPoints)
-        y = np.linspace(yMin, yMax, num=numPoints)
-        stableGrid = self.compute_Stability_Grid(xMin, xMax, yMin, yMax,
-                                                 numPoints=numPoints)  # grid of stable solutions to compute tune for
-        envelopeMinGrid = np.empty((numPoints, numPoints))
-        for i in range(x.shape[0]):
-            for j in range(y.shape[0]):
-                if (stableGrid[i, j] == True):
-                    stableCoords.append([x[i], y[j]])
-                    gridPosList.append([i, j])
-                else:
-                    envelopeMinGrid[i, j] = np.nan  # no tune
-
-        processes = mp.cpu_count()
-        jobSize = int(len(stableCoords) / processes) + 1  # in case rounding down. will make a small difference
-        manager = mp.Manager()
-        resultList = manager.list()
-        jobs = []
-
-        loop = True
-        i = 0
-        while loop == True:
-            arg1List = []
-            arg2List = []
-            for j in range(jobSize):
-                if i == len(stableCoords):
-                    loop = False
-                    break
-                arg1List.append(stableCoords[i])
-                arg2List.append(gridPosList[i])
-                i += 1
-            p = mp.Process(target=self._compute_Dispersion_Max_Parallel,
-                           args=(arg1List, arg2List,whichElement, resultList))
-            p.start()
-            jobs.append(p)
-        for proc in jobs:
-            proc.join()
-
-        for item in resultList:
-            i, j = item[0]
-            envelopeMinGrid[i, j] = item[1]
-        return envelopeMinGrid
-
-    def _compute_Beta_Min_Parallel(self, coords, gridPos,elementIndex, results):
-        #parallel helper routine. Processes can finish in random order so it's important to keep track of the order
-        #
-        
-        #coords: coordinates of the calculation
-        #gridPos: position in the plot of the calculation. So I don't need to track the order of solution, just plop the results
-        #where it belongs
-        for i in range(len(coords)):
-            try:  # in case there is imaginary numbers
-                betaMin=np.min(self.compute_Beta_Of_z_Array(*coords[i],elementIndex=elementIndex,returnZarr=False))
-                envelope=self.emmitance_Function(betaMin)
-                results.append([gridPos[i], betaMin])
-            except:
-                results.append([gridPos[i], np.nan])
-    def compute_Beta_Min_Grid(self,xMin,xMax,yMin,yMax,whichElement,numPoints=25):
-        #function that makes a grid of minimum envelope sizes for a given element
-        #whichElement: which element to analyze, 1st,2nd,3rd, etc
-        #numPoints: number of points along each axis
-        
-        if whichElement!=None:
-            elementIndex = whichElement - 1  # to adjust to computer style where 1st is actually zeroth in an array
-
+    def _compute_Output_Grid(self,xMin, xMax, yMin, yMax,output,elementIndex, numPoints=100):
 
         stableCoords = []
         gridPosList = []
         x = np.linspace(xMin, xMax, num=numPoints)
         y = np.linspace(yMin, yMax, num=numPoints)
         stableGrid=self.compute_Stability_Grid(xMin,xMax,yMin,yMax,numPoints=numPoints) #grid of stable solutions to compute tune for
-        envelopeMinGrid=np.empty((numPoints,numPoints))
+        outputGrid=np.empty((numPoints,numPoints))
         for i in range(x.shape[0]):
            for j in range(y.shape[0]):
                if(stableGrid[i,j]==True):
                    stableCoords.append([x[i],y[j]])
                    gridPosList.append([i,j])
                else:
-                   envelopeMinGrid[i,j]=np.nan #no tune
+                   outputGrid[i,j]=np.nan #no tune
 
         processes=mp.cpu_count()
         jobSize=int(len(stableCoords)/processes)+1 #in case rounding down. will make a small difference
@@ -666,7 +528,7 @@ class PeriodicLatticeSolver:
                 arg1List.append(stableCoords[i])
                 arg2List.append(gridPosList[i])
                 i+=1
-            p = mp.Process(target=self._compute_Beta_Min_Parallel, args=(arg1List,arg2List,elementIndex,resultList))
+            p = mp.Process(target=self._parallel_Helper, args=(arg1List,arg2List,elementIndex,resultList,output))
             p.start()
             jobs.append(p)
         for proc in jobs:
@@ -674,46 +536,25 @@ class PeriodicLatticeSolver:
 
         for item in resultList:
             i,j=item[0]
-            envelopeMinGrid[i,j]=item[1]
-        return envelopeMinGrid
-    def generate_2D_Beta_Min_Plot(self,xMin,xMax,yMin,yMax,whichElement,numPoints=25,useLogScale=False):
-        #whichElement: the desired element to find the minimum mover
-        #numPoints: number of points to along each axis for the graph.
-        #useLogScale: wether to take the base 10 log of the results. Data is kind of hard to see otherwise
-        envelopeMinGrid=self.compute_Beta_Min_Grid(xMin,xMax,yMin,yMax,whichElement,numPoints=numPoints)
-        if useLogScale==True:
-            envelopeMinGrid=np.log10(envelopeMinGrid)
-        plotData = np.transpose(envelopeMinGrid)
-        plotData = np.flip(plotData, axis=0)
-        masked_array = np.ma.masked_where(plotData == np.nan, plotData)
-        cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-        cmap.set_bad(color='grey')
-        plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
-                   aspect=(xMax-xMin) / (yMax-yMin))
-        plt.colorbar()
-        plt.show()
-    def generate_2D_Dispersion_Max_Plot(self,xMin,xMax,yMin,yMax,numPoints=25,useLogScale=False,whichElement=None):
-        #whichElement: the desired element to find the minimum mover
-        #numPoints: number of points to use along each axis for the graph.
-        #useLogScale: wether to take the base 10 log of the results. Data is kind of hard to see otherwise
-        envelopeMinGrid=self.compute_Dispersion_Max_Grid(xMin,xMax,yMin,yMax,numPoints=numPoints,whichElement=whichElement)
-        if useLogScale==True:
-            envelopeMinGrid=np.log10(envelopeMinGrid)
-        plotData = np.transpose(envelopeMinGrid)
-        plotData = np.flip(plotData, axis=0)
-        plotData=plotData*self.delta
-        plotData=plotData*1000#convert to mm
-        #data can be excessively large
-        plotData[plotData>500]=500 #clip dispersions over 500mm
-        plotData[plotData<.1]=.1 #clip dispersion under .1 mm
-        plotData=np.log10(plotData)
-        masked_array = np.ma.masked_where(plotData == np.nan, plotData)
-        cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-        cmap.set_bad(color='grey')
-        plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
-                   aspect=(xMax-xMin) / (yMax-yMin))
-        plt.colorbar()
-        plt.show()
+            outputGrid[i,j]=item[1]
+        return outputGrid
+
+    def _parallel_Helper(self, argList, gridPos, elementIndex, results,output):
+        if output=='BETA MIN':
+            for i in range(len(argList)):
+                try:  # in case there is imaginary numbers
+                    betaMin = np.min(self.compute_Beta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False))
+                    results.append([gridPos[i], betaMin])
+                except:
+                    results.append([gridPos[i], np.nan])
+        if output=="DISPERSION MIN":
+            for i in range(len(argList)):
+                try:  # in case there is imaginary numbers
+                    etaMin = self.delta*np.max(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False))
+                    results.append([gridPos[i], etaMin])
+                except:
+                    results.append([gridPos[i], np.nan])
+
 
 if __name__ == '__main__':
 
@@ -726,38 +567,17 @@ if __name__ == '__main__':
     PLS.add_Drift(L)
     PLS.add_Focus(Lm,.5,.05)
     PLS.add_Drift(L)
-    PLS.add_Bend(np.pi,1,0)
-    PLS.add_Drift(L)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(L)
+    #PLS.add_Bend(np.pi,1,0)
+    #PLS.add_Drift(L)
+    #PLS.add_Focus(Lm,.5,.05)
+    #PLS.add_Drift(L)
 
     PLS.end_Lattice()
 
     #PLS.generate_2D_Stability_Plot(.01,.5,.01,.6)
     #PLS.generate_2D_Beta_Min_Plot(.1,.3,.001,.6,4,numPoints=50)
-    PLS.generate_Envelope_Graph(.3,.3)
-    #x,y=PLS.compute_Beta_Of_z_Array(.2,.4)
-    #plt.plot(x,y)
-    #plt.show()
+    PLS._generate_2D_Output_Plot(0,1,0,1, 'BETA MIN', 2)
 
-    #PLS.generate_2D_Dispersion_Max_Plot(.35,.45,.15,.25,numPoints=50)
-    #PLS.generate_2D_Tune_Plot(.38,.42,.18,.22)
-    #xArr=np.linspace(.01,1,num=100)
-    #yArr=np.linspace(.01,1,num=100)
-    #img=np.ones((xArr.shape[0],yArr.shape[0]))
-    #for i in range(xArr.shape[0]):
-    #    for j in range(yArr.shape[0]):
-    #        M=PLS.M_Tot_N(xArr[i],yArr[j])
-    #        M11 = M[0, 0]
-    #        M12 = M[0, 1]
-    #        M21 = M[1, 0]
-    #        M22 = M[1, 1]
-    #        root=2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2
-    #        if root<0:
-    #            img[i,j]=0
-    #        else:
-    #            img[i,j]=1
-    #plt.imshow(img)
-    #plt.show()
+    #PLS.generate_Beta_And_Eta_Plot(.3,.3)
+    #PLS.generate_Envelope_Graph(.3,.3)
 
-    #PLS.generate_2D_Beta_Min_Plot(.01,1,.01,1,whichElement=4,numPoints=100)

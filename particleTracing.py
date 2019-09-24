@@ -193,8 +193,8 @@ class ParticleTrace:
 
         peaks=self.find_Focuses(q)
 
-        xRMSArr=1000*np.std(q[:,1::3],axis=1)
-        yRMSArr = 1000 * np.std(q[:,2::3], axis=1)
+        xRMSArr=np.std(q[:,1::3],axis=1)
+        yRMSArr = np.std(q[:,2::3], axis=1)
         spotSizes = np.sqrt(xRMSArr[peaks] ** 2 + yRMSArr[peaks] ** 2)  # combine the values at the focus
 
         VxRMSArr=np.std(v[:,1::3],axis=1)
