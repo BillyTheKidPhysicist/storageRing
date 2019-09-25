@@ -55,10 +55,8 @@ class ParticleTrace:
                 k = 0
                 apeture = np.inf #drift has infinite apeture
             else:
-                B = el.params[1]
-                rp = el.params[2]
-                k = 2 * self.u0Sim * B / rp ** 2
-                apeture = rp #lens has finite aperture defined by wall size
+                k = 2 * self.u0Sim * el.Bp / el.rp ** 2
+                apeture = el.rp #lens has finite aperture defined by wall size
             kList.append(k)
             apetureList.append(apeture)
         # now add an element at the end for drift. There cannot be a drift in the final element from LLS because it makes
