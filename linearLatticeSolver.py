@@ -8,14 +8,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from magnet import Magnet
-from particleTracing import ParticleTrace
-
+import time
 import sys
 
 
 class LinearLatticeSolver:
 
-    def __init__(self,v0=None):
+    def __init__(self,v0=None,T=None):
+        if v0==None or T==None:
+            print('YOU DID NOT STATE WHAT V0 and/or T IS')
+            sys.exit()
+        else:
+            self.v0=v0
+            self.T=T
         self.type='LINEAR' #this to so the magnet class knows what's calling it
         self.m=1.1650341e-26
         self.u0=9.274009994E-24
@@ -28,14 +33,9 @@ class LinearLatticeSolver:
 
 
         self.k = 1.38064852E-23 #bolztman constant, J/K
-        if v0==None:
-            print('YOU DID NOT STATE WHAT V0 IS')
-            sys.exit()
-        self.v0=v0
         self.began = False  # check if the lattice has begun
         self.lattice = []  # list to hold lattice magnet objects
-        self.T = 25  # temperature of atoms, mk
-        self.delta =None
+        self.delta=np.round(np.sqrt(self.k * self.T / self.m) / self.v0,3)  # RMS velocity spread
         self.numElements = 0  # to keep track of total number of elements. Gets incremented with each additoin
         self.totalLengthArrayFunc = None  # a function that recieves values and returns an array
         # of lengths
@@ -81,7 +81,6 @@ class LinearLatticeSolver:
 
     def begin_Lattice(self):  # must be called before making lattice
         #v0: nominal atomic velocity
-        self.delta=np.round(np.sqrt(self.k * (self.T / 1000) / self.m) / self.v0,3)  # RMS velocity spread
         self.began = True
 
     def end_Lattice(self):
@@ -386,7 +385,7 @@ class LinearLatticeSolver:
 if __name__ == '__main__':
     thetaMax1 = .07
 
-    LLS=LinearLatticeSolver(v0=200)
+    LLS=LinearLatticeSolver(v0=200,T=.025)
     rp1=LLS.compute_rp(thetaMax=thetaMax1,Bp=.5)
     LLS.begin_Lattice()
     LLS.add_Drift(.6)
@@ -400,7 +399,7 @@ if __name__ == '__main__':
 
 
 
-    LLS=LinearLatticeSolver(v0=200)
+    LLS=LinearLatticeSolver(v0=200,T=.025)
     #Lm=LLS.Variable('Lm')
     LLS.begin_Lattice()
     LLS.add_Drift(.6)
@@ -411,7 +410,12 @@ if __name__ == '__main__':
 
 
     PT = ParticleTrace(LLS,200,0.01)
-    print(PT.find_Particle_Distributions(3.5))
+    print("meep")
+    var=PT.find_Particle_Distributions(3.5)
+    x=var[0][1]
+    xd=var[1][1]/LLS.v0
+    print(np.sqrt(2*x*xd*.25))
+
 
     #print(PT.find_Spot_Sizes())
 

@@ -1,9 +1,7 @@
 #version .1,sep 18th
 
 
-#more commenting
-#generalize the 2d plots like in the other program
-#properly decorate plots
+#Fix max dispersion!!
 
 
 
@@ -15,20 +13,27 @@ import multiprocessing as mp
 import matplotlib
 import sys
 from magnet import Magnet
+import time
+
 
 
 
 class PeriodicLatticeSolver:
-    def __init__(self):
+    def __init__(self,v0=None,T=None):
+
+        if v0==None or T==None:
+            print('YOU DID NOT STATE WHAT V0 and/or T IS')
+            sys.exit()
+        else:
+            self.v0=v0
+            self.T=T
         self.type = 'PERIODIC'  # this to so the magnet class knows what's calling it
         self.m = 1.16503E-26
         self.u0 = 9.274009E-24
         self.k=1.38064852E-23
-        self.v0 = 200
         self.began=False #check if the lattice has begun
         self.lattice = [] #list to hold lattice magnet objects
-        self.T=25 #temperature of atoms, mk
-        self.delta=np.round(np.sqrt(self.k*(self.T/1000)/self.m)/self.v0,3) #RMS longitudinal velocity spread
+        self.delta=np.round(np.sqrt(self.k*(self.T)/self.m)/self.v0,3) #RMS longitudinal velocity spread
         self.numElements = 0 #to keep track of total number of elements. Gets incremented with each additoin
         self.totalLengthArrayFunc = None  # a function that recieves values and returns an array
         # of lengths
@@ -136,14 +141,6 @@ class PeriodicLatticeSolver:
         M21 = M[1, 0]
         M22 = M[1, 1]
         return (M11-M22)*self.compute_Beta_From_M(M)/(2*M12)
-    def compute_EtaD_From_M(self,M):
-        M11 = M[0, 0]
-        M12 = M[0, 1]
-        M13 = M[0, 2]
-        M21 = M[1, 0]
-        M22 = M[1, 1]
-        M23 = M[1, 2]
-        return (M21*M13+M23*(1-M11))/(2-M11-M22)
     def compute_Eta_From_M(self, M):
         M11 = M[0, 0]
         M12 = M[0, 1]
@@ -185,7 +182,7 @@ class PeriodicLatticeSolver:
         totalLengthArray =  self.totalLengthArrayFunc(*args)
         if elementIndex==None:
             if numPoints==None: #if user is wanting default value
-                numPoints=1000
+                numPoints=500
             zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
         else:
             if numPoints==None: #if user is wanting default value
@@ -216,7 +213,7 @@ class PeriodicLatticeSolver:
         totalLengthArray =  self.totalLengthArrayFunc(*args)
         if elementIndex==None:
             if numPoints==None: #if user is wanting default value
-                numPoints=1000
+                numPoints=500
             zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
         else:
             if numPoints==None: #if user is wanting default value
@@ -266,7 +263,10 @@ class PeriodicLatticeSolver:
         else:  # any other magnet
             M = self.lattice[index].M_Funcz(z - totalLengthArray[index - 1],*args) @ M
         return M
-    def _graph_Helper(self,plotType,*args,emittance=None): #used to plot different functions witout repetativeness of code
+
+    def plot_Beta_And_Eta(self,*args):
+        self._1D_Plot_Helper("BETA AND ETA",*args)
+    def _1D_Plot_Helper(self,plotType,*args,emittance=None): #used to plot different functions witout repetativeness of code
         fig, ax1 = plt.subplots(figsize=(10, 5))
         totalLengthArray = self.totalLengthArrayFunc(*args)
         zArr, y1 = self.compute_Beta_Of_z_Array(*args) #compute beta array
@@ -328,41 +328,13 @@ class PeriodicLatticeSolver:
         #ax1.set_ylabel('Betraton envelope,mm', color='black')
         #ax2.set_ylabel('Dispersion shift,mm', color='black')
         plt.title(titleString)
+        plt.draw()
         plt.show()
-    def generate_Beta_And_Eta_Plot(self,*args):
-        self.graph_Helper("BETA AND ETA",*args)
-    def _compute_Tune_Parallel(self,coords,gridPos,results):
-        for i in range(len(coords)):
-            try: #in case there is imaginary numbers
-                x,y=self.compute_Beta_Of_z_Array(*coords[i],numPoints=200)
-                tune = np.trapz(np.power(y, -2), x=x) / (2 * np.pi)
-                results.append([gridPos[i], tune])
-            except:
-                results.append([gridPos[i], np.nan])
 
-    def generate_2D_Resonance_Plot(self,xMin,xMax,yMin,yMax,resonance=1,numPoints=50):
-        tuneGrid=self.compute_Tune_Grid(xMin, xMax, yMin, yMax, numPoints=numPoints)
-        plotData=self.compute_Resonance_Factor(tuneGrid,resonance)
 
-        plotData=np.transpose(plotData)
-        plotData=np.flip(plotData,axis=0)
-        masked_array = np.ma.masked_where(plotData == np.nan, plotData)
-        cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
-        cmap.set_bad(color='grey')
-        plt.imshow(masked_array, cmap=cmap,interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],aspect=(xMax-xMin) / (yMax-yMin))
-        plt.colorbar()
-        plt.show()
-    def generate_2D_Tune_Plot(self,xMin,xMax,yMin,yMax,numPoints=25):
-        plotData=self.compute_Tune_Grid(xMin,xMax,yMin,yMax,numPoints=numPoints)
-        plotData=np.transpose(plotData)
-        plotData=np.flip(plotData,axis=0)
 
-        masked_array = np.ma.masked_where(plotData==np.nan, plotData)
-        cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
-        cmap.set_bad(color='grey')
-        plt.imshow(masked_array, cmap=cmap,interpolation='bilinear',extent=[xMin, xMax, yMin, yMax], aspect=(xMax-xMin) / (yMax-yMin))
-        plt.colorbar()
-        plt.show()
+
+
     def compute_Stability_Grid(self, xMin, xMax, yMin, yMax, numPoints=500):
         #uses parallelism. Tricky
         #This returns a grid of stable points. The top left point on the grid is 0,0. Going down rows
@@ -395,61 +367,7 @@ class PeriodicLatticeSolver:
         results = ~np.any(eigValsArr > 1 + 1E-5, axis=1)
         stabilityGrid=results.reshape((numPoints, numPoints))
         return stabilityGrid
-    def compute_Tune_Grid(self,xMin,xMax,yMin,yMax,numPoints=25):
-        # uses parallelism. Tricky
-        #a function that generates a grid of the tune for 2 parameters. Rather complicated because it utilized parallel processing
-        #It uses the grid of stable solutions to filter out tunes that shouldn't be computed because these would through an error
-        #cause imaginary numbers appear, and computing tune is expensive.
-
-
-        stableCoords = []
-        gridPosList = []
-        x = np.linspace(xMin, xMax, num=numPoints)
-        y = np.linspace(yMin, yMax, num=numPoints)
-        stableGrid=self.compute_Stability_Grid(xMin,xMax,yMin,yMax,numPoints=numPoints) #grid of stable solutions to compute tune for
-        tuneGrid=np.empty((numPoints,numPoints))
-        for i in range(x.shape[0]):
-           for j in range(y.shape[0]):
-               if(stableGrid[i,j]==True):
-                   stableCoords.append([x[i],y[j]])
-                   gridPosList.append([i,j])
-               else:
-                   tuneGrid[i,j]=np.nan #no tune
-
-        #parallel part. Split up tasks and distribute
-        processes=mp.cpu_count()
-        jobSize=int(len(stableCoords)/processes)+1 #in case rounding down. will make a small difference
-        manager = mp.Manager()
-        resultList = manager.list()
-        jobs=[]
-
-        loop=True
-        i=0
-        while loop==True:
-            arg1List=[]
-            arg2List=[]
-            for j in range(jobSize):
-                if i==len(stableCoords):
-                    loop=False
-                    break
-                arg1List.append(stableCoords[i])
-                arg2List.append(gridPosList[i])
-                i+=1
-            p = mp.Process(target=self._compute_Tune_Parallel, args=(arg1List,arg2List,resultList))
-            p.start() #start the process
-            jobs.append(p)
-        for proc in jobs:
-            proc.join()#wait for it to be done and get the results
-
-        for item in resultList:
-            i,j=item[0]
-            tuneGrid[i,j]=item[1]
-        #plt.imshow(tuneGrid)
-        #plt.show()
-        return tuneGrid
-
-
-
+    
 
     def compute_Resonance_Factor(self,tune,res):# a factor, between 0 and 1, describing how close a tune is a to a given resonance
     #0 is as far away as possible, 1 is exactly on resonance
@@ -460,42 +378,78 @@ class PeriodicLatticeSolver:
         resFact=1/res #What the remainder is compare to
         tuneRem = tune - tune.astype(int)  # tune remainder, the integer value doens't matter
         tuneResFactArr = 1-np.abs(2*(tuneRem-np.round(tuneRem/resFact)*resFact)/resFact)  # relative nearness to resonances
+        print('here')
         return tuneResFactArr
-    def _generate_2D_Output_Plot(self,xMin,xMax,yMin,yMax,output,elementIndex,useLogScale=False,numPoints=1000):
-        plotData = self._compute_Output_Grid(xMin, xMax, yMin, yMax,output,elementIndex, numPoints=numPoints)
+
+
+
+    def plot_Beta_Min_2D(self,xMin,xMax,yMin,yMax,elementIndex,useLogScale=False,numPoints=100,trim=2.5):
+        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'BETA MIN',elementIndex,useLogScale,numPoints,trim,None)
+    def plot_Dispersion_Min_2D(self,xMin,xMax,yMin,yMax,elementIndex=None,useLogScale=False,numPoints=100,trim=100):
+        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'DISPERSION MIN',elementIndex,useLogScale,numPoints,trim,None)
+    def plot_Tune_2D(self,xMin,xMax,yMin,yMax,useLogScale=False,numPoints=50):
+        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'TUNE',None,useLogScale,numPoints,None,None)
+    def plot_Resonance_2D(self,xMin,xMax,yMin,yMax,resonance=1,numPoints=50,useLogScale=False):
+        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'RESONANCE',None,useLogScale,numPoints,None,resonance)
+    def plot_Dispersion_Max_2D(self,xMin,xMax,yMin,yMax,elementIndex=None,useLogScale=False,numPoints=100,trim=None):
+        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'DISPERSION MAX',elementIndex,useLogScale,numPoints,trim,None)
+
+    def _2D_Plot_Parallel_Helper(self,xMin,xMax,yMin,yMax,output,elementIndex,useLogScale,numPoints,trim,resonance):
+
+        plotData = self._compute_Grid_Parallel(xMin, xMax, yMin, yMax,output,elementIndex=elementIndex, numPoints=numPoints)
+        plotData = np.transpose(plotData) #need to reorient the data so that 0,0 is bottom left
+        plotData = np.flip(plotData, axis=0) #need to reorient the data so that 0,0 is bottom left
+
+
+
+
+        if trim!=None: #if plot values are clipped pegged above some value
+            titleExtra=' \n Data clipped at a values greater than '+str(trim)
+        else:
+            titleExtra=''
         if output=='BETA MIN':
-            if useLogScale == True:
-                plotData = np.log10(plotData)
-            plotData = np.transpose(plotData)
-            plotData = np.flip(plotData, axis=0)
-            masked_array = np.ma.masked_where(plotData == np.nan, plotData)
-            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-            cmap.set_bad(color='grey')
-            plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
-                       aspect=(xMax - xMin) / (yMax - yMin))
-            plt.colorbar()
-            plt.show()
-
+            plotData[plotData>=trim]=trim #trim values
+            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cay
+            title='Beta,m^2.'
         if output=="DISPERSION MIN":
-            plotData = np.transpose(plotData)
-            plotData = np.flip(plotData, axis=0)
-            plotData = plotData * self.delta*1000
-            # data can be excessively large
-            plotData[plotData > 100] = 100  # clip dispersions over 500mm
-            plotData[plotData < .1] = .1  # clip dispersion under .1 mm
-            if useLogScale == True:
-                plotData = np.log10(plotData)
-            masked_array = np.ma.masked_where(plotData == np.nan, plotData)
+            plotData = plotData *1000 #convert to mm
+            if trim!=None:
+                plotData[plotData>=trim]=trim #trim values
             cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-            cmap.set_bad(color='grey')
-            plt.imshow(masked_array, cmap=cmap, interpolation='bilinear', extent=[xMin, xMax, yMin, yMax],
-                       aspect=(xMax - xMin) / (yMax - yMin))
-            plt.colorbar()
-            plt.show()
+            title='Disperison Minimum, mm.'
+        if output=="DISPERSION MAX":
+            plotData = plotData *1000 #convert to mm
+            if trim!=None:
+                plotData[plotData>=trim]=trim #trim values
+            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
+            title='Disperison Maximum, mm.'
+        if output=="TUNE":
+            cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
+            title='tune'
+        if output=='RESONANCE':
+            plotData=self.compute_Resonance_Factor(plotData,resonance) #compute the tune
+            cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
+            title='Resonances of order '+str(resonance)+'. \n 1.0 indicates exactly on resonance, 0.0 off'
+
+        if useLogScale == True:
+            plotData = np.log10(plotData)
+        masked_array = np.ma.masked_where(plotData == np.nan, plotData) #a way of marking ceratin values to have different colors
+
+        plt.subplots(figsize=(8,8)) #required to plot multiple plots
+        plt.grid()
+        cmap.set_bad(color='grey')#set the colors of values in masked array
+        plt.title(title+titleExtra)
+        plt.imshow(masked_array, cmap=cmap, extent=[xMin, xMax, yMin, yMax],aspect=(xMax - xMin) / (yMax - yMin))
+        plt.colorbar()
+        plt.xlabel(self.sympyStringList[0])
+        plt.ylabel(self.sympyStringList[1])
+        plt.draw()
+        plt.pause(.01)
+        plt.show()
 
 
-    def _compute_Output_Grid(self,xMin, xMax, yMin, yMax,output,elementIndex, numPoints=100):
 
+    def _compute_Grid_Parallel(self,xMin, xMax, yMin, yMax,output,elementIndex=None, numPoints=100):
         stableCoords = []
         gridPosList = []
         x = np.linspace(xMin, xMax, num=numPoints)
@@ -510,7 +464,7 @@ class PeriodicLatticeSolver:
                else:
                    outputGrid[i,j]=np.nan #no tune
 
-        processes=mp.cpu_count()
+        processes=mp.cpu_count()-1
         jobSize=int(len(stableCoords)/processes)+1 #in case rounding down. will make a small difference
         manager = mp.Manager()
         resultList = manager.list()
@@ -550,34 +504,69 @@ class PeriodicLatticeSolver:
         if output=="DISPERSION MIN":
             for i in range(len(argList)):
                 try:  # in case there is imaginary numbers
-                    etaMin = self.delta*np.max(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False))
-                    results.append([gridPos[i], etaMin])
+                    dispersionMin = self.delta*np.min(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
+                    #print(dispersionMin)
+                    results.append([gridPos[i], dispersionMin])
+                except:
+                    results.append([gridPos[i], np.nan])
+        if output=="DISPERSION MAX":
+            for i in range(len(argList)):
+                try:  # in case there is imaginary numbers
+                    dispersionMax = self.delta*np.max(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
+                    #print(dispersionMin)
+                    results.append([gridPos[i], dispersionMax])
+                except:
+                    results.append([gridPos[i], np.nan])
+        if output=="TUNE" or output=="RESONANCE":
+            for i in range(len(argList)):
+                try: #in case there is imaginary numbers
+                    x,y=self.compute_Beta_Of_z_Array(*argList[i],numPoints=200)
+                    tune = np.trapz(np.power(y, -1), x=x) / (2 * np.pi)
+                    results.append([gridPos[i], tune])
                 except:
                     results.append([gridPos[i], np.nan])
 
-
 if __name__ == '__main__':
 
-    PLS=PeriodicLatticeSolver()
-    L=PLS.Variable('L')
+    PLS=PeriodicLatticeSolver(v0=200,T=.001)
+    print(PLS.delta)
     Lm=PLS.Variable('Lm')
+    Bp=PLS.Variable('Bp')
 
     PLS.begin_Lattice()
     PLS.add_Bend(np.pi,1,0)
-    PLS.add_Drift(L)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(L)
+    PLS.add_Drift(.05)
+    PLS.add_Focus(Lm,Bp,.05)
+    PLS.add_Combiner(.5)
+    PLS.add_Focus(Lm,Bp,.05)
+    PLS.add_Drift(.05)
+    PLS.add_Bend(np.pi,1,0)
+    #PLS.add_Focus(.25,Bp,.05)
     #PLS.add_Bend(np.pi,1,0)
-    #PLS.add_Drift(L)
-    #PLS.add_Focus(Lm,.5,.05)
-    #PLS.add_Drift(L)
+    PLS.add_Drift(.1+2*Lm+.5)
+
+
 
     PLS.end_Lattice()
 
-    #PLS.generate_2D_Stability_Plot(.01,.5,.01,.6)
-    #PLS.generate_2D_Beta_Min_Plot(.1,.3,.001,.6,4,numPoints=50)
-    PLS._generate_2D_Output_Plot(0,1,0,1, 'BETA MIN', 2)
 
-    #PLS.generate_Beta_And_Eta_Plot(.3,.3)
-    #PLS.generate_Envelope_Graph(.3,.3)
+
+
+
+    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=0)
+    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
+    #PLS.plot_Dispersion_Max_2D(*args,numPoints=numPoints,trim=1000)
+    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=1)
+    PLS.plot_Beta_And_Eta(.4,.4)
+
+    args=(.1,.5,1E-3,.5)
+    numPoints=100
+    elementIndex=3
+    #PLS.plot_Beta_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
+    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
+    #PLS.plot_Dispersion_Max_2D(*args,numPoints=numPoints,trim=1000)
+    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=1)
+    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=2)
+    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=3)
+
 
