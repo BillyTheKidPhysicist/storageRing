@@ -1,9 +1,8 @@
-#version .1,sep 18th
-
-
-#Fix max dispersion!!
-
-
+#-updated add_Bend to make Bdd a keyword beacause i don't really know what to do with it yet. need to look
+#at theory more
+#-miscellaneous naming improvements
+#-misc plot improvement
+#-improved error handling 
 
 import sympy as sym
 import numpy.linalg as npl
@@ -19,21 +18,23 @@ import time
 
 
 class PeriodicLatticeSolver:
-    def __init__(self,v0=None,T=None):
+    def __init__(self,axis,v0=None,T=None):
 
         if v0==None or T==None:
-            print('YOU DID NOT STATE WHAT V0 and/or T IS')
-            sys.exit()
+            raise Exception('YOU DID NOT STATE WHAT V0 and/or T IS')
         else:
             self.v0=v0
             self.T=T
+        if axis!='x' and axis!='y': #check wether a valid axis was provided
+            raise Exception('INVALID AXIS PROVIDED!!')
+        self.axis=axis #wether we're looking at the x or y axis. x is horizontal
         self.type = 'PERIODIC'  # this to so the magnet class knows what's calling it
         self.m = 1.16503E-26
         self.u0 = 9.274009E-24
         self.k=1.38064852E-23
         self.began=False #check if the lattice has begun
         self.lattice = [] #list to hold lattice magnet objects
-        self.delta=np.round(np.sqrt(self.k*(self.T)/self.m)/self.v0,3) #RMS longitudinal velocity spread
+        self.delta=np.round(np.sqrt(self.k*(self.T)/self.m)/self.v0,4) #RMS longitudinal velocity spread
         self.numElements = 0 #to keep track of total number of elements. Gets incremented with each additoin
         self.totalLengthArrayFunc = None  # a function that recieves values and returns an array
         # of lengths
@@ -44,38 +45,41 @@ class PeriodicLatticeSolver:
         self.M_Tot_N = None#numeric function that returns total transfer matrix based on input arguments
         self.combinerIndex=None
 
-    def add_Focus(self, L, Bp, rp):
+    def add_Focus(self,L, Bp, rp):
+        #axis: x or y direction. x is horizontal. must be 'x' or 'y'
         #L: Length of focuser
         #Bp: field strength at pole face
         #rp: radius of bore inside magnet
         self.numElements += 1
         args = [L, Bp, rp]
-        el = Magnet(self, 'LENS',args)
+        el = Magnet(self, self.axis,'LENS',args)
         self.lattice.append(el)
 
-    def add_Bend(self, ang, r0, Bdd):
+    def add_Bend(self, ang, r0, Bdd=0):
+        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
         #Ang: angle of bending
         #r0: nominal radius of curvature.
         #Bdd: second derivative of field. This causes focusing during the bending.
                 #this is used instead of Bp and rp because the bending region will probably not be a simple revolved hexapole
         self.numElements += 1
         args = [ang, r0, Bdd]
-        el = Magnet(self,'BEND', args)
+        el = Magnet(self,self.axis,'BEND', args)
         self.lattice.append(el)
 
     def add_Drift(self, L):
+        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
         #L: length of drift region
         self.numElements += 1
         args = [L]
-        el = Magnet(self,'DRIFT', args)
+        el = Magnet(self,self.axis,'DRIFT', args)
         self.lattice.append(el)
-    def add_Combiner(self,Ld):
-        #Ld: drift region size
+    def add_Combiner(self,L=.187):
+        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
+        #L: length of combiner, current length for collin mag is .187
         self.combinerIndex=self.numElements
         self.numElements += 1
-        L=.187+Ld #fixed length plus drift
         args = [L]
-        el = Magnet(self,'COMBINER', args)
+        el = Magnet(self,self.axis,'COMBINER', args)
         self.lattice.append(el)
 
     def compute_M_Total(self): #computes total transfer matric. numeric or symbolic
@@ -93,10 +97,10 @@ class PeriodicLatticeSolver:
             print("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
             sys.exit()
         self.M_Tot = self.compute_M_Total()
+        
         self.M_Tot_N = sym.lambdify(self.sympyVariableList, self.M_Tot, 'numpy') #numeric version of M_Total that takes in arguments
                     #arguments are in the order of sympyVariableList, which is order that they were created
-
-
+        
         #make two functions that return 1: an array where each entry is the length of the corresping optic.
         #2: each entry is the sum of the preceding optics. ie, the total length at that point
         temp = []#temporary holders
@@ -138,19 +142,18 @@ class PeriodicLatticeSolver:
     def compute_Alpha_From_M(self, M):
         M11 = M[0, 0]
         M12 = M[0, 1]
-        M21 = M[1, 0]
+        #M21 = M[1, 0]
         M22 = M[1, 1]
         return (M11-M22)*self.compute_Beta_From_M(M)/(2*M12)
     def compute_Eta_From_M(self, M):
         M11 = M[0, 0]
         M12 = M[0, 1]
         M13 = M[0, 2]
-        M21 = M[1, 0]
+        #M21 = M[1, 0]
         M22 = M[1, 1]
         M23 = M[1, 2]
         extraFact=2 #  THIS IS A KEY DIFFERENCE BETWEEN NEUTRAL AND CHARGED PARTICLES!!!
         return extraFact*((1-M22)*M13+M12*M23)/(2-M11-M22)
-        #return -extraFact*(M13 - M13 * M22 + M12 * M23) / (M11 + M12 * M21 + M22 - M11 * M22 - 1)
 
     def compute_Tune_Array(self, *args,numPoints=250):
         temp = []
@@ -234,13 +237,24 @@ class PeriodicLatticeSolver:
             return zArr, EtaArr
         else:
             return EtaArr
-    def generate_2D_Stability_Plot(self, xMin, xMax, yMin, yMax, numPoints=500):
+    def plot_Stability_Regions_2D(self, xMin, xMax, yMin, yMax, numPoints=500):
+        plt.figure(figsize=(8,8))#required to plot multiple plots
         plotData=self.compute_Stability_Grid(xMin, xMax, yMin, yMax, numPoints=numPoints)
         plotData=np.transpose(plotData)
         plotData=np.flip(plotData,axis=0)
         plt.imshow(plotData, extent=[xMin,xMax, yMin,yMax], aspect=(xMax-xMin) / (yMax-yMin))
-        plt.title("x stability, yellow is STABLE")
+        plt.title("Stability regions \n yellow regions are stable")
+        plt.grid()
+        plt.xlabel(self.sympyStringList[0])
+        plt.ylabel(self.sympyStringList[1])
         plt.show()
+
+
+
+
+
+
+
 
 
     def compute_M_Trans_At_z(self, z, *args):
@@ -249,7 +263,6 @@ class PeriodicLatticeSolver:
         temp = totalLengthArray - z
         index = np.argmax(temp >= 0)
         M = self.lattice[index].M_Funcz(totalLengthArray[index] - z,*args)  # starting matrix
-        #print(M,index)
         # calculate from point z to end of lattice
         for i in range(self.numElements - index - 1):
             j = i + index + 1  # current magnet +1 to get index of next magnet
@@ -266,15 +279,14 @@ class PeriodicLatticeSolver:
 
     def plot_Beta_And_Eta(self,*args):
         self._1D_Plot_Helper("BETA AND ETA",*args)
+    def plot_Envelope(self,*args,emittance):
+        self._1D_Plot_Helper("ENVELOPE",*args,emittance=emittance)
     def _1D_Plot_Helper(self,plotType,*args,emittance=None): #used to plot different functions witout repetativeness of code
         fig, ax1 = plt.subplots(figsize=(10, 5))
         totalLengthArray = self.totalLengthArrayFunc(*args)
         zArr, y1 = self.compute_Beta_Of_z_Array(*args) #compute beta array
         zArr, y2 = self.compute_Eta_Of_z_Array(*args) #compute periodic dispersion array
-        #y3 = [] #to hold tune array
-        #for i in range(zArr.shape[0]):
-        #    y3.append(np.trapz(1 / (y1[:i]) ** 2, x=zArr[:i]) / (2 * np.pi))
-        #y3=np.asarray(y3)
+        tune=np.trapz(1/y1,x=zArr)/(2*np.pi)
 
         if plotType=="BETA AND ETA":
             y2 = y2 * 1000  # dispersion shift is the periodic dispersion times the velocity shift. convert to mm
@@ -293,29 +305,28 @@ class PeriodicLatticeSolver:
             ax1.set_xlabel(xLable)
             ax1.set_ylabel(ax1yLable, color='black')
             ax2.set_ylabel(ax2yLable, color='black')
+        if plotType=="ENVELOPE":
+            y2 = y2 * 1000*self.delta  # dispersion shift is the periodic dispersion times the velocity shift. convert to mm
+            y1=np.sqrt(emittance*y1)*1000
+            ax1Name='Beta envelope'
+            ax1yLable='Beta envelope, mm'
+            ax2Name='Dispersion'
+            ax2yLable='Dispersion, mm'
+            xLable='Nominal trajectory distance,m'
+            titleString='Beta oscillation envelope and dispersion'
+            titleString += "\n Emittance is " + str(np.round(emittance, 6)) + ". Delta is " + str(
+            self.delta) + '. Total tune is ' + str(np.round(tune, 2)) + '.'
+            titleString += " Time of flight ~" + str(int(1000 * zArr[-1] / self.v0)) + " ms"
+            ax2 = ax1.twinx()
+            ax1.plot(zArr, y1, c='black', label=ax1Name)
+            ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
+            lines, labels = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines + lines2, labels + labels2, loc=4)
+            ax1.set_xlabel(xLable)
+            ax1.set_ylabel(ax1yLable, color='black')
+            ax2.set_ylabel(ax2yLable, color='black')
 
-        #if plotType=="ENVELOPE":
-
-
-
-
-        #ax2 = ax1.twinx()
-        #ax3 = ax1.twinx()
-#
-        #ax1.plot(zArr, y1, c='black', label=ax1Name)
-        #ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
-        ## ax3.plot(zArr, y, c='blue', alpha=.5, linestyle='-.', label='envelope')
-#
-        #lines, labels = ax1.get_legend_handles_labels()
-        #lines2, labels2 = ax2.get_legend_handles_labels()
-        #lines3, labels3 = ax3.get_legend_handles_labels()
-        #ax1.legend(lines + lines2 + lines3, labels + labels2 + labels3, loc=4)
-        #ax3.get_yaxis().set_visible(False)
-
-        #titleString = "Beam envelope in mm\n"
-        #titleString += "Emittance is " + str(np.round(emittance, 6)) + ". Delta is " + str(
-        #    self.delta) + '. Total tune is ' + str(np.round(y3[-1], 2)) + '.'
-        #titleString += " Time of flight ~" + str(int(1000 * zArr[-1] / self.v0)) + " ms"
 
         for i in range(self.numElements):
             if i == 0:
@@ -323,13 +334,12 @@ class PeriodicLatticeSolver:
             else:
                 center = (totalLengthArray[i - 1] + totalLengthArray[i]) / 2
             plt.axvline(totalLengthArray[i], c='black', linestyle=':')
-            ax1.text(center, np.max(y1), self.lattice[i].type, rotation=45)
-        #ax1.set_xlabel('Nominal trajectory distance,m')
-        #ax1.set_ylabel('Betraton envelope,mm', color='black')
-        #ax2.set_ylabel('Dispersion shift,mm', color='black')
+            ax1.text(center, np.max(y1)*.9, self.lattice[i].type, rotation=45)
         plt.title(titleString)
         plt.draw()
         plt.show()
+
+
 
 
 
@@ -378,7 +388,6 @@ class PeriodicLatticeSolver:
         resFact=1/res #What the remainder is compare to
         tuneRem = tune - tune.astype(int)  # tune remainder, the integer value doens't matter
         tuneResFactArr = 1-np.abs(2*(tuneRem-np.round(tuneRem/resFact)*resFact)/resFact)  # relative nearness to resonances
-        print('here')
         return tuneResFactArr
 
 
@@ -410,7 +419,7 @@ class PeriodicLatticeSolver:
         if output=='BETA MIN':
             plotData[plotData>=trim]=trim #trim values
             cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cay
-            title='Beta,m^2.'
+            title='Beta,m.'
         if output=="DISPERSION MIN":
             plotData = plotData *1000 #convert to mm
             if trim!=None:
@@ -505,7 +514,6 @@ class PeriodicLatticeSolver:
             for i in range(len(argList)):
                 try:  # in case there is imaginary numbers
                     dispersionMin = self.delta*np.min(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
-                    #print(dispersionMin)
                     results.append([gridPos[i], dispersionMin])
                 except:
                     results.append([gridPos[i], np.nan])
@@ -513,7 +521,6 @@ class PeriodicLatticeSolver:
             for i in range(len(argList)):
                 try:  # in case there is imaginary numbers
                     dispersionMax = self.delta*np.max(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
-                    #print(dispersionMin)
                     results.append([gridPos[i], dispersionMax])
                 except:
                     results.append([gridPos[i], np.nan])
@@ -528,45 +535,57 @@ class PeriodicLatticeSolver:
 
 if __name__ == '__main__':
 
-    PLS=PeriodicLatticeSolver(v0=200,T=.001)
-    print(PLS.delta)
-    Lm=PLS.Variable('Lm')
-    Bp=PLS.Variable('Bp')
 
+    
+    
+    
+    PLS=PeriodicLatticeSolver('x',v0=200,T=.025)
     PLS.begin_Lattice()
-    PLS.add_Bend(np.pi,1,0)
+    Lm=PLS.Variable('Lm')
+    Ld=PLS.Variable('Ld')
     PLS.add_Drift(.05)
-    PLS.add_Focus(Lm,Bp,.05)
-    PLS.add_Combiner(.5)
-    PLS.add_Focus(Lm,Bp,.05)
+    PLS.add_Focus(Lm,.5,.05)
+    PLS.add_Drift(Ld)
+    PLS.add_Combiner()
+    PLS.add_Drift(Ld)
+    PLS.add_Focus(Lm,.5,.05)
     PLS.add_Drift(.05)
-    PLS.add_Bend(np.pi,1,0)
-    #PLS.add_Focus(.25,Bp,.05)
-    #PLS.add_Bend(np.pi,1,0)
-    PLS.add_Drift(.1+2*Lm+.5)
-
-
-
+    PLS.add_Bend(np.pi/2,1)
     PLS.end_Lattice()
+    #PLS.plot_Stability_Regions_2D(0, 1, 0, 1)
+    PLS.plot_Envelope(.4,.2,emittance=1E-3)
+    #PLS.plot_Beta_Min_2D(0,1,0,1,4)
+    
+    
+    
+    PLS=PeriodicLatticeSolver('y',v0=200,T=.025)
+    PLS.begin_Lattice()
+    Lm=PLS.Variable('Lm')
+    Ld=PLS.Variable('Ld')
+    PLS.add_Drift(.05)
+    PLS.add_Focus(Lm,.5,.05)
+    PLS.add_Drift(Ld)
+    PLS.add_Combiner()
+    PLS.add_Drift(Ld)
+    PLS.add_Focus(Lm,.5,.05)
+    PLS.add_Drift(.05)
+    PLS.add_Bend(np.pi/2,1)
+    PLS.end_Lattice()
+    #PLS.plot_Stability_Regions_2D(0, 1, 0, 1)
+    PLS.plot_Envelope(.4,.2,emittance=1E-3)
+    #PLS.plot_Beta_Min_2D(0,1,0,1,4)
+    
+    
 
+    
+    
 
-
-
-
-    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=0)
-    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
-    #PLS.plot_Dispersion_Max_2D(*args,numPoints=numPoints,trim=1000)
-    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=1)
-    PLS.plot_Beta_And_Eta(.4,.4)
-
-    args=(.1,.5,1E-3,.5)
-    numPoints=100
-    elementIndex=3
-    #PLS.plot_Beta_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
-    #PLS.plot_Dispersion_Min_2D(*args,numPoints=numPoints,elementIndex=elementIndex)
-    #PLS.plot_Dispersion_Max_2D(*args,numPoints=numPoints,trim=1000)
-    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=1)
-    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=2)
-    #PLS.plot_Resonance_2D(*args,numPoints=numPoints,resonance=3)
-
-
+    
+    
+    
+    
+    
+    
+    
+    
+    
