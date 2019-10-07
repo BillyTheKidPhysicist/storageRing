@@ -4,6 +4,8 @@ import scipy.signal as sps
 import sys
 import time
 
+#for linearLatticeSolver
+
 
 class ParticleTrace:
     def __init__(self,LLS,v0,T):
@@ -26,6 +28,9 @@ class ParticleTrace:
         self.dt=None #time step soze
         self.simulationTime=None #total time in the particle tracing
         self.firstLensIndex=None #index of first lens in the lattice
+
+
+
 
     def compute_ThetaMax(self):
         #computes maximum input angle for first lens from ideal picture.
@@ -149,6 +154,8 @@ class ParticleTrace:
         self.ForceHelper[1::3] = temp #cheaper method to track the force than restating an array each time
         self.ForceHelper[2::3] = temp
         return self.ForceHelper * q
+
+
     def trace_Particles(self):
         #do the time stepping. Uses velocity verlet
         q,v=self.initialize_q_And_v()
@@ -246,6 +253,55 @@ class ParticleTrace:
         indices = self.find_Wall_Collision_Indices(q)
         qNew,vNew=self.remove_Particles(q,v,indices)
         return qNew,vNew
+    def find_RMS_Emittance(self,totalLength,beta):
+        self.thetaMax=self.compute_ThetaMax()
+        self.numParticles=1000
+        self.timeSteps = 1000
+        self.initialize_Parameters(totalLength)
+        q,v=self.trace_Particles()
+
+        q,v=self.remove_Collided_Particles(q,v)
+        numRemoved=int(self.numParticles-q[0].shape[0]/3)
+        peaks=self.find_Focuses(q)
+        focus=peaks[-1] #the final focus, the one used for loading
+        qFocus=q[focus]
+        qx=qFocus[1::3]
+        qy=qFocus[2::3]
+        vFocus=v[focus]
+        vx=vFocus[1::3]
+        vy=vFocus[2::3]
+        ex=(qx**2+(vx*beta/self.v0)**2)/beta
+        ey=(qy**2+(vy*beta/self.v0)**2)/beta
+        print(np.sqrt(np.mean(ex**2)))
+    def plot_RMS_Envelope(self,totalLength):
+        self.thetaMax=self.compute_ThetaMax()
+        self.numParticles=1000
+        self.timeSteps = 1000
+        self.initialize_Parameters(totalLength)
+        q,v=self.trace_Particles()
+        q,v=self.remove_Collided_Particles(q,v)
+        xRMSArr=np.std(q[:,1::3],axis=1)
+        yRMSArr = np.std(q[:,2::3], axis=1)
+        averageRMS=(xRMSArr+yRMSArr)/2
+        z=q[:,0]
+        plt.plot(100*z,1000*averageRMS)
+        plt.ylabel("Envelope, mm")
+        plt.xlabel("Distance, cm")
+        plt.grid()
+        plt.show()
+    def find_Spot_Sizes(self,totalLength=10):
+        self.thetaMax=self.compute_ThetaMax()
+        self.numParticles=1000
+        self.timeSteps = 1000
+        self.initialize_Parameters(totalLength)
+        q,v=self.trace_Particles()
+        q,v=self.remove_Collided_Particles(q,v)
+        stdArr=np.std(q[:,1::3],axis=1)
+        peaks=sps.find_peaks(-stdArr)[0]
+        spotSizes=np.sqrt(2)*stdArr[peaks]
+        return spotSizes
+
+
 
 
 

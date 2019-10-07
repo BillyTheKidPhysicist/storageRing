@@ -1,7 +1,4 @@
-# version .1, sep 18
-#NEED TO CHECK IMAGE MAGNIFICATION and AGNULGA
-#BE ABLE TO COMPUTE ANGULAR MAGNICATION ON THE SPOT WITHOUT END LATTICE
-
+#-improved error handling 
 from particleTracing import ParticleTrace
 import sympy as sym
 import numpy as np
@@ -16,8 +13,7 @@ class LinearLatticeSolver:
 
     def __init__(self,v0=None,T=None):
         if v0==None or T==None:
-            print('YOU DID NOT STATE WHAT V0 and/or T IS')
-            sys.exit()
+            raise Exception('YOU DID NOT STATE WHAT V0 and/or T IS')
         else:
             self.v0=v0
             self.T=T
@@ -86,11 +82,9 @@ class LinearLatticeSolver:
     def end_Lattice(self):
         # must be called after ending lattice. Prepares functions that will be used later
         if self.began == False:
-            print("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
-            sys.exit()
+            raise Exception("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
         if self.lattice[-1].type == "DRIFT":
-            print('THE LAST ELEMENT CANNOT BE A DRIFT')
-            sys.exit()
+            raise Exception('THE LAST ELEMENT CANNOT BE A DRIFT')
         self.M_Tot = self.compute_M_Total()
         self.M_Tot_N = sym.lambdify(self.sympyVariableList, self.M_Tot,
                                     'numpy')  # numeric version of M_Total that takes in arguments
@@ -161,8 +155,7 @@ class LinearLatticeSolver:
             imageMagnificationGrid = self.imageMagnificationFunc(*coords)
             return imageMagnificationGrid
         else:
-            print("not a valid output!")
-            sys.exit()
+            raise Exception("not a valid output!")
     def generate_2D_Output_Plot(self,xMin,xMax,yMin,yMax,output,numPoints=1000,trimUpper=None,trimLower=None):
         plotData = self.compute_Output_Grid(xMin, xMax, yMin, yMax,output, numPoints=numPoints)
 
@@ -383,6 +376,7 @@ class LinearLatticeSolver:
             v0 = self.v0
         return thetaMax*Ld/np.sqrt(1-self.m*(v0*thetaMax)**2/(2*self.u0*Bp))
 if __name__ == '__main__':
+
     thetaMax1 = .07
 
     LLS=LinearLatticeSolver(v0=200,T=.025)
@@ -395,8 +389,7 @@ if __name__ == '__main__':
 
     thetaMax2=np.abs(LLS.angularMagnificationFunc()*thetaMax1)
     rp2=LLS.compute_rp(thetaMax=thetaMax2,Bp=.5,Ld=.5)
-
-
+    print(rp1,rp2)
 
 
     LLS=LinearLatticeSolver(v0=200,T=.025)
@@ -410,24 +403,11 @@ if __name__ == '__main__':
 
 
     PT = ParticleTrace(LLS,200,0.01)
-    print("meep")
-    var=PT.find_Particle_Distributions(3.5)
-    x=var[0][1]
-    xd=var[1][1]/LLS.v0
-    print(np.sqrt(2*x*xd*.25))
+    print(PT.find_Spot_Sizes(3))
+    print(PT.find_RMS_Emittance(3,.18))
+    PT.plot_RMS_Envelope(3)
 
 
-    #print(PT.find_Spot_Sizes())
-
-
-    #print(PT.find_Spot_Sizes(3))
-
-
-    #LLS.generate_1D_Lattice_Length_Plot(.1,.5)
-
-
-    #LLS.generate_1D_Image_Distance_Plot(.1,.75)
-    #print(LLS.compute_Bp(thetaMax=.075,rp=.053,Ld=.6))
 
 
 
