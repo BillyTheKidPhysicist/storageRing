@@ -1,108 +1,270 @@
-#-updated add_Bend to make Bdd a keyword beacause i don't really know what to do with it yet. need to look
-#at theory more
-#-miscellaneous naming improvements
-#-misc plot improvement
-#-improved error handling 
-
 import sympy as sym
-import numpy.linalg as npl
+import numpy.linalg as npla
 import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import matplotlib
 import sys
-from magnet import Magnet
-import time
+from element import Element
+
+
+#TODO: ROBUST COMMENTING WITH INTRO EXPLANATOION
 
 
 
+class VariableObject:
+    def __init__(self,sympyVar,symbol):
+        self.vareMin=None
+        self.varMax=None
+        self.varInit=None #initial value of variable
+        self.symbol=symbol
+        self.sympyObject=sympyVar
+        self.elIndex=None #index of use of variables. Can be overwritten if reused.
 
 class PeriodicLatticeSolver:
-    def __init__(self,axis,v0=None,T=None):
+    def __init__(self,axis=None,v0=None,T=None):
 
         if v0==None or T==None:
             raise Exception('YOU DID NOT STATE WHAT V0 and/or T IS')
         else:
             self.v0=v0
             self.T=T
-        if axis!='x' and axis!='y': #check wether a valid axis was provided
+        if axis!='x' and axis!='y' and axis!='both': #check wether a valid axis was provided
             raise Exception('INVALID AXIS PROVIDED!!')
-        self.axis=axis #wether we're looking at the x or y axis. x is horizontal
+        if axis==None:
+            self.axis='both'
+        else:
+            self.axis=axis #wether we're looking at the x or y axis or both. x is horizontal
         self.type = 'PERIODIC'  # this to so the magnet class knows what's calling it
-        self.m = 1.16503E-26
-        self.u0 = 9.274009E-24
-        self.k=1.38064852E-23
+        self.trackLength=None
+        self.m = 1.16503E-26 #mass of lithium 7, SI
+        self.u0 = 9.274009E-24 #bohr magneton, SI
+        self.kb=1.38064852E-23 #boltzman constant, SI
         self.began=False #check if the lattice has begun
         self.lattice = [] #list to hold lattice magnet objects
-        self.delta=np.round(np.sqrt(self.k*(self.T)/self.m)/self.v0,4) #RMS longitudinal velocity spread
+        self.bendIndices=[] #list of locations of bends in the lattice
+        self.delta=np.round(np.sqrt(self.kb*(self.T)/self.m)/self.v0,4) #sigma of velocity spread
         self.numElements = 0 #to keep track of total number of elements. Gets incremented with each additoin
-        self.totalLengthArrayFunc = None  # a function that recieves values and returns an array
-        # of lengths
-        self.lengthArrayFunc = None  # length of each element
-        self.sympyVariableList = [] #list of sympy objects
-        self.sympyStringList=[] #list of strings used to represent sympy variables
+        self.totalLengthListFunc = None  # each entry is the length of that element plus preceding elements.
+                                    # arguments are variables declared by user in order user declared them
+        self.lengthListFunc = None  # each entry is the length of that element. arguments are variables declared by user
+                                    #in order user declared them
+        self.sympyVarList = [] #list of sympy object variables. This list is filled in the order that the user
+            #declared them
+        self.VOList=[] #list of VariableObject objects. These are used to help with interactive plotting
         self.M_Tot = None #total transfer matrix, can contain sympy symbols
         self.M_Tot_N = None#numeric function that returns total transfer matrix based on input arguments
-        self.combinerIndex=None
+        self.MListFunc=None #returns a list of numeric matrix values
+    #class Variable:
+    #    def __init__(self1,symbol):
+    #        self1.min=None
+    #        self1.max=None
+    #        self1.var=sym.symbols(symbol)
+    #        PeriodicLatticeSolver.sympyVarList.append(self1.var)
+    def Variable(self, symbol,varMin=0.0,varMax=1.0,varInit=None):
+        #function that is called to create a variable to use. Really it jsut adds things to list, but to the user it looks
+        #like a variable
+        #symbol: string used for sympy symbol
+        #print(varInit)
+        sympyVar=sym.symbols(symbol)
+        VO=VariableObject(sympyVar,symbol)
+        VO.varMin=varMin
+        VO.varMax=varMax
+        if varInit==None:
+            VO.varInit=(varMin+varMax)/2
+        else:
+            VO.varInit=varInit
+        #print(self.varInit)
 
-    def add_Focus(self,L, Bp, rp):
-        #axis: x or y direction. x is horizontal. must be 'x' or 'y'
-        #L: Length of focuser
+        self.VOList.append(VO)
+        self.sympyVarList.append(sympyVar)
+        return VO
+    def unpack_VariableObjects(self,args):
+    #to unpack sympy from VariableObject before sending to Element class. also does error checking and some other
+    #things for VariableObject
+        for i in range(len(args)): #extract the sympy object from variable to send to Element class. Also note element index
+                                    #for later use
+            if isinstance(args[i], VariableObject):
+                #check if the variable has been used in another element, that is currently not allowed
+                #if args[i].elIndex!=None:
+                #    print("YOU CAN'T USE VariableObjects IN MORE THAN ONE ELEMENT!!")
+                #    sys.exit()
+                #args[i].elIndex=self.numElements-1
+                args[i]=args[i].sympyObject
+        return args
+
+    def add_Lens(self,L, Bp, rp,S=None):
+        #add a magnetic lens, ie hexapole magnet
+        #L: Length of lens
         #Bp: field strength at pole face
         #rp: radius of bore inside magnet
         self.numElements += 1
-        args = [L, Bp, rp]
-        el = Magnet(self, self.axis,'LENS',args)
-        self.lattice.append(el)
+        args = self.unpack_VariableObjects([L, Bp, rp,S])
 
-    def add_Bend(self, ang, r0, Bdd=0):
-        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
+        el = Element(self, 'LENS',args=args)
+        self.lattice.append(el)
+        el.index = self.numElements - 1
+
+    def add_Bend(self, angle, alpha,beta,S=None):
+        #add a bending magnet. At this point it's some kind of dipole+quadrupole magnet. The radius of curvature
+        #is decided by bending power
         #Ang: angle of bending
-        #r0: nominal radius of curvature.
-        #Bdd: second derivative of field. This causes focusing during the bending.
-                #this is used instead of Bp and rp because the bending region will probably not be a simple revolved hexapole
+        #alpha: dipole term
+        #beta: quadrupole terms
         self.numElements += 1
-        args = [ang, r0, Bdd]
-        el = Magnet(self,self.axis,'BEND', args)
+        self.bendIndices.append(self.numElements-1)
+        args = self.unpack_VariableObjects([angle,alpha,beta,S])
+        el = Element(self,'BEND',args=args)
         self.lattice.append(el)
+        el.index = self.numElements - 1
 
-    def add_Drift(self, L):
-        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
+    def add_Drift(self, L=None,S=None):
+        #add a drift section.
         #L: length of drift region
         self.numElements += 1
-        args = [L]
-        el = Magnet(self,self.axis,'DRIFT', args)
+        if L==None:
+            el = Element(self, 'DRIFT',[L,S],defer=True)
+        else:
+            args = self.unpack_VariableObjects([L,S])
+            el = Element(self,'DRIFT', args)
         self.lattice.append(el)
-    def add_Combiner(self,L=.187):
-        # axis: x or y direction. x is horizontal. must be 'x' or 'y'
+        el.index = self.numElements - 1
+    def add_Combiner(self,L=.187,alpha=1.01,beta=20,S=None):
+        #add combiner magnet. This is the 'collin' magnet
         #L: length of combiner, current length for collin mag is .187
-        self.combinerIndex=self.numElements
+        #alpha: dipole term
+        #beta: quadrupole term
+        #NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
         self.numElements += 1
-        args = [L]
-        el = Magnet(self,self.axis,'COMBINER', args)
+        args = self.unpack_VariableObjects([L,alpha,beta,S])
+        el = Element(self,'COMBINER',args=args)
         self.lattice.append(el)
+        el.index = self.numElements - 1
 
     def compute_M_Total(self): #computes total transfer matric. numeric or symbolic
-        M=sym.Matrix([[1,0,0],[0,1,0],[0,0,1]]) #starting matrix, identity
+        M=sym.eye(5) #starting matrix, identity
         for i in range(self.numElements):
             M=self.lattice[i].M @ M #remember, first matrix is on the right!
         return M
+    def set_Track_Length(self,value):
+        #this is to set the length of the straight awayas between bends. As of now this is the same for each
+        # straight away
+        self.trackLength=value
+
+    def catch_Errors(self):
+        if self.lattice[0].elType!='BEND':
+            print('First element must be a bender!')
+            sys.exit()
+        #ERROR: Check that there are two benders
+        if len(self.bendIndices)!=2:
+            print('There must be 2 benders!!!')
+            sys.exit()
+        #ERROR: check that total bending is 360 deg within .1%
+        angle=0
+        for i in self.bendIndices:
+            angle+=self.lattice[i].angle
+        if angle>1.01*2*np.pi or angle <.99*2*np.pi:
+            print('Total bending must be 360 degrees within .1%!')
+            sys.exit()
+
+        #ERROR: the total length of elements is greater than the track length or edges overlap
+        ###length1=0
+        ###edgeList1 = []
+        ###for el in self.lattice[1:self.bendIndices[1]]: #first element is a bend always
+        ###    if isinstance(el.Length,numbers.Number): #sometimes the length of the element is declared
+        ###        length1+=el.Length
+        ###    if isinstance(el.Length,numbers.Number): #sometimes the length of the element may be an undetermind variable
+        ###    if isinstance(el.S,numbers.Number) and isinstance(el.Length, numbers.Number): #sometimes
+        ###        edgeList1.append(el.S-el.Length/2)
+        ###        edgeList1.append(el.S + el.Length / 2)
+        ###length2=0
+        ###edgeList2 = []
+        ###for el in self.lattice[self.bendIndices[1]+1:]:
+        ###    if isinstance(el.Length,numbers.Number):
+        ###        length2 += el.Length
+        ###    if isinstance(el.S, numbers.Number) and isinstance(el.Length, numbers.Number):
+        ###        edgeList2.append(el.S - el.Length / 2)
+        ###        edgeList2.append(el.S + el.Length / 2)
+        ###print(length1,edgeList1)
+        ###if length1>self.trackLength or length2>self.trackLength:
+        ###    print('Total length greater than track length!!!')
+        ###    sys.exit()
+        ###temp=0-1E-10
+        ###for item in edgeList1:
+        ###    if item<temp:
+        ###        print('Edges of elements cannot overlap')
+        ###        sys.exit()
+        ###for item in edgeList2:
+        ###    if item<temp:
+        ###        print('Edges of elements cannot overlap')
+        ###        sys.exit()
+    def update_Element_Lengths(self):
+        self.catch_Errors()
+
+
+
+
+        #solve element length and position one track at a time. A track is the sequence of elements between two bends.
+        #user must start with the first element being a bend and use only 2 bends
+        if self.lattice[0].elType!='BEND':
+            print('first element must be a bend!')
+            sys.exit()
+        if len(self.bendIndices)==2: #simple two element lattice
+            for el in self.lattice: #manipulate lens elements only
+                if el.elType=='LENS': #adjust lens lengths
+                    if el.index==self.bendIndices[0]+1 or el.index==self.bendIndices[1]+1:#if the lens is right after the bend
+                        if el.S==None: #if position is unspecified
+                            el.S=el.Length/2
+                    elif el.index == self.bendIndices[1] - 1 or el.index == self.numElements - 1: #if the lens is right
+                            #before the bend
+                        if el.S==None: #if position is unspecified
+                            el.S=self.trackLength-el.Length/2
+            for el in self.lattice: #manipulate drift elements only
+                if el.elType=='DRIFT': #-----------adjust the drift lengths
+                    if el.index==self.bendIndices[0]+1 or el.index==self.bendIndices[1]+1: #edge case for drift right
+                            # after bend. The lattice starts with first element as bend so there are two cases here for now
+                        edgeR=self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2 #the position of the next element edge reletaive
+                            #to first bend end
+                        el.Length=edgeR #distance from beginning of drift to edge of element
+                    elif el.index==self.bendIndices[1]-1: #if the drift is right before the bend
+                        edgeL = self.lattice[self.bendIndices[1]-2].S+self.lattice[self.bendIndices[1]-2].Length/2
+                                    # the distance of the element edge from the beggining of the bend
+                        el.Length=self.trackLength-edgeL
+                        #distance from previous element end to
+                            #beginning of bend
+                    elif el.index==self.numElements-1: #if the drift is right before the end
+                        edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
+                        el.Length=self.trackLength-edgeL
+
+                    else:
+                        edgeL=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2 #position of prev el edge
+                        edgeR = self.lattice[el.index + 1].S-self.lattice[el.index+1].Length/2 #position of next el edge
+                        el.Length=edgeR-edgeL
+        else:
+            print('the ability to deal with a system with more or less than 2 bends is not implemented')
+            sys.exit()
 
     def begin_Lattice(self): #must be called before making lattice
         self.began=True
 
     def end_Lattice(self):
         #must be called after ending lattice. Prepares functions that will be used later
+        self.update_Element_Lengths()
+        for el in self.lattice:
+            if el.deferred==True:
+                el.update()
+
         if self.began==False:
             print("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
             sys.exit()
-        self.M_Tot = self.compute_M_Total()
-        
-        self.M_Tot_N = sym.lambdify(self.sympyVariableList, self.M_Tot, 'numpy') #numeric version of M_Total that takes in arguments
-                    #arguments are in the order of sympyVariableList, which is order that they were created
-        
-        #make two functions that return 1: an array where each entry is the length of the corresping optic.
-        #2: each entry is the sum of the preceding optics. ie, the total length at that point
+        self.M_Tot = self.compute_M_Total() #sympy version of full transfer function
+        self.M_Tot_N = sym.lambdify(self.sympyVarList, self.M_Tot, 'numpy') #numeric version of M_Total that takes in arguments
+                    #arguments are in the order of sympyVarList, which is order that they were created by the user
+
+        #this loop does 2 things
+        # 1:make  an array function where each entry is the length of the corresping optic.
+        #2: make an array function each entry is the sum of the lengths of the preceding optics and that optic. ie, the total length at that point
+        #3: enter the z coordinate for each element
         temp = []#temporary holders
         temp1 = [] #temporary holders
         for i in range(len(self.lattice)):
@@ -110,146 +272,136 @@ class PeriodicLatticeSolver:
             temp1.append(self.lattice[i].Length)
             for j in range(i): #do the sum up to that point
                 temp[i] += self.lattice[j].Length
-        self.totalLengthArrayFunc = sym.lambdify(self.sympyVariableList, temp)
-        self.lengthArrayFunc = sym.lambdify(self.sympyVariableList, temp1)
+            self.lattice[i].zFunc=sym.lambdify(self.sympyVarList,temp[i]-self.lattice[i].Length/2)
+        self.totalLengthListFunc = sym.lambdify(self.sympyVarList, temp) #each entry is an inclusive cumulative sum
+                                                                                #of element lengths
+        self.lengthListFunc = sym.lambdify(self.sympyVarList, temp1) #each entry is length of that element
+
+
+
+        def tempFunc(*args):
+        #takes in arguments and returns a list of transfer matrices
+        #args: the variables defined by the user ie the sympyVarList
+            tempList=[]
+            for el in self.lattice:
+                M_N=sym.lambdify(self.sympyVarList, el.M,'numpy')
+                tempList.append(M_N(*args))
+            return tempList
+        self.MListFunc=tempFunc
+
 
     def compute_Tune(self,*args):
-        #args are input values
         #this method is slow, but very accruate because it used default sample size of compute_Beta_Of_z_Array
-        x,y=self.compute_Beta_Of_z_Array(*args)
+        #args: input values, sympyVariablesList
+        x,y=self.compute_Beta_Of_Z_Array(*args)
         tune=np.trapz(np.power(y,-2),x=x)/(2*np.pi)
         return tune
 
 
 
 
-    def Variable(self, symbol):
-        #function that is called to create a variable to use. Really it jsut adds things to list, but to the user it looks
-        #like a variable
-        #symbol: string used for sympy symbol
-        var=sym.symbols(symbol)
-        self.sympyVariableList.append(var)
-        self.sympyStringList.append(symbol)
-        return var
+    def _compute_Lattice_Function_From_M(self,M,funcName,axis):
+        #since many latice functions, such as beta,alpha,gamma and eta are calculated in a very similiar was
+        #this function saces space by resusing code
+        #M: 5x5 transfer matrix, or 3x3 if using x axis or 2x2 if using x axis and no eta
+        if axis==None: #can't put self as keyword arg
+            axis=self.axis
+        def lattice_Func_Reduced_From_M(Mat): #to save space. This simply computes beta over a given 2x2 matrix
+            M11 = Mat[0, 0]
+            M12 = Mat[0, 1]
+            M21 = Mat[1, 0]
+            M22 = Mat[1, 1]
 
-    def compute_Beta_From_M(self, M):
-        M11 = M[0, 0]
-        M12 = M[0, 1]
-        M21 = M[1, 0]
-        M22 = M[1, 1]
-        return 2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+            if funcName=='BETA':
+                #print('here',2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
+                return 2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+            if funcName=='ETA':
+                M13 = Mat[0, 2]
+                M23 = Mat[1, 2]
+                extraFact = 2  # THIS IS A KEY DIFFERENCE BETWEEN NEUTRAL AND CHARGED PARTICLES!!!
+                return extraFact * ((1 - M22) * M13 + M12 * M23) / (2 - M11 - M22)
+            if funcName=='ALPHA':
+                return ((M11-M22)/(2*M12))*2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
 
-    def compute_Alpha_From_M(self, M):
-        M11 = M[0, 0]
-        M12 = M[0, 1]
-        #M21 = M[1, 0]
-        M22 = M[1, 1]
-        return (M11-M22)*self.compute_Beta_From_M(M)/(2*M12)
-    def compute_Eta_From_M(self, M):
-        M11 = M[0, 0]
-        M12 = M[0, 1]
-        M13 = M[0, 2]
-        #M21 = M[1, 0]
-        M22 = M[1, 1]
-        M23 = M[1, 2]
-        extraFact=2 #  THIS IS A KEY DIFFERENCE BETWEEN NEUTRAL AND CHARGED PARTICLES!!!
-        return extraFact*((1-M22)*M13+M12*M23)/(2-M11-M22)
+        if axis=='x':
+            return lattice_Func_Reduced_From_M(M[:2,:2])
+        elif axis=='y':
+            return lattice_Func_Reduced_From_M(M[3:5, 3:5])
+        elif axis=='both':
+            betax= lattice_Func_Reduced_From_M(M[:2, :2])
+            betay=lattice_Func_Reduced_From_M(M[3:5, 3:5])
+            return betax,betay
 
-    def compute_Tune_Array(self, *args,numPoints=250):
-        temp = []
-        x,y=self.compute_Beta_Of_z_Array(*args,numPoints=250)
-        for i in range(numPoints):
-            integral=np.trapz(y[:i],x=x[:i])
-            temp.append(integral)
-
-        return np.asarray(temp)
-
-    def compute_Alpha_Of_z_Array(self, *args,numPoints=1000):
-        #args: supplied arguments. this depends on the variables created by user if there are any. Order is critical
-        #numPoints: number of points compute
-        totalLengthArray = np.asarray(self.totalLengthArrayFunc(*args))
-        zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
-        betaList = []
-        for z in zArr:
-            M = self.compute_M_Trans_At_z(z, *args)
-            betaList.append(self.compute_Alpha_From_M(M))
-        alphaArr = np.asarray(betaList)
-        return zArr, alphaArr
-
-    def compute_Beta_Of_z_Array(self, *args,numPoints=None,elementIndex=None,returnZarr=True):
-        #computes beta over entire lattice, or single element.
-        #args: supplied arguments. this depends on the variables created by user if there are any. Order is critical
-        #numPoints: number of points compute. Initially none because it has different behaviour wether the user chooses to
-                    #compute beta over a single element or the while thing
-        #elementIndex: which element to compute points for
-        totalLengthArray =  self.totalLengthArrayFunc(*args)
-        if elementIndex==None:
-            if numPoints==None: #if user is wanting default value
-                numPoints=500
-            zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
+    def compute_Alpha_From_M(self, M,axis=None):
+        if axis==None:
+            return self._compute_Lattice_Function_From_M(M,'ALPHA',self.axis)
         else:
-            if numPoints==None: #if user is wanting default value
-                numPoints=50
-            if elementIndex==0:
-                zArr = np.linspace(0, totalLengthArray[elementIndex], num=numPoints)
-            else:
-                zArr = np.linspace(totalLengthArray[elementIndex-1], totalLengthArray[elementIndex], num=numPoints)
+            return self._compute_Lattice_Function_From_M(M, 'ALPHA', axis)
 
-
-        betaArr=np.empty(zArr.shape)
-        i=0
-        for z in zArr:
-            M = self.compute_M_Trans_At_z(z, *args)
-            betaArr[i]=self.compute_Beta_From_M(M)
-            i+=1
-        betaArr = np.abs(betaArr)
-        if returnZarr==True:
-            return zArr, betaArr
+    def compute_Eta_From_M(self, M,axis=None):
+        if axis == None:
+            return self._compute_Lattice_Function_From_M(M, 'Eta', self.axis)
         else:
-            return betaArr
-    def compute_Eta_Of_z_Array(self, *args,numPoints=None,elementIndex=None,returnZarr=True):
-        #computes beta over entire lattice, or single element.
-        #args: supplied arguments. this depends on the variables created by user if there are any. Order is critical
-        #numPoints: number of points compute. Initially none because it has different behaviour wether the user chooses to
-                    #compute beta over a single element or the while thing
-        #elementIndex: which element to compute points for
-        totalLengthArray =  self.totalLengthArrayFunc(*args)
-        if elementIndex==None:
-            if numPoints==None: #if user is wanting default value
-                numPoints=500
-            zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
+            return self._compute_Lattice_Function_From_M(M, 'Eta', axis)
+    def compute_Beta_From_M(self, M,axis=None):
+        if axis == None:
+            return self._compute_Lattice_Function_From_M(M, 'Beta', self.axis)
         else:
-            if numPoints==None: #if user is wanting default value
-                numPoints=50
-            if elementIndex==0:
-                zArr = np.linspace(0, totalLengthArray[elementIndex], num=numPoints)
-            else:
-                zArr = np.linspace(totalLengthArray[elementIndex-1], totalLengthArray[elementIndex], num=numPoints)
+            return self._compute_Lattice_Function_From_M(M, 'Beta', axis)
+    def compute_Beta_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('BETA',numpoints,elIndex,returZarr,zArr,axis,*args)
+    def compute_Eta_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('ETA',numpoints,elIndex,returZarr,zArr,axis,*args)
+    def compute_Alpha_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('ALPHA',numpoints,elIndex,returZarr,zArr,axis,*args)
 
 
-        EtaArr=np.empty(zArr.shape)
-        i=0
-        for z in zArr:
-            M = self.compute_M_Trans_At_z(z, *args)
-            EtaArr[i]=self.compute_Eta_From_M(M)
-            i+=1
-        if returnZarr==True:
-            return zArr, EtaArr
-        else:
-            return EtaArr
-    def plot_Stability_Regions_2D(self, xMin, xMax, yMin, yMax, numPoints=500):
-        plt.figure(figsize=(8,8))#required to plot multiple plots
-        plotData=self.compute_Stability_Grid(xMin, xMax, yMin, yMax, numPoints=numPoints)
-        plotData=np.transpose(plotData)
-        plotData=np.flip(plotData,axis=0)
-        plt.imshow(plotData, extent=[xMin,xMax, yMin,yMax], aspect=(xMax-xMin) / (yMax-yMin))
-        plt.title("Stability regions \n yellow regions are stable")
-        plt.grid()
-        plt.xlabel(self.sympyStringList[0])
-        plt.ylabel(self.sympyStringList[1])
-        plt.show()
 
 
+    def _compute_Lattice_Function_Of_z_Array(self,funcName,numPoints,elIndex,returnZarr,zArr,axis,*args):
+       # computes lattice functions over entire lattice, or single element.
+       # args: supplied arguments. this depends on the variables created by user if there are any. Order is critical
+       # numPoints: number of points compute. Initially none because it has different behaviour wether the user chooses to
+       # compute beta over a single element or the while thing
+       # elIndex: which element to compute points at. if none compute over whole lattice
+       if axis==None:
+           axis=self.axis
+       totalLengthArray = self.totalLengthListFunc(*args)
+       if elIndex == None:  # use entire lattice
+           if np.any(zArr==None): #if user wants to use default zArr
+                if numPoints == None:  # if user is wanting default value
+                    numPoints = 500
+                zArr = np.linspace(0, totalLengthArray[-1], num=numPoints)
+       else:  # comptue betta array over specific element
+           if numPoints == None:  # if user is wanting default value
+               numPoints = 50
+           if elIndex == 0:
+               zArr = np.linspace(0, totalLengthArray[0], num=numPoints)  # different rule for first element
+           else:
+               zArr = np.linspace(totalLengthArray[elIndex - 1], totalLengthArray[elIndex], num=numPoints)
+
+       if axis == 'both':
+           latFuncxArr = np.empty(zArr.shape)
+           latFuncyArr = latFuncxArr.copy()
+           i = 0
+           for z in zArr:
+               M = self.compute_M_Trans_At_z(z, *args)
+               latFuncxArr[i], latFuncyArr[i] = self._compute_Lattice_Function_From_M(M,funcName,axis=axis)
+               i += 1
+           latFuncArrReturn = [np.abs(latFuncxArr), np.abs(latFuncyArr)]
+       else:
+           latFuncArr = np.empty(zArr.shape)
+           i = 0
+           for z in zArr:
+               M = self.compute_M_Trans_At_z(z, *args)
+               latFuncArr[i] = self._compute_Lattice_Function_From_M(M,funcName,axis=axis)
+               i += 1
+           latFuncArrReturn = np.abs(latFuncArr)
+
+       if returnZarr == True:
+           return zArr, latFuncArrReturn
+       else:
+           return latFuncArrReturn
 
 
 
@@ -258,10 +410,11 @@ class PeriodicLatticeSolver:
 
 
     def compute_M_Trans_At_z(self, z, *args):
-        totalLengthArray = np.asarray(self.totalLengthArrayFunc(*args))
-        lengthArray = np.asarray(self.lengthArrayFunc(*args))
+        #TODO: speedup!!!
+        totalLengthArray = np.asarray(self.totalLengthListFunc(*args))
+        lengthArray = np.asarray(self.lengthListFunc(*args))
         temp = totalLengthArray - z
-        index = np.argmax(temp >= 0)
+        index = int(np.argmax(temp >= 0)) #to prevent a typecast warning
         M = self.lattice[index].M_Funcz(totalLengthArray[index] - z,*args)  # starting matrix
         # calculate from point z to end of lattice
         for i in range(self.numElements - index - 1):
@@ -277,315 +430,28 @@ class PeriodicLatticeSolver:
             M = self.lattice[index].M_Funcz(z - totalLengthArray[index - 1],*args) @ M
         return M
 
-    def plot_Beta_And_Eta(self,*args):
-        self._1D_Plot_Helper("BETA AND ETA",*args)
-    def plot_Envelope(self,*args,emittance):
-        self._1D_Plot_Helper("ENVELOPE",*args,emittance=emittance)
-    def _1D_Plot_Helper(self,plotType,*args,emittance=None): #used to plot different functions witout repetativeness of code
-        fig, ax1 = plt.subplots(figsize=(10, 5))
-        totalLengthArray = self.totalLengthArrayFunc(*args)
-        zArr, y1 = self.compute_Beta_Of_z_Array(*args) #compute beta array
-        zArr, y2 = self.compute_Eta_Of_z_Array(*args) #compute periodic dispersion array
-        tune=np.trapz(1/y1,x=zArr)/(2*np.pi)
-
-        if plotType=="BETA AND ETA":
-            y2 = y2 * 1000  # dispersion shift is the periodic dispersion times the velocity shift. convert to mm
-            ax1Name='Beta'
-            ax1yLable='Beta, m^2'
-            ax2Name='Eta'
-            ax2yLable='Eta, mm'
-            xLable='Nominal trajectory distance,m'
-            titleString='Beta and Eta versus trajectory'
-            ax2 = ax1.twinx()
-            ax1.plot(zArr, y1, c='black', label=ax1Name)
-            ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
-            lines, labels = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines + lines2, labels + labels2, loc=4)
-            ax1.set_xlabel(xLable)
-            ax1.set_ylabel(ax1yLable, color='black')
-            ax2.set_ylabel(ax2yLable, color='black')
-        if plotType=="ENVELOPE":
-            y2 = y2 * 1000*self.delta  # dispersion shift is the periodic dispersion times the velocity shift. convert to mm
-            y1=np.sqrt(emittance*y1)*1000
-            ax1Name='Beta envelope'
-            ax1yLable='Beta envelope, mm'
-            ax2Name='Dispersion'
-            ax2yLable='Dispersion, mm'
-            xLable='Nominal trajectory distance,m'
-            titleString='Beta oscillation envelope and dispersion'
-            titleString += "\n Emittance is " + str(np.round(emittance, 6)) + ". Delta is " + str(
-            self.delta) + '. Total tune is ' + str(np.round(tune, 2)) + '.'
-            titleString += " Time of flight ~" + str(int(1000 * zArr[-1] / self.v0)) + " ms"
-            ax2 = ax1.twinx()
-            ax1.plot(zArr, y1, c='black', label=ax1Name)
-            ax2.plot(zArr, y2, c='red', alpha=1, linestyle=':', label=ax2Name)
-            lines, labels = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines + lines2, labels + labels2, loc=4)
-            ax1.set_xlabel(xLable)
-            ax1.set_ylabel(ax1yLable, color='black')
-            ax2.set_ylabel(ax2yLable, color='black')
-
-
-        for i in range(self.numElements):
-            if i == 0:
-                center = totalLengthArray[0] / 2
-            else:
-                center = (totalLengthArray[i - 1] + totalLengthArray[i]) / 2
-            plt.axvline(totalLengthArray[i], c='black', linestyle=':')
-            ax1.text(center, np.max(y1)*.9, self.lattice[i].type, rotation=45)
-        plt.title(titleString)
-        plt.draw()
-        plt.show()
-
-
-
-
-
-
-
-    def compute_Stability_Grid(self, xMin, xMax, yMin, yMax, numPoints=500):
-        #uses parallelism. Tricky
-        #This returns a grid of stable points. The top left point on the grid is 0,0. Going down rows
-        #is going up in x and going across columns is going up in y.
-        #TO GET 0,0 ON THE BOTTOM LEFT AND NORMAL BEHAVIOUR, THE OUTPUT MUST BE TRANSPOSED AND FLIPPED ABOUT AXIS=0
-
-        x = np.linspace(xMin, xMax, num=numPoints)
-        y = np.linspace(yMin, yMax, num=numPoints)
-        inputCoords = np.meshgrid(x, y)
-
-        #stupid trick to get around weird behaviour with lambdify.
-        one = sym.symbols('one')
-        zero=sym.symbols('zero')
-        newMatrix=self.M_Tot.copy()
-        for i in range(3):
-            for j in range(3):
-                if newMatrix[i,j]==0:
-                    newMatrix[i,j]=zero
-                if newMatrix[i,j]==1:
-                    newMatrix[i,j]=one
-        newArgs=self.sympyVariableList.copy()
-        newArgs.extend([zero,one])
-        func=sym.lambdify(newArgs,newMatrix,'numpy')
-        zeroArg=np.zeros(numPoints**2).reshape(numPoints,numPoints)
-        oneArg = np.ones(numPoints**2).reshape(numPoints,numPoints)
-        inputCoords.extend([zeroArg,oneArg])
-        matrixArr =func(*inputCoords)
-
-        eigValsArr = np.abs(npl.eigvals(matrixArr.flatten(order='F').reshape(numPoints ** 2, 3, 3))) #some tricky shaping
-        results = ~np.any(eigValsArr > 1 + 1E-5, axis=1)
-        stabilityGrid=results.reshape((numPoints, numPoints))
-        return stabilityGrid
-    
-
-    def compute_Resonance_Factor(self,tune,res):# a factor, between 0 and 1, describing how close a tune is a to a given resonance
-    #0 is as far away as possible, 1 is exactly on resonance
-    #the precedure is to see how close the tune is to an integer multiples of 1/res. ie a 2nd order resonance(res =2) can occure
-    # when the tune is 1,1.5,2,2.5 etc and is maximally far off resonance when the tuen is 1.25,1.75,2.25 etc
-    #tune: the given tune to analyze
-    #res: the order of resonance interested in. 1,2,3,4 etc. 1 is pure bend, 2 is pure focus, 3 is pure corrector etc.
-        resFact=1/res #What the remainder is compare to
-        tuneRem = tune - tune.astype(int)  # tune remainder, the integer value doens't matter
-        tuneResFactArr = 1-np.abs(2*(tuneRem-np.round(tuneRem/resFact)*resFact)/resFact)  # relative nearness to resonances
-        return tuneResFactArr
-
-
-
-    def plot_Beta_Min_2D(self,xMin,xMax,yMin,yMax,elementIndex,useLogScale=False,numPoints=100,trim=2.5):
-        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'BETA MIN',elementIndex,useLogScale,numPoints,trim,None)
-    def plot_Dispersion_Min_2D(self,xMin,xMax,yMin,yMax,elementIndex=None,useLogScale=False,numPoints=100,trim=100):
-        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'DISPERSION MIN',elementIndex,useLogScale,numPoints,trim,None)
-    def plot_Tune_2D(self,xMin,xMax,yMin,yMax,useLogScale=False,numPoints=50):
-        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'TUNE',None,useLogScale,numPoints,None,None)
-    def plot_Resonance_2D(self,xMin,xMax,yMin,yMax,resonance=1,numPoints=50,useLogScale=False):
-        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'RESONANCE',None,useLogScale,numPoints,None,resonance)
-    def plot_Dispersion_Max_2D(self,xMin,xMax,yMin,yMax,elementIndex=None,useLogScale=False,numPoints=100,trim=None):
-        self._2D_Plot_Parallel_Helper(xMin,xMax,yMin,yMax,'DISPERSION MAX',elementIndex,useLogScale,numPoints,trim,None)
-
-    def _2D_Plot_Parallel_Helper(self,xMin,xMax,yMin,yMax,output,elementIndex,useLogScale,numPoints,trim,resonance):
-
-        plotData = self._compute_Grid_Parallel(xMin, xMax, yMin, yMax,output,elementIndex=elementIndex, numPoints=numPoints)
-        plotData = np.transpose(plotData) #need to reorient the data so that 0,0 is bottom left
-        plotData = np.flip(plotData, axis=0) #need to reorient the data so that 0,0 is bottom left
-
-
-
-
-        if trim!=None: #if plot values are clipped pegged above some value
-            titleExtra=' \n Data clipped at a values greater than '+str(trim)
-        else:
-            titleExtra=''
-        if output=='BETA MIN':
-            plotData[plotData>=trim]=trim #trim values
-            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cay
-            title='Beta,m.'
-        if output=="DISPERSION MIN":
-            plotData = plotData *1000 #convert to mm
-            if trim!=None:
-                plotData[plotData>=trim]=trim #trim values
-            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-            title='Disperison Minimum, mm.'
-        if output=="DISPERSION MAX":
-            plotData = plotData *1000 #convert to mm
-            if trim!=None:
-                plotData[plotData>=trim]=trim #trim values
-            cmap = matplotlib.cm.inferno_r  # Can be any colormap that you want after the cm
-            title='Disperison Maximum, mm.'
-        if output=="TUNE":
-            cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
-            title='tune'
-        if output=='RESONANCE':
-            plotData=self.compute_Resonance_Factor(plotData,resonance) #compute the tune
-            cmap = matplotlib.cm.inferno  # Can be any colormap that you want after the cm
-            title='Resonances of order '+str(resonance)+'. \n 1.0 indicates exactly on resonance, 0.0 off'
-
-        if useLogScale == True:
-            plotData = np.log10(plotData)
-        masked_array = np.ma.masked_where(plotData == np.nan, plotData) #a way of marking ceratin values to have different colors
-
-        plt.subplots(figsize=(8,8)) #required to plot multiple plots
-        plt.grid()
-        cmap.set_bad(color='grey')#set the colors of values in masked array
-        plt.title(title+titleExtra)
-        plt.imshow(masked_array, cmap=cmap, extent=[xMin, xMax, yMin, yMax],aspect=(xMax - xMin) / (yMax - yMin))
-        plt.colorbar()
-        plt.xlabel(self.sympyStringList[0])
-        plt.ylabel(self.sympyStringList[1])
-        plt.draw()
-        plt.pause(.01)
-        plt.show()
-
-
-
-    def _compute_Grid_Parallel(self,xMin, xMax, yMin, yMax,output,elementIndex=None, numPoints=100):
-        stableCoords = []
-        gridPosList = []
-        x = np.linspace(xMin, xMax, num=numPoints)
-        y = np.linspace(yMin, yMax, num=numPoints)
-        stableGrid=self.compute_Stability_Grid(xMin,xMax,yMin,yMax,numPoints=numPoints) #grid of stable solutions to compute tune for
-        outputGrid=np.empty((numPoints,numPoints))
-        for i in range(x.shape[0]):
-           for j in range(y.shape[0]):
-               if(stableGrid[i,j]==True):
-                   stableCoords.append([x[i],y[j]])
-                   gridPosList.append([i,j])
-               else:
-                   outputGrid[i,j]=np.nan #no tune
-
-        processes=mp.cpu_count()-1
-        jobSize=int(len(stableCoords)/processes)+1 #in case rounding down. will make a small difference
-        manager = mp.Manager()
-        resultList = manager.list()
-        jobs=[]
-
-        loop=True
-        i=0
-        while loop==True:
-            arg1List=[]
-            arg2List=[]
-            for j in range(jobSize):
-                if i==len(stableCoords):
-                    loop=False
-                    break
-                arg1List.append(stableCoords[i])
-                arg2List.append(gridPosList[i])
-                i+=1
-            p = mp.Process(target=self._parallel_Helper, args=(arg1List,arg2List,elementIndex,resultList,output))
-            p.start()
-            jobs.append(p)
-        for proc in jobs:
-            proc.join()
-
-        for item in resultList:
-            i,j=item[0]
-            outputGrid[i,j]=item[1]
-        return outputGrid
-
-    def _parallel_Helper(self, argList, gridPos, elementIndex, results,output):
-        if output=='BETA MIN':
-            for i in range(len(argList)):
-                try:  # in case there is imaginary numbers
-                    betaMin = np.min(self.compute_Beta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False))
-                    results.append([gridPos[i], betaMin])
-                except:
-                    results.append([gridPos[i], np.nan])
-        if output=="DISPERSION MIN":
-            for i in range(len(argList)):
-                try:  # in case there is imaginary numbers
-                    dispersionMin = self.delta*np.min(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
-                    results.append([gridPos[i], dispersionMin])
-                except:
-                    results.append([gridPos[i], np.nan])
-        if output=="DISPERSION MAX":
-            for i in range(len(argList)):
-                try:  # in case there is imaginary numbers
-                    dispersionMax = self.delta*np.max(np.abs(self.compute_Eta_Of_z_Array(*argList[i], elementIndex=elementIndex, returnZarr=False)))
-                    results.append([gridPos[i], dispersionMax])
-                except:
-                    results.append([gridPos[i], np.nan])
-        if output=="TUNE" or output=="RESONANCE":
-            for i in range(len(argList)):
-                try: #in case there is imaginary numbers
-                    x,y=self.compute_Beta_Of_z_Array(*argList[i],numPoints=200)
-                    tune = np.trapz(np.power(y, -1), x=x) / (2 * np.pi)
-                    results.append([gridPos[i], tune])
-                except:
-                    results.append([gridPos[i], np.nan])
 
 if __name__ == '__main__':
-
-
-    
-    
-    
-    PLS=PeriodicLatticeSolver('x',v0=200,T=.025)
+    PLS = PeriodicLatticeSolver('both', v0=200, T=.025)
+    Lm1 = PLS.Variable('Lm1', varMin=0.01, varMax=.2)
+    Lm2 = PLS.Variable('Lm2', varMin=0.01, varMax=.2)
+    Lm3 = PLS.Variable('Lm3', varMin=0.01, varMax=.2)
+    Lm4 = PLS.Variable('Lm4', varMin=0.01, varMax=.2)
+    S = PLS.Variable('S', varMin=-.2, varMax=.2)
     PLS.begin_Lattice()
-    Lm=PLS.Variable('Lm')
-    Ld=PLS.Variable('Ld')
-    PLS.add_Drift(.05)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(Ld)
-    PLS.add_Combiner()
-    PLS.add_Drift(Ld)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(.05)
-    PLS.add_Bend(np.pi/2,1)
-    PLS.end_Lattice()
-    #PLS.plot_Stability_Regions_2D(0, 1, 0, 1)
-    PLS.plot_Envelope(.4,.2,emittance=1E-3)
-    #PLS.plot_Beta_Min_2D(0,1,0,1,4)
-    
-    
-    
-    PLS=PeriodicLatticeSolver('y',v0=200,T=.025)
-    PLS.begin_Lattice()
-    Lm=PLS.Variable('Lm')
-    Ld=PLS.Variable('Ld')
-    PLS.add_Drift(.05)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(Ld)
-    PLS.add_Combiner()
-    PLS.add_Drift(Ld)
-    PLS.add_Focus(Lm,.5,.05)
-    PLS.add_Drift(.05)
-    PLS.add_Bend(np.pi/2,1)
-    PLS.end_Lattice()
-    #PLS.plot_Stability_Regions_2D(0, 1, 0, 1)
-    PLS.plot_Envelope(.4,.2,emittance=1E-3)
-    #PLS.plot_Beta_Min_2D(0,1,0,1,4)
-    
-    
 
-    
-    
+    PLS.add_Bend(np.pi, 1, 50)
+    PLS.add_Lens(Lm1, 1, .05)
+    PLS.add_Drift()
+    PLS.add_Combiner(S=S)
+    PLS.add_Drift()
+    PLS.add_Lens(Lm2, 1, .05)
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+    PLS.add_Bend(np.pi, 1, 50)
+    PLS.add_Lens(Lm3, 1, .05)
+    PLS.add_Drift()
+    PLS.add_Lens(Lm4, 1, .05)
+    PLS.set_Track_Length(1)
+
+    PLS.end_Lattice()
