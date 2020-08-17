@@ -1,20 +1,26 @@
+import time
 import sympy as sym
+import sympy.utilities.autowrap as symWrap
+from numpy.linalg import inv
 import numpy as np
 from element import Element
-
+import sys
 
 #version 1.0. June 22, 2020. William Huntington
 
+#TODO: Implement the total bending angle accounting for the combiner's extra angle
+#TODO: Implement the ability to not use injector
 
 class VariableObject:
     # class used to hold information about the variables made by the user when they call PLS.Variable()
     def __init__(self,sympyVar,symbol):
-        self.vareMin=None
+        self.varMin=None
         self.varMax=None
         self.varInit=None #initial value of variable
         self.symbol=symbol
         self.sympyObject=sympyVar
         self.elIndex=None #index of use of variables. Can be overwritten if reused.
+        self.type=None # to hold wether the optic is assigned to lattice, injector or both
 class Injector:
     def __init__(self):
         self.M=None #to hold transfer matrix
@@ -22,16 +28,75 @@ class Injector:
         self.el=None #to hold element object
         self.xi=None #To hold xRMS for input to injector
         self.xdi=None #To hold xDotRMS for input to inject
-    def compute_Xf_Xdf_RMS(self,*args):
+        self.Li=None #to hold sympy expression for image length of injector
+        self.LiFunc=None #to hold the function that returns the image distance
+        self.epsFunc=None #function that return value of emittance. First argument must be beta
+        self.epsSampleFunc=None #A with xi and xdi as input paramters
+        self.rpFunc=None #function that return the radius of the shaper
+        self.sympyVarList=[] #list of sympy variables used in injector
+        self.Lo = sym.symbols('L0', real=True, positive=True)
+        self.Lm=sym.symbols('Lm',real=True,positive=True)
+        self.sympyVarList=[self.Lo,self.Lm]
+        maxLen=2.5
+        self.LoMin=.1
+        self.LoMax=.2
+        self.LiMin=1.1
+        self.LiMax=maxLen
+        self.LmMin=.01
+        self.LmMax=.25
+        self.LtMin=self.LoMin+self.LiMin+self.LmMin
+        self.LtMax=maxLen
+        self.thetaMax=.07
+        self.riMax = .002  # safe offset for object transverse displacement
+        self.sigma=.9
+        self.LoOp=None
+        self.LmOp=None
+        self.LiOp=None
+    def update(self):
+        self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList)
+        self.LiFunc=symWrap.ufuncify(self.sympyVarList,self.el.Li)
+        A=self.M[0,0]
+        C=self.M[1, 0]
+        D=self.M[1, 1]
+        xf=A*self.xi
+        xfd=C*self.xi+D*self.xdi
+        beta, alpha=sym.symbols('beta alpha',real=True,positive=True)
+        eps=(xf**2+(beta*xfd)**2+(alpha*xf)**2+2*alpha*xfd*xf*beta)/beta #this can't go negative
+
+
+
+        args=self.sympyVarList.copy()
+        args.extend([beta,alpha])
+        self.epsFunc=symWrap.ufuncify(args,eps)
+
+
+        xi,xdi=sym.symbols('xi xdi',real=True)
+        args = [xi,xdi,beta,alpha]
+        args.extend(self.sympyVarList)
+        xf=A*xi
+        xfd=C*xi+D*xdi
+        eps=(xf**2+(beta*xfd)**2+(alpha*xf)**2+2*alpha*xfd*xf*beta)/beta #this can't go negative
+        self.epsSampleFunc=symWrap.autowrap(eps,args=args)
+
+        m = 1.16503E-26
+        ub = 9.274009E-24
+        temp=2*ub/(m*200**2)
+        rp=sym.simplify(((self.el.Lo*self.thetaMax+self.riMax)/self.sigma)*sym.sqrt(1/(1-self.thetaMax**2/(temp*self.el.Bp))))
+        self.rpFunc=symWrap.autowrap(rp,args=self.sympyVarList)
+
+
+
+
+    def compute_Xf_Xdf_RMS(self,args):
         M=self.MFunc(*args)
         A=M[0,0]
         C=M[1,0]
         D=M[1,1]
-        xRMS=A*self.xi
-        xdRMS=C*self.xi +D*self.xdi
-        return float(xRMS),float(xdRMS)
+        xfRMS=A*self.xi
+        xfdRMS=C*self.xi +D*self.xdi
+        return float(xfRMS),float(xfdRMS)
 class PeriodicLatticeSolver:
-    def __init__(self,v0,T,axis=None,catchErrors=True):
+    def __init__(self,v0,T,axis,catchErrors=True):
 
         if axis==None:
             self.axis='both'
@@ -44,13 +109,16 @@ class PeriodicLatticeSolver:
         self.v0=v0 #nominal speed of atoms, usually 200 m/s
         self.T=T #temperature of atoms
         self.catchErrors=catchErrors
-        self.trackLength=None
+        self.trackLength=None #total track length of the lattice
+        self.TL1=None #tracklength of section 1
+        self.TL2=None #tracklength of section2
         self.m = 1.16503E-26 #mass of lithium 7, SI
         self.u0 = 9.274009E-24 #bohr magneton, SI
         self.kb=1.38064852E-23 #boltzman constant, SI
         self.began=False #check if the lattice has begun
         self.lattice = [] #list to hold lattice magnet objects
-        self.bendIndices=[] #list of locations of bends in the lattice
+        self.benderIndices=[] #list of locations of bends in the lattice
+        self.lensIndices=[]
         self.combinerIndex=None #index of combiner's location
         self.delta=np.round(np.sqrt(self.kb*(self.T)/self.m)/self.v0,4) #sigma of velocity spread
         self.numElements = 0 #to keep track of total number of elements. Gets incremented with each additoin
@@ -67,13 +135,31 @@ class PeriodicLatticeSolver:
         self.injector=Injector() #to hold the injector object
         self.emittancex=None #to hold emittance value in x direction.
         self.emittancey=None #to hold emittance value in y direction
+        self.bendingAngleVarList=[] #to hold the variables used to set the amount of bending. This is only used if
+        #None is entered for the value of the bending angle. Then the bending angle is calcualted later
+
+
+
+        self.test=None
+        self.varType=[]
+        self.numPoints=250
+
 
     def Variable(self, symbol,varMin=0.0,varMax=1.0,varInit=None):
+        #TODO: remove this redundancy
         #function that is called to create a variable to use. Really it jsut adds things to list, but to the user it looks
         #like a variable
         #symbol: string used for sympy symbol
-        sympyVar=sym.symbols(symbol)
+        sympyVar=sym.symbols(symbol,real=True)
         VO=VariableObject(sympyVar,symbol)
+        #if injector==True:
+        #    VO.type='INJECTOR'
+        #elif lattice==True:
+        #    VO.type='LATTICE'
+        #else:
+        #    VO.type='both'
+        #if lattice==True and injector==True:
+        #    raise Exception("Variable can't be both lattice and injector only!")
         VO.varMin=varMin
         VO.varMax=varMax
         if varInit==None:
@@ -89,21 +175,33 @@ class PeriodicLatticeSolver:
         for i in range(len(args)): #extract the sympy object from variable to send to Element class. Also note element index
                                     #for later use
             if isinstance(args[i], VariableObject):
-                #check if the variable has been used in another element, that is currently not allowed
-                args[i]=args[i].sympyObject
+                #if args[i].type!=latticetype and args[i].type!=None:
+                #    raise Exception('IMPROPER VARIABLE OBJECT USE')
+                #args[i].type=latticetype
+                args[i]=args[i].sympyObject #replace the argument with the sympy symbol
         return args
 
-    def add_Injector(self,L,Lo,Bp,rp,xiRMS=None,xdiRMS=None):
+    def add_Injector(self,Bp,xi,xdi):
         #add an injector. This doesn't go into the list of elements though
         #L: length of magnet in injection system
         #Lo: distance from image to front of magnet in injection system
         #Bp: magnetic field strength at pole in magnet
         #rp: radius of lens
-        args=self.unpack_VariableObjects([L,Lo,Bp,rp])
-        self.injector.el=Element(self,'INJECTOR',args=args)
+        #sigma: fraction of inner bore to use
+        #r0: maximum incoming particle offset. This forces the bore to be large
+        if self.numElements>0:
+            raise Exception('INJECTOR MUST BE ADDED FIRST')
+        alpha = 2 * self.u0 / (self.m * 200 ** 2)
+        self.injector.rp=sym.simplify(((self.injector.Lo*self.injector.thetaMax+self.injector.riMax)/self.injector.sigma)*sym.sqrt(1/(1-self.injector.thetaMax**2/(alpha*Bp))))
+        args=[self.injector.Lm,self.injector.Lo,Bp,self.injector.rp]
+
+        self.injector.el=Element(self,'INJECTOR',args)
+        self.injector.el.calc_M()
         self.injector.M=self.injector.el.M
-        self.injector.xiRMS=xiRMS
-        self.injector.xdiRMS=xdiRMS
+        self.injector.xi=xi
+        self.injector.xdi=xdi
+        self.injector.Li=self.injector.el.Li
+        self.injector.update()
 
 
     def add_Lens(self,L, Bp, rp,S=None):
@@ -113,50 +211,57 @@ class PeriodicLatticeSolver:
         #rp: radius of bore inside magnet
         self.numElements += 1
         args = self.unpack_VariableObjects([L, Bp, rp,S])
-
-        el = Element(self, 'LENS',args=args)
+        el = Element(self, 'LENS',args)
         self.lattice.append(el)
         el.index = self.numElements - 1
+        self.lensIndices.append(el.index)
 
-    def add_Bend(self, angle, alpha,beta,S=None):
+    def add_Bend(self, angle, r0,Bp,S=None):
         #add a bending magnet. At this point it's some kind of dipole+quadrupole magnet. The radius of curvature
         #is decided by bending power
-        #Ang: angle of bending
+        #Ang: angle of bending. Use None to set it later with a constraint.
         #alpha: dipole term
         #beta: quadrupole terms
+        #if angle is None:
+        #    angle=sym.symbols('theta',real=True,positive=True)
+        #    self.bendingAngleVarList.append(angle)
         self.numElements += 1
-        self.bendIndices.append(self.numElements-1)
-        args = self.unpack_VariableObjects([angle,alpha,beta,S])
-        el = Element(self,'BEND',args=args)
+        self.benderIndices.append(self.numElements-1)
+        args = self.unpack_VariableObjects([angle,r0,Bp,S])
+        el = Element(self,'BEND',args)
         self.lattice.append(el)
         el.index = self.numElements - 1
 
-    def add_Drift(self, L=None,defer=True):
+    def add_Drift(self, L=None):
         #add a drift section.
         #L: length of drift region
         self.numElements += 1
         if L==None:
-            defer=True
-            el = Element(self, 'DRIFT',[L],defer=defer)
+            el = Element(self, 'DRIFT',[L],defer=True)
         else:
             args = self.unpack_VariableObjects([L])
             el = Element(self,'DRIFT', args)
         self.lattice.append(el)
         el.index = self.numElements - 1
-    def add_Combiner(self,L=.187,alpha=1.01,beta=20,S=None):
+    def add_Combiner(self,L=.2,alpha=1.01,beta=22,S=None):
         #add combiner magnet. This is the 'collin' magnet
         #L: length of combiner, current length for collin mag is .187
         #alpha: dipole term
         #beta: quadrupole term
         #NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
+        if self.TL1!=None and S!=None:
+            raise Exception('you cannot set S if you are specifying track length')
+        if self.TL1!=None:
+            S=self.TL2
         self.numElements += 1
         args = self.unpack_VariableObjects([L,alpha,beta,S])
-        el = Element(self,'COMBINER',args=args)
+        r0 = self.m * self.v0 ** 2 / (self.u0 * beta)
+        args.append(r0)
+        el = Element(self,'COMBINER',args)
         self.lattice.append(el)
         self.combinerIndex=self.numElements-1
         el.index = self.numElements - 1
 
-    #def add_Injector(self):
 
 
     def compute_M_Total(self): #computes total transfer matric. numeric or symbolic
@@ -164,135 +269,201 @@ class PeriodicLatticeSolver:
         for i in range(self.numElements):
             M=self.lattice[i].M @ M #remember, first matrix is on the right!
         return M
-    def set_Track_Length(self,value):
+    def set_Track_Length(self,trackLength=None,TL1=None,TL2=None):
         #this is to set the length of the straight awayas between bends. As of now this is the same for each
         # straight away
-        self.trackLength=value
+
+        if TL1==None and TL2==None:
+            self.trackLength=self.unpack_VariableObjects([trackLength])[0]
+        elif TL1!=None and TL2!=None:
+            self.TL1,self.TL2=self.unpack_VariableObjects([TL1,TL2])
+            self.trackLength=self.TL1+self.TL2
+        else:
+            raise Exception('YOU MUST SPECIFY BOTH TRACK LENGTHS OR THE TOTALLENGTH, BUT NOT BOTH')
+
 
     def catch_Errors(self):
         if self.began==False:
             raise Exception("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
         if self.trackLength==None:
             raise Exception('TRACK LENGTH WAS NOT SET!!')
-        if len(self.bendIndices) == 2:  # can only have two bend as of now
+        if len(self.benderIndices) == 2:  # can only have two bend as of now
             Exception('the ability to deal with a system with more or less than 2 bends is not implemented')
         if self.lattice[0].elType!='BEND':
             raise Exception('First element must be a bender!')
         #ERROR: Check that there are two benders
-        if len(self.bendIndices)!=2:
+        if len(self.benderIndices)!=2:
             raise Exception('There must be 2 benders!!!')
+
         #ERROR: check that total bending is 360 deg within .1%
-        angle=0
-        for i in self.bendIndices:
-            angle+=self.lattice[i].angle
-        if angle>1.01*2*np.pi or angle <.99*2*np.pi:
-            raise Exception('Total bending must be 360 degrees within .1%!')
+        if self.lattice[self.benderIndices[0]].angle is None:
+            #if the angle is none, then the user wants the angle to be set by constraints
+            pass
+        else:
+            angle=0
+            for i in self.benderIndices:
+                angle+=self.lattice[i].angle
+            if angle>1.01*2*np.pi or angle <.99*2*np.pi:
+                raise Exception('Total bending must be 360 degrees within .1%!')
+        #check that every bending angle is either a sympy variable/float or None
+        for i in self.benderIndices:
+            temp=self.lattice[i].angle
+            if i>0:
+                if temp is None and self.lattice[0].angle is None:
+                    pass
+                elif temp is not None and self.lattice[0].angle is not None:
+                    pass
+                else:
+                    raise Exception('IF ONE BENDING ANGLE IS \'None\' THEN ALL MUST BE NONE')
+
+
+    def update_Element_Parameters_And_Functions(self):
+        if self.lattice[self.benderIndices[0]].angle is None: #set the angle with constraints
+            if self.combinerIndex==None: #if there is no combiner in the lattice. Settings angles is then easy
+                angle=2*np.pi/len(self.benderIndices)
+                for i in self.benderIndices:
+                    self.lattice[i].angle=angle
+            elif len(self.benderIndices)==2: # if there are two benders and a combiner
+                #algorithm courtesy of Jamie Hall
+                self.TL2=self.lattice[self.combinerIndex].S + self.lattice[self.combinerIndex].Length/2
+                self.TL1=self.trackLength-self.TL2
+                L1=self.TL2
+                L2=self.TL1
+                r1=self.lattice[self.benderIndices[0]].r0
+                r2 = self.lattice[self.benderIndices[1]].r0
+                theta=self.lattice[self.combinerIndex].Length/self.lattice[self.combinerIndex].r0 #approximation, but very accurate
+                L3=sym.sqrt((L1-sym.sin(theta)*r2 +L2*sym.cos(theta))**2+(L2*sym.sin(theta)-r2*(1-sym.cos(theta))+(r2-r1))**2  )
+                angle1=sym.pi*1.5-sym.atan(L1/r1)-sym.acos((L3**2+L1**2-L2**2)/(2*L3*sym.sqrt(L1**2+r1**2)))
+                angle2=sym.pi*1.5-sym.atan(L2/r2)-sym.acos((L3**2+L2**2-L1**2)/(2*L3*sym.sqrt(L2**2+r2**2)))
+                self.lattice[self.benderIndices[0]].angle=angle1
+                self.lattice[self.benderIndices[1]].angle = angle2
+            else:
+                raise Exception('INCORRECT NUMBER OF BENDERS. IF COMBINER IS PRESENT THERE SHOULD BE ONLY 2 BENDERS!')
 
 
 
+        #sys.exit()
 
 
 
+        #---now update the elements. This mostly computes the various functions of each lattice. Somewhat intensive
+        for el in self.lattice:
+            if el.deferred==False: #deferred means calculate the element's parameters after constraining lengths below.
+                        #this is most likely for some drift elements only
+                el.fill_Params_And_Functions()
 
 
 
-
-
-
-
-
-
-
-            #ERROR: the total length of elements is greater than the track length or edges overlap
-            ##length1=0
-            ##edgeList1 = []
-            ##for el in self.lattice[1:self.bendIndices[1]]: #first element is a bend always
-            ##    if isinstance(el.Length,numbers.Number): #sometimes the length of the element is declared
-            ##        length1+=el.Length
-            ##    if isinstance(el.Length,numbers.Number): #sometimes the length of the element may be an undetermind variable
-            ##    if isinstance(el.S,numbers.Number) and isinstance(el.Length, numbers.Number): #sometimes
-            ##        edgeList1.append(el.S-el.Length/2)
-            ##        edgeList1.append(el.S + el.Length / 2)
-            ##length2=0
-            ##edgeList2 = []
-            ##for el in self.lattice[self.bendIndices[1]+1:]:
-            ##    if isinstance(el.Length,numbers.Number):
-            ##        length2 += el.Length
-            ##    if isinstance(el.S, numbers.Number) and isinstance(el.Length, numbers.Number):
-            ##        edgeList2.append(el.S - el.Length / 2)
-            ##        edgeList2.append(el.S + el.Length / 2)
-            ##print(length1,edgeList1)
-            ##if length1>self.trackLength or length2>self.trackLength:
-            ##    print('Total length greater than track length!!!')
-            ##    sys.exit()
-            ##temp=0-1E-10
-            ##for item in edgeList1:
-            ##    if item<temp:
-            ##        print('Edges of elements cannot overlap')
-            ##        sys.exit()
-            ##for item in edgeList2:
-            ##    if item<temp:
-            ##        print('Edges of elements cannot overlap')
-            ##        sys.exit()
-    def update_Element_Lengths(self):
-
-        #solve element length and position one track at a time. A track is the sequence of elements between two bends.
-        #user must start with the first element being a bend and use only 2 bends
-
-        for el in self.lattice: #manipulate lens elements only
-            if el.elType=='LENS': #adjust lens lengths
-                if el.index==self.bendIndices[0]+1 or el.index==self.bendIndices[1]+1:#if the lens is right after the bend
+        for el in self.lattice: #manipulate drift elements only
+            if el.elType=='LENS': #-------adjust lens lengths
+                if el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1:#if the lens is right after the bend
                     if el.S==None: #if position is unspecified
                         el.S=el.Length/2
-                elif el.index == self.bendIndices[1] - 1 or el.index == self.numElements - 1: #if the lens is right
-                        #before the bend
+                elif el.index == self.benderIndices[1] - 1 or el.index == self.numElements - 1: #if the lens is right
+                        #before the bend or at the end
                     if el.S==None: #if position is unspecified
                         el.S=self.trackLength-el.Length/2
-        for el in self.lattice: #manipulate drift elements only
+
+        for el in self.lattice:
+            if el.elType=='LENS': #-------adjust lens lengths
+                if el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1:#if the lens is right after the bend
+                    if el.S==None: #if position is unspecified
+                        el.S=el.Length/2
+                elif el.index == self.benderIndices[1] - 1 or el.index == self.numElements - 1: #if the lens is right
+                        #before the bend or at the end
+                    if el.S==None: #if position is unspecified
+                        el.S=self.trackLength-el.Length/2
+
             if el.elType=='DRIFT': #-----------adjust the drift lengths
-                if el.index==self.bendIndices[0]+1 or el.index==self.bendIndices[1]+1: #edge case for drift right
-                        # after bend. The lattice starts with first element as bend so there are two cases here for now
-                    edgeR=self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2 #the position of the next element edge reletaive
-                        #to first bend end
-                    el.Length=edgeR #distance from beginning of drift to edge of element
-                elif el.index==self.bendIndices[1]-1: #if the drift is right before the bend
-                    edgeL = self.lattice[self.bendIndices[1]-2].S+self.lattice[self.bendIndices[1]-2].Length/2
+                if el.index==self.numElements-1: #if the drift is the last element
+                        if self.lattice[-2].elType=='BEND': #if the drift element is the only element in that track
+                            el.Length=self.trackLength
+                            el.S=self.trackLength/2
+                        else:
+                            edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
+                            el.Length=self.trackLength-edgeL
+                            el.S = self.trackLength - el.Length / 2
+                elif el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1: #edge case for drift right
+                            # after bend. The lattice starts with first element as bend so there are two cases here for now
+                    if self.lattice[el.index+1].elType=='BEND': #the drift is sandwiched between two bends
+                        el.Length=self.trackLength
+                    elif el.Length!=None:
+                        self.lattice[el.index+1].S=el.Length+self.lattice[el.index+1].Length/2 #setting the center of the
+                                #next element if the drift length is already set. only for drift after bend
+                        el.S=el.Length/2 #also set the drift position
+                    else:
+                        edgeR=self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2 #the position of the next element edge reletaive
+                            #to first bend end
+                        el.Length=edgeR #distance from beginning of drift to edge of element
+                elif el.index==self.benderIndices[1]-1: #if the drift is right before the bend
+                    edgeL = self.lattice[self.benderIndices[1]-2].S+self.lattice[self.benderIndices[1]-2].Length/2
                                 # the distance of the element edge from the beggining of the bend
                     el.Length=self.trackLength-edgeL #distance from previous element end to beginning of bend
+                    el.S=self.trackLength-el.Length/2
 
-                elif el.index==self.numElements-1: #if the drift is right before the end
-                    edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
-                    el.Length=self.trackLength-edgeL
-                else:
-                    edgeL=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2 #position of prev el edge
-                    edgeR = self.lattice[el.index + 1].S-self.lattice[el.index+1].Length/2 #position of next el edge
-                    el.Length=edgeR-edgeL
+
+                else: #if drift is somewhere else
+                    if self.lattice[el.index+1].S != None and self.lattice[el.index+1].Length != None: #if the next element has
+                                #definite position and length
+                        edgeL=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2 #position of prev el edge
+                        edgeR = self.lattice[el.index + 1].S-self.lattice[el.index+1].Length/2 #position of next el edge
+                        el.Length=edgeR-edgeL
+                        el.S=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2+el.Length/2
+                    else: #this really only works for drifts after the bender that is followed by a lens, another drift
+                            #and then a bend
+                        self.lattice[el.index+1].S=self.trackLength-self.lattice[el.index+2].Length-self.lattice[el.index+1].Length/2
+                        el.Length=(self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2)-(self.lattice[el.index-1].S-self.lattice[el.index-1].Length/2)
+                        el.S=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2+self.lattice[el.index].Length/2
         for el in self.lattice:
             if type(el.Length)==float:
                 if el.Length<0:
                     raise Exception("ELEMENT LENGTH IS BEING SET TO NEGATIVE VALUE")
 
+        for el in self.lattice:
+            if el.deferred==True:
+                el.fill_Params_And_Functions()
+
+
+
 
     def begin_Lattice(self): #must be called before making lattice
         self.began=True
-
+    def set_apetures(self):
+        #update the apetures
+        for el in self.lattice:
+            if el.elType=='BEND':
+                #apetures are simply half the bending magnet radius because the vacuum tube would span the center to the
+                #edge.
+                el.apxFunc=el.rtFunc
+                el.apyFunc=el.rtFunc
+            elif el.elType=='COMBINER':
+                #I make a dumbby function so that I can still pass the variables and get a constant number
+                def temp(*args):
+                    return .015
+                def temp2(*args):
+                    return .005
+                el.apxFunc=temp #15 mm apterure in x plane
+                el.apyFunc=temp2 #5 mm apeture in y plane
+            elif el.elType=='LENS':
+                el.apxFunc=el.rpFunc
+                el.apyFunc=el.rpFunc
+            else: #other elements have no apeture
+                def temp(*args):
+                    return np.inf
+                el.apxFunc=temp
+                el.apyFunc=temp
     def end_Lattice(self):
         #must be called after ending lattice. Prepares functions that will be used later
         if self.catchErrors==True:
             self.catch_Errors()
-        self.update_Element_Lengths()
+        self.update_Element_Parameters_And_Functions()
 
-        for el in self.lattice:
-            if el.deferred==True:
-                el.update()
+        self.set_apetures()
+
 
         self.MTot = self.compute_M_Total() #sympy version of full transfer function
 
-
-
-        self.MTotFunc = sym.lambdify(self.sympyVarList, self.MTot, 'numpy') #MTot function that takes arguments
-        self.injector.MFunc=sym.lambdify(self.sympyVarList,self.injector.M,'numpy')
-
+        self.MTotFunc = symWrap.autowrap(self.MTot,args=self.sympyVarList)
 
         #this loop does 2 things
         # 1:make  an array function where each entry is the length of the corresping optic.
@@ -304,22 +475,20 @@ class PeriodicLatticeSolver:
             temp2.append(self.lattice[i].Length)
             for j in range(i): #do the sum up to that point
                 temp2[i] += self.lattice[j].Length
-            self.lattice[i].zFunc=sym.lambdify(self.sympyVarList,temp2[i]-self.lattice[i].Length/2)
-        self.lengthListFunc = sym.lambdify(self.sympyVarList, temp1) #A function that returns a list where
-                                                                        # each entry is length of that element
-
-        self.totalLengthListFunc = sym.lambdify(self.sympyVarList, temp2) #each entry is an inclusive cumulative sum
+        self.lengthListFunc = sym.lambdify(self.sympyVarList,temp1) #A function that returns a list where
+                                                # each entry is length of that element
+        self.totalLengthListFunc = sym.lambdify(self.sympyVarList,temp2) #each entry is an inclusive cumulative sum
                                                                             #of element lengths
-
-        def tempFunc(*args):
-        #takes in arguments and returns a list of transfer matrices
-        #args: the variables defined by the user ie the sympyVarList
-            tempList=[]
-            for el in self.lattice:
-                M_N=sym.lambdify(self.sympyVarList, el.M,'numpy')
-                tempList.append(M_N(*args))
-            return tempList
-        self.MListFunc=tempFunc
+        print("Lattice model completed")
+        #def tempFunc(args):
+        ##takes in arguments and returns a list of transfer matrices
+        ##args: the variables defined by the user ie the sympyVarList
+        #    tempList=[]
+        #    for el in self.lattice:
+        #        M_N=sym.lambdify(self.sympyVarList, el.M,'numpy')
+        #        tempList.append(M_N(*args))
+        #    return tempList
+        #self.MListFunc=tempFunc
 
     def compute_Resonance_Factor(self, tune,res):  # a factor, between 0 and 1, describing how close a tune is a to a given resonance
         # 0 is as far away as possible, 1 is exactly on resonance
@@ -331,17 +500,12 @@ class PeriodicLatticeSolver:
         tuneRem = tune%1  # tune remainder, the integer value doens't matter
         tuneResFact =1-np.abs(2*(tuneRem-np.round(tuneRem/resFact)*resFact) / resFact)  # relative nearness to resonances
         return tuneResFact
-    def compute_Tune(self,*args):
-        #this method is slow, but very accruate because it used default sample size of compute_Beta_Of_z_Array
-        #args: input values, sympyVariablesList
-        x,y=self.compute_Beta_Of_Z_Array(*args)
-        tune=np.trapz(np.power(y,-2),x=x)/(2*np.pi)
-        return tune
 
 
 
 
-    def _compute_Lattice_Function_From_M(self,M,funcName,axis):
+
+    def _compute_Lattice_Function_From_M(self,M,funcName,axis,args=None):
         #since many latice functions, such as beta,alpha,gamma and eta are calculated in a very similiar was
         #this function saces space by resusing code
         #M: 5x5 transfer matrix, or 3x3 if using x axis or 2x2 if using x axis and no eta
@@ -352,18 +516,17 @@ class PeriodicLatticeSolver:
             M12 = Mat[0, 1]
             M21 = Mat[1, 0]
             M22 = Mat[1, 1]
-
             if funcName=='BETA':
-                #print('here',2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
-                return 2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+                return np.abs(2 * M12 / np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
             if funcName=='ETA':
                 M13 = Mat[0, 2]
                 M23 = Mat[1, 2]
                 extraFact = 2  # THIS IS A KEY DIFFERENCE BETWEEN NEUTRAL AND CHARGED PARTICLES!!!
                 etaPrime=(M21*M13+M23*(1-M11))/(2-M11-M22)
                 return extraFact * (M12*etaPrime+M13)/(1-M11)
-            if funcName=='ALPHA':
-                return ((M11-M22)/(2*M12))*2 * M12 / sym.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+            if funcName=='ALPHA': #DONT BE STUPID BILLY. Alpha=-deriv(beta)/2.
+                #TODO: Figure out how to deal with sign ambiguity...
+                return (M11-M22)/np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
         if axis=='x':
             return lattice_Func_From_M_Reduced(M[:3,:3])
         elif axis=='y':
@@ -371,7 +534,58 @@ class PeriodicLatticeSolver:
         elif axis=='both':
             funcx= lattice_Func_From_M_Reduced(M[:3, :3])
             funcy=lattice_Func_From_M_Reduced(M[3:5, 3:5])
-            return funcx,funcy
+            return [funcx,funcy]
+
+    def _compute_Lattice_Function_From_MArr(self,MArr,funcName,axis):
+        #Yes, this is messy. But this is a bottle neck and this is the fastest way
+        #TODO: CLEANUP WITHOUT SACRIFICING PERFORMACE
+        #M: 5x5 transfer matrix, or 3x3 if using x axis or 2x2 if using x axis and no eta
+        if axis==None: #can't put self as keyword arg
+            axis=self.axis
+        if axis=='x':
+            M11 = MArr[:, 0, 0]
+            M12 = MArr[:, 0, 1]
+            M21 = MArr[:, 1, 0]
+            M22 = MArr[:, 1, 1]
+            if funcName=='BETA':
+                return np.abs(2 * M12 / np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
+            if funcName=='ETA':
+                M13 = MArr[:,0, 2]
+                M23 = MArr[:,1, 2]
+                extraFact = 2  # THIS IS A KEY DIFFERENCE BETWEEN NEUTRAL AND CHARGED PARTICLES!!!
+                etaPrime=(M21*M13+M23*(1-M11))/(2-M11-M22)
+                return extraFact * (M12*etaPrime+M13)/(1-M11)
+            if funcName=='ALPHA': #DONT BE STUPID BILLY. Alpha=-deriv(beta)/2.
+                #TODO: Figure out how to deal with sign ambiguity...
+                return (M11-M22)/np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+        if axis=='y':
+            M11 = MArr[:, 2, 2]
+            M12 = MArr[:, 2, 3]
+            M21 = MArr[:, 3, 2]
+            M22 = MArr[:, 3, 3]
+            if funcName=='BETA':
+                return np.abs(2 * M12 / np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
+            if funcName=='ALPHA': #DONT BE STUPID BILLY. Alpha=-deriv(beta)/2.
+                #TODO: Figure out how to deal with sign ambiguity...
+                return (M11-M22)/np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+        else:
+            M11 = MArr[:, 0, 0]
+            M12 = MArr[:, 0, 1]
+            M21 = MArr[:, 1, 0]
+            M22 = MArr[:, 1, 1]
+            M44 = MArr[:, 3, 3]
+            M45 = MArr[:, 3, 4]
+            M54 = MArr[:, 4, 3]
+            M55 = MArr[:, 4, 4]
+            if funcName=='BETA':
+                betax= np.abs(2 * M12 / np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
+                betay = np.abs(2 * M45 / np.sqrt(2 - M44 ** 2 - 2 * M45 * M54 - M55 ** 2))
+                return betax,betay
+            if funcName=='ALPHA': #DONT BE STUPID BILLY. Alpha=-deriv(beta,z)/2.
+                #TODO: Figure out how to deal with sign ambiguity...
+                alphax= (M11-M22)/np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
+                alphay = (M44 - M55) / np.sqrt(2 - M44 ** 2 - 2 * M45 * M54 - M55 ** 2)
+                return alphax,alphay
 
     def compute_Alpha_From_M(self, M,axis=None):
         if axis==None:
@@ -389,17 +603,24 @@ class PeriodicLatticeSolver:
             return self._compute_Lattice_Function_From_M(M, 'Beta', self.axis)
         else:
             return self._compute_Lattice_Function_From_M(M, 'Beta', axis)
-    def compute_Beta_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
-        return self._compute_Lattice_Function_Of_z_Array('BETA',numpoints,elIndex,returZarr,zArr,axis,*args)
-    def compute_Eta_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
-        return self._compute_Lattice_Function_Of_z_Array('ETA',numpoints,elIndex,returZarr,zArr,axis,*args)
-    def compute_Alpha_Of_Z_Array(self,*args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
-        return self._compute_Lattice_Function_Of_z_Array('ALPHA',numpoints,elIndex,returZarr,zArr,axis,*args)
+    def compute_Beta_Of_Z_Array(self,args,numpoints=None,axis=None,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('BETA',numpoints,elIndex,returZarr,zArr,axis,args)
+    def compute_Eta_Of_Z_Array(self,args,numpoints=1000,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('ETA',numpoints,elIndex,returZarr,zArr,'x',args)
+    def compute_Alpha_Of_Z_Array(self,args,numpoints=1000,axis=None,elIndex=None,returZarr=True,zArr=None):
+        return self._compute_Lattice_Function_Of_z_Array('ALPHA',numpoints,elIndex,returZarr,zArr,axis,args)
+    def compute_Beta_At_Z(self,z,args,axis='both'):
+        M=self.compute_M_Trans_At_z(z,args)
+        beta=self._compute_Lattice_Function_From_M(M,'BETA',axis,args=args)
+        return beta
+    def compute_Alpha_At_Z(self,z,args,axis='both'):
+        M=self.compute_M_Trans_At_z(z,args)
+        alpha=self._compute_Lattice_Function_From_M(M,'ALPHA',axis)
+        return alpha
 
 
 
-
-    def _compute_Lattice_Function_Of_z_Array(self,funcName,numPoints,elIndex,returnZarr,zArr,axis,*args):
+    def _compute_Lattice_Function_Of_z_Array(self,funcName,numPoints,elIndex,returnZarr,zArr,axis,args):
        # computes lattice functions over entire lattice, or single element.
        # args: supplied arguments. this depends on the variables created by user if there are any. Order is critical
        # numPoints: number of points compute. Initially none because it has different behaviour wether the user chooses to
@@ -423,24 +644,14 @@ class PeriodicLatticeSolver:
            else:
                zArr = np.linspace(totalLengthList[elIndex - 1], totalLengthList[elIndex], num=numPoints)
 
+       MTranList = self.make_MTrans_List(zArr.shape[0], args)
+       MArr = np.asarray(MTranList)
        if axis == 'both':
-           latFuncxArr = np.empty(zArr.shape)
-           latFuncyArr = latFuncxArr.copy()
-           i = 0
-           for z in zArr:
-               M = self.compute_M_Trans_At_z(z, *args)
-
-               latFuncxArr[i], latFuncyArr[i] = self._compute_Lattice_Function_From_M(M,funcName,axis=axis)
-               i += 1
-           latFuncArrReturn = [np.abs(latFuncxArr), np.abs(latFuncyArr)]
+           latFuncxArr, latFuncyArr = self._compute_Lattice_Function_From_MArr(MArr,funcName,axis=axis)
+           latFuncArrReturn = [latFuncxArr, latFuncyArr]
        else:
-           latFuncArr = np.empty(zArr.shape)
-           i=0
-           for z in zArr:
-               M=self.compute_M_Trans_At_z(z, *args)
-               latFuncArr[i]=self._compute_Lattice_Function_From_M(M,funcName,axis=axis)
-               i+=1
-           latFuncArrReturn = np.abs(latFuncArr)
+           latFuncArr=self._compute_Lattice_Function_From_MArr(MArr,funcName,axis=axis)
+           latFuncArrReturn = latFuncArr
        if returnZarr == True:
            return zArr, latFuncArrReturn
        else:
@@ -449,10 +660,13 @@ class PeriodicLatticeSolver:
 
 
 
+    def compute_MTot(self,args):
+        M = np.eye(5)
+        for j in range(self.numElements):
+            M = self.lattice[j].M_Func(*args) @ M
+        return M
 
-
-
-    def compute_M_Trans_At_z(self, z, *args):
+    def compute_M_Trans_At_z(self, z, args):
         #TODO: speedup!!!
         totalLengthArray = np.asarray(self.totalLengthListFunc(*args))
         lengthArray = np.asarray(self.lengthListFunc(*args))
@@ -463,7 +677,7 @@ class PeriodicLatticeSolver:
         for i in range(self.numElements - index - 1):
             j = i + index + 1  # current magnet +1 to get index of next magnet
             M = self.lattice[j].M_Funcz(lengthArray[j],*args) @ M
-        # from beginning to point z
+        # from beginning to current element
         for i in range(index):
             M = self.lattice[i].M_Funcz(lengthArray[i],*args) @ M
         # final step is rest of distance
@@ -472,11 +686,55 @@ class PeriodicLatticeSolver:
         else:  # any other magnet
             M = self.lattice[index].M_Funcz(z - totalLengthArray[index - 1],*args) @ M
         return M
+    def make_MTrans_List(self,numPoints,args):
+        temp=[]
+        z0=0
+        index=0
+        totalLengthArr = np.asarray(self.totalLengthListFunc(*args))
+        lengthArr = np.asarray(self.lengthListFunc(*args))
+        zArr = np.linspace(0, totalLengthArr[-1], num=numPoints)
+
+        #----get the algorithm started----
+
+        M1=np.eye(5) #matrix from the left to that element
+        M2=np.eye(5) #from that element to the end
+        for i in range(1,self.numElements):
+            M2=self.lattice[i].M_Func(*args)@M2
+        j=1
+        for z in zArr:
+
+            if z<=totalLengthArr[index]+1E-10 and z0<=totalLengthArr[index]+1E-10: #small number added to account for
+                    #potential numerical issues
+                if index==0: #if index==0 then using totalLengthArr[index-1] is equivalent to totalLengthArr[-1]!, but
+                        #i want zero!
+                    Ma = self.lattice[index].M_Funcz(z, *args)
+                else:
+                    Ma=self.lattice[index].M_Funcz(z-totalLengthArr[index-1],*args)
+                Mb=self.lattice[index].M_Funcz(totalLengthArr[index]-z,*args)
+
+                M=Ma@M1@M2@Mb
+                z0=z
+                temp.append(M)
+            elif j==numPoints:
+                M2 = np.eye(5)
+                for i in range(0,self.numElements): #go from the element after the current element to the end
+                    M2=self.lattice[i].M_Func(*args)@M2 #TODO: REPLACE WITH MFunc
+                temp.append(M2)
+            else:
+                index=int(np.argmax(z<totalLengthArr))
+                M1 = np.eye(5)  # matrix from the left to that element
+                M2 = np.eye(5)  # from that element to the end
+                for i in range(index+1,self.numElements): #go from the element after the current element to the end
+                    M2=self.lattice[i].M_Func(*args)@M2
+                for i in range(0,index): #go from beginning to current element
+                    M1=self.lattice[i].M_Func(*args)@M1
+                Ma = self.lattice[index].M_Funcz(z-totalLengthArr[index-1], *args)
+                Mb = self.lattice[index].M_Funcz(totalLengthArr[index] - z, *args)
+                M=Ma@M1@M2@Mb
+                z0=z
+                temp.append(M)
+            j+=1
+
+        return temp
 
 
-if __name__ == '__main__':
-    PLS = PeriodicLatticeSolver(200,.02,axis='both',catchErrors=False)
-    PLS.begin_Lattice()
-    PLS.add_Injector(1,1,1,1)
-    PLS.add_Drift(1)
-    PLS.end_Lattice()
