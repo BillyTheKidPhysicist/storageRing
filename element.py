@@ -9,6 +9,8 @@ import numpy as np
 
 
 #TODO: do other elements have small number problems?
+#TODO: KISS SUSAN
+
 
 class Element:
 
