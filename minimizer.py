@@ -40,6 +40,7 @@ class Solution():
         self.Lm = None  # the optimal magnet length of the injection system
         self.Li = None  # the optimal image length. The distance from the end of the magnet to the focus at the combiner
         self.mag = None  # injector magnification for optimal lengths
+        self.sOffset=None #the optimal offset distance of the collector element
         self.fracParticlesx=None
         self.fracParticlesy=None
 
@@ -416,7 +417,7 @@ class Minimizer():
         self.sol.eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=1000, returZarr=False)
         self.sol.emittance, temp = self.compute_Emittance(self.sol.args, self.sol.totalLengthList,
                                                           returnAll=True)
-
+        self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li,self.sol.sOffset = temp
         #use the largest emittance particle that isn't clipping
         envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList)
         numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
@@ -444,7 +445,7 @@ class Minimizer():
                     maxArgy=i
 
         self.sol.emittance=[emittanceArrList[0][maxArgx],emittanceArrList[1][maxArgy]]
-        self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li = temp
+
         self.sol.tunex = np.trapz(np.power(self.sol.beta[0], -1), x=self.sol.zArr) / (2 * np.pi)
         self.sol.tuney = np.trapz(np.power(self.sol.beta[1], -1), x=self.sol.zArr) / (2 * np.pi)
 
@@ -495,7 +496,8 @@ class Minimizer():
             LoOp = xInjector[0]
             LmOp = xInjector[1]
             LiOp = self.PLS.injector.LiFunc(*xInjector)
-            return emittance, [mag, LoOp, LmOp, LiOp]
+            sOffset=xInjector[2]
+            return emittance, [mag, LoOp, LmOp, LiOp,sOffset]
         else:
             return emittance
 

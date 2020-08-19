@@ -9,7 +9,7 @@ class Plotter:
         if (np.any(args!=None) and sol!=None) or (np.any(args==None) and sol==None):
             raise Exception('YOU NEED TO PROVIDE ARGUMENTS OR A MINIMIZER OBJECT')
         if sol!=None:
-            args=sol.args[:-2] #only keep lattice parameters
+            args=sol.args[:-3] #only keep lattice parameters
             zArr=sol.zArr
             env=sol.env
             eta=sol.eta
@@ -23,6 +23,7 @@ class Plotter:
             Lo=sol.Lo
             Lm=sol.Lm
             Li=sol.Li
+            sOffset=sol.sOffset
         else:
             print('args not supported yet')
             sys.exit()
@@ -93,7 +94,7 @@ class Plotter:
         axBeta[0].text(.75, 1.1, text, transform=axBeta[0].transAxes) #place in top right of top plot, only the top
             #plot
 
-        rp=self.PLS.injector.rpFunc(Lo,Lm) #Bore radius of the shaper magnet
+        rp=self.PLS.injector.rpFunc(Lo,Lm,sOffset) #Bore radius of the shaper magnet
         text='Shaper rp: '+str(np.round(rp*1000,1))+'mm'
         axBeta[0].text(.75, 1.15, text, transform=axBeta[0].transAxes) #place in top right of only top magnet
 
