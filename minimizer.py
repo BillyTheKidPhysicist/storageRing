@@ -27,7 +27,7 @@ class Solution():
         self.tracex = None  # trace of transfer matrix in x plane
         self.tracey = None  # trace of transfer matrix in y plane
         self.beta = [None, None]  # List to hold arrays of beta function in x and y plane
-        self.envBeta = [None, None]  # List of the arrays of the envelope of the beta function in the x and y plane.
+        self.env = [None, None]  # List of the arrays of the envelope of the beta function in the x and y plane.
         self.eta = None  # to hold array of eta functions, only x plane of course
         self.zArr = None  # to hold the zArr for this solution.
         self.emittance = [None, None]  # to hold the emittance
@@ -40,6 +40,9 @@ class Solution():
         self.injec_LmOp = None  # the optimal magnet length of the injection system
         self.injec_LiOp = None  # the optimal image length. The distance from the end of the magnet to the focus at the combiner
         self.injec_Mag = None  # injector magnification for optimal lengths
+        self.fracParticlesx=None
+        self.fracParticlesy=None
+
 
 
 class Evolution():
@@ -173,27 +176,38 @@ class Minimizer():
     def __init__(self, PLS, numSteps=5):
         self.PLS = PLS
         self.numPoints = 250  # number of points in the beta array
-        self.a_Sigmoid_Env = self.numPoints * (
-                .015 ** 2) * 100  # a guess at a value that gives a good sigmoid. Should be close to the value of
-        # a sum of the envelope squared
+        self.a_Sigmoid_Trace = 100  # a guess at a value that gives a good sigmoid for trace.
+        #testing shows around 100
+        self.a_Sigmoid_Env=(self.numPoints*.02)*100 #a guess at good value of sigmoid factor. A reasonable value for the
+            #sum mulitplied by a factor
         self.traceMax = 1.9  # rather than punishing for trace being above 2
         self.sol = None  # the final solution
         self.numSolutions = None  # number of solutions
+        temp=[]
+        for particle in self.PLS.injector.particles:
+            temp.append(particle.vs/self.PLS.v0-1)
+        self.particleDeltaArr=np.asarray(temp) #an array of the value of delta (longitudinal velocity/ 200 -1) for each particle
+        #this is used to quickly compute the envelope from dispersion
+
+
 
     def cost_Function(self, x, Print, floorPlan):
         # this function returns the 'cost' of a particular point in parameter space. The goal is to minimize this cost.
         # The cost function varies continuously everywhere in the space. The derivative is not continuous. This is probably
         # fine because genetic algorithm doesn't use the derivative. I think newton's method works as well with discontinuous
         # derivatives
-        # The components of the cost function are:
-        # 1: The trace of the matrix as (tracex+tracey)/2. When this is above 2, this is the cost. When below it goes to the
-        # the next step
-        # 2: The sum of the envelopes squared added together. This goes into the sigmoid function whos maximum value is 2.
-        # This is continuous with step 1 because at the edge of stability the envelope is infinite which gives 2 with the
-        # sigmoid
-        # 3:
-        # 4: If any part of the envelope clips an apeture, the fractional 'extra' of clipping is multiplied by the previous
-        # cost in part 2 and a weight function. This get added to the cost
+        # The steps are as follows
+        # 1: If the floorplan violates a contraint it gives a value greater than 4. The total cost is then this value. If less
+        # than 4 go to the next step
+        # 2: compute the trace. If it's greater than self.traceMax confine the result between a value of self.traceMax
+        # and 4. If not go to the next step
+        # 3: count the number of clipped particle. compute the total envelope sum of the unclipped particles.
+        #  constrain the sum between 0 and 1. the cost is then the number of clipped particles plus the contrained
+        #  envelope sum divided by number of particles plus 1. This is then scaled to be betweeon 0 and self.traceMax
+        #
+
+
+
 
         layOutCost = floorPlan.calculate_Cost(args=x, offset=4)  # cost from floor plan
         if Print == True:
@@ -209,7 +223,6 @@ class Minimizer():
         else:
             xLattice = x[:-2]  # the lattice parameters
             xInjector = x[-2:]  # the injector parameters
-            cost = 0
             M = self.PLS.MTotFunc(*xLattice)
             tracex = np.abs(np.trace(M[:2, :2]))
             tracey = np.abs(np.trace(M[3:, 3:]))
@@ -217,65 +230,110 @@ class Minimizer():
                 cost = (tracey + tracex)  # minimum value is self.traceMax
                 if Print == True:
                     print('Trace is greater than maximum.Values are (x,y): ' + str(tracex) + ' ' + str(tracey))
+                return self.sigmoid_Trace(cost)
+
             else:
                 totalLengthList = self.PLS.totalLengthListFunc(*xLattice)
-                beta = self.PLS.compute_Beta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
+                envList,emittanceArrList=self.make_Envelope_And_Emittance_List(x, totalLengthList)
+                numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
+                    totalLengthList, xLattice, envList)
 
-                emittance = self.compute_Emittance(x, totalLengthList)
-                envBeta = [np.sqrt(emittance[0] * beta[0]), np.sqrt(emittance[1] * beta[1])]
-                envSum = np.sum(envBeta[0] ** 2 + envBeta[1] ** 2)
-                cost += envSum
 
-                weight = 1  # the weight of envelope clipping. Bigger numbers punish more. Don't want too big though because
-                # it will make the cost function too flat there
-                apFracxList = []
-                apFracyList = []
-                for i in range(len(self.PLS.lattice)):
-                    el = self.PLS.lattice[i]
-                    if i == 0:
-                        ind1 = 0  # z array index of beginning of element. Only if it's the first element in the ring
-                    else:
-                        ind1 = int(totalLengthList[i - 1] * self.numPoints / totalLengthList[
-                            -1]) + 1  # z array index of the end
-                        # element. overshoot the beginning
-                    ind2 = int(
-                        totalLengthList[i] * self.numPoints / totalLengthList[-1]) - 1  # z array index of end of the
-                    # element. undershoot ending
-                    if ind2 > ind1 + 1:  # sometimes the element is very short and this doesn't make sense. Not usually, but
-                        # can be true for small drift regions
-                        elMaxx = np.max(envBeta[0][ind1:ind2])
-                        elMaxy = np.max(envBeta[1][ind1:ind2])
-                        apx = el.apxFunc(*xLattice)  # the size of the apeture in the x dimension
-                        apy = el.apyFunc(*xLattice)  # in the y dimension
-                        if elMaxx > apx:  # if the envelope is clipping
-                            apFracxList.append((elMaxx - apx) / apx)
-                        if elMaxy > apy:  # if the envelope is clipping
-                            apFracyList.append((elMaxy - apy) / apy)
-                clipx = 0
-                clipy = 0
-                if len(apFracxList) > 0:
-                    clipx = np.max(np.asarray(apFracxList))
-                if len(apFracyList):
-                    clipy = np.max(np.asarray(apFracyList))
-                clip = np.sqrt(clipx ** 2 + clipy ** 2)
-                cost += weight * self.a_Sigmoid_Env * clip
+                #find the sum of the envelope but normalize to the number of particles
+                envSum=0
+                if len(self.PLS.injector.particles)-numClippedx!=0 or len(self.PLS.injector.particles)-numClippedy!=0:
+                    for i in range(len(self.PLS.injector.particles)):
+                        envX=0
+                        envY=0
+                        if clippedXBoolList[i]==False:
+                            envX=np.sum(envList[0][i])
+                        if clippedYBoolList[i]==False:
+                            envY=np.sum(envList[1][i])
+                        envSum+=np.sqrt(envX**2+envY**2)
+                    envCost=self.sigmoid_Env(envSum/(2*len(self.PLS.injector.particles)-(numClippedx+numClippedy)))
+                else:
+                    envCost=0
+                if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
+                    cost=self.traceMax
+                else:
+                    cost=((numClippedx+numClippedy)/(2*len(self.PLS.injector.particles)+1)+envCost)*self.traceMax
+                return cost
 
-                if Print == True:
-                    print('Trace is less than maximum. Values are (x,y): ' + str(tracex) + ' ' + str(tracey))
-                    print('Cost before sigmoid is: ' + str(cost))
-                cost = self.sigmoid_Env(cost)  # constrain the cost to be between 0 and 2
 
-            if Print == True:
-                print('Final cost is: ' + str(cost))
-                print('Arguments are (below)')
-                print(x)
-            return cost
 
-    def sigmoid_Env(self, x):
-        # this function returns either 0 or self.traceMax for any given positive real x. Common trick in machine learning
-        a = self.a_Sigmoid_Env
-        return (self.traceMax / 2) * (((x - a / 2) / a) / (1 + (x - a / 2) / a) + 1)
 
+                #if Print==True:
+                #    print(envCost)
+                #    print(clipCost)
+                #    print(self.a_Sigmoid)
+                #cost=self.sigmoid(clipCost+envCost)
+
+    def make_Envelope_And_Emittance_List(self, x, totalLengthList):
+        #returns a list of the envelopes of the particles in the x and y plane
+        xLattice = x[:-2]  # the lattice parameters
+        beta = self.PLS.compute_Beta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
+        eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
+        eta = np.abs(eta)  # the absolute value is all that really matter
+
+        emittanceArrList = self.compute_Emittance(x, totalLengthList)  # list of two arrays where the first array
+        envList = [[], []]
+        for i in range(emittanceArrList[0].shape[0]):
+            envx = np.sqrt(emittanceArrList[0][i] * beta[0])
+            envy = np.sqrt(emittanceArrList[1][i] * beta[1])
+            delta = self.PLS.injector.particles[i].vs / self.PLS.v0 - 1
+            envx += np.abs(delta * eta)  # as of now apetures are symmetric, the right and left are equal so to speak
+            # so taking the absolute value isn't an issue. If I don't take the absolute value then I
+            # need to check if an envelope is both higher or lower than the apeture and make sure to add beta
+            # carefully
+            envList[0].append(envx)
+            envList[1].append(envy)
+        return envList,emittanceArrList
+    def find_Clipped_Particles(self,totalLengthList,xLattice,envList):
+        numClippedx = 0
+        numClippedy = 0
+        clippedXBoolList = [False] * len(self.PLS.injector.particles)  # create list of wether particle has clipped
+        clippedYBoolList = [False] * len(self.PLS.injector.particles)  # create list of wether particle has clipped
+
+        for i in range(len(self.PLS.injector.particles)):
+            clippedx = False  # to make sure I don't overcount when clipping happens more than once for that particle
+            clippedy = False
+            for j in range(len(self.PLS.lattice)):
+                el = self.PLS.lattice[j]
+                if j == 0:
+                    ind1 = 0  # z array index of beginning of element. Only if it's the first element in the ring
+                else:
+                    ind1 = int(
+                        totalLengthList[j - 1] * self.numPoints / totalLengthList[-1])+1  # z array index of the end
+                    # element
+                ind2 = int(totalLengthList[j] * self.numPoints / totalLengthList[-1])   # z array index of end of the
+                # element. undershoot ending
+                if ind2 > ind1 + 1:  # sometimes the element is very short and this doesn't make sense. Not usually, but
+                    # can be true for small drift regions
+                    elMaxx = np.max(envList[0][i][ind1:ind2])
+                    elMaxy = np.max(envList[1][i][ind1:ind2])
+                    apx = el.apxFunc(*xLattice)  # the size of the apeture in the x dimension
+                    apy = el.apyFunc(*xLattice)  # in the y dimension
+                    if elMaxx > apx:  # if the envelope is clipping
+                        if clippedx == False:
+                            numClippedx += 1
+                            clippedXBoolList[i] = True
+                            clippedx = True
+                    if elMaxy > apy:  # if the envelope is clipping
+                        if clippedy == False:
+                            numClippedy += 1
+                            clippedYBoolList[i] = True
+                            clippedy = True
+        return numClippedx,numClippedy,clippedXBoolList,clippedYBoolList
+    def sigmoid_Trace(self,x):
+        #this confines a value between self.traceMax and 4
+        a = self.a_Sigmoid_Trace
+        y=((((x - self.traceMax) - a / 2) / a) / (1 + ((x -self.traceMax) - a / 2) / a) +1)*(2/self.traceMax)+self.traceMax
+        return y
+    def sigmoid_Env(self,x):
+        #confines a value of the envelope sum to be between 0 and 1
+        a=self.a_Sigmoid_Env
+        y = (x / a) / (1 + x / a)
+        return y
     def trace_Env(self, x):
         # this confines the trace to a value between self.traceMax and 4
         a = 100
@@ -358,6 +416,34 @@ class Minimizer():
         self.sol.eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=1000, returZarr=False)
         self.sol.emittance, temp = self.compute_Emittance(self.sol.args, self.sol.totalLengthList,
                                                           returnAll=True)
+
+        #use the largest emittance particle that isn't clipping
+        envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList)
+        numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
+            self.sol.totalLengthList, xLattice, envList)
+        if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
+            print('One or more dimensions has no surviving particles!')
+            sys.exit()
+        self.sol.fracParticlesx=1-(numClippedx/len(self.PLS.injector.particles))
+        self.sol.fracParticlesy=1-(numClippedy/len(self.PLS.injector.particles))
+        maxValx=0
+        maxValy=0
+        maxArgx=None
+        maxArgy=None
+        print(numClippedx,numClippedy)
+        for i in range(len(self.PLS.injector.particles)):
+            if clippedXBoolList[i]==False:
+                envx=np.sum(envList[0][i])
+                if envx>maxValx:
+                    maxValx=envx
+                    maxArgx=i
+            if clippedYBoolList[i]==False:
+                envy=np.sum(envList[1][i])
+                if envy>maxValy:
+                    maxValy=envy
+                    maxArgy=i
+
+        self.sol.emittance=[emittanceArrList[0][maxArgx],emittanceArrList[1][maxArgy]]
         self.sol.injec_Mag, self.sol.injec_LoOp, self.sol.injec_LmOp, self.sol.injec_LiOp = temp
         self.sol.tunex = np.trapz(np.power(self.sol.beta[0], -1), x=self.sol.zArr) / (2 * np.pi)
         self.sol.tuney = np.trapz(np.power(self.sol.beta[1], -1), x=self.sol.zArr) / (2 * np.pi)
@@ -365,9 +451,12 @@ class Minimizer():
         self.sol.resonanceFactx = self.PLS.compute_Resonance_Factor(self.sol.tunex, np.arange(3) + 1)
         self.sol.resonanceFacty = self.PLS.compute_Resonance_Factor(self.sol.tuney, np.arange(3) + 1)
 
-        envBetax = np.sqrt(self.sol.emittance[0] * self.sol.beta[0])
-        envBetay = np.sqrt(self.sol.emittance[0] * self.sol.beta[1])
-        self.sol.envBeta = [envBetax, envBetay]
+        delta=self.PLS.injector.particles[maxArgx].vs/self.PLS.v0-1
+        envx = np.sqrt(self.sol.emittance[0] * self.sol.beta[0])+np.abs(self.sol.eta*delta)*0
+        envy = np.sqrt(self.sol.emittance[1] * self.sol.beta[1])
+        self.sol.env = [envx, envy]
+        print('percent particles surviving (x,y): '+str(np.round(self.sol.fracParticlesx*100,1)) +
+                                       ', '+ str(np.round(100*self.sol.fracParticlesy,1)))
 
     def find_Beta_And_Alpha_Injection(self, args, totalLengthList):
         # finds the value of beta at the injection point
@@ -398,8 +487,8 @@ class Minimizer():
         xInjector = args[-2:]
 
         betax, betay, alphax, alphay = self.find_Beta_And_Alpha_Injection(xLattice, totalLengthList)
-        emittance = [self.PLS.injector.epsFunc(*xInjector, betax, alphax),
-                     self.PLS.injector.epsFunc(*xInjector, betay, alphay)]
+        emittance = [np.asarray(self.PLS.injector.epsFunc(xInjector, betax, alphax)),
+                     np.asarray(self.PLS.injector.epsFunc(xInjector, betay, alphay))]
         if returnAll == True:
             # M=injector.MFunc(*injArgArr[:,minIndex])
             mag = self.PLS.injector.MFunc(*xInjector)[0, 0]

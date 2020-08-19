@@ -21,21 +21,28 @@ class VariableObject:
         self.sympyObject=sympyVar
         self.elIndex=None #index of use of variables. Can be overwritten if reused.
         self.type=None # to hold wether the optic is assigned to lattice, injector or both
+class Particle:
+    def __init__(self,xi,xdi,vs):
+        self.xi=xi #particle transverse position at focus
+        self.xdi=xdi #particle transverse velocity at focus
+        self.vs=vs #particles longitudinal velocity
 class Injector:
-    def __init__(self):
+    def __init__(self,PLS):
+        self.PLS=PLS
         self.M=None #to hold transfer matrix
         self.MFunc=None #to hold numpy function for matrix
+        self.MVelCor=None #matrix that represent first order correction to velocity
         self.el=None #to hold element object
-        self.xi=None #To hold xRMS for input to injector
-        self.xdi=None #To hold xDotRMS for input to inject
         self.Li=None #to hold sympy expression for image length of injector
         self.LiFunc=None #to hold the function that returns the image distance
         self.epsFunc=None #function that return value of emittance. First argument must be beta
         self.epsSampleFunc=None #A with xi and xdi as input paramters
+        self.rp=None #To hold the value of the radius of the injector bore
         self.rpFunc=None #function that return the radius of the shaper
         self.sympyVarList=[] #list of sympy variables used in injector
         self.Lo = sym.symbols('L0', real=True, positive=True)
         self.Lm=sym.symbols('Lm',real=True,positive=True)
+        self.Bp=.45
         self.sympyVarList=[self.Lo,self.Lm]
         maxLen=2.5
         self.LoMin=.1
@@ -52,49 +59,69 @@ class Injector:
         self.LoOp=None
         self.LmOp=None
         self.LiOp=None
+
+        self.particles=[]
+        xMax=.005
+        xdMax=15
+        deltaVMax=5
+        x=np.linspace(-xMax,xMax,num=5)
+        xd=np.linspace(-xdMax,xdMax,num=5)
+        v0=self.PLS.v0+np.linspace(-deltaVMax,deltaVMax,num=5)
+        temp=np.meshgrid(x,xd,v0)
+        t1=temp[0].flatten()
+        t2 = temp[1].flatten()
+        t3 = temp[2].flatten()
+        argsList=np.transpose(np.row_stack((t1,t2,t3)))
+        for item in argsList:
+            if item[0]==0 or item[1]==0: #don't include particles with zero position or velocity
+                pass
+            else:
+                self.particles.append(Particle(*item))
     def update(self):
         self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList)
-        self.LiFunc=symWrap.ufuncify(self.sympyVarList,self.el.Li)
-        A=self.M[0,0]
-        C=self.M[1, 0]
-        D=self.M[1, 1]
-        xf=A*self.xi
-        xfd=C*self.xi+D*self.xdi
+        self.LiFunc=sym.lambdify(self.sympyVarList,self.el.Li)
+        self.rpFunc = symWrap.autowrap(self.rp, args=self.sympyVarList)
+
+
         beta, alpha=sym.symbols('beta alpha',real=True,positive=True)
-        eps=(xf**2+(beta*xfd)**2+(alpha*xf)**2+2*alpha*xfd*xf*beta)/beta #this can't go negative
-
-
-
+        funcList=[]
         args=self.sympyVarList.copy()
         args.extend([beta,alpha])
-        self.epsFunc=symWrap.ufuncify(args,eps)
+        for particle in self.particles:
+            xi=particle.xi
+            xdi=particle.xdi/self.PLS.v0 #convert to angles
+            deltaV=particle.vs-self.PLS.v0
+
+            A = self.M[0, 0]
+            C = self.M[1, 0]
+            D = self.M[1, 1]
+
+            ACor = self.MVelCor[0, 0]#component of the correction matrix
+            CCor = self.MVelCor[1, 0]#component of the correction matrix
+            DCor = self.MVelCor[1, 1]#component of the correction matrix
+
+            xf=(A+ACor*deltaV)*xi
+            xdf=(C+CCor*deltaV)*xi+(D+DCor*deltaV)*xdi
+            eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta #this can't go negative
+            funcList.append(symWrap.autowrap(eps,args=args))
 
 
-        xi,xdi=sym.symbols('xi xdi',real=True)
-        args = [xi,xdi,beta,alpha]
-        args.extend(self.sympyVarList)
-        xf=A*xi
-        xfd=C*xi+D*xdi
-        eps=(xf**2+(beta*xfd)**2+(alpha*xf)**2+2*alpha*xfd*xf*beta)/beta #this can't go negative
-        self.epsSampleFunc=symWrap.autowrap(eps,args=args)
 
-        m = 1.16503E-26
-        ub = 9.274009E-24
-        temp=2*ub/(m*200**2)
-        rp=sym.simplify(((self.el.Lo*self.thetaMax+self.riMax)/self.sigma)*sym.sqrt(1/(1-self.thetaMax**2/(temp*self.el.Bp))))
-        self.rpFunc=symWrap.autowrap(rp,args=self.sympyVarList)
+
+        def temp(x,alpha,beta):
+            tempList=[]
+            for func in funcList:
+                tempList.append(func(*x,alpha,beta))
+            return tempList
+        self.epsFunc=temp
 
 
 
 
-    def compute_Xf_Xdf_RMS(self,args):
-        M=self.MFunc(*args)
-        A=M[0,0]
-        C=M[1,0]
-        D=M[1,1]
-        xfRMS=A*self.xi
-        xfdRMS=C*self.xi +D*self.xdi
-        return float(xfRMS),float(xfdRMS)
+
+
+
+
 class PeriodicLatticeSolver:
     def __init__(self,v0,T,axis,catchErrors=True):
 
@@ -132,7 +159,7 @@ class PeriodicLatticeSolver:
         self.MTot = None #total transfer matrix, can contain sympy symbols
         self.MTotFunc = None#numeric function that returns total transfer matrix based on input arguments
         self.MListFunc=None #returns a list of numeric matrix values
-        self.injector=Injector() #to hold the injector object
+        self.injector = None  # to hold the injector object
         self.emittancex=None #to hold emittance value in x direction.
         self.emittancey=None #to hold emittance value in y direction
         self.bendingAngleVarList=[] #to hold the variables used to set the amount of bending. This is only used if
@@ -181,7 +208,7 @@ class PeriodicLatticeSolver:
                 args[i]=args[i].sympyObject #replace the argument with the sympy symbol
         return args
 
-    def add_Injector(self,Bp,xi,xdi):
+    def add_Injector(self):
         #add an injector. This doesn't go into the list of elements though
         #L: length of magnet in injection system
         #Lo: distance from image to front of magnet in injection system
@@ -189,18 +216,18 @@ class PeriodicLatticeSolver:
         #rp: radius of lens
         #sigma: fraction of inner bore to use
         #r0: maximum incoming particle offset. This forces the bore to be large
+        self.injector=Injector(self)
         if self.numElements>0:
             raise Exception('INJECTOR MUST BE ADDED FIRST')
-        alpha = 2 * self.u0 / (self.m * 200 ** 2)
-        self.injector.rp=sym.simplify(((self.injector.Lo*self.injector.thetaMax+self.injector.riMax)/self.injector.sigma)*sym.sqrt(1/(1-self.injector.thetaMax**2/(alpha*Bp))))
-        args=[self.injector.Lm,self.injector.Lo,Bp,self.injector.rp]
+
+        args=[self.injector.Lm,self.injector.Lo,self.injector.Bp,self.injector.thetaMax,self.injector.sigma,self.injector.riMax]
 
         self.injector.el=Element(self,'INJECTOR',args)
-        self.injector.el.calc_M()
         self.injector.M=self.injector.el.M
-        self.injector.xi=xi
-        self.injector.xdi=xdi
+        self.injector.MVelCor=self.injector.el.MVelCor
         self.injector.Li=self.injector.el.Li
+        self.injector.rp=self.injector.el.rp
+
         self.injector.update()
 
 

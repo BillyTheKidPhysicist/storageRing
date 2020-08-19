@@ -8,11 +8,11 @@ import numpy as np
 #version 1.0. June 22, 2020. William Huntington
 
 
-
+#TODO: do other elements have small number problems?
 
 class Element:
 
-    def __init__(self, PLS,elType, args,defer=False,injectorComponent=False):
+    def __init__(self, PLS,elType, args,defer=False):
         #PLS: Lattice object, could be periodic or linear
         #type :: element type such as bender, lens etc. must be in list elType
         #args: parameters for the element such as length, magnetic field etc.
@@ -41,10 +41,21 @@ class Element:
         self.M_Func=None #returns total transfer matrix for the element
         self.apxFunc=None #apeture in x plane
         self.apyFunc=None #apeture in y plane
+        self.thetaMax=None #the maximum acceptance angle of injector
+        self.sigma=None #fraction of the elements bore to use. The good field fraction
+        self.riMax=None #the maximum expected offset of input particle. For injector only most likely
+        self.MVelCor=None #matrix that represents first order correction to longitudinal velocity
+        self.v=None #velocity of atoms for transfer matrix
+
         self.fill_Variables(args)
-        if injectorComponent==True or elType=='INJECTOR': #if the component is part of the injector only compute the matrix and do it
+        if elType=='INJECTOR': #if the component is part of the injector only compute the matrix and do it
                 #it without having to update
             self.M = self.calc_M()  # calculate the matrix representing the element.
+            self.MVelCor=sym.simplify(self.M.diff(self.v).subs(self.v, self.PLS.v0))# find the correction matrix
+            self.M=self.M.subs(self.v,self.PLS.v0) #now include the numerical value for velocity
+            self.rp = self.rp.subs(self.v, self.PLS.v0)
+            self.Li=self.Li.subs(self.v,self.PLS.v0)
+
 
 
 
@@ -95,12 +106,16 @@ class Element:
             self.Length=args[0]
             self.Lo=args[1]
             self.Bp=args[2]
-            self.rp=args[3]
+            self.thetaMax=args[3]
+            self.sigma=args[4]
+            self.riMax=args[5]
         else:
             raise Exception('INVALID element NAME PROVIDED!')
 
-
-
+        if self.elType=='INJECTOR':
+            self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
+        else:
+            self.v = self.PLS.v0
 
     def calc_M(self,  L=None):
         # L: The length of the element. By default this is whatever the length property of the element is.
@@ -114,8 +129,8 @@ class Element:
             # NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
             #x component of matrix
             k0=1/self.r0
-            self.rp=self.r0*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.PLS.v0 ** 2)) #from the theory of what the maximum bore is
-            k =2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.PLS.v0 ** 2 * self.rp ** 2)
+            self.rp=self.r0*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.v ** 2)) #from the theory of what the maximum bore is
+            k =2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
             kappa=k0**2+k
             phi = sym.sqrt(kappa) * L
             M[0, 0] = sym.cos(phi)
@@ -160,7 +175,7 @@ class Element:
             #M[1,2] = sym.sin(phiX)*k0 / sym.sqrt(kappaX)
             #M[2,2]=1
             ##y component
-            #k= self.PLS.u0 * self.beta ** 2 / (self.alpha * self.PLS.m * self.PLS.v0 ** 2) #there is lensing present in y direction
+            #k= self.PLS.u0 * self.beta ** 2 / (self.alpha * self.PLS.m * self.v ** 2) #there is lensing present in y direction
             #    #for combind function magnets. See notes
             #kappaY=k
             #phiY = sym.sqrt(kappaY) * L
@@ -172,7 +187,7 @@ class Element:
 
         elif self.elType == self.elTypeList[1]:  #-----------------------------LENS-----------------------------------------------
             #same along both axis
-            kappa = 2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.PLS.v0 ** 2 * self.rp ** 2)
+            kappa = 2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
             #x component
 
             phi = sym.sqrt(kappa) * L
@@ -204,7 +219,7 @@ class Element:
             # combined function magnet with predominatly quadrupole and dipole terms
             # NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
             #x component of matrix
-            k0 = self.beta * self.PLS.u0 / (self.PLS.m * self.PLS.v0 ** 2)
+            k0 = self.beta * self.PLS.u0 / (self.PLS.m * self.v ** 2)
             self.r0 = 1 / k0
             kappaX = k0 ** 2
             phiX = sym.sqrt(kappaX) * L
@@ -217,7 +232,7 @@ class Element:
             M[2,2]=1
 
             #y component
-            kappaY = self.PLS.u0 * self.beta ** 2 / (self.alpha * self.PLS.m * self.PLS.v0 ** 2)  # 'spring constant' of the magnet
+            kappaY = self.PLS.u0 * self.beta ** 2 / (self.alpha * self.PLS.m * self.v ** 2)  # 'spring constant' of the magnet
             phiY = sym.sqrt(kappaY) * L
             M[3,3] = sym.cos(phiY)
             M[3,4] = sym.sin(phiY) / sym.sqrt(kappaY)
@@ -225,19 +240,28 @@ class Element:
             M[4,4] = sym.cos(phiY)
 
         elif self.elType==self.elTypeList[4]:  #-------------------INJECTOR---------------
-            #this all checks out, I've triple checked it now
-            lensArgs=[self.Length, self.Bp, self.rp,None]
-            MLens=Element(self.PLS, 'LENS',args=lensArgs,injectorComponent=True).M
-            MLo=Element(self.PLS,'DRIFT',args=[self.Lo,None],injectorComponent=True).M
-            K = 2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.PLS.v0 ** 2 * self.rp ** 2)
-            phi = sym.sqrt(K) * L
-            self.Li=(sym.sqrt(K)*self.Lo*sym.cos(phi)+sym.sin(phi))/(K*self.Lo*sym.sin(phi)-sym.sqrt(K)*sym.cos(phi))
-            MLi = Element(self.PLS, 'DRIFT', args=[self.Li, None], injectorComponent=True).M
+            #TODO: fix small numbers by doing symbollicaly and only subbing at end
+            #I checked the approximation
 
-            M=MLi@MLens@MLo
-            #print(lensArgs[2].subs(lensArgs[1],.45).subs(lensArgs[0],.124).subs(self.Lo,.2))
-            #print(M.subs(lensArgs[2],.0208).subs(lensArgs[1],.45).subs(lensArgs[0],.124).subs(self.Lo,.2))
-            #print(MLi.subs(lensArgs[2],.0235).subs(lensArgs[1],.45).subs(lensArgs[0],.124).subs(self.Lo,.2))
-            #print(self.Li.subs(lensArgs[2],.0235).subs(lensArgs[1],.45).subs(lensArgs[0],.124).subs(self.Lo,.2))
-            #sys.exit()
+
+
+            K=sym.symbols('k',real=True,positive=True,nonzero=True)
+
+            phi = sym.sqrt(K) * self.Length
+            C = sym.cos(phi)
+            S = sym.sin(phi) / sym.sqrt(K)
+            Cd = -sym.sqrt(K) * sym.sin(phi)
+            Sd = sym.cos(phi)
+            self.Li = (sym.sqrt(K) * self.Lo * sym.cos(phi) + sym.sin(phi)) / (K * self.Lo * sym.sin(phi) - sym.sqrt(K) * sym.cos(phi))
+            MLens = sym.Matrix([[C, S], [Cd, Sd]])
+            MLo = sym.Matrix([[1, self.Lo], [0, 1]])  # drift for object
+            MLi = sym.Matrix([[1, self.Li], [0, 1]])  # drift for object
+            M = MLi @ MLens @ MLo
+            v=sym.symbols('v',real=True,positive=True,nonzero=True)
+            alpha = 2 * self.PLS.u0 / (self.PLS.m * v** 2)
+            self.rp = sym.simplify(((self.Lo * self.thetaMax + self.riMax) / self.sigma) * sym.sqrt(
+                    1 / (1 - self.thetaMax ** 2 / (alpha * self.Bp))))
+            KSub=2 * self.PLS.u0 * self.Bp / (self.PLS.m * v ** 2 * self.rp ** 2)
+            M=sym.simplify(M).subs(K,KSub)
+            self.Li=self.Li.subs(K,KSub)
         return sym.simplify(M)

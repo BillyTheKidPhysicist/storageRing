@@ -255,7 +255,6 @@ class FloorPlan:
             area += self.shaperVacuumTube.intersection(self.lens4).area / (self.shaperVacuumTube.area + self.lens4.area)
             area += self.lens4VacuumTube.intersection(self.lensShaper).area / (self.lens4VacuumTube.area + self.lensShaper.area)
             area += self.shaperVacuumTube.intersection(self.bender2).area / (self.shaperVacuumTube.area + self.bender2.area)
-
             totalCost += area * areaWeight
 
         return totalCost + offset

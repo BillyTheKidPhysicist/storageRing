@@ -10,7 +10,7 @@ class Plotter:
         if sol!=None:
             args=sol.args[:-2] #only keep lattice parameters
             zArr=sol.zArr
-            envBeta=sol.envBeta
+            env=sol.env
             eta=sol.eta
             emittance=sol.emittance
             tracex=sol.tracex
@@ -23,20 +23,23 @@ class Plotter:
             LmOp=sol.injec_LmOp
             LiOp=sol.injec_LiOp
         else:
-            zArr, beta = self.PLS.compute_Beta_Of_Z_Array(args, numpoints=numPoints)
-            M = self.PLS.MTotFunc(*args)
-            tracex = np.abs(np.trace(M[:2, :2]))
-            tracey = np.abs(np.trace(M[3:, 3:]))
-            tunex = np.trapz(np.power(beta[0], -1), x=zArr) / (2 * np.pi)
-            tuney = np.trapz(np.power(beta[1], -1), x=zArr) / (2 * np.pi)
-            resonanceFactx = self.PLS.compute_Resonance_Factor(tunex, np.arange(3) + 1)
-            resonanceFacty = self.PLS.compute_Resonance_Factor(tuney, np.arange(3) + 1)
-            totalLengthList = self.PLS.totalLengthListFunc(*args)
-
-            emittance,temp = list(self.compute_Emittance(args,totalLengthList, returnAll=True))
-            mag, LoOp, LmOp, LiOp=temp
-            envBeta = [np.sqrt(emittance[0] * beta[0]), np.sqrt(emittance[0] * beta[1])]
-            eta = self.PLS.compute_Eta_Of_Z_Array(args, numpoints=numPoints, returZarr=False)
+            print('args not supported yet')
+            sys.exit()
+        #else:
+        #    zArr, beta = self.PLS.compute_Beta_Of_Z_Array(args, numpoints=numPoints)
+        #    M = self.PLS.MTotFunc(*args)
+        #    tracex = np.abs(np.trace(M[:2, :2]))
+        #    tracey = np.abs(np.trace(M[3:, 3:]))
+        #    tunex = np.trapz(np.power(beta[0], -1), x=zArr) / (2 * np.pi)
+        #    tuney = np.trapz(np.power(beta[1], -1), x=zArr) / (2 * np.pi)
+        #    resonanceFactx = self.PLS.compute_Resonance_Factor(tunex, np.arange(3) + 1)
+        #    resonanceFacty = self.PLS.compute_Resonance_Factor(tuney, np.arange(3) + 1)
+        #    totalLengthList = self.PLS.totalLengthListFunc(*args)
+#
+        #    emittance,temp = list(self.compute_Emittance(args,totalLengthList, returnAll=True))
+        #    mag, LoOp, LmOp, LiOp=temp
+        #    envBeta = [np.sqrt(emittance[0] * beta[0]), np.sqrt(emittance[0] * beta[1])]
+        #    eta = self.PLS.compute_Eta_Of_Z_Array(args, numpoints=numPoints, returZarr=False)
 
 
 
@@ -58,8 +61,8 @@ class Plotter:
         axBeta[1].grid() #make grid lines for y axis beta subplot
         #axEta.grid() #make grid lines for x axis beta subplot
         envEta=eta*self.PLS.delta
-        axBeta[0].plot(zArr,1000*envBeta[0]) #plot the envelope in the x plane
-        axBeta[1].plot(zArr, 1000*envBeta[1]) #plot the envelope in the y plane
+        axBeta[0].plot(zArr,1000*env[0]) #plot the envelope in the x plane
+        axBeta[1].plot(zArr, 1000*env[1]) #plot the envelope in the y plane
         axEta.plot(zArr, 1000*envEta,linestyle=':') #plot the eta envelope, only the x plane of course
 
         temp='abs(Trace) :'
