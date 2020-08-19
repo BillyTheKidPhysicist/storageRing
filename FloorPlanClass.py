@@ -90,7 +90,7 @@ class FloorPlan:
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].rp * self.rOuterRatio)
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].rp * self.rOuterRatio)
                 args = self.PLS.sympyVarList.copy()
-                args.extend([self.PLS.injector.Lo, self.PLS.injector.Lm])
+                args.extend(self.PLS.injector.sympyVarList)
                 self.floorPlanArgListFunc = sym.lambdify(args, temp)
 
     def load_Paramters(self, args):

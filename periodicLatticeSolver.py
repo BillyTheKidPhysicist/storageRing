@@ -40,10 +40,14 @@ class Injector:
         self.rp=None #To hold the value of the radius of the injector bore
         self.rpFunc=None #function that return the radius of the shaper
         self.sympyVarList=[] #list of sympy variables used in injector
-        self.Lo = sym.symbols('L0', real=True, positive=True)
-        self.Lm=sym.symbols('Lm',real=True,positive=True)
+        self.Lo = sym.symbols('L0', real=True, positive=True,nonzero=True)
+        self.Lm=sym.symbols('Lm',real=True,positive=True,nonzero=True)
+        self.sOffset=sym.symbols('s_offset',real=True) #this is for mode matching. it is the offset from the focus of the
+            #collector magnet. I believe it is advantageous to sometimes not use the image of the collector as the
+            #object of the shaper, but rather offset it. Positive values correspond to shifting the collector
+            #away from the nozzle
         self.Bp=.45
-        self.sympyVarList=[self.Lo,self.Lm]
+        self.sympyVarList=[self.Lo,self.Lm,self.sOffset]
         maxLen=2.5
         self.LoMin=.1
         self.LoMax=.2
@@ -53,7 +57,10 @@ class Injector:
         self.LmMax=.25
         self.LtMin=self.LoMin+self.LiMin+self.LmMin
         self.LtMax=maxLen
-        self.thetaMax=.07
+        self.sOffsetMax=.05
+        self.sOffsetMin=-.05
+
+        self.thetaMax=.07 #maximum expected angle that the shaper could collect
         self.riMax = .002  # safe offset for object transverse displacement
         self.sigma=.9
         self.LoOp=None
@@ -90,6 +97,7 @@ class Injector:
         for particle in self.particles:
             xi=particle.xi
             xdi=particle.xdi/self.PLS.v0 #convert to angles
+            xi=xdi*self.sOffset+xi
             deltaV=particle.vs-self.PLS.v0
 
             A = self.M[0, 0]
@@ -763,5 +771,3 @@ class PeriodicLatticeSolver:
             j+=1
 
         return temp
-
-

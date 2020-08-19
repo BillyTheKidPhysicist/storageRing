@@ -9,9 +9,6 @@ import numpy as np
 
 
 #TODO: do other elements have small number problems?
-#TODO: lick susan
-
-
 class Element:
 
     def __init__(self, PLS,elType, args,defer=False):
@@ -152,14 +149,6 @@ class Element:
             M[3, 4] = sym.sin(phi) / sym.sqrt(kappa)
             M[4, 3] = -sym.sqrt(kappa) * sym.sin(phi)
             M[4, 4] = sym.cos(phi)
-
-
-
-
-
-
-
-
 
 
             #the following is for when I was using the combined function idea

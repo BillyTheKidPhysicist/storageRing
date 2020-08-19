@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from periodicLatticeSolver import PeriodicLatticeSolver
+import sys
 class Plotter:
     def __init__(self,PLS):
         self.PLS=PLS
@@ -18,10 +19,10 @@ class Plotter:
             resonanceFactx=sol.resonanceFactx
             resonanceFacty = sol.resonanceFacty
             totalLengthList=sol.totalLengthList
-            mag=sol.injec_Mag
-            LoOp=sol.injec_LoOp
-            LmOp=sol.injec_LmOp
-            LiOp=sol.injec_LiOp
+            mag=sol.mag
+            Lo=sol.Lo
+            Lm=sol.Lm
+            Li=sol.Li
         else:
             print('args not supported yet')
             sys.exit()
@@ -37,7 +38,7 @@ class Plotter:
         #    totalLengthList = self.PLS.totalLengthListFunc(*args)
 #
         #    emittance,temp = list(self.compute_Emittance(args,totalLengthList, returnAll=True))
-        #    mag, LoOp, LmOp, LiOp=temp
+        #    mag, Lo, Lm, Li=temp
         #    envBeta = [np.sqrt(emittance[0] * beta[0]), np.sqrt(emittance[0] * beta[1])]
         #    eta = self.PLS.compute_Eta_Of_Z_Array(args, numpoints=numPoints, returZarr=False)
 
@@ -88,11 +89,11 @@ class Plotter:
                 #of top plot (x)
 
 
-        text='Lo,Lm,Li: ['+str(np.round(LoOp*100,1))+','+str(np.round(LmOp*100,1))+','+str(np.round(LiOp*100,1))+'] cm'
+        text='Lo,Lm,Li: ['+str(np.round(Lo*100,1))+','+str(np.round(Lm*100,1))+','+str(np.round(Li*100,1))+'] cm'
         axBeta[0].text(.75, 1.1, text, transform=axBeta[0].transAxes) #place in top right of top plot, only the top
             #plot
 
-        rp=self.PLS.injector.rpFunc(LoOp,LmOp) #Bore radius of the shaper magnet
+        rp=self.PLS.injector.rpFunc(Lo,Lm) #Bore radius of the shaper magnet
         text='Shaper rp: '+str(np.round(rp*1000,1))+'mm'
         axBeta[0].text(.75, 1.15, text, transform=axBeta[0].transAxes) #place in top right of only top magnet
 

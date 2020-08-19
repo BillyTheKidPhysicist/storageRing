@@ -35,11 +35,11 @@ class Solution():
         self.resonanceFacty = None  # the array of resonance factors in the x plane. closer to zero is better
         self.lengthList = []  # List to hold the length of each element in the lattice
         self.totalLengthList = []  # List to hold the cumulative length of each element in the list
-        self.injec_LoOp = None  # the optimal object length of the injection system. Distance from collector focus to beginnig
+        self.Lo = None  # the optimal object length of the injection system. Distance from collector focus to beginnig
         # of shaper lens
-        self.injec_LmOp = None  # the optimal magnet length of the injection system
-        self.injec_LiOp = None  # the optimal image length. The distance from the end of the magnet to the focus at the combiner
-        self.injec_Mag = None  # injector magnification for optimal lengths
+        self.Lm = None  # the optimal magnet length of the injection system
+        self.Li = None  # the optimal image length. The distance from the end of the magnet to the focus at the combiner
+        self.mag = None  # injector magnification for optimal lengths
         self.fracParticlesx=None
         self.fracParticlesy=None
 
@@ -221,8 +221,8 @@ class Minimizer():
             return layOutCost
 
         else:
-            xLattice = x[:-2]  # the lattice parameters
-            xInjector = x[-2:]  # the injector parameters
+            xLattice = x[:-3]  # the lattice parameters
+            xInjector = x[-3:]  # the injector parameters
             M = self.PLS.MTotFunc(*xLattice)
             tracex = np.abs(np.trace(M[:2, :2]))
             tracey = np.abs(np.trace(M[3:, 3:]))
@@ -270,7 +270,7 @@ class Minimizer():
 
     def make_Envelope_And_Emittance_List(self, x, totalLengthList):
         #returns a list of the envelopes of the particles in the x and y plane
-        xLattice = x[:-2]  # the lattice parameters
+        xLattice = x[:-3]  # the lattice parameters
         beta = self.PLS.compute_Beta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
         eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
         eta = np.abs(eta)  # the absolute value is all that really matter
@@ -391,7 +391,7 @@ class Minimizer():
         #        self.sol.localMinSolFitness = np.min(costArr)
         #        break
         finalArgs = self.sol.geneticSolX
-        xLattice = finalArgs[:-2]
+        xLattice = finalArgs[:-3]
         M = self.PLS.MTotFunc(*xLattice)
         if M[0, 0] + M[1, 1] > 2 + 1E-10 or M[3, 3] + M[4, 4] > 2 + 1E-10:
             print('FINAL SOLUTION IS UNSTABLE!')
@@ -402,8 +402,8 @@ class Minimizer():
     def update_Sol(self, args):
 
         self.sol.args = args
-        xLattice = self.sol.args[:-2]
-        xInjector = self.sol.args[-2:]
+        xLattice = self.sol.args[:-3]
+        xInjector = self.sol.args[-3:]
         M = self.PLS.MTotFunc(*xLattice)
 
         self.sol.tracex = np.abs(np.trace(M[:2, :2]))
@@ -444,7 +444,7 @@ class Minimizer():
                     maxArgy=i
 
         self.sol.emittance=[emittanceArrList[0][maxArgx],emittanceArrList[1][maxArgy]]
-        self.sol.injec_Mag, self.sol.injec_LoOp, self.sol.injec_LmOp, self.sol.injec_LiOp = temp
+        self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li = temp
         self.sol.tunex = np.trapz(np.power(self.sol.beta[0], -1), x=self.sol.zArr) / (2 * np.pi)
         self.sol.tuney = np.trapz(np.power(self.sol.beta[1], -1), x=self.sol.zArr) / (2 * np.pi)
 
@@ -471,7 +471,7 @@ class Minimizer():
         alpha = [-slopex / 2, -slopey / 2]  # Remember, alpha=-(dbeta/dz)/2
         return beta + alpha  # combine the two lists
 
-    def compute_Emittance(self, args, totalLengthList, returnAll=False):
+    def compute_Emittance(self, x, totalLengthList, returnAll=False):
         # Computes the paramters that optimize the emittance. This is done with brute force, but the function evaluates
         # very fast so it works fine
         # MArr = np.linspace(4, 10, num=1000)
@@ -483,8 +483,8 @@ class Minimizer():
         # epsyArr = (xf ** 2 + (betay * xfd) ** 2 + (alphay * xf) ** 2 + 2 * alphay * xfd * xf * betay) / betay
         # epsArr=np.sqrt(epsxArr**2 +2*epsyArr**2)  # minimize the quadrature of them. The y axis is weighted more
 
-        xLattice = args[:-2]
-        xInjector = args[-2:]
+        xLattice = x[:-3]
+        xInjector = x[-3:]
 
         betax, betay, alphax, alphay = self.find_Beta_And_Alpha_Injection(xLattice, totalLengthList)
         emittance = [np.asarray(self.PLS.injector.epsFunc(xInjector, betax, alphax)),
@@ -517,6 +517,9 @@ class Minimizer():
         bounds.extend(temp)
         temp = [[floorPlan.LmMin, floorPlan.LmMax]]  # magnet length of injector
         bounds.extend(temp)
+        temp=[[self.PLS.injector.sOffsetMin,self.PLS.injector.sOffsetMax]]
+        bounds.extend(temp)
+
         self.sol.bounds = bounds
         if population == None:
             population = popPerDim * len(self.sol.bounds)
