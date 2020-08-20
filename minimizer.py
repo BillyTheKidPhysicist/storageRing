@@ -43,6 +43,7 @@ class Solution():
         self.sOffset=None #the optimal offset distance of the collector element
         self.fracParticlesx=None
         self.fracParticlesy=None
+        self.survivingParticles=[] #list to hold particles that survive in the lattice
 
 
 
@@ -422,9 +423,19 @@ class Minimizer():
         envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList)
         numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
             self.sol.totalLengthList, xLattice, envList)
+
+
+
         if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
             print('One or more dimensions has no surviving particles!')
             sys.exit()
+            # Now add unclipped particles to a list
+        for i in range(len(clippedXBoolList)):
+            particle=self.PLS.injector.particles[i]
+            if clippedXBoolList[i]==False:
+                self.sol.survivingParticles.append(particle)
+            if clippedYBoolList[i]==False:
+                self.sol.survivingParticles.append(particle)
         self.sol.fracParticlesx=1-(numClippedx/len(self.PLS.injector.particles))
         self.sol.fracParticlesy=1-(numClippedy/len(self.PLS.injector.particles))
         maxValx=0

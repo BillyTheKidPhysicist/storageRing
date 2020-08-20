@@ -70,10 +70,10 @@ class Injector:
         self.particles=[]
         xMax=.005
         xdMax=15
-        deltaVMax=5
-        x=np.linspace(-xMax,xMax,num=5)
-        xd=np.linspace(-xdMax,xdMax,num=5)
-        v0=self.PLS.v0+np.linspace(-deltaVMax,deltaVMax,num=5)
+        deltaVMax=7.5
+        x=np.linspace(-xMax,xMax,num=10)
+        xd=np.linspace(-xdMax,xdMax,num=10)
+        v0=self.PLS.v0+np.linspace(-deltaVMax,deltaVMax,num=10)
         temp=np.meshgrid(x,xd,v0)
         t1=temp[0].flatten()
         t2 = temp[1].flatten()
