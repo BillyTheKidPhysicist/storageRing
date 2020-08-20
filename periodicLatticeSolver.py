@@ -67,18 +67,21 @@ class Injector:
         self.LmOp=None
         self.LiOp=None
 
+        #I explote symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.\
+        #Notice that delta has a symmetry also because my apetures are symmetric
         self.particles=[]
         xMax=.005
         xdMax=15
         deltaVMax=7.5
+
         x=np.linspace(-xMax,xMax,num=10)
-        xd=np.linspace(-xdMax,xdMax,num=10)
-        v0=self.PLS.v0+np.linspace(-deltaVMax,deltaVMax,num=10)
+        xd=np.linspace(0,xdMax,num=5)
+        v0=self.PLS.v0+np.linspace(0,deltaVMax,num=5)
         temp=np.meshgrid(x,xd,v0)
-        t1=temp[0].flatten()
-        t2 = temp[1].flatten()
-        t3 = temp[2].flatten()
-        argsList=np.transpose(np.row_stack((t1,t2,t3)))
+        self.xiArr=temp[0].flatten()
+        self.xdiArr = temp[1].flatten()
+        self.deltaVArr = temp[2].flatten()
+        argsList=np.transpose(np.row_stack((self.xiArr,self.xdiArr,self.deltaVArr)))
         for item in argsList:
             if item[0]==0 or item[1]==0: #don't include particles with zero position or velocity
                 pass
@@ -91,36 +94,66 @@ class Injector:
 
 
         beta, alpha=sym.symbols('beta alpha',real=True,positive=True)
-        funcList=[]
         args=self.sympyVarList.copy()
         args.extend([beta,alpha])
-        for particle in self.particles:
-            xi=particle.xi
-            xdi=particle.xdi/self.PLS.v0 #convert to angles
-            xi=xdi*self.sOffset+xi
-            deltaV=particle.vs-self.PLS.v0
-
-            A = self.M[0, 0]
-            C = self.M[1, 0]
-            D = self.M[1, 1]
-
-            ACor = self.MVelCor[0, 0]#component of the correction matrix
-            CCor = self.MVelCor[1, 0]#component of the correction matrix
-            DCor = self.MVelCor[1, 1]#component of the correction matrix
-
-            xf=(A+ACor*deltaV)*xi
-            xdf=(C+CCor*deltaV)*xi+(D+DCor*deltaV)*xdi
-            eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta #this can't go negative
-            funcList.append(symWrap.autowrap(eps,args=args))
-
-
-
+        A = self.M[0, 0]
+        C = self.M[1, 0]
+        D = self.M[1, 1]
+        funcA=symWrap.autowrap(A,args=args)
+        funcC = symWrap.autowrap(C, args=args)
+        funcD = symWrap.autowrap(D, args=args)
+        ACor = self.MVelCor[0, 0]  # component of the correction matrix
+        CCor = self.MVelCor[1, 0]  # component of the correction matrix
+        DCor = self.MVelCor[1, 1]  # component of the correction matrix
+        funcACor=symWrap.autowrap(ACor,args=args)
+        funcCCor = symWrap.autowrap(CCor, args=args)
+        funcDCor = symWrap.autowrap(DCor, args=args)
 
         def temp(x,alpha,beta):
-            tempList=[]
-            for func in funcList:
-                tempList.append(func(*x,alpha,beta))
-            return tempList
+            A0=funcA(x)
+            C0 = funcC(x)
+            D0 = funcD(x)
+            ACor0 = funcACor(x)
+            CCor0 = funcCCor(x)
+            DCor0 = funcDCor(x)
+            epsList=[]
+            for particle in self.particles:
+                xi=particle.xi
+                xdi=particle.xdi/self.PLS.v0 #convert to angles
+                xi=xdi*self.sOffset+xi
+                deltaV=particle.vs-self.PLS.v0
+                xf=(A0+ACor0*deltaV)*xi
+                xdf=(C0+CCor0*deltaV)*xi+(D0+DCor0*deltaV)*xdi
+                epsList.append((xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta) #this can't go negative
+            return epsList
+
+        #for particle in self.particles:
+        #    xi=particle.xi
+        #    xdi=particle.xdi/self.PLS.v0 #convert to angles
+        #    xi=xdi*self.sOffset+xi
+        #    deltaV=particle.vs-self.PLS.v0
+#
+        #    A = self.M[0, 0]
+        #    C = self.M[1, 0]
+        #    D = self.M[1, 1]
+#
+        #    ACor = self.MVelCor[0, 0]#component of the correction matrix
+        #    CCor = self.MVelCor[1, 0]#component of the correction matrix
+        #    DCor = self.MVelCor[1, 1]#component of the correction matrix
+#
+        #    xf=(A+ACor*deltaV)*xi
+        #    xdf=(C+CCor*deltaV)*xi+(D+DCor*deltaV)*xdi
+        #    eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta #this can't go negative
+        #    funcList.append(symWrap.autowrap(eps,args=args))
+#
+#
+#
+#
+        #def temp(x,alpha,beta):
+        #    tempList=[]
+        #    for func in funcList:
+        #        tempList.append(func(*x,alpha,beta))
+        #    return tempList
         self.epsFunc=temp
 
 
