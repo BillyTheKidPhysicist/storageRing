@@ -484,29 +484,12 @@ class Minimizer():
         return beta + alpha  # combine the two lists
 
     def compute_Emittance(self, x, totalLengthList, returnAll=False):
-        # Computes the paramters that optimize the emittance. This is done with brute force, but the function evaluates
-        # very fast so it works fine
-        # MArr = np.linspace(4, 10, num=1000)
-        # injector = self.PLS.injector
-        # xf = injector.xi * MArr
-        # xfd = injector.xdi / MArr
-        # betax, betay, alphax, alphay = self.find_Beta_And_Alpha_Injection(args,totalLengthList)
-        # epsxArr = (xf ** 2 + (betax * xfd) ** 2 + (alphax * xf) ** 2 + 2 * alphax * xfd * xf * betax) / betax
-        # epsyArr = (xf ** 2 + (betay * xfd) ** 2 + (alphay * xf) ** 2 + 2 * alphay * xfd * xf * betay) / betay
-        # epsArr=np.sqrt(epsxArr**2 +2*epsyArr**2)  # minimize the quadrature of them. The y axis is weighted more
-
         xLattice = x[:-3]
         xInjector = x[-3:]
 
         betax, betay, alphax, alphay = self.find_Beta_And_Alpha_Injection(xLattice, totalLengthList)
         emittance = [np.asarray(self.PLS.injector.epsFunc(xInjector, betax, alphax)),
                      np.asarray(self.PLS.injector.epsFunc(xInjector, betay, alphay))]
-        if np.any(emittance[0]<0):
-            print(betax,alphax,xInjector)
-            sys.exit()
-        if np.any(emittance[1]<0):
-            print(betay,alphay,xInjector)
-            sys.exit()
         if returnAll == True:
             # M=injector.MFunc(*injArgArr[:,minIndex])
             mag = self.PLS.injector.MFunc(*xInjector)[0, 0]

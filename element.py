@@ -79,7 +79,6 @@ class Element:
         else:
             self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
             args.append(self.v)
-
         self.Mz = self.calc_M(L=self.zVar)
         self.M = self.Mz.subs(self.zVar, self.Length)
         tempList = [self.zVar]
