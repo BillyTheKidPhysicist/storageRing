@@ -11,13 +11,15 @@ import numpy as np
 #TODO: do other elements have small number problems?
 class Element:
 
-    def __init__(self, PLS,elType, args,defer=False):
+    def __init__(self, PLS,elType, args,velocityVariable=False):
         #PLS: Lattice object, could be periodic or linear
         #type :: element type such as bender, lens etc. must be in list elType
         #args: parameters for the element such as length, magnetic field etc.
-        #S: the position of the element, based on its center. Can be None
+        #velocityVariable: if this variable is false then the returned functions don't depend on velocity, the 
+        #   velocity used will be PLS.v0
+        
         self.PLS=PLS
-        self.deferred=defer
+        self.velocityVar=velocityVariable
         self.S=None #element's center's position in its respective track
         self.index=None #position of element in the lattice
         self.elType = elType  # type of element, DRIFT,FOCUS,BEND,COMBINER
@@ -49,11 +51,18 @@ class Element:
         self.fill_Variables(args)
         if elType=='INJECTOR': #if the component is part of the injector only compute the matrix and do it
                 #it without having to update
-            self.M = self.calc_M()  # calculate the matrix representing the element.
-            self.MVelCor=sym.simplify(self.M.diff(self.v).subs(self.v, self.PLS.v0))# find the correction matrix
-            self.M=self.M.subs(self.v,self.PLS.v0) #now include the numerical value for velocity
-            self.rp = self.rp.subs(self.v, self.PLS.v0)
-            self.Li=self.Li.subs(self.v,self.PLS.v0)
+
+            #use a variable for velocity to calculate the correction matrix
+            self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
+            M = self.calc_M()  # calculate the matrix representing the element.
+            self.MVelCor = sym.simplify(M.diff(self.v).subs(self.v, self.PLS.v0))  # find the correction matrix
+
+
+            if self.velocityVar==True:
+                pass
+            else:
+                self.v=self.PLS.v0
+                self.M = self.calc_M()  # calculate the matrix representing the element.
 
 
 
@@ -63,22 +72,26 @@ class Element:
         # or strength of elements
         #only for drift elements. finishes the process if it was deferred. This is so that elements can be placed
         #and the length of the drift region determined after
-        if self.elType=='BEND': #this is so that a undetermined value, None, can be entered for the bending angle by the
-            #user. Then those angles can be massaged to fit constraints and then that new angle can be used to compute the
-            #rest of the elements parameters and functions
-            self.Length=self.angle*self.r0
         self.zVar = sym.symbols('z', real=True, positive=True)
+        args = self.PLS.sympyVarList
+        if self.velocityVar==False:
+            self.v=self.PLS.v0
+        else:
+            self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
+            args.append(self.v)
+
         self.Mz = self.calc_M(L=self.zVar)
         self.M = self.Mz.subs(self.zVar, self.Length)
+
         tempList = [self.zVar]
-        tempList.extend(self.PLS.sympyVarList)  # add the other variables which appear
+        tempList.extend(args)  # add the other variables which appear
         self.M_Funcz=symWrap.autowrap(self.Mz,args=tempList)
-        self.M_Func = symWrap.autowrap(self.M, args=self.PLS.sympyVarList)
+        self.M_Func = symWrap.autowrap(self.M, args=args)
         if self.elType=='LENS':
-            self.rpFunc = symWrap.autowrap(self.rp, args=self.PLS.sympyVarList)
+            self.rpFunc = symWrap.autowrap(self.rp, args=args)
         if self.elType=='BEND':
-            self.rpFunc = symWrap.autowrap(self.rp, args=self.PLS.sympyVarList)
-            self.rtFunc = symWrap.autowrap(self.rp / 2,args=self.PLS.sympyVarList)  # vacuum tube radius is half of bore radius
+            self.rpFunc = symWrap.autowrap(self.rp, args=args)
+            self.rtFunc = symWrap.autowrap(self.rp / 2,args=args)  # vacuum tube radius is half of bore radius
         # first argument of function is position, second is unpacked arguments such as length
         # or strength of elements
     def fill_Variables(self,args):#fill variable
@@ -88,6 +101,8 @@ class Element:
             self.r0 = args[1]
             self.Bp=args[2]
             self.S=args[3]
+            if self.angle is not None:
+                self.Length=self.angle*self.r0
         elif self.elType==self.elTypeList[1]: #lens
             self.Length=args[0]
             self.Bp=args[1]
@@ -111,10 +126,10 @@ class Element:
         else:
             raise Exception('INVALID element NAME PROVIDED!')
 
-        if self.elType=='INJECTOR':
-            self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
-        else:
-            self.v = self.PLS.v0
+        #if self.velocityVar==True:
+        #    self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
+        #else:
+        #    self.v = self.PLS.v0
 
     def calc_M(self,  L=None):
         # L: The length of the element. By default this is whatever the length property of the element is.
@@ -248,11 +263,10 @@ class Element:
             MLo = sym.Matrix([[1, self.Lo], [0, 1]])  # drift for object
             MLi = sym.Matrix([[1, self.Li], [0, 1]])  # drift for object
             M = MLi @ MLens @ MLo
-            v=sym.symbols('v',real=True,positive=True,nonzero=True)
-            alpha = 2 * self.PLS.u0 / (self.PLS.m * v** 2)
+            alpha = 2 * self.PLS.u0 / (self.PLS.m * self.v** 2)
             self.rp = sym.simplify(((self.Lo * self.thetaMax + self.riMax) / self.sigma) * sym.sqrt(
                     1 / (1 - self.thetaMax ** 2 / (alpha * self.Bp))))
-            KSub=2 * self.PLS.u0 * self.Bp / (self.PLS.m * v ** 2 * self.rp ** 2)
+            KSub=2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
             M=sym.simplify(M).subs(K,KSub)
             self.Li=self.Li.subs(K,KSub)
         return sym.simplify(M)

@@ -93,9 +93,8 @@ class Injector:
         self.rpFunc = symWrap.autowrap(self.rp, args=self.sympyVarList)
 
 
-        beta, alpha=sym.symbols('beta alpha',real=True,positive=True)
+
         args=self.sympyVarList.copy()
-        args.extend([beta,alpha])
         A = self.M[0, 0]
         C = self.M[1, 0]
         D = self.M[1, 1]
@@ -110,23 +109,35 @@ class Injector:
         funcDCor = symWrap.autowrap(DCor, args=args)
 
         def temp(x,alpha,beta):
-            A0=funcA(x)
-            C0 = funcC(x)
-            D0 = funcD(x)
-            ACor0 = funcACor(x)
-            CCor0 = funcCCor(x)
-            DCor0 = funcDCor(x)
+            sOffset=x[2]
+            A0=funcA(*x)
+            C0 = funcC(*x)
+            D0 = funcD(*x)
+            ACor0 = funcACor(*x)
+            CCor0 = funcCCor(*x)
+            DCor0 = funcDCor(*x)
             epsList=[]
             for particle in self.particles:
                 xi=particle.xi
                 xdi=particle.xdi/self.PLS.v0 #convert to angles
-                xi=xdi*self.sOffset+xi
+                xi=xdi*sOffset+xi
                 deltaV=particle.vs-self.PLS.v0
                 xf=(A0+ACor0*deltaV)*xi
                 xdf=(C0+CCor0*deltaV)*xi+(D0+DCor0*deltaV)*xdi
+                eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta
+                if eps<0:
+                    print(A0,C0,D0,xf,xdf)
+                    print(ACor0,CCor0,DCor0)
+                    print(xi,xdi,xf,xdf)
+                    print(eps)
+                    sys.exit()
                 epsList.append((xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta) #this can't go negative
             return epsList
 
+        #funcList=[]
+        #alpha=sym.symbols('alpha')
+        #beta=sym.symbols('beta')
+        #args.extend([alpha,beta])
         #for particle in self.particles:
         #    xi=particle.xi
         #    xdi=particle.xdi/self.PLS.v0 #convert to angles
@@ -145,10 +156,10 @@ class Injector:
         #    xdf=(C+CCor*deltaV)*xi+(D+DCor*deltaV)*xdi
         #    eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta #this can't go negative
         #    funcList.append(symWrap.autowrap(eps,args=args))
-#
-#
-#
-#
+##
+##
+##
+##
         #def temp(x,alpha,beta):
         #    tempList=[]
         #    for func in funcList:

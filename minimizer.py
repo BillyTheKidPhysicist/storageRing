@@ -501,6 +501,12 @@ class Minimizer():
         betax, betay, alphax, alphay = self.find_Beta_And_Alpha_Injection(xLattice, totalLengthList)
         emittance = [np.asarray(self.PLS.injector.epsFunc(xInjector, betax, alphax)),
                      np.asarray(self.PLS.injector.epsFunc(xInjector, betay, alphay))]
+        if np.any(emittance[0]<0):
+            print(betax,alphax,xInjector)
+            sys.exit()
+        if np.any(emittance[1]<0):
+            print(betay,alphay,xInjector)
+            sys.exit()
         if returnAll == True:
             # M=injector.MFunc(*injArgArr[:,minIndex])
             mag = self.PLS.injector.MFunc(*xInjector)[0, 0]
