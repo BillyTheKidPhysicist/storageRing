@@ -8,7 +8,6 @@ import sys
 
 #version 1.0. June 22, 2020. William Huntington
 
-#TODO: Implement the total bending angle accounting for the combiner's extra angle
 #TODO: Implement the ability to not use injector
 
 class VariableObject:
@@ -67,7 +66,7 @@ class Injector:
         self.LmOp=None
         self.LiOp=None
 
-        #I explote symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.\
+        #I exploit symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.\
         #Notice that delta has a symmetry also because my apetures are symmetric
         self.particles=[]
         xMax=.005
@@ -76,7 +75,7 @@ class Injector:
 
         x=np.linspace(-xMax,xMax,num=10)
         xd=np.linspace(0,xdMax,num=5)
-        v0=self.PLS.v0+np.linspace(0,deltaVMax,num=5)
+        v0=self.PLS.v0+np.linspace(0,deltaVMax,num=5) #total longitudinal velocity
         temp=np.meshgrid(x,xd,v0)
         self.xiArr=temp[0].flatten()
         self.xdiArr = temp[1].flatten()
@@ -108,7 +107,7 @@ class Injector:
         funcCCor = symWrap.autowrap(CCor, args=args)
         funcDCor = symWrap.autowrap(DCor, args=args)
 
-        def temp(x,alpha,beta):
+        def temp(x,beta,alpha):
             sOffset=x[2]
             A0=funcA(*x)
             C0 = funcC(*x)
@@ -125,63 +124,14 @@ class Injector:
                 xf=(A0+ACor0*deltaV)*xi
                 xdf=(C0+CCor0*deltaV)*xi+(D0+DCor0*deltaV)*xdi
                 eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta
-                if eps<0:
-                    print(A0,C0,D0,xf,xdf)
-                    print(ACor0,CCor0,DCor0)
-                    print(xi,xdi,xf,xdf)
-                    print(eps)
-                    sys.exit()
-                epsList.append((xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta) #this can't go negative
+                epsList.append(eps) #this can't go negative. I've tested for many values and by inspection it seems
+                    #like it can't. It could be proven no doubt
             return epsList
-
-        #funcList=[]
-        #alpha=sym.symbols('alpha')
-        #beta=sym.symbols('beta')
-        #args.extend([alpha,beta])
-        #for particle in self.particles:
-        #    xi=particle.xi
-        #    xdi=particle.xdi/self.PLS.v0 #convert to angles
-        #    xi=xdi*self.sOffset+xi
-        #    deltaV=particle.vs-self.PLS.v0
-#
-        #    A = self.M[0, 0]
-        #    C = self.M[1, 0]
-        #    D = self.M[1, 1]
-#
-        #    ACor = self.MVelCor[0, 0]#component of the correction matrix
-        #    CCor = self.MVelCor[1, 0]#component of the correction matrix
-        #    DCor = self.MVelCor[1, 1]#component of the correction matrix
-#
-        #    xf=(A+ACor*deltaV)*xi
-        #    xdf=(C+CCor*deltaV)*xi+(D+DCor*deltaV)*xdi
-        #    eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta #this can't go negative
-        #    funcList.append(symWrap.autowrap(eps,args=args))
-##
-##
-##
-##
-        #def temp(x,alpha,beta):
-        #    tempList=[]
-        #    for func in funcList:
-        #        tempList.append(func(*x,alpha,beta))
-        #    return tempList
         self.epsFunc=temp
 
-
-
-
-
-
-
-
 class PeriodicLatticeSolver:
-    def __init__(self,v0,T,axis,catchErrors=True):
-
-        if axis==None:
-            self.axis='both'
-        else:
-            self.axis=axis
-        if self.axis!='x' and self.axis!='y' and self.axis!='both': #check wether a valid axis was provided
+    def __init__(self,v0,T,axis='both',catchErrors=True):
+        if axis!='x' and axis!='y' and axis!='both': #check wether a valid axis was provided
             raise Exception('INVALID AXIS PROVIDED!!')
         else:
             self.axis=axis #wether we're looking at the x or y axis or both. x is horizontal
@@ -316,7 +266,7 @@ class PeriodicLatticeSolver:
         #L: length of drift region
         self.numElements += 1
         if L==None:
-            el = Element(self, 'DRIFT',[L],defer=True)
+            el = Element(self, 'DRIFT',[L])
         else:
             args = self.unpack_VariableObjects([L])
             el = Element(self,'DRIFT', args)
@@ -426,10 +376,6 @@ class PeriodicLatticeSolver:
 
 
         #---now update the elements. This mostly computes the various functions of each lattice. Somewhat intensive
-        for el in self.lattice:
-            if el.deferred==False: #deferred means calculate the element's parameters after constraining lengths below.
-                        #this is most likely for some drift elements only
-                el.fill_Params_And_Functions()
 
 
 
@@ -479,8 +425,6 @@ class PeriodicLatticeSolver:
                                 # the distance of the element edge from the beggining of the bend
                     el.Length=self.trackLength-edgeL #distance from previous element end to beginning of bend
                     el.S=self.trackLength-el.Length/2
-
-
                 else: #if drift is somewhere else
                     if self.lattice[el.index+1].S != None and self.lattice[el.index+1].Length != None: #if the next element has
                                 #definite position and length
@@ -499,8 +443,7 @@ class PeriodicLatticeSolver:
                     raise Exception("ELEMENT LENGTH IS BEING SET TO NEGATIVE VALUE")
 
         for el in self.lattice:
-            if el.deferred==True:
-                el.fill_Params_And_Functions()
+            el.fill_Params_And_Functions()
 
 
 

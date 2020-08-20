@@ -82,7 +82,6 @@ class Element:
 
         self.Mz = self.calc_M(L=self.zVar)
         self.M = self.Mz.subs(self.zVar, self.Length)
-
         tempList = [self.zVar]
         tempList.extend(args)  # add the other variables which appear
         self.M_Funcz=symWrap.autowrap(self.Mz,args=tempList)
