@@ -18,13 +18,16 @@ class FloorPlan:
 
         self.combinerWidth = .3
         rCombiner = self.PLS.lattice[self.PLS.combinerIndex].r0
-        self.combinerInputAngle = np.arcsin(self.combinerLength / rCombiner) * 180 / np.pi
+        self.combinerInputAngle = np.arcsin(self.combinerLength / rCombiner) * 180 / np.pi #Half angle seperation
+            #between 2 incoming beams, deg
         self.combinerInputSep = 2 * self.combinerLength ** 2 / (2 * rCombiner)
         self.bendingRadius = None
         self.rOuterBender = .15
         self.benderPoints = 50
         self.TL1 = None  # tracklength 1
         self.TL2 = None  # trackLength 2
+        self.wallSpacing=.75 #Minimum distance between wall and any component of the ring. meters
+        self.focusToWallDistance=4.4 #distance from focus of the collector magnet to the wall along the nozzle axis, meters
 
         self.Lm4 = None
         self.rOuter4 = None
@@ -213,10 +216,17 @@ class FloorPlan:
     def calculate_Cost(self, args=None, offset=4, areaWeight=10, lineWeight=1):
         # This method works fast by only building the floorplan, which takes a few ms, if all simple costs return zero
         # use fractional overlapping area, (area overlapping)/(total area)
+
+
+        xMostLeft=(self.Lo+self.Lm+self.Li)*np.cos(self.combinerInputAngle*np.pi/180) #the most leftward point of the
+                #bender. This is used to prevent the layout from impinging onto the wall and too keep enough seperation
+        xMostLeft+=self.TL1+self.bendingRadius+self.rOuterBender
         totalCost = 0
         if args is not None:
             # if no arguments are provided, just use the cpreviously built floorplan. otherwise rebuild
             self.load_Paramters(args)
+        if xMostLeft>(self.focusToWallDistance-self.wallSpacing):
+            totalCost+=lineWeight*np.abs(xMostLeft-(self.focusToWallDistance-self.wallSpacing))
         if self.Li < self.LiMin:
             totalCost += lineWeight * np.abs(self.LiMin - self.Li)
         if self.Li > self.LiMax:
