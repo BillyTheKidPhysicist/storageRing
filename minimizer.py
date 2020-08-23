@@ -266,11 +266,13 @@ class Minimizer():
                 #    print(self.a_Sigmoid)
                 #cost=self.sigmoid(clipCost+envCost)
 
-    def make_Envelope_And_Emittance_List(self, x, totalLengthList):
+    def make_Envelope_And_Emittance_List(self, x, totalLengthList,numPoints=None):
         #returns a list of the envelopes of the particles in the x and y plane
         xLattice = x[:-3]  # the lattice parameters
-        beta = self.PLS.compute_Beta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
-        eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=self.numPoints, returZarr=False)
+        if numPoints is None:
+            numPoints=self.numPoints
+        beta = self.PLS.compute_Beta_Of_Z_Array(xLattice, numpoints=numPoints, returZarr=False)
+        eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=numPoints, returZarr=False)
         eta = np.abs(eta)  # the absolute value is all that really matter
 
         emittanceArrList = self.compute_Emittance(x, totalLengthList)  # list of two arrays where the first array
@@ -424,7 +426,7 @@ class Minimizer():
                                                           returnAll=True)
         self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li,self.sol.sOffset = temp
         #use the largest emittance particle that isn't clipping
-        envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList)
+        envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList,numPoints=1000)
         clippedx,clippedy=self.find_Clipped_Particles(self.sol.totalLengthList, xLattice, envList)
         numParticlesx=self.PLS.injector.numParticlesx
         numParticlesy = self.PLS.injector.numParticlesy
