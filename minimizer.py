@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 # TODO: DEAL WITH FLOORPLAN BETTER?
 
+
 class Solution():
     # An object to hold onto the solution generated with the object PlotSweep. There will be many of these
     def __init__(self):
@@ -180,16 +181,11 @@ class Minimizer():
         self.numPoints = 250  # number of points in the beta array
         self.a_Sigmoid_Trace = 100  # a guess at a value that gives a good sigmoid for trace.
         #testing shows around 100
-        self.a_Sigmoid_Env=(self.numPoints*.02)*100 #a guess at good value of sigmoid factor. A reasonable value for the
+        self.a_Sigmoid_Env=(self.numPoints*.02)*10 #a guess at good value of sigmoid factor. A reasonable value for the
             #sum mulitplied by a factor
         self.traceMax = 1.9  # rather than punishing for trace being above 2
         self.sol = None  # the final solution
         self.numSolutions = None  # number of solutions
-        temp=[]
-        for particle in self.PLS.injector.particles:
-            temp.append(particle.vs/self.PLS.v0-1)
-        self.particleDeltaArr=np.asarray(temp) #an array of the value of delta (longitudinal velocity/ 200 -1) for each particle
-        #this is used to quickly compute the envelope from dispersion
 
 
 
@@ -206,11 +202,6 @@ class Minimizer():
         # 3: count the number of clipped particle. compute the total envelope sum of the unclipped particles.
         #  constrain the sum between 0 and 1. the cost is then the number of clipped particles plus the contrained
         #  envelope sum divided by number of particles plus 1. This is then scaled to be betweeon 0 and self.traceMax
-        #
-
-
-
-
         layOutCost = floorPlan.calculate_Cost(args=x, offset=4)  # cost from floor plan
         if Print == True:
             print('-----ENTERED COST FUNCTION-----------------------------------------------------------------')
@@ -221,7 +212,6 @@ class Minimizer():
                 print('Arguments are (below)')
                 print(x)
             return layOutCost
-
         else:
             xLattice = x[:-3]  # the lattice parameters
             xInjector = x[-3:]  # the injector parameters
@@ -237,28 +227,34 @@ class Minimizer():
             else:
                 totalLengthList = self.PLS.totalLengthListFunc(*xLattice)
                 envList,emittanceArrList=self.make_Envelope_And_Emittance_List(x, totalLengthList)
-                numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
-                    totalLengthList, xLattice, envList)
+                numClippedx,numClippedy=self.find_Clipped_Particles(totalLengthList, xLattice, envList)
+
 
 
                 #find the sum of the envelope but normalize to the number of particles
                 envSum=0
-                if len(self.PLS.injector.particles)-numClippedx!=0 or len(self.PLS.injector.particles)-numClippedy!=0:
+                if numClippedx<self.PLS.injector.numParticlesx or numClippedy<self.PLS.injector.numParticlesy: #only
+                    #bother if there are surviving particles
+                    #print('here')
                     for i in range(len(self.PLS.injector.particles)):
                         envX=0
                         envY=0
-                        if clippedXBoolList[i]==False:
-                            envX=np.sum(envList[0][i])
-                        if clippedYBoolList[i]==False:
-                            envY=np.sum(envList[1][i])
+                        particle=self.PLS.injector.particles[i]
+                        if particle.clippedx[0]==False:
+                            envX = np.sum(envList[0][i])
+                        if particle.clippedx[1]==False:
+                            if envX!=0: #average the two x particles otherwise it will weight x plane more than y
+                                envX = (np.sum(envList[1][i])+envX)/2
+                            else:
+                                envX=np.sum(envList[1][i])
                         envSum+=np.sqrt(envX**2+envY**2)
-                    envCost=self.sigmoid_Env(envSum/(2*len(self.PLS.injector.particles)-(numClippedx+numClippedy)))
+                    envCost=self.sigmoid_Env(envSum/(self.PLS.injector.numParticles-(numClippedx+numClippedy)))
                 else:
                     envCost=0
-                if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
-                    cost=self.traceMax
+                if numClippedx==self.PLS.injector.numParticlesx or numClippedy==self.PLS.injector.numParticlesy:
+                    cost=self.traceMax #if none survive just set to maximum value of trace
                 else:
-                    cost=((numClippedx+numClippedy)/(2*len(self.PLS.injector.particles)+1)+envCost)*self.traceMax
+                    cost=((numClippedx+numClippedy)/(self.PLS.injector.numParticles+1)+envCost)*self.traceMax
                 return cost
 
 
@@ -282,7 +278,7 @@ class Minimizer():
         for i in range(emittanceArrList[0].shape[0]):
             envx = np.sqrt(emittanceArrList[0][i] * beta[0])
             envy = np.sqrt(emittanceArrList[1][i] * beta[1])
-            delta = self.PLS.injector.particles[i].vs / self.PLS.v0 - 1
+            delta = self.PLS.injector.particles[i].delta
             envx += np.abs(delta * eta)  # as of now apetures are symmetric, the right and left are equal so to speak
             # so taking the absolute value isn't an issue. If I don't take the absolute value then I
             # need to check if an envelope is both higher or lower than the apeture and make sure to add beta
@@ -293,12 +289,11 @@ class Minimizer():
     def find_Clipped_Particles(self,totalLengthList,xLattice,envList):
         numClippedx = 0
         numClippedy = 0
-        clippedXBoolList = [False] * len(self.PLS.injector.particles)  # create list of wether particle has clipped
-        clippedYBoolList = [False] * len(self.PLS.injector.particles)  # create list of wether particle has clipped
-
         for i in range(len(self.PLS.injector.particles)):
-            clippedx = False  # to make sure I don't overcount when clipping happens more than once for that particle
-            clippedy = False
+            particle=self.PLS.injector.particles[i]
+            particle.clippedx=[False,False] #need to initialize to false because they may been set to true before
+            particle.clippedy=False #need to initialize to false because they may been set to true before
+            delta=particle.delta
             for j in range(len(self.PLS.lattice)):
                 el = self.PLS.lattice[j]
                 if j == 0:
@@ -313,19 +308,27 @@ class Minimizer():
                     # can be true for small drift regions
                     elMaxx = np.max(envList[0][i][ind1:ind2])
                     elMaxy = np.max(envList[1][i][ind1:ind2])
-                    apx = el.apxFunc(*xLattice)  # the size of the apeture in the x dimension
+                    apxL = el.apxFuncL(*xLattice)  # the size of the apeture in the x dimension on the outer side
+                    apxR = el.apxFuncR(*xLattice)  # the size of the apeture in the x dimension on the inner side
                     apy = el.apyFunc(*xLattice)  # in the y dimension
-                    if elMaxx > apx:  # if the envelope is clipping
-                        if clippedx == False:
-                            numClippedx += 1
-                            clippedXBoolList[i] = True
-                            clippedx = True
-                    if elMaxy > apy:  # if the envelope is clipping
-                        if clippedy == False:
-                            numClippedy += 1
-                            clippedYBoolList[i] = True
-                            clippedy = True
-        return numClippedx,numClippedy,clippedXBoolList,clippedYBoolList
+                    if delta==0:
+                        if (elMaxy>apxL or elMaxx>apxR) and particle.clippedx[0]==False: #if the particle's
+                                # longitudinal velocity is exactly the nominal velocity then if it clips either
+                                # right or left it's gone
+                            particle.clippedx[0]=True #only set the first element to true,
+                            particle.clippedx[1]=None #set the second to None as a safety to not counting later
+                            numClippedx+=1
+                    else:
+                        if elMaxx>apxR and particle.clippedx[0]==False:
+                            particle.clippedx[0]=True
+                            numClippedx+=1
+                        if elMaxx > apxL and particle.clippedx[1]==False:
+                            particle.clippedx[1] = True
+                            numClippedx+=1
+                    if elMaxy > apy and particle.clippedy==False:  # if the envelope is clipping
+                        particle.clippedy=True
+                        numClippedy+=1
+        return numClippedx,numClippedy
     def sigmoid_Trace(self,x):
         #this confines a value between self.traceMax and 4
         a = self.a_Sigmoid_Trace
@@ -398,6 +401,7 @@ class Minimizer():
         if M[0, 0] + M[1, 1] > 2 + 1E-10 or M[3, 3] + M[4, 4] > 2 + 1E-10:
             print('FINAL SOLUTION IS UNSTABLE!')
             sys.exit()
+
         self.update_Sol(finalArgs)
         print(self.sol.args, self.sol.geneticSolFitness)
 
@@ -421,51 +425,64 @@ class Minimizer():
         self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li,self.sol.sOffset = temp
         #use the largest emittance particle that isn't clipping
         envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList)
-        numClippedx, numClippedy, clippedXBoolList, clippedYBoolList = self.find_Clipped_Particles(
-            self.sol.totalLengthList, xLattice, envList)
-
-
-
-        if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
-            print('One or more dimensions has no surviving particles!')
+        clippedx,clippedy=self.find_Clipped_Particles(self.sol.totalLengthList, xLattice, envList)
+        numParticlesx=self.PLS.injector.numParticlesx
+        numParticlesy = self.PLS.injector.numParticlesy
+        self.sol.fracParticlesx=(numParticlesx-clippedx)/numParticlesx
+        self.sol.fracParticlesy = (numParticlesy - clippedy) / numParticlesy
+        if clippedx==numParticlesx or clippedy==numParticlesy:
+            if clippedx==numParticlesx:
+                print('ALL PARTICLES IN X AXIS CLIPPED')
+            if clippedy==numParticlesy:
+                print('ALL PARTICLES IN Y AXIS CLIPPED')
             sys.exit()
-            # Now add unclipped particles to a list
-        for i in range(len(clippedXBoolList)):
-            particle=self.PLS.injector.particles[i]
-            if clippedXBoolList[i]==False:
-                self.sol.survivingParticles.append(particle)
-            if clippedYBoolList[i]==False:
-                self.sol.survivingParticles.append(particle)
-        self.sol.fracParticlesx=1-(numClippedx/len(self.PLS.injector.particles))
-        self.sol.fracParticlesy=1-(numClippedy/len(self.PLS.injector.particles))
+
+        #if numClippedx==len(self.PLS.injector.particles) or numClippedy==len(self.PLS.injector.particles):
+        #    print('One or more dimensions has no surviving particles!')
+        #    sys.exit()
+        #    # Now add unclipped particles to a list
+        #for particle in self.injector.PLS.particles:
+        #    if clippedXBoolList[i]==False:
+        #        self.sol.survivingParticles.append(particle)
+        #    if clippedYBoolList[i]==False:
+        #        self.sol.survivingParticles.append(particle)
+        #self.sol.fracParticlesx=1-(numClippedx/len(self.PLS.injector.particles))
+        #self.sol.fracParticlesy=1-(numClippedy/len(self.PLS.injector.particles))
         maxValx=0
         maxValy=0
         maxArgx=None
         maxArgy=None
-        print(numClippedx,numClippedy)
-        for i in range(len(self.PLS.injector.particles)):
-            if clippedXBoolList[i]==False:
-                envx=np.sum(envList[0][i])
-                if envx>maxValx:
-                    maxValx=envx
-                    maxArgx=i
-            if clippedYBoolList[i]==False:
-                envy=np.sum(envList[1][i])
-                if envy>maxValy:
-                    maxValy=envy
+        #print(numClippedx,numClippedy)
+        i=0
+        for particle in self.PLS.injector.particles:
+            delta=particle.delta
+            if delta==0:
+                if particle.clippedx[0]==False:
+                    envX=np.sum(envList[0][i])
+                    if envX>maxValx:
+                        maxValx=envX
+                        maxArgx=i
+            else:
+                if particle.clippedx[0]==False: #use the 'left' side, ie outer apeture limit of x. This is the smaller one
+                    envX=np.sum(envList[0][i])
+                    if envX>maxValx:
+                        maxValx=envX
+                        maxArgx=i
+            if particle.clippedy==False:
+                envY=np.sum(envList[1][i])
+                if envY>maxValy:
+                    maxValy=envY
                     maxArgy=i
+            i+=1
+
 
         self.sol.emittance=[emittanceArrList[0][maxArgx],emittanceArrList[1][maxArgy]]
-
         self.sol.tunex = np.trapz(np.power(self.sol.beta[0], -1), x=self.sol.zArr) / (2 * np.pi)
         self.sol.tuney = np.trapz(np.power(self.sol.beta[1], -1), x=self.sol.zArr) / (2 * np.pi)
-
         self.sol.resonanceFactx = self.PLS.compute_Resonance_Factor(self.sol.tunex, np.arange(3) + 1)
         self.sol.resonanceFacty = self.PLS.compute_Resonance_Factor(self.sol.tuney, np.arange(3) + 1)
-
-        delta=self.PLS.injector.particles[maxArgx].vs/self.PLS.v0-1
-        envx = np.sqrt(self.sol.emittance[0] * self.sol.beta[0])+np.abs(self.sol.eta*delta)*0
-        envy = np.sqrt(self.sol.emittance[1] * self.sol.beta[1])
+        envx = envList[0][maxArgx]
+        envy = envList[1][maxArgy]
         self.sol.env = [envx, envy]
         print('percent particles surviving (x,y): '+str(np.round(self.sol.fracParticlesx*100,1)) +
                                        ', '+ str(np.round(100*self.sol.fracParticlesy,1)))

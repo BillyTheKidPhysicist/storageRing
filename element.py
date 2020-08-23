@@ -6,9 +6,6 @@ import sys
 import numpy as np
 
 #version 1.0. June 22, 2020. William Huntington
-
-
-#TODO: do other elements have small number problems?
 class Element:
 
     def __init__(self, PLS,elType, args,velocityVariable=False):
@@ -40,8 +37,9 @@ class Element:
         self.Mz= None #matrix with length replaced by sympy z object
         self.M_Funcz = None #returns transfer matric for the element as a function of position in the element
         self.M_Func=None #returns total transfer matrix for the element
-        self.apxFunc=None #apeture in x plane
-        self.apyFunc=None #apeture in y plane
+        self.apxFuncL=None #apeture in x plane, outer side of ring or 'left' for the particle
+        self.apxFuncR = None  # apeture in x plane, inner side of ring or 'right' for the particle
+        self.apyFunc=None #apeture in y plane.
         self.thetaMax=None #the maximum acceptance angle of injector
         self.sigma=None #fraction of the elements bore to use. The good field fraction
         self.riMax=None #the maximum expected offset of input particle. For injector only most likely

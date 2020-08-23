@@ -9,6 +9,7 @@ import sys
 #version 1.0. June 22, 2020. William Huntington
 
 #TODO: Implement the ability to not use injector
+# TODO: REMOVE REFERENCE TO AXIS?
 
 class VariableObject:
     # class used to hold information about the variables made by the user when they call PLS.Variable()
@@ -21,10 +22,14 @@ class VariableObject:
         self.elIndex=None #index of use of variables. Can be overwritten if reused.
         self.type=None # to hold wether the optic is assigned to lattice, injector or both
 class Particle:
-    def __init__(self,xi,xdi,vs):
+    def __init__(self,xi,xdi,deltaV,PLS):
         self.xi=xi #particle transverse position at focus
         self.xdi=xdi #particle transverse velocity at focus
-        self.vs=vs #particles longitudinal velocity
+        self.deltaV=deltaV
+        self.delta = self.deltaV / PLS.v0
+        self.clippedx=[False,False] #wether the particle clips the x apeture. first entry is for negative delta, second
+            #is for positive
+        self.clippedy=None #wether paticle clips in the y plane
 class Injector:
     def __init__(self,PLS):
         self.PLS=PLS
@@ -68,24 +73,38 @@ class Injector:
 
         #I exploit symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.\
         #Notice that delta has a symmetry also because my apetures are symmetric
+        self.numParticles = 0
+        self.numParticlesx=0
+        self.numParticlesy=0
         self.particles=[]
         xMax=.005
         xdMax=15
         deltaVMax=7.5
 
-        x=np.linspace(-xMax,xMax,num=10)
-        xd=np.linspace(0,xdMax,num=5)
-        v0=self.PLS.v0+np.linspace(0,deltaVMax,num=5) #total longitudinal velocity
+        x=np.linspace(-xMax,xMax,num=6)
+        xd=np.linspace(0,xdMax,num=6)
+        v0=np.linspace(0,deltaVMax,num=6) #total longitudinal velocity
         temp=np.meshgrid(x,xd,v0)
         self.xiArr=temp[0].flatten()
         self.xdiArr = temp[1].flatten()
         self.deltaVArr = temp[2].flatten()
         argsList=np.transpose(np.row_stack((self.xiArr,self.xdiArr,self.deltaVArr)))
+        i=0
         for item in argsList:
             if item[0]==0 or item[1]==0: #don't include particles with zero position or velocity
+                i+=1
                 pass
             else:
-                self.particles.append(Particle(*item))
+                self.particles.append(Particle(*item,self.PLS))
+                #I exploit symmetry with delta so for every particle with a given delta I consider there to be 2. In addition
+                #I consider each particle in the x and y plane.
+                if item[2]!=0:
+                    self.numParticlesx+=2
+                else:
+                    self.numParticlesx+=1
+                self.numParticlesy += 1
+        self.numParticles=self.numParticlesx+self.numParticlesy
+        print(self.numParticlesx,self.numParticlesy)
     def update(self):
         self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList)
         self.LiFunc=sym.lambdify(self.sympyVarList,self.el.Li)
@@ -120,7 +139,7 @@ class Injector:
                 xi=particle.xi
                 xdi=particle.xdi/self.PLS.v0 #convert to angles
                 xi=xdi*sOffset+xi
-                deltaV=particle.vs-self.PLS.v0
+                deltaV=particle.deltaV
                 xf=(A0+ACor0*deltaV)*xi
                 xdf=(C0+CCor0*deltaV)*xi+(D0+DCor0*deltaV)*xdi
                 eps=(xf**2+(beta*xdf)**2+(alpha*xf)**2+2*alpha*xdf*xf*beta)/beta
@@ -458,7 +477,10 @@ class PeriodicLatticeSolver:
             if el.elType=='BEND':
                 #apetures are simply half the bending magnet radius because the vacuum tube would span the center to the
                 #edge.
-                el.apxFunc=el.rtFunc
+                el.apxFuncL=el.rtFunc
+                def temp(*x):
+                    return el.rtFunc(*x)+el.rpFunc(*x)
+                el.apxFuncR=el.rpFunc#+el.rtFunc#temp#lambda *x: (el.rtFunc(*x)+el.rpFunc(*x))
                 el.apyFunc=el.rtFunc
             elif el.elType=='COMBINER':
                 #I make a dumbby function so that I can still pass the variables and get a constant number
@@ -466,15 +488,18 @@ class PeriodicLatticeSolver:
                     return .015
                 def temp2(*args):
                     return .005
-                el.apxFunc=temp #15 mm apterure in x plane
+                el.apxFuncL=temp #15 mm apterure in x plane
+                el.apxFuncR = temp  # 15 mm apterure in x plane
                 el.apyFunc=temp2 #5 mm apeture in y plane
             elif el.elType=='LENS':
-                el.apxFunc=el.rpFunc
+                el.apxFuncL=el.rpFunc
+                el.apxFuncR=el.rpFunc
                 el.apyFunc=el.rpFunc
             else: #other elements have no apeture
                 def temp(*args):
                     return np.inf
-                el.apxFunc=temp
+                el.apxFuncL=temp
+                el.apxFuncR = temp
                 el.apyFunc=temp
     def end_Lattice(self):
         #must be called after ending lattice. Prepares functions that will be used later

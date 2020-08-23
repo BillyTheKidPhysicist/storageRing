@@ -213,18 +213,20 @@ class FloorPlan:
         plt.ylim(-1, 3)
         plt.show()
 
-    def calculate_Cost(self, args=None, offset=4, areaWeight=10, lineWeight=1):
+    def calculate_Cost(self, args=None, offset=4, areaWeight=100, lineWeight=1):
         # This method works fast by only building the floorplan, which takes a few ms, if all simple costs return zero
         # use fractional overlapping area, (area overlapping)/(total area)
 
 
-        xMostLeft=(self.Lo+self.Lm+self.Li)*np.cos(self.combinerInputAngle*np.pi/180) #the most leftward point of the
-                #bender. This is used to prevent the layout from impinging onto the wall and too keep enough seperation
-        xMostLeft+=self.TL1+self.bendingRadius+self.rOuterBender
+
         totalCost = 0
         if args is not None:
             # if no arguments are provided, just use the cpreviously built floorplan. otherwise rebuild
             self.load_Paramters(args)
+
+        xMostLeft=(self.Lo+self.Lm+self.Li)*np.cos(self.combinerInputAngle*np.pi/180) #the most leftward point of the
+                #bender. This is used to prevent the layout from impinging onto the wall and too keep enough seperation
+        xMostLeft+=self.TL1+self.bendingRadius+self.rOuterBender
         if xMostLeft>(self.focusToWallDistance-self.wallSpacing):
             totalCost+=lineWeight*np.abs(xMostLeft-(self.focusToWallDistance-self.wallSpacing))
         if self.Li < self.LiMin:
@@ -251,11 +253,8 @@ class FloorPlan:
             if args is not None:
                 # if args are None then use the current floorplan
                 self.build(args, reloadParams=False)
-            area += self.lens1.intersection(self.combiner).area / (
-                        self.lens1.area + self.combiner.area)  # fractional area overlap
+            area += self.lens1.intersection(self.combiner).area / (self.lens1.area + self.combiner.area)  # fractional area overlap
             # between lens1 and combiner
-            # area+=self.lens4.intersection(self.combiner).area/(self.lens1.area+self.combiner.area) # fractional area overlap
-            # between lens4 and combiner
             area += self.lens4.intersection(self.lensShaper).area / (
                         self.lens1.area + self.lensShaper.area)  # farctional area overlap
             # between lens4 and shaper lens
