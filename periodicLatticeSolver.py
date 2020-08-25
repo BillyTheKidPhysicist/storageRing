@@ -27,8 +27,8 @@ class Particle:
         self.xdi=xdi #particle transverse velocity at focus
         self.deltaV=deltaV
         self.delta = self.deltaV / PLS.v0
-        self.clippedx=[False,False] #wether the particle clips the x apeture. first entry is for negative delta, second
-            #is for positive
+        self.clippedx=[False,False] #wether the particle clips the x apeture. first entry is for left (outer) apeture and
+                #second is for right (inner) apeture. delta greater/less than zero corresponds to outer/inner side
         self.clippedy=None #wether paticle clips in the y plane
 class Injector:
     def __init__(self,PLS):
@@ -479,7 +479,8 @@ class PeriodicLatticeSolver:
                 #edge.
                 el.apxFuncL=el.rtFunc
                 def temp(*x):
-                    return el.rtFunc(*x)+el.rpFunc(*x)
+                    return np.inf#el.rtFunc(*x)+el.rpFunc(*x)
+                #TODO: ADD rt SOMEHOW. WHY DOES IT NOT WORK???
                 el.apxFuncR=el.rpFunc#+el.rtFunc#temp#lambda *x: (el.rtFunc(*x)+el.rpFunc(*x))
                 el.apyFunc=el.rtFunc
             elif el.elType=='COMBINER':

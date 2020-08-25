@@ -244,9 +244,11 @@ class Minimizer():
                             envX = np.sum(envList[0][i])
                         if particle.clippedx[1]==False:
                             if envX!=0: #average the two x particles otherwise it will weight x plane more than y
-                                envX = (np.sum(envList[1][i])+envX)/2
+                                envX = (np.sum(envList[0][i])+envX)/2
                             else:
-                                envX=np.sum(envList[1][i])
+                                envX=np.sum(envList[0][i])
+                        if particle.clippedy==False:
+                            envY=np.sum(envList[1][i])
                         envSum+=np.sqrt(envX**2+envY**2)
                     envCost=self.sigmoid_Env(envSum/(self.PLS.injector.numParticles-(numClippedx+numClippedy)))
                 else:
@@ -291,6 +293,7 @@ class Minimizer():
     def find_Clipped_Particles(self,totalLengthList,xLattice,envList):
         numClippedx = 0
         numClippedy = 0
+        numPoints=envList[0][0].shape[0]
         for i in range(len(self.PLS.injector.particles)):
             particle=self.PLS.injector.particles[i]
             particle.clippedx=[False,False] #need to initialize to false because they may been set to true before
@@ -302,11 +305,11 @@ class Minimizer():
                     ind1 = 0  # z array index of beginning of element. Only if it's the first element in the ring
                 else:
                     ind1 = int(
-                        totalLengthList[j - 1] * self.numPoints / totalLengthList[-1])+1  # z array index of the end
+                        totalLengthList[j - 1] * numPoints / totalLengthList[-1])+1  # z array index of the end
                     # element
-                ind2 = int(totalLengthList[j] * self.numPoints / totalLengthList[-1])   # z array index of end of the
+                ind2 = int(totalLengthList[j] * numPoints / totalLengthList[-1])   # z array index of end of the
                 # element. undershoot ending
-                if ind2 > ind1 + 1:  # sometimes the element is very short and this doesn't make sense. Not usually, but
+                if ind2 > ind1 + 1:  # sometimes the element is very short an`d this doesn't make sense. Not usually, but
                     # can be true for small drift regions
                     elMaxx = np.max(envList[0][i][ind1:ind2])
                     elMaxy = np.max(envList[1][i][ind1:ind2])
@@ -314,18 +317,18 @@ class Minimizer():
                     apxR = el.apxFuncR(*xLattice)  # the size of the apeture in the x dimension on the inner side
                     apy = el.apyFunc(*xLattice)  # in the y dimension
                     if delta==0:
-                        if (elMaxy>apxL or elMaxx>apxR) and particle.clippedx[0]==False: #if the particle's
+                        if (elMaxx>apxL or elMaxx>apxR) and particle.clippedx[0]==False: #if the particle's
                                 # longitudinal velocity is exactly the nominal velocity then if it clips either
                                 # right or left it's gone
                             particle.clippedx[0]=True #only set the first element to true,
                             particle.clippedx[1]=None #set the second to None as a safety to not counting later
                             numClippedx+=1
                     else:
-                        if elMaxx>apxR and particle.clippedx[0]==False:
-                            particle.clippedx[0]=True
+                        if elMaxx > apxL and particle.clippedx[0]==False:
+                            particle.clippedx[0] = True
                             numClippedx+=1
-                        if elMaxx > apxL and particle.clippedx[1]==False:
-                            particle.clippedx[1] = True
+                        if elMaxx>apxR and particle.clippedx[1]==False:
+                            particle.clippedx[1]=True
                             numClippedx+=1
                     if elMaxy > apy and particle.clippedy==False:  # if the envelope is clipping
                         particle.clippedy=True
@@ -363,8 +366,6 @@ class Minimizer():
         #    high = localSol.x[i] + Range
         #    reducedBounds.append((low, high))
         #
-
-        floorPlan = FloorPlan(self.PLS)
 
         # def temp(x):
         #    return self.cost_Function(x, False, floorPlan)
@@ -422,8 +423,7 @@ class Minimizer():
         self.sol.zArr = temp[0]
         self.sol.beta = temp[1]
         self.sol.eta = self.PLS.compute_Eta_Of_Z_Array(xLattice, numpoints=1000, returZarr=False)
-        self.sol.emittance, temp = self.compute_Emittance(self.sol.args, self.sol.totalLengthList,
-                                                          returnAll=True)
+        self.sol.emittance, temp = self.compute_Emittance(self.sol.args, self.sol.totalLengthList,returnAll=True)
         self.sol.mag, self.sol.Lo, self.sol.Lm, self.sol.Li,self.sol.sOffset = temp
         #use the largest emittance particle that isn't clipping
         envList,emittanceArrList = self.make_Envelope_And_Emittance_List(self.sol.args, self.sol.totalLengthList,numPoints=1000)
@@ -476,8 +476,6 @@ class Minimizer():
                     maxValy=envY
                     maxArgy=i
             i+=1
-
-
         self.sol.emittance=[emittanceArrList[0][maxArgx],emittanceArrList[1][maxArgy]]
         self.sol.tunex = np.trapz(np.power(self.sol.beta[0], -1), x=self.sol.zArr) / (2 * np.pi)
         self.sol.tuney = np.trapz(np.power(self.sol.beta[1], -1), x=self.sol.zArr) / (2 * np.pi)
