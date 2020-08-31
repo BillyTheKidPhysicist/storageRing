@@ -6,13 +6,9 @@ import numpy as np
 from element import Element
 import sys
 
-#version 1.0. June 22, 2020. William Huntington
-
-#TODO: Implement the ability to not use injector
-# TODO: REMOVE REFERENCE TO AXIS?
 
 class VariableObject:
-    # class used to hold information about the variables made by the user when they call PLS.Variable()
+    # class used to hold information about the variables made by the user when they call PLS.Variable().
     def __init__(self,sympyVar,symbol):
         self.varMin=None
         self.varMax=None
@@ -25,12 +21,16 @@ class Particle:
     def __init__(self,xi,xdi,deltaV,PLS):
         self.xi=xi #particle transverse position at focus
         self.xdi=xdi #particle transverse velocity at focus
-        self.deltaV=deltaV
+        self.deltaV=deltaV #difference in longitudinal speed
         self.delta = self.deltaV / PLS.v0
         self.clippedx=[False,False] #wether the particle clips the x apeture. first entry is for left (outer) apeture and
                 #second is for right (inner) apeture. delta greater/less than zero corresponds to outer/inner side
         self.clippedy=None #wether paticle clips in the y plane
 class Injector:
+    #this class creates an object that models the injection system which as of now (august 31,2020) would be composed of
+    #the large permanent magnet collector and an electromagnet to shape the beam. The magnet's length, object distance
+    #can drive parameters. In addition, there is a parameter that adds an offset to the object distance for mode matching
+    #optimization. The optimal configuration may not be two lens whos focal length exactly meet at the image or object distance.
     def __init__(self,PLS):
         self.PLS=PLS
         self.M=None #to hold transfer matrix
@@ -48,31 +48,35 @@ class Injector:
         self.Lm=sym.symbols('Lm',real=True,positive=True,nonzero=True)
         self.sOffset=sym.symbols('s_offset',real=True) #this is for mode matching. it is the offset from the focus of the
             #collector magnet. I believe it is advantageous to sometimes not use the image of the collector as the
-            #object of the shaper, but rather offset it. Positive values correspond to shifting the collector
+            #object of the shaper, but rather offset it. Positive values correspond to shifting the shaper
             #away from the nozzle
         self.Bp=.45
         self.sympyVarList=[self.Lo,self.Lm,self.sOffset]
         maxLen=2.5
-        self.LoMin=.1
-        self.LoMax=.2
-        self.LiMin=1.1
-        self.LiMax=maxLen
-        self.LmMin=.01
-        self.LmMax=.25
-        self.LtMin=self.LoMin+self.LiMin+self.LmMin
-        self.LtMax=maxLen
-        self.sOffsetMax=.05
-        self.sOffsetMin=-.05
 
+        #----see above comments for better descriptions of below bounds
+        self.LoMin=.1 #minimum distance from collector focus to face of shaper, ie object distance
+        self.LoMax=.2 #maximum distance from collector focus to face of shaper, ie object distance
+        self.LiMin=1.1 #min distance from back of shaper to focus of shaper, ie image distance
+        self.LiMax=maxLen #max distance from back of shaper to focus of shaper, ie image distance
+        self.LmMin=.01 #min length of magnet
+        self.LmMax=.25 #max length of magnet
+        self.LtMin=self.LoMin+self.LiMin+self.LmMin #min length of total system
+        self.LtMax=maxLen #max length of total system
+        self.sOffsetMax=.05 #max offset of mode matching. positive is away from the nozzle
+        self.sOffsetMin=-.05 #min offset of mode matching. negative is towards from the nozzle
+
+
+        #---these three paremeters, thetaMax, riMax, and sigma are used to construct a realistic lens. Thetamax is the
+        #maximum expected input anlge. ri is the maximumu expected offset from axis at the point of the focus of the
+        # collector. sigma is the fraction of the apeture to use. bigger thetaMax, riMax and smaller sigma are more difficult to
+        #achieve. smaller sigma increases field quality because particle will be further from the poles
         self.thetaMax=.07 #maximum expected angle that the shaper could collect
         self.riMax = .002  # safe offset for object transverse displacement
-        self.sigma=.9
-        self.LoOp=None
-        self.LmOp=None
-        self.LiOp=None
+        self.sigma=.9 #the fraction of the bore that will be used for particle trajectories.
 
-        #I exploit symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.\
-        #Notice that delta has a symmetry also because my apetures are symmetric
+        #I exploit symmetry here. Looking at eps notice that -x,xd and x,-xd have the same value.
+        #Notice that delta has a symmetry also because the env is +/-(sqrt(beta*eps)+delta*eta)
         self.numParticles = 0
         self.numParticlesx=0
         self.numParticlesy=0
@@ -106,34 +110,36 @@ class Injector:
         self.numParticles=self.numParticlesx+self.numParticlesy
         print(self.numParticlesx,self.numParticlesy)
     def update(self):
-        self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList)
-        self.LiFunc=sym.lambdify(self.sympyVarList,self.el.Li)
-        self.rpFunc = symWrap.autowrap(self.rp, args=self.sympyVarList)
-
+        self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList) #function that return numeric valued transfer matrix
+        self.LiFunc=sym.lambdify(self.sympyVarList,self.el.Li) #function that return numeric value for shaper image distance
+        self.rpFunc = symWrap.autowrap(self.rp, args=self.sympyVarList) #function that return numeric value for bore
+            #radius of shaper. This account for wanting to use only self.sigma of the apeture
 
 
         args=self.sympyVarList.copy()
-        A = self.M[0, 0]
-        C = self.M[1, 0]
-        D = self.M[1, 1]
+        A = self.M[0, 0] #0,0 entry of transfer matrix, sympy version
+        C = self.M[1, 0] #1,0 entry of transfer matrix, sympy version
+        D = self.M[1, 1] #1,1 entry of transfer matrix, sympy version
+        ACor = self.MVelCor[0, 0]  # component of the correction matrix for particle speed, sympy version
+        CCor = self.MVelCor[1, 0]  # component of the correction matrix for particle speed, sympy version
+        DCor = self.MVelCor[1, 1]  # component of the correction matrix for particle speed, sympy version
+
+        #----convert above sympy expressions into fast fortran/c code
         funcA=symWrap.autowrap(A,args=args)
         funcC = symWrap.autowrap(C, args=args)
         funcD = symWrap.autowrap(D, args=args)
-        ACor = self.MVelCor[0, 0]  # component of the correction matrix
-        CCor = self.MVelCor[1, 0]  # component of the correction matrix
-        DCor = self.MVelCor[1, 1]  # component of the correction matrix
         funcACor=symWrap.autowrap(ACor,args=args)
         funcCCor = symWrap.autowrap(CCor, args=args)
         funcDCor = symWrap.autowrap(DCor, args=args)
 
         def temp(x,beta,alpha):
-            sOffset=x[2]
-            A0=funcA(*x)
-            C0 = funcC(*x)
-            D0 = funcD(*x)
-            ACor0 = funcACor(*x)
-            CCor0 = funcCCor(*x)
-            DCor0 = funcDCor(*x)
+            sOffset=x[2] #offset from focal plane
+            A0=funcA(*x)   #0,0 entry of transfer matrix
+            C0 = funcC(*x) #1,0 entry of transfer matrix
+            D0 = funcD(*x) #1,1 entry of transfer matrix
+            ACor0 = funcACor(*x) #correction factors to transfer matrix for particle speed
+            CCor0 = funcCCor(*x) #correction factors to transfer matrix for particle speed
+            DCor0 = funcDCor(*x) #correction factors to transfer matrix for particle speed
             epsList=[]
             for particle in self.particles:
                 xi=particle.xi

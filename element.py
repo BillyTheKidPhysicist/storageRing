@@ -162,31 +162,6 @@ class Element:
             M[4, 4] = sym.cos(phi)
 
 
-            #the following is for when I was using the combined function idea
-            ##x component of matrix
-            #r0 = self.rb
-            #k0=1/r0 #nominal bending radius. Only present in x direction
-#
-            #kappaX = k0 ** 2
-            #phiX = sym.sqrt(kappaX) * L
-            #M[0,0] = sym.cos(phiX)
-            #M[0,1] = sym.sin(phiX) / sym.sqrt(kappaX)
-            #M[1,0] = -sym.sin(phiX) * sym.sqrt(kappaX)
-            #M[1,1]=sym.cos(phiX)
-            #M[0,2] = (1 - sym.cos(phiX))*k0 / kappaX # dispersion
-            #M[1,2] = sym.sin(phiX)*k0 / sym.sqrt(kappaX)
-            #M[2,2]=1
-            ##y component
-            #k= self.PLS.u0 * self.beta ** 2 / (self.alpha * self.PLS.m * self.v ** 2) #there is lensing present in y direction
-            #    #for combind function magnets. See notes
-            #kappaY=k
-            #phiY = sym.sqrt(kappaY) * L
-            #M[3,3] = sym.cos(phiY)
-            #M[3,4] = sym.sin(phiY) / sym.sqrt(kappaY)
-            #M[4,3] = -sym.sqrt(kappaY) * sym.sin(phiY)
-            #M[4,4] = sym.cos(phiY)
-
-
         elif self.elType == self.elTypeList[1]:  #-----------------------------LENS-----------------------------------------------
             #same along both axis
             kappa = 2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
@@ -242,11 +217,6 @@ class Element:
             M[4,4] = sym.cos(phiY)
 
         elif self.elType==self.elTypeList[4]:  #-------------------INJECTOR---------------
-            #TODO: fix small numbers by doing symbollicaly and only subbing at end
-            #I checked the approximation
-
-
-
             K=sym.symbols('k',real=True,positive=True,nonzero=True)
 
             phi = sym.sqrt(K) * self.Length
