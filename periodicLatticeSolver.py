@@ -4,6 +4,7 @@ import sympy.utilities.autowrap as symWrap
 from numpy.linalg import inv
 import numpy as np
 from element import Element
+import functools
 import sys
 
 
@@ -81,10 +82,11 @@ class Injector:
         self.numParticlesx=0
         self.numParticlesy=0
         self.particles=[]
-        xMax=.005
-        xdMax=15
-        deltaVMax=7.5
-
+        
+        #maximum values for the population of particles to use in the injector
+        xMax=.005 #maximum offset in x (and y) plane
+        xdMax=15 #maximum transverse velocity in the x (and y) plane
+        deltaVMax=7.5 #maximum longitudinal velocity difference from the nominal 200 m/s
         x=np.linspace(-xMax,xMax,num=6)
         xd=np.linspace(0,xdMax,num=6)
         v0=np.linspace(0,deltaVMax,num=6) #total longitudinal velocity
@@ -92,9 +94,10 @@ class Injector:
         self.xiArr=temp[0].flatten()
         self.xdiArr = temp[1].flatten()
         self.deltaVArr = temp[2].flatten()
-        argsList=np.transpose(np.row_stack((self.xiArr,self.xdiArr,self.deltaVArr)))
+        argsArr=np.transpose(np.row_stack((self.xiArr,self.xdiArr,self.deltaVArr)))# (3 x number of particles) dimension
+            #array where each row is the xi,xdi, and delta of a given particle
         i=0
-        for item in argsList:
+        for item in argsArr:
             if item[0]==0 or item[1]==0: #don't include particles with zero position or velocity
                 i+=1
                 pass
@@ -102,14 +105,21 @@ class Injector:
                 self.particles.append(Particle(*item,self.PLS))
                 #I exploit symmetry with delta so for every particle with a given delta I consider there to be 2. In addition
                 #I consider each particle in the x and y plane.
-                if item[2]!=0:
+                if item[2]!=0: #if delta does not equal zero
                     self.numParticlesx+=2
-                else:
+                else: #if it does equal zero, then only one particle
                     self.numParticlesx+=1
                 self.numParticlesy += 1
         self.numParticles=self.numParticlesx+self.numParticlesy
-        print(self.numParticlesx,self.numParticlesy)
-    def update(self):
+    def fill_Parameters_And_Functions(self):
+        #fill various functions and parameters of the injector.
+
+        #its convenient to attach these values to the injector rather than the element
+        self.M=self.el.M
+        self.MVelCor=self.el.MVelCor
+        self.Li=self.el.Li
+        self.rp=self.el.rp
+
         self.MFunc=symWrap.autowrap(self.M,args=self.sympyVarList) #function that return numeric valued transfer matrix
         self.LiFunc=sym.lambdify(self.sympyVarList,self.el.Li) #function that return numeric value for shaper image distance
         self.rpFunc = symWrap.autowrap(self.rp, args=self.sympyVarList) #function that return numeric value for bore
@@ -132,6 +142,8 @@ class Injector:
         funcCCor = symWrap.autowrap(CCor, args=args)
         funcDCor = symWrap.autowrap(DCor, args=args)
 
+
+        #now construct a function that returns a list of emittance values for each particle.
         def temp(x,beta,alpha):
             sOffset=x[2] #offset from focal plane
             A0=funcA(*x)   #0,0 entry of transfer matrix
@@ -156,6 +168,11 @@ class Injector:
 
 class PeriodicLatticeSolver:
     def __init__(self,v0,T,axis='both',catchErrors=True):
+        #v0: nominal speed of particles
+        #T: temperature of particles
+        #axis: which axis to model. Typically both
+        #catchErrors: Wether to stop the program when certain errors occur that it would otherwise catch. Disabling this
+            #has been helpful in the past
         if axis!='x' and axis!='y' and axis!='both': #check wether a valid axis was provided
             raise Exception('INVALID AXIS PROVIDED!!')
         else:
@@ -189,31 +206,14 @@ class PeriodicLatticeSolver:
         self.injector = None  # to hold the injector object
         self.emittancex=None #to hold emittance value in x direction.
         self.emittancey=None #to hold emittance value in y direction
-        self.bendingAngleVarList=[] #to hold the variables used to set the amount of bending. This is only used if
-        #None is entered for the value of the bending angle. Then the bending angle is calcualted later
-
-
-
-        self.test=None
-        self.varType=[]
-        self.numPoints=250
 
 
     def Variable(self, symbol,varMin=0.0,varMax=1.0,varInit=None):
-        #TODO: remove this redundancy
         #function that is called to create a variable to use. Really it jsut adds things to list, but to the user it looks
         #like a variable
         #symbol: string used for sympy symbol
         sympyVar=sym.symbols(symbol,real=True)
         VO=VariableObject(sympyVar,symbol)
-        #if injector==True:
-        #    VO.type='INJECTOR'
-        #elif lattice==True:
-        #    VO.type='LATTICE'
-        #else:
-        #    VO.type='both'
-        #if lattice==True and injector==True:
-        #    raise Exception("Variable can't be both lattice and injector only!")
         VO.varMin=varMin
         VO.varMax=varMax
         if varInit==None:
@@ -236,7 +236,8 @@ class PeriodicLatticeSolver:
         return args
 
     def add_Injector(self):
-        #add an injector. This doesn't go into the list of elements though
+        #add an injector. This doesn't go into the list of elements though. It's not even a single element, it's more like
+            #a mindset maaaan
         #L: length of magnet in injection system
         #Lo: distance from image to front of magnet in injection system
         #Bp: magnetic field strength at pole in magnet
@@ -246,17 +247,9 @@ class PeriodicLatticeSolver:
         self.injector=Injector(self)
         if self.numElements>0:
             raise Exception('INJECTOR MUST BE ADDED FIRST')
-
         args=[self.injector.Lm,self.injector.Lo,self.injector.Bp,self.injector.thetaMax,self.injector.sigma,self.injector.riMax]
-
         self.injector.el=Element(self,'INJECTOR',args)
-        self.injector.M=self.injector.el.M
-        self.injector.MVelCor=self.injector.el.MVelCor
-        self.injector.Li=self.injector.el.Li
-        self.injector.rp=self.injector.el.rp
-
-        self.injector.update()
-
+        self.injector.fill_Parameters_And_Functions()
 
     def add_Lens(self,L, Bp, rp,S=None):
         #add a magnetic lens, ie hexapole magnet
@@ -276,9 +269,6 @@ class PeriodicLatticeSolver:
         #Ang: angle of bending. Use None to set it later with a constraint.
         #alpha: dipole term
         #beta: quadrupole terms
-        #if angle is None:
-        #    angle=sym.symbols('theta',real=True,positive=True)
-        #    self.bendingAngleVarList.append(angle)
         self.numElements += 1
         self.benderIndices.append(self.numElements-1)
         args = self.unpack_VariableObjects([angle,r0,Bp,S])
@@ -309,16 +299,14 @@ class PeriodicLatticeSolver:
             S=self.TL2
         self.numElements += 1
         args = self.unpack_VariableObjects([L,alpha,beta,S])
-        r0 = self.m * self.v0 ** 2 / (self.u0 * beta)
+        r0 = self.m * self.v0 ** 2 / (self.u0 * beta) #bending radius of the combiner. The combiner is basically a bender
         args.append(r0)
         el = Element(self,'COMBINER',args)
         self.lattice.append(el)
         self.combinerIndex=self.numElements-1
         el.index = self.numElements - 1
 
-
-
-    def compute_M_Total(self): #computes total transfer matric. numeric or symbolic
+    def _compute_M_Total(self): #computes total transfer matric. numeric or symbolic
         M=sym.eye(5) #starting matrix, identity
         for i in range(self.numElements):
             M=self.lattice[i].M @ M #remember, first matrix is on the right!
@@ -336,7 +324,7 @@ class PeriodicLatticeSolver:
             raise Exception('YOU MUST SPECIFY BOTH TRACK LENGTHS OR THE TOTALLENGTH, BUT NOT BOTH')
 
 
-    def catch_Errors(self):
+    def _catch_Errors(self):
         if self.began==False:
             raise Exception("YOU NEED TO BEGIN THE LATTICE BEFORE ENDING IT!")
         if self.trackLength==None:
@@ -348,7 +336,6 @@ class PeriodicLatticeSolver:
         #ERROR: Check that there are two benders
         if len(self.benderIndices)!=2:
             raise Exception('There must be 2 benders!!!')
-
         #ERROR: check that total bending is 360 deg within .1%
         if self.lattice[self.benderIndices[0]].angle is None:
             #if the angle is none, then the user wants the angle to be set by constraints
@@ -370,8 +357,10 @@ class PeriodicLatticeSolver:
                 else:
                     raise Exception('IF ONE BENDING ANGLE IS \'None\' THEN ALL MUST BE NONE')
 
+    def _update_Element_Parameters_And_Functions(self):
+        #after adding all the elements to the lattice set the lengths and positions such that all the constraints
+        #are satisfied. Also set parameters and functions that couldn't be set before
 
-    def update_Element_Parameters_And_Functions(self):
         if self.lattice[self.benderIndices[0]].angle is None: #set the angle with constraints
             if self.combinerIndex==None: #if there is no combiner in the lattice. Settings angles is then easy
                 angle=2*np.pi/len(self.benderIndices)
@@ -396,16 +385,7 @@ class PeriodicLatticeSolver:
             else:
                 raise Exception('INCORRECT NUMBER OF BENDERS. IF COMBINER IS PRESENT THERE SHOULD BE ONLY 2 BENDERS!')
 
-
-
-        #sys.exit()
-
-
-
         #---now update the elements. This mostly computes the various functions of each lattice. Somewhat intensive
-
-
-
         for el in self.lattice: #manipulate drift elements only
             if el.elType=='LENS': #-------adjust lens lengths
                 if el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1:#if the lens is right after the bend
@@ -468,29 +448,25 @@ class PeriodicLatticeSolver:
             if type(el.Length)==float:
                 if el.Length<0:
                     raise Exception("ELEMENT LENGTH IS BEING SET TO NEGATIVE VALUE")
-
         for el in self.lattice:
             el.fill_Params_And_Functions()
-
-
-
 
     def begin_Lattice(self): #must be called before making lattice
         self.began=True
     def set_apetures(self):
-        #update the apetures
+        #update the apeture values for each element. The apeture value is return from a function, even for
+        #apetures that don't change with the parameters so that it is general
         for el in self.lattice:
             if el.elType=='BEND':
                 #apetures are simply half the bending magnet radius because the vacuum tube would span the center to the
                 #edge.
-                el.apxFuncL=el.rtFunc
-                def temp(*x):
-                    return np.inf#el.rtFunc(*x)+el.rpFunc(*x)
-                #TODO: ADD rt SOMEHOW. WHY DOES IT NOT WORK???
-                el.apxFuncR=el.rpFunc#+el.rtFunc#temp#lambda *x: (el.rtFunc(*x)+el.rpFunc(*x))
-                el.apyFunc=el.rtFunc
+                def temp(func1,func2,*x):
+                    return func1(*x)+func2(*x)
+                el.apxFuncL = el.rtFunc
+                el.apxFuncR=functools.partial(temp,el.rpFunc,el.rtFunc) #there are some subtleties here with functions!!
+                el.apyFunc=el.rpFunc
             elif el.elType=='COMBINER':
-                #I make a dumbby function so that I can still pass the variables and get a constant number
+                #I make a dummy function so that I can still pass the variables and get a constant number
                 def temp(*args):
                     return .015
                 def temp2(*args):
@@ -509,15 +485,16 @@ class PeriodicLatticeSolver:
                 el.apxFuncR = temp
                 el.apyFunc=temp
     def end_Lattice(self):
+
         #must be called after ending lattice. Prepares functions that will be used later
         if self.catchErrors==True:
-            self.catch_Errors()
-        self.update_Element_Parameters_And_Functions()
-
+            self._catch_Errors()
+        self._update_Element_Parameters_And_Functions()
         self.set_apetures()
 
 
-        self.MTot = self.compute_M_Total() #sympy version of full transfer function
+
+        self.MTot = self._compute_M_Total() #sympy version of full transfer function
 
         self.MTotFunc = symWrap.autowrap(self.MTot,args=self.sympyVarList)
 

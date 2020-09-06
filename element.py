@@ -85,6 +85,7 @@ class Element:
         self.M_Func = symWrap.autowrap(self.M, args=args)
         if self.elType=='LENS':
             self.rpFunc = symWrap.autowrap(self.rp, args=args)
+            self.rtFunc='penis'
         if self.elType=='BEND':
             self.rpFunc = symWrap.autowrap(self.rp, args=args)
             self.rtFunc = symWrap.autowrap(self.rp / 2,args=args)  # vacuum tube radius is half of bore radius
