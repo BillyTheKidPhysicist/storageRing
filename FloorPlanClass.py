@@ -26,7 +26,7 @@ class FloorPlan:
         self.benderPoints = 50
         self.TL1 = None  # tracklength 1
         self.TL2 = None  # trackLength 2
-        self.wallSpacing=.75 #Minimum distance between wall and any component of the ring. meters
+        self.wallSpacing=.3 #Minimum distance between wall and any component of the ring. meters
         self.focusToWallDistance=4.4 #distance from focus of the collector magnet to the wall along the nozzle axis, meters
 
         self.Lm4 = None
