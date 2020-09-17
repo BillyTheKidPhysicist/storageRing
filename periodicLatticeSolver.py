@@ -84,8 +84,8 @@ class Injector:
         self.particles=[]
         
         #maximum values for the population of particles to use in the injector
-        xMax=.005 #maximum offset in x (and y) plane
-        xdMax=15 #maximum transverse velocity in the x (and y) plane
+        xMax=.003 #maximum offset in x (and y) plane, mm
+        xdMax=10 #maximum transverse velocity in the x (and y) plane, m/s
         deltaVMax=7.5 #maximum longitudinal velocity difference from the nominal 200 m/s
         x=np.linspace(-xMax,xMax,num=6)
         xd=np.linspace(0,xdMax,num=6)
