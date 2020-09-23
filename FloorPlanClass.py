@@ -38,7 +38,11 @@ class FloorPlan:
         self.Lm2 = None
         self.rOuter2 = None
         self.rOuterRatio = 6.5  # outer dimension of lens to bore
-        self.airGap = .03  # spacing between lenses and bender
+        self.airGap1 = .01  # extra lens spacing for coils
+        self.airGap2 = .01  # extra lens spacing for coils
+        self.airGap3 = .01  # extra lens spacing for coils
+        self.airGap4 = .01  # extra lens spacing for coils
+        self.coilGapRatio=2 #ratio between required coil spacing and bore radius
 
         # injector stuff
         self.LiMin = self.combinerLength + .2
@@ -79,19 +83,28 @@ class FloorPlan:
                 # tracklength 1
                 temp.append(self.PLS.lattice[self.PLS.combinerIndex].S + self.PLS.lattice[
                     self.PLS.combinerIndex].Length / 2)  # tracklength 2
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].Length)  # lens lengths
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].Length)  # lens lengths
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].Length)  # lens lengths
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].Length)  # lens lengths
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].Length)  # lens lengths
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].Length)  # lens lengths
+
                 temp.append(self.PLS.lattice[self.PLS.benderIndices[0]].r0)  # bender radius, same for both as of now
                 temp.append(self.PLS.lattice[self.PLS.combinerIndex].Length)  # length of combiner
                 temp.append(self.PLS.injector.Lo)
                 temp.append(self.PLS.injector.Lm)
                 temp.append(self.PLS.injector.Li)
+
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].rp * self.rOuterRatio)
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].rp * self.rOuterRatio)
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].rp * self.rOuterRatio)
                 temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].rp * self.rOuterRatio)
+
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].rp * self.coilGapRatio)
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].rp * self.coilGapRatio)
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].rp * self.coilGapRatio)
+                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].rp * self.coilGapRatio)
+
+
                 args = self.PLS.sympyVarList.copy()
                 args.extend(self.PLS.injector.sympyVarList)
                 self.floorPlanArgListFunc = sym.lambdify(args, temp)
@@ -113,6 +126,13 @@ class FloorPlan:
         self.rOuter2 = self.parameters[12]
         self.rOuter3 = self.parameters[13]
         self.rOuter4 = self.parameters[14]
+
+        self.airGap1 = self.parameters[15]
+        self.airGap2 = self.parameters[16]
+        self.airGap3 = self.parameters[17]
+        self.airGap4 = self.parameters[18]
+
+
 
     def build(self, args, reloadParams=True):
         if reloadParams == True:
@@ -136,12 +156,12 @@ class FloorPlan:
 
         self.bender2 = Polygon(np.column_stack((x[None].T, y[None].T)))
         self.lens4 = Polygon([(0, 0), (self.Lm4, 0), (self.Lm4, self.rOuter4 * 2), (0, self.rOuter4 * 2)])
-        self.lens4 = translate(self.lens4, xoff=-self.Lm4 - self.airGap, yoff=-self.rOuter4)
+        self.lens4 = translate(self.lens4, xoff=-self.Lm4 - self.airGap4, yoff=-self.rOuter4)
         self.lens3 = Polygon([(0, 0), (self.Lm3, 0), (self.Lm3, self.rOuter3 * 2), (0, self.rOuter3 * 2)])
-        self.lens3 = translate(self.lens3, xoff=-self.Lm3 - self.airGap, yoff=self.bendingRadius - self.rOuter3)
+        self.lens3 = translate(self.lens3, xoff=-self.Lm3 - self.airGap3, yoff=self.bendingRadius - self.rOuter3)
         self.lens4VacuumTube = Polygon(
-            [(0, 0), (self.TL2 - self.combinerLength - self.Lm4 - self.airGap, 0), (self.TL2 - self.combinerLength
-                                                                                    - self.Lm4 - self.airGap,
+            [(0, 0), (self.TL2 - self.combinerLength - self.Lm4 - self.airGap4, 0), (self.TL2 - self.combinerLength
+                                                                                    - self.Lm4 - self.airGap4,
                                                                                     self.rVacuumTube * 2),
              (0, self.rVacuumTube * 2)])
         self.lens4VacuumTube = translate(self.lens4VacuumTube, xoff=self.combinerLength, yoff=-self.rVacuumTube)
@@ -170,9 +190,9 @@ class FloorPlan:
         self.bender1 = rotate(self.bender1, 180, origin=(0, 0))
         self.bender1 = translate(self.bender1, yoff=self.bendingRadius, xoff=-self.TL1)
         self.lens1 = Polygon([(0, 0), (self.Lm1, 0), (self.Lm1, self.rOuter1 * 2), (0, self.rOuter1 * 2)])
-        self.lens1 = translate(self.lens1, xoff=-self.TL1 + self.airGap, yoff=-self.rOuter1)
+        self.lens1 = translate(self.lens1, xoff=-self.TL1 + self.airGap1, yoff=-self.rOuter1)
         self.lens2 = Polygon([(0, 0), (self.Lm2, 0), (self.Lm2, self.rOuter2 * 2), (0, self.rOuter2 * 2)])
-        self.lens2 = translate(self.lens2, xoff=-self.TL1 + self.airGap, yoff=2 * self.bendingRadius - self.rOuter2)
+        self.lens2 = translate(self.lens2, xoff=-self.TL1 + self.airGap2, yoff=2 * self.bendingRadius - self.rOuter2)
         self.objects.append(self.bender1)
         self.objects.append(self.lens1)
         self.objects.append(self.lens2)
@@ -237,14 +257,14 @@ class FloorPlan:
             totalCost += lineWeight * np.abs(self.TL1)
         if self.TL2 < 0:
             totalCost += lineWeight * np.abs(self.TL2)
-        if (self.Lm2 + self.Lm3 + 2 * self.airGap) > (self.TL1 + self.TL2):  # if the two lenses overlap
-            totalCost += lineWeight * np.abs((self.Lm2 + self.Lm3 + 2 * self.airGap) - (self.TL1 + self.TL2))
+        if (self.Lm2 + self.Lm3 + self.airGap2+self.airGap3) > (self.TL1 + self.TL2):  # if the two lenses overlap
+            totalCost += lineWeight * np.abs((self.Lm2 + self.Lm3 +self.airGap2+self.airGap3) - (self.TL1 + self.TL2))
         if (self.Li + self.Lm + self.Lo + self.TL1 + self.bendingRadius) > self.distanceFromObjectMax:
             totalCost += lineWeight * np.abs(
                 (self.Li + self.Lm + self.Lo + self.TL1 + self.bendingRadius) - self.distanceFromObjectMax)
-        if (self.TL1 - self.Lm1 - self.airGap) < self.combinerLen1Sep:
+        if (self.TL1 - self.Lm1 - self.airGap1) < self.combinerLen1Sep:
             # if there is not enough room between the combiner output and next lens for optical pumping:
-            totalCost += lineWeight * np.abs((self.TL1 - self.Lm1 - self.airGap) - self.combinerLen1Sep)
+            totalCost += lineWeight * np.abs((self.TL1 - self.Lm1 - self.airGap1) - self.combinerLen1Sep)
         if (self.TL2 - self.Lm4 - self.combinerLength) < 0:
             # if lens 4 is impinging on the combiner
             totalCost += lineWeight * np.abs(self.TL2 - self.Lm4 - self.combinerLength)

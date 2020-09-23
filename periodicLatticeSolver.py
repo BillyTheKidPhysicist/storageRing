@@ -10,12 +10,12 @@ import sys
 
 class VariableObject:
     # class used to hold information about the variables made by the user when they call PLS.Variable().
-    def __init__(self,sympyVar,symbol):
+    def __init__(self):
         self.varMin=None
         self.varMax=None
         self.varInit=None #initial value of variable
-        self.symbol=symbol
-        self.sympyObject=sympyVar
+        self.symbol=None
+        self.sympyObject=None
         self.elIndex=None #index of use of variables. Can be overwritten if reused.
         self.type=None # to hold wether the optic is assigned to lattice, injector or both
 class Particle:
@@ -207,13 +207,22 @@ class PeriodicLatticeSolver:
         self.emittancex=None #to hold emittance value in x direction.
         self.emittancey=None #to hold emittance value in y direction
 
+    def mathVariable(self,variable,fact):
+        #this creates variable that is a previous variable times a factor
+        temp=variable.sympyObject*fact
+        VO = VariableObject()
+        VO.sympyObject=temp
+        return VO
+
 
     def Variable(self, symbol,varMin=0.0,varMax=1.0,varInit=None):
         #function that is called to create a variable to use. Really it jsut adds things to list, but to the user it looks
         #like a variable
         #symbol: string used for sympy symbol
         sympyVar=sym.symbols(symbol,real=True)
-        VO=VariableObject(sympyVar,symbol)
+        VO=VariableObject()
+        VO.sympyObject=sympyVar
+        VO.symbol=symbol
         VO.varMin=varMin
         VO.varMax=varMax
         if varInit==None:
