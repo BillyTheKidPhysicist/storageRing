@@ -186,11 +186,11 @@ class Minimizer():
         self.traceMax = 1.9  # rather than punishing for trace being above 2
         self.sol = None  # the final solution
         self.numSolutions = None  # number of solutions
-        self.VOList=[] #list that holds variable objects for lattice and injector. Lattice is first in the list
-
-        self.VOList.extend(self.PLS.VOList) #add variables from lattice
-        for VO in self.PLS.injector.VOList: #add variables from injector
-            self.VOList.append(VO)
+        #self.VOList=[] #list that holds variable objects for lattice and injector. Lattice is first in the list
+#
+        #self.VOList.extend(self.PLS.VOList) #add variables from lattice
+        #for VO in self.PLS.injector.VOList: #add variables from injector
+        #    self.VOList.append(VO)
 
 
     def cost_Function(self, x, Print, floorPlan):
