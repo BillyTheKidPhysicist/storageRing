@@ -73,6 +73,8 @@ class particleTracer:
             #these needs to be at least equal to the element length to begin asking shapely what element the particle is
             #in
         self.v0=None #the particles total speed. TODO: MAKE CHANGE WITH HARD EDGE MODEL
+
+        self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving #TODO: MAKE THIS WORK
     def add_Lens(self,Bp,rp,L,ap=None):
         if ap is None:
             ap=.9*rp
@@ -128,17 +130,13 @@ class particleTracer:
         p=self.p #p old or p sub n
         a=self.force(q)/self.m #acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
-
         if self.is_Particle_Inside_Chamber(q_n)==False:
             self.particleOutside=True
             return
         a_n=self.force(q_n)/self.m #acceleration new or acceleration sub n+1
         p_n=p+self.m*.5*(a+a_n)*self.h
-
         self.q=q_n
         self.p=p_n
-
-
     def is_Particle_Inside_Chamber(self,q):
         return True
     def loop_Check(self):
@@ -149,7 +147,7 @@ class particleTracer:
             return True
     def force(self,q):
         el=self.which_Element_Wrapper(q)
-        if el is None: #the particle ®is outside the lattice!
+        if el is None: #the particle is outside the lattice!
             return None
         F = np.zeros(3) #force vector starts out as zero
         if el.type == 'DRIFT':
@@ -179,9 +177,11 @@ class particleTracer:
             rot=(el.theta-el.ang+np.pi/2)
         if el.type=='LENS':
             rot=el.theta
-        rotMat=np.asarray([[np.cos(rot),-np.sin(rot),0],[np.sin(rot),np.cos(rot),0],[0,0,1]])
-        F=rotMat@F[:,np.newaxis]
-        return F.T[0]
+        Fx=F[0]
+        Fy=F[1]
+        F[0]=Fx*np.cos(rot)+Fy*(-np.sin(rot))
+        F[1]=Fx*np.sin(rot)+Fy*np.cos(rot)
+        return F
 
     def transform_To_Element_Frame(self,point,el):
         #get the coordinates of the particle in the element's frame where the input is facing towards the 'west'.
@@ -205,13 +205,33 @@ class particleTracer:
         newPoint[1] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
         return newPoint
 
-
-        pass
+    def transform_To_Element_Frame1(self, Point, el):
+        # get the coordinates of the particle in the element's frame where the input is facing towards the 'west'.
+        # note that this would mean that theta is 0 deg. Also, this is only in the xy plane
+        point = Point[:-1].copy()  # only use x and y. CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT OUTSIDE OF METHOD!!!!
+        newPoint = np.empty(2)
+        if el.type == 'DRIFT' or el.type == 'LENS':
+            point[0] = point[0] - el.xb
+            point[1] = point[1] - el.yb
+            rot = -el.theta
+            # rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
+            # point=rotMat@point[:,np.newaxis]
+        elif el.type == 'BENDER':
+            rot = -(el.theta - el.ang + np.pi / 2)
+            point = point - el.r0
+            # newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
+            # newPoint[0] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
+            # rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
+            # point=rotMat@point[:,np.newaxis]
+        newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
+        newPoint[1] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
+        return newPoint
 
     def which_Element_Wrapper(self,q):
         #this is used to determine wether it's worthwile to call which_Element which is kind of expensive to call
-        if self.currentElDeltaT*self.v0<=self.currentEl.L:
-            self.currentElDeltaT += self.h
+        dist=np.sqrt((self.q[0]-self.currentEl.xe)**2+(self.q[1]-self.currentEl.ye)**2) #distance to end of element
+        stepSize=self.h*self.v0
+        if dist>2*stepSize: #if particle is far enough away that it isn't worth checking
             return self.currentEl
         else:
             el=self.which_Element(q)
@@ -224,7 +244,7 @@ class particleTracer:
             #it returns false for all. This 'ensures' that doens't happen
         for el in self.lattice:
             if el.SO.contains(point)==True:
-                if np.abs(q[2])>el.ap: #element clips in the x direction
+                if np.abs(q[2])>el.ap: #element clips in the z direction
                     return None
                 else:
                     return el #return the element the particle is in
@@ -339,3 +359,4 @@ test.show_Lattice(particleCoords=q[-1])
 plt.plot(q[:,0],q[:,1])
 #print(q[-1])
 plt.show()
+
