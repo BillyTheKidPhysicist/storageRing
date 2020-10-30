@@ -153,19 +153,19 @@ class particleTracer:
         if el.type == 'DRIFT':
             return F #empty force vector
         elif el.type == 'BENDER':
-            coords=self.transform_To_Element_Frame(q,el)
-            r=np.sqrt(np.sum(coords**2)) #radius in x y frame
+            coordsxy=self.transform_To_Element_Frame(q[:-1],el) #only x and y coords
+            r=np.sqrt(coordsxy[0]**2+coordsxy[1]**2) #radius in x y frame
             F0=-el.K*(r-el.rb) #force in x y plane
-            phi=np.arctan2(coords[1],coords[0])
+            phi=np.arctan2(coordsxy[1],coordsxy[0])
             F[0]=np.cos(phi)*F0
             F[1]=np.sin(phi)*F0
             F[2]=-el.K*q[2]
             F=self.transform_Force_Out_Of_Element_Frame(F,el)
             return F
         elif el.type=='LENS':
-            coords = self.transform_To_Element_Frame(q, el) #x and y plane only
+            coordsxy = self.transform_To_Element_Frame(q[:-1], el) #x and y plane only
             #note: for the perfect lens, in it's frame, there is never force in the x direction
-            F[1] =-el.K*coords[1]
+            F[1] =-el.K*coordsxy[1]
             F[2] =-el.K*q[2]
             F = self.transform_Force_Out_Of_Element_Frame(F, el)
             return F
@@ -183,27 +183,28 @@ class particleTracer:
         F[1]=Fx*np.sin(rot)+Fy*np.cos(rot)
         return F
 
-    def transform_To_Element_Frame(self,point,el):
+    def transform_To_Element_Frame(self,q,el):
         #get the coordinates of the particle in the element's frame where the input is facing towards the 'west'.
         #note that this would mean that theta is 0 deg. Also, this is only in the xy plane
-        point=point[:-1].copy() #only use x and y. CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!!
-        newPoint = np.empty(2)
+        qNew=q.copy() #only use x and y. CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
         if el.type=='DRIFT' or el.type=='LENS':
-            point[0]=point[0]-el.xb
-            point[1]=point[1]-el.yb
+            qNew[0]=qNew[0]-el.xb
+            qNew[1]=qNew[1]-el.yb
             rot = -el.theta
             #rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
-            #point=rotMat@point[:,np.newaxis]
+            #qNew=rotMat@qNew[:,np.newaxis]
         elif el.type=='BENDER':
             rot=-(el.theta-el.ang+np.pi/2)
-            point=point-el.r0
-            #newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
-            #newPoint[0] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
+            qNew=qNew-el.r0
+            #newPoint[0] = qNew[0] * np.cos(rot) + qNew[1] * (-np.sin(rot))
+            #newPoint[0] = qNew[0] * np.sin(rot) + qNew[1] * (np.cos(rot))
             #rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
-            #point=rotMat@point[:,np.newaxis]
-        newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
-        newPoint[1] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
-        return newPoint
+            #qNew=rotMat@qNew[:,np.newaxis]
+        qNewx=qNew[0]
+        qNewy = qNew[1]
+        qNew[0] = qNewx*np.cos(rot)+qNewy*(-np.sin(rot))
+        qNew[1] = qNewx*np.sin(rot)+qNewy*(np.cos(rot))
+        return qNew
 
     def transform_To_Element_Frame1(self, Point, el):
         # get the coordinates of the particle in the element's frame where the input is facing towards the 'west'.
