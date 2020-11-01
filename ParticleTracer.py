@@ -46,7 +46,7 @@ class Element:
             self.rp=args[2]
             self.ang=args[3]
             self.ap=args[4]
-            self.L=2*np.pi*self.rb
+            self.L=self.ang*self.rb
             self.K=(2*self.Bp*self.PT.u0_Actual/self.rp**2)/self.PT.m_Actual #reduced force
 class particleTracer:
     def __init__(self):
@@ -61,6 +61,10 @@ class particleTracer:
         self.q=np.zeros(3) #contains the particles current position coordinates
         self.p=np.zeros(3) #contains the particles current momentum. m is set to 1 so this is the same
             #as velocity
+        self.qoList=[] #coordinates in orbit frame
+
+        self.cumulativeLength=0 #cumulative length of previous elements. This accounts for revolutions, it doesn't reset each
+            #time
         self.h=None
         self.revs=None
         self.particleOutside=False #if the particle has stepped outside the chamber
@@ -74,7 +78,8 @@ class particleTracer:
             #in
         self.v0=None #the particles total speed. TODO: MAKE CHANGE WITH HARD EDGE MODEL
 
-        self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving #TODO: MAKE THIS WORK
+        self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
+            #This won't always be on #TODO: MAKE THIS WORK
     def add_Lens(self,Bp,rp,L,ap=None):
         if ap is None:
             ap=.9*rp
@@ -117,6 +122,7 @@ class particleTracer:
             qList.append(self.q)
             pList.append(self.p)
             self.time_Step()
+            self.update_Energy_List()
             if self.particleOutside==True:
                 loop=False
             i+=1
@@ -124,27 +130,69 @@ class particleTracer:
                 loop=False
         qArr=np.asarray(qList)
         pArr=np.asarray(pList)
-        return qArr,pArr
+        qoArr=np.asarray(self.qoList)
+        return qArr,pArr,qoArr
     def time_Step(self):
         q=self.q #q old or q sub n
         p=self.p #p old or p sub n
-        a=self.force(q)/self.m #acceleration old or acceleration sub n
-        q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
-        if self.is_Particle_Inside_Chamber(q_n)==False:
+        F=self.force(q)
+        if F is None: #force returns None if particle is outside
             self.particleOutside=True
             return
-        a_n=self.force(q_n)/self.m #acceleration new or acceleration sub n+1
+        a = F / self.m  # acceleration old or acceleration sub n
+        q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
+        F_n=self.force(q_n)
+        if F_n is None: #force returns None if particle is outside
+            self.particleOutside=True
+            return
+        a_n = F_n / self.m  # acceleration new or acceleration sub n+1
         p_n=p+self.m*.5*(a+a_n)*self.h
         self.q=q_n
         self.p=p_n
-    def is_Particle_Inside_Chamber(self,q):
-        return True
+        self.update_Coords_In_Orbit_Frame(self.q)
+    def update_Coords_In_Orbit_Frame(self,q):
+        #need to rotate coordinate system to align with the element
+        coordsxy = self.transform_To_Element_Frame(q[:-1], self.currentEl)
+        if self.currentEl.type=='LENS' or self.currentEl.type=='DRIFT':
+            qos=self.cumulativeLength+coordsxy[0]
+            qox=coordsxy[1]
+        elif self.currentEl.type=='BENDER':
+            phi=self.currentEl.ang-np.arctan2(coordsxy[1],coordsxy[0])
+            ds=self.currentEl.rb*phi
+            qos=self.cumulativeLength+ds
+            qox=np.sqrt(coordsxy[0]**2+coordsxy[1]**2)-self.currentEl.rb
+        qoy = q[2]
+
+        self.qoList.append(np.asarray([qos, qox, qoy]))
+
+
     def loop_Check(self):
         z=self.q[2]
         if z>2:
             return False
         else:
             return True
+    def update_Energy_List(self):
+        PE=None
+        KE=None
+        if self.currentEl.type=='LENS':
+            qxy=self.transform_To_Element_Frame(self.q[:-1],self.currentEl)
+            r=np.sqrt(qxy[1]**2+self.q[2]**2)
+            B=self.currentEl.Bp*r**2/self.currentEl.rp**2
+            PE=self.u0*B
+            KE=np.sum(self.p**2)/(2*self.m)
+        elif self.currentEl.type=='DRIFT':
+            PE=0
+            KE=np.sum(self.p**2)/(2*self.m)
+        elif self.currentEl.type=='BENDER':
+            qxy=self.transform_To_Element_Frame(self.q[:-1],self.currentEl) #only x and y coords
+            r=np.sqrt(qxy[0]**2+qxy[1]**2) -self.currentEl.rb
+            B=self.currentEl.Bp*r**2/self.currentEl.rp**2
+            PE=self.u0*B
+            KE=np.sum(self.p**2)/(2*self.m)
+        #print(self.currentEl.type,PE+KE,B)
+        self.EList.append(PE + KE)
+
     def force(self,q):
         el=self.which_Element_Wrapper(q)
         if el is None: #the particle is outside the lattice!
@@ -206,28 +254,6 @@ class particleTracer:
         qNew[1] = qNewx*np.sin(rot)+qNewy*(np.cos(rot))
         return qNew
 
-    def transform_To_Element_Frame1(self, Point, el):
-        # get the coordinates of the particle in the element's frame where the input is facing towards the 'west'.
-        # note that this would mean that theta is 0 deg. Also, this is only in the xy plane
-        point = Point[:-1].copy()  # only use x and y. CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT OUTSIDE OF METHOD!!!!
-        newPoint = np.empty(2)
-        if el.type == 'DRIFT' or el.type == 'LENS':
-            point[0] = point[0] - el.xb
-            point[1] = point[1] - el.yb
-            rot = -el.theta
-            # rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
-            # point=rotMat@point[:,np.newaxis]
-        elif el.type == 'BENDER':
-            rot = -(el.theta - el.ang + np.pi / 2)
-            point = point - el.r0
-            # newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
-            # newPoint[0] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
-            # rotMat=np.asarray([[np.cos(rot),-np.sin(rot)],[np.sin(rot),np.cos(rot)]])
-            # point=rotMat@point[:,np.newaxis]
-        newPoint[0] = point[0] * np.cos(rot) + point[1] * (-np.sin(rot))
-        newPoint[1] = point[0] * np.sin(rot) + point[1] * (np.cos(rot))
-        return newPoint
-
     def which_Element_Wrapper(self,q):
         #this is used to determine wether it's worthwile to call which_Element which is kind of expensive to call
         dist=np.sqrt((self.q[0]-self.currentEl.xe)**2+(self.q[1]-self.currentEl.ye)**2) #distance to end of element
@@ -238,6 +264,7 @@ class particleTracer:
             el=self.which_Element(q)
             if el is not self.currentEl:
                 self.currentElDeltaT=0
+                self.cumulativeLength+=self.currentEl.L
                 self.currentEl=el
             return el
     def which_Element(self,q):
@@ -347,17 +374,23 @@ test.add_Bender(2,1,.03,np.pi)
 test.add_Lens(1,.02,1)
 test.add_Bender(2,1,.03,np.pi)
 test.end_Lattice()
-q0=np.asarray([-.01,.00,0])
+q0=np.asarray([-.01,0.01,0])
 v0=np.asarray([-200,0,0])
 #def testRun():
 #    test.trace(q0, v0, 5300, 10e-6)
 #testRun()
 #cProfile.run('testRun()')
 t=time.time()
-q,p=test.trace(q0,v0,5300,1e-5)
-print(time.time()-t)
+steps=2000
+q,p,qo=test.trace(q0,v0,steps,1e-4)
+#print(time.time()-t)
 test.show_Lattice(particleCoords=q[-1])
-plt.plot(q[:,0],q[:,1])
+tArr=np.linspace(0,steps*test.h,num=steps)
+#plt.plot(tArr,test.EList)
+#plt.plot(tArr,test.EList)
+plt.plot(qo[:,0],qo[:,1])
+EArr=np.asarray(test.EList)
+#print(100*(np.max(EArr)-np.min(EArr))/EArr[0])
 #print(q[-1])
 plt.show()
 
