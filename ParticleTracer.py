@@ -71,6 +71,8 @@ class particleTracer:
 
         self.cumulativeLength=0 #cumulative length of previous elements. This accounts for revolutions, it doesn't reset each
             #time
+        self.deltaT=0 #time spent in current element by particle. Resets to zero after entering each element
+        self.T=0 #total time elapsed
         self.h=None #current step size. This changes near boundaries
         self.h0=None # initial step size.
         self.particleOutside=False #if the particle has stepped outside the chamber
@@ -80,6 +82,7 @@ class particleTracer:
 
         self.currentEl=None #to keep track of the element the particle is currently in
         self.elHasChanged=False # to record if the particle has changed to another element
+        self.timeAdapted=False #wether the time step has been shrunk because nearness to a new element
 
         self.v0=None #the particles total speed. TODO: MAKE CHANGE WITH HARD EDGE MODEL
         self.v0Nominal=200 #Design particle speed
@@ -89,7 +92,7 @@ class particleTracer:
         self.TList=[] #list of kinetic energy
         self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
             #This won't always be on
-    def add_Lens(self,Bp,rp,L,ap=None):
+    def add_Lens(self,L,Bp,rp,ap=None):
         if ap is None:
             ap=.9*rp
         args=[Bp,rp,L,ap]
@@ -104,7 +107,7 @@ class particleTracer:
         el=Element(args,'DRIFT',self)
         el.index = len(self.lattice)
         self.lattice.append(el)
-    def add_Bender(self,Bp,rb,rp,ang,ap=None):
+    def add_Bender(self,ang,rb,Bp,rp,ap=None):
         if ap is None:
             ap=.9*rp
         args=[Bp,rb,rp,ang,ap]
@@ -134,52 +137,68 @@ class particleTracer:
             raise Exception('Particle\'s initial position is outside vacuum' )
         self.v0=np.sqrt(np.sum(vi**2))
         self.h=h
+        self.h0=self.h
         self.E0=sum(self.get_Energies())
         self.EList.append(self.E0)
+        self.deltaT=self.set_Initial_T()
+
         loop=True
-        iMax=int(T0/h)
         i=0
         while(loop==True):
             self.qList.append(self.q)
             self.pList.append(self.p)
+
             self.time_Step()
             i += 1
-            if self.particleOutside==True or i==iMax:
+            if self.particleOutside==True or self.T>T0:
                 loop=False
                 break
             temp=self.get_Energies() #sum the potential and kinetic energy
             self.VList.append(temp[0])
             self.TList.append(temp[1])
             self.EList.append(sum(temp))
+            self.T+=self.h
         qArr=np.asarray(self.qList)
         pArr=np.asarray(self.pList)
         qoArr=np.asarray(self.qoList)
 
         return qArr,pArr,qoArr,self.particleOutside
+    def set_Initial_T(self):
+        return 0
     def time_Step(self):
         q=self.q #q old or q sub n
         p=self.p #p old or p sub n
         F=self.force(q)
+
         #if F is None: #force returns None if particle is outside. Only does this when near the boundary of an element
         #    #though
         #    self.particleOutside=True
         #    return
         a = F / self.m  # acceleration old or acceleration sub n
+
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         if self.is_Particle_Inside(q_n)==False:
             return
-        F_n=self.force(q_n)
+
+        F_n,coordsxy=self.force(q_n,returnCoords=True)
+
         #if F_n is None: #force returns None if particle is outside, but not always!
         #    self.particleOutside=True
         #    return
+
         a_n = F_n / self.m  # acceleration new or acceleration sub n+1
         p_n=p+self.m*.5*(a+a_n)*self.h
         self.q=q_n
         self.p=p_n
         self.update_Coords_In_Orbit_Frame(self.q) #convert coordinates in lab frame to orbit frame and save
+        self.deltaT+=self.h #update time spent in element. This resets to zero everytime element changes
+        self.adapt_Time_Step(coordsxy) #adapt time step
         if self.elHasChanged==True:
-            self.adjust_Energy()
             self.elHasChanged=False
+            self.timeAdapted=False
+            self.h=self.h0
+            self.adjust_Energy()
+
     def is_Particle_Inside(self,q):
         #this could be done with which_Element, but this is faster
         if np.abs(q[-1])>self.currentEl.ap:
@@ -241,7 +260,7 @@ class particleTracer:
 
 
 
-    def force(self,q):
+    def force(self,q,returnCoords=False):
         el,coordsxy=self.which_Element_Wrapper(q,returnCoords=True) #find element the particle is in, and the coords in
             #the element frame as well
         if el is None: #the particle is outside the lattice! Note that this isn't a reliable way to determine this because
@@ -249,9 +268,8 @@ class particleTracer:
             return None
         F = np.zeros(3) #force vector starts out as zero
         if el.type == 'DRIFT':
-            return F #empty force vector
+            pass
         elif el.type == 'BENDER':
-
             r=np.sqrt(coordsxy[0]**2+coordsxy[1]**2) #radius in x y frame
             F0=-el.K*(r-el.rb) #force in x y plane
             phi=np.arctan2(coordsxy[1],coordsxy[0])
@@ -259,15 +277,18 @@ class particleTracer:
             F[1]=np.sin(phi)*F0
             F[2]=-el.K*q[2]
             F=self.transform_Force_Out_Of_Element_Frame(F,el)
-            return F
         elif el.type=='LENS':
             #note: for the perfect lens, in it's frame, there is never force in the x direction
             F[1] =-el.K*coordsxy[1]
             F[2] =-el.K*q[2]
             F = self.transform_Force_Out_Of_Element_Frame(F, el)
-            return F
         else:
             sys.exit()
+
+        if returnCoords==True:
+            return F,coordsxy
+        else:
+            return F
     def transform_Force_Out_Of_Element_Frame(self,F,el):
         #rotation matrix is 3x3 to account for z axis
         if el.type=='BENDER':
@@ -306,27 +327,40 @@ class particleTracer:
         elif el.type=='LENS' or el.type=='DRFIT':
             return el.L-coordsxy[0]
         pass
-
     def which_Element_Wrapper(self,q,returnCoords=False):
         #this is used to determine wether it's worthwile to call which_Element which is kind of expensive to call
-        dist=np.sqrt((self.q[0]-self.currentEl.xe)**2+(self.q[1]-self.currentEl.ye)**2) #distance to end of element
-        coordsxy = self.transform_To_Element_Frame(q[:-1], self.currentEl)  # only x and y coords
-        checkDist=self.currentEl.ap*2
-
-        if dist>checkDist: #if particle is far enough away that it isn't worth checking
+        #dist=np.sqrt((self.q[0]-self.currentEl.xe)**2+(self.q[1]-self.currentEl.ye)**2) #distance to end of element
+        T_el=self.currentEl.L/self.v0 #total time to traverse element assuming all speed is along length. This won't
+            #work if the particles velocity increases with time! TODO: ROBUST METHOD WITH PARTICLES CURRENT SPEED
+        if self.deltaT<T_el-self.h*10: #if particle is far enough away that it isn't worth checking
+            coordsxy = self.transform_To_Element_Frame(q[:-1], self.currentEl)  # only x and y coords
             el=self.currentEl
         else: #if close enough, try more precise check
             el=self.which_Element(q)
-
-            if el is not self.currentEl:
-                self.cumulativeLength+=self.currentEl.L
-                self.currentEl=el
+            if el is not self.currentEl: #if element has changed
+                #the order here is very important!
+                self.cumulativeLength += self.currentEl.L  #1, length up to the beginning of each element
+                self.currentEl = el #2, update element
+                self.deltaT = 0
                 self.elHasChanged=True #the particle is now in a new element
-                coordsxy = self.transform_To_Element_Frame(q[:-1], el)  # only x and y coords
+
+            coordsxy = self.transform_To_Element_Frame(q[:-1], self.currentEl)  # only x and y coords
+
         if returnCoords==True:
             return el, coordsxy
         else:
             return el
+    def adapt_Time_Step(self,coordsxy):
+        if self.timeAdapted==False:
+            T_el=self.currentEl.L/self.v0 #total time to traverse element assuming all speed is along length. This won't
+                #work if the particles velocity increases with time! TODO: ROBUST METHOD WITH PARTICLES CURRENT SPEED
+            if self.deltaT<T_el-self.h*10: #if particle is far enough away that it isn't worth checking
+                pass
+            else:
+                deltas=self.distance_From_End(coordsxy,self.currentEl)
+                if deltas<1.5*self.v0*self.h0: #if very near, decrease time step
+                    self.h=self.h0/10
+                    self.timeAdapted=True
 
 
     def which_Element(self,q):
@@ -341,12 +375,14 @@ class particleTracer:
         return None #if the particle is inside no elements
     def adjust_Energy(self):
         #when the particel traverses an element boundary, energy needs to be conserved
+
         el=self.currentEl
         E=sum(self.get_Energies())
         deltaE=E-self.EList[-1]
         #Basically solve .5*m*(v+dv)dot(v+dv)+PE+deltaPE=E0 then add dv to v
         ndotv= el.nb[0]*self.p[0]/self.m+el.nb[1]*self.p[1]/self.m#the normal to the element inlet dotted into the particle velocity
         deltav=-(np.sqrt(ndotv**2-2*deltaE/self.m)+ndotv)
+        #sys.exit()
         self.p[0]+=deltav*el.nb[0]*self.m
         self.p[1]+=deltav*el.nb[1]*self.m
     def end_Lattice(self):
@@ -467,28 +503,17 @@ class particleTracer:
         plt.show()
 
 test=particleTracer()
-test.add_Lens(1,.02,1)
-test.add_Bender(2,1,.03,np.pi)
-test.add_Lens(1,.02,1)
-test.add_Bender(2,1,.03,np.pi)
+#test.add_Lens(.1,1,.02)
+test.add_Drift(.1)
+test.add_Bender(np.pi,1,1,.03)
+test.add_Drift(.1)
+#test.add_Lens(.1,1,.02)
+test.add_Bender(np.pi,1,1,.03)
 test.end_Lattice()
-q0=np.asarray([-.01,1e-3,0])
+q0=np.asarray([-1e-8,2e-3,0])
 v0=np.asarray([-200,0,0])
-###def testRun():
-###    test.trace(q0, v0, 5300, 10e-6)
-###testRun()
-###cProfile.run('testRun()')
-###t=time.time()
-##steps=5000
-q,p,qo,particleOutside=test.trace(q0,v0,1e-5,.0051)
+
+q,p,qo,particleOutside=test.trace(q0,v0,1e-5,.1)
+
 plt.plot(qo[:,0],qo[:,1])
-plt.grid()
-#plt.show()
-#plt.plot(qo[:,0],test.EList)
-#plt.show()
-test.show_Lattice(particleCoords=q[-1])
-#plt.plot(qo[:,0],np.sqrt(np.sum(p**2,axis=1)))
-#plt.grid()
-#plt.show()
-
-
+plt.show()

@@ -272,15 +272,15 @@ class PeriodicLatticeSolver:
         el.index = self.numElements - 1
         self.lensIndices.append(el.index)
 
-    def add_Bend(self, angle, r0,Bp,S=None):
-        #add a bending magnet. At this point it's some kind of dipole+quadrupole magnet. The radius of curvature
-        #is decided by bending power
-        #Ang: angle of bending. Use None to set it later with a constraint.
-        #alpha: dipole term
-        #beta: quadrupole terms
+    def add_Bend(self, angle, r0,Bp,rp=None,S=None):
+        #add a bending magnet. A hexapole magnet
+        #angle: bending angle, radians
+        #r0: bending radius, m
+        #Bp: field strength at poles, T
+        #rp: Bore radius of hexapole. If None, the bore radius that maximizes capture is calculated
         self.numElements += 1
         self.benderIndices.append(self.numElements-1)
-        args = self.unpack_VariableObjects([angle,r0,Bp,S])
+        args = self.unpack_VariableObjects([angle,r0,Bp,rp,S])
         el = Element(self,'BEND',args)
         self.lattice.append(el)
         el.index = self.numElements - 1
@@ -289,7 +289,7 @@ class PeriodicLatticeSolver:
         #add a drift section.
         #L: length of drift region
         self.numElements += 1
-        if L==None:
+        if L is None:
             el = Element(self, 'DRIFT',[L])
         else:
             args = self.unpack_VariableObjects([L])
@@ -416,14 +416,19 @@ class PeriodicLatticeSolver:
                         el.S=self.trackLength-el.Length/2
 
             if el.elType=='DRIFT': #-----------adjust the drift lengths
+
+
                 if el.index==self.numElements-1: #if the drift is the last element
-                        if self.lattice[-2].elType=='BEND': #if the drift element is the only element in that track
-                            el.Length=self.trackLength
-                            el.S=self.trackLength/2
-                        else:
-                            edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
-                            el.Length=self.trackLength-edgeL
-                            el.S = self.trackLength - el.Length / 2
+                    if self.lattice[-2].elType=='BEND': #if the drift element is the only element in that track
+                        if el.Length is not None:
+                            print('User set drift length is being changed!!!!')
+                        el.Length=self.trackLength
+                        el.S=self.trackLength/2
+                    else:
+                        edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
+                        el.Length=self.trackLength-edgeL
+                        el.S = self.trackLength - el.Length / 2
+
                 elif el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1: #edge case for drift right
                             # after bend. The lattice starts with first element as bend so there are two cases here for now
                     if self.lattice[el.index+1].elType=='BEND': #the drift is sandwiched between two bends
@@ -453,6 +458,7 @@ class PeriodicLatticeSolver:
                         self.lattice[el.index+1].S=self.trackLength-self.lattice[el.index+2].Length-self.lattice[el.index+1].Length/2
                         el.Length=(self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2)-(self.lattice[el.index-1].S-self.lattice[el.index-1].Length/2)
                         el.S=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2+self.lattice[el.index].Length/2
+
         for el in self.lattice:
             if type(el.Length)==float:
                 if el.Length<0:
@@ -499,6 +505,7 @@ class PeriodicLatticeSolver:
         if self.catchErrors==True:
             self._catch_Errors()
         self._update_Element_Parameters_And_Functions()
+
         self.set_apetures()
 
 
@@ -601,10 +608,10 @@ class PeriodicLatticeSolver:
                 #TODO: Figure out how to deal with sign ambiguity...
                 return (M11-M22)/np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2)
         if axis=='y':
-            M11 = MArr[:, 2, 2]
-            M12 = MArr[:, 2, 3]
-            M21 = MArr[:, 3, 2]
-            M22 = MArr[:, 3, 3]
+            M11 = MArr[:, 3, 3]
+            M12 = MArr[:, 3, 4]
+            M21 = MArr[:, 4, 3]
+            M22 = MArr[:, 4, 4]
             if funcName=='BETA':
                 return np.abs(2 * M12 / np.sqrt(2 - M11 ** 2 - 2 * M12 * M21 - M22 ** 2))
             if funcName=='ALPHA': #DONT BE STUPID BILLY. Alpha=-deriv(beta)/2.
@@ -685,7 +692,6 @@ class PeriodicLatticeSolver:
                zArr = np.linspace(0, totalLengthList[0], num=numPoints)  # different rule for first element
            else:
                zArr = np.linspace(totalLengthList[elIndex - 1], totalLengthList[elIndex], num=numPoints)
-
        MTranList = self.make_MTrans_List(zArr.shape[0], args)
        MArr = np.asarray(MTranList)
        if axis == 'both':
@@ -776,5 +782,4 @@ class PeriodicLatticeSolver:
                 z0=z
                 temp.append(M)
             j+=1
-
         return temp

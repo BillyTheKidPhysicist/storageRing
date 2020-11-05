@@ -39,7 +39,7 @@ class InteractivePlot:
         self.elNameTextListy = [] #list of element names (matplotlib text objects) in plot of y plane
         self.lineListx=[] #list of matplotlib line objects in plot of x plane. Lines are used to separate elements
         self.lineListy = [] #list of matplotlib line objects in plot of y plane. Lines are used to separate elements
-        self.stabilityTextList=[] #A list of the trace of transfer matrix. trace in [x plane, y plane]
+        self.traceList=[] #A list of the trace of transfer matrix. trace in [x plane, y plane]
         self.injectorText=None #to hold the text object that displays the injector parameters
         self.shaperText=None #to hold text object that displays radius of shaping magnet
         self.numPoints=250 #number of points to use along an axis in model
@@ -152,8 +152,8 @@ class InteractivePlot:
 
         #put the current value of the trace of the transfer matrix in the top left of both plots
         temp='abs(Trace) :'
-        self.stabilityTextList.append(self.axBeta[0].text(0,1.05,temp+str(np.round(self.tracexAbs,2)),transform=self.axBeta[0].transAxes))
-        self.stabilityTextList.append(self.axBeta[1].text(0,1.05,temp+str(np.round(self.traceyAbs,2)),transform=self.axBeta[1].transAxes))
+        self.traceList.append(self.axBeta[0].text(0,1.05,temp+str(np.round(self.tracexAbs,2)),transform=self.axBeta[0].transAxes))
+        self.traceList.append(self.axBeta[1].text(0,1.05,temp+str(np.round(self.traceyAbs,2)),transform=self.axBeta[1].transAxes))
         #---------------------
 
         #place resonance factor text on the top right of each plot. The factors are represented as percents here
@@ -215,6 +215,7 @@ class InteractivePlot:
                             #on the range of the slider. This behaviour only occurs once for each slider before mainloop.
                             #program will crash without this.
 
+
             self.update_q_And_Length_Lists(sliderID,val) #fill self.q, the list that holds current slider values.
             self.make_Plot_Data(self.q,sliderID=sliderID) #generate data to be plotted by compute self.beta, self.eta etc.
 
@@ -265,8 +266,8 @@ class InteractivePlot:
 
             #update the trace text at the top left of the plot
             temp = 'abs(Trace) :'
-            self.stabilityTextList[0].set_text(temp+str(np.round(self.tracexAbs,2))) #update trace value
-            self.stabilityTextList[1].set_text(temp+str(np.round(self.traceyAbs,2))) #update trace value
+            self.traceList[0].set_text(temp+str(np.round(self.tracexAbs,2))) #update trace value
+            self.traceList[1].set_text(temp+str(np.round(self.traceyAbs,2))) #update trace value
 
             temp = 'Emittance: '
             textx = temp + str(np.round(self.PLS.emittancex, 5))
@@ -288,12 +289,8 @@ class InteractivePlot:
     def make_Plot_Data(self,args,initial=False,sliderID=None):
         #this generates points on the z axis and the corresponding envelope/beta/eta values. It also find which solutions are
         #stable or not and only return stable ones, then labels them. It also finds the tune
-        if initial==True: #if this function is being called to make the inital plot. if it is being called, then no
-                        #sliderID is going to be provided, so a Type needs to be made
-            Type='NA'
-        else: #if not initial==true, then this method has been called because the slider has been moved
-            Type=self.PLS.VOList[sliderID].type
-        if initial==True or Type=='both' or Type=='PERIODIC': #only bother computing beta and eta if the variable changed
+
+        if True: #only bother computing beta and eta if the variable changed
                                 #by the slider affects them
             M=self.PLS.MTotFunc(*args) #transfer matrix of the entire lattice.
             self.tracexAbs=np.abs(np.trace(M[:2,:2,])) #absolute value of the trace for the x dimension. Stable if less than 2
@@ -306,10 +303,8 @@ class InteractivePlot:
                         #beta function and the z values they occur at
                 self.eta=self.PLS.compute_Eta_Of_Z_Array(args,zArr=self.z,returZarr=False)
                 self.envEta=self.eta*self.PLS.delta #dispersion offset from achromatic particles
-                self.compute_Emittance_And_Update_Injector()
                 self.envBeta[0]=np.sqrt(self.PLS.emittancex*self.beta[0]) #compute the beta oscillation envelope for x dimension
                 self.envBeta[1]=np.sqrt(self.PLS.emittancey*self.beta[1]) #compute the beta oscillation envelope for y dimension
-                print(np.sum(self.envBeta[0]**2+self.envBeta[1]**2))
                 self.tunex=np.trapz(np.power(self.beta[0],-1),x=self.z)/(2*np.pi) #compute the tune in the x direction
                 self.tuney=np.trapz(np.power(self.beta[1],-1),x=self.z)/(2*np.pi) #compute the tune in the x direction
                 self.resonanceFactorList[0]=self.PLS.compute_Resonance_Factor(self.tunex,self.resonanceNumArray) #fill
@@ -322,7 +317,6 @@ class InteractivePlot:
                 self.beta[0]=self.PLS.compute_Beta_Of_Z_Array(args,zArr=self.z,returZarr=False,axis='x') #compute beta array
                 self.eta=self.PLS.compute_Eta_Of_Z_Array(args,zArr=self.z,returZarr=False)
                 self.envEta=self.eta*self.PLS.delta #dispersion offset from achromatic particles
-                self.compute_Emittance_And_Update_Injector()
                 self.envBeta[0]=np.sqrt(self.PLS.emittancex*self.beta[0])
                 self.tunex=np.trapz(np.power(self.beta[0],-1),x=self.z)/(2*np.pi) #compute tune value
                 self.resonanceFactorList[0] = self.PLS.compute_Resonance_Factor(self.tunex, self.resonanceNumArray) #fill
@@ -331,7 +325,6 @@ class InteractivePlot:
                 self.stablex = False #set stability in x dimension
                 self.stabley = True #set stability in y dimension
                 self.beta[1] = self.PLS.compute_Beta_Of_Z_Array(args, zArr=self.z,returZarr=False, axis='y') #compute beta array
-                self.compute_Emittance_And_Update_Injector()
                 self.envBeta[1]=np.sqrt(self.PLS.emittancey*self.beta[1]) #compute betatron oscillation envelope
                 self.tuney=np.trapz(np.power(self.beta[1],-1),x=self.z)/(2*np.pi) #compute tune value
                 self.resonanceFactorList[1]=self.PLS.compute_Resonance_Factor(self.tuney,self.resonanceNumArray)# fill
@@ -342,12 +335,12 @@ class InteractivePlot:
                 print('unstable solution')
         #print("BENDER VACUUM TUBE RADIUS: ",np.round(self.PLS.lattice[0].rpFunc(*self.q)*1000/2,1),'mm')
 
-        if Type=='INJECTOR' or initial==True and self.PLS.combinerIndex!=None:
-            self.compute_Emittance_And_Update_Injector()
-            if self.stablex==True:
-                self.envBeta[0]=np.sqrt(self.PLS.emittancex*self.beta[0]) #compute the beta oscillation envelope for x dimension
-            if self.stabley==True:
-                self.envBeta[1]=np.sqrt(self.PLS.emittancey*self.beta[1]) #compute the beta oscillation envelope for y dimension
+        #if Type=='INJECTOR' or initial==True and self.PLS.combinerIndex!=None:
+        #    self.compute_Emittance_And_Update_Injector()
+        #    if self.stablex==True:
+        #        self.envBeta[0]=np.sqrt(self.PLS.emittancex*self.beta[0]) #compute the beta oscillation envelope for x dimension
+        #    if self.stabley==True:
+        #        self.envBeta[1]=np.sqrt(self.PLS.emittancey*self.beta[1]) #compute the beta oscillation envelope for y dimension
     def make_Zarr(self):
         #ideally this would create points in the z array that are more closely spaced in certain elements, and
         #further spaced in others to save computing time. As of now, it's not worth figuring out how to get this to work.
@@ -367,102 +360,6 @@ class InteractivePlot:
         slopey=(beta2[1]-beta1[1])/2E-3
         alpha=[-slopex/2,-slopey/2]
         return beta+alpha #combine the two lists
-
-    def compute_Emittance_And_Update_Injector(self):
-        #compute the emmittance for the x and y dimension
-        if self.PLS.combinerIndex==None: #if there is no combiner, don't worry about injecting obviously
-            return
-        elif self.stablex==True or self.stabley==True: #don't bother if there is no stability
-            injector=self.PLS.injector
-            numPoints=100
-            LoArr = np.linspace(injector.LoMin, injector.LoMax, num=numPoints)
-            LmArr = np.linspace(injector.LmMin, injector.LmMax, num=numPoints)
-            argList = np.meshgrid(LmArr,LoArr)
-            argList[0]=argList[0].flatten()
-            argList[1] = argList[1].flatten()
-            argArr = np.asarray(argList)
-            LiArr = injector.LiFunc(*argList)
-
-            '''
-            LiArr=injector.LiFunc(LmArr,.1)
-            temp=LiArr[LiArr>1.2]
-            print(temp)
-            temp = temp[temp < 1.9]
-            print(temp)
-
-            print(injector.rpFunc(LmArr[np.logical_and(LiArr > injector.LiMin, LiArr < injector.LiMax)][0],.1))
-            plt.close('all')
-
-            LiArr[np.abs(LiArr)>2]=0
-            plt.plot(LmArr,LiArr)
-            plt.show()
-
-
-            sys.exit()
-            '''
-            trimIndices = np.logical_and(LiArr > injector.LiMin, LiArr < injector.LiMax)
-            if trimIndices.sum()==0:
-                raise Exception('NO CONFIGURATION FOUND FOR INJECTOR THAT SATISFIES CONTRAINTS')
-            argArr = argArr[:, trimIndices]
-            LiArr = LiArr[trimIndices]
-
-            LtArr = np.sum(argArr, axis=0) + LiArr
-            trimIndices = np.logical_and(LtArr < injector.LtMax,LtArr>injector.LtMin)
-            if trimIndices.sum()==0:
-                raise Exception('NO CONFIGURATION FOUND FOR INJECTOR THAT SATISFIES CONTRAINTS')
-
-            argArr = argArr[:, trimIndices]
-            LiArr = LiArr[trimIndices]
-            LtArr=LtArr[trimIndices]
-            betax,betay,alphax,alphay=self.find_Beta_And_Alpha_Injection()
-            epsxArr = injector.epsFunc(betax,alphax, *argArr)
-            epsyArr = injector.epsFunc(betay,alphay, *argArr)
-            epsArr=np.sqrt(epsxArr**2+epsyArr**2) #minimize the quadrature of them
-            minIndex = np.argmin(epsArr)
-            self.PLS.emittancex = epsxArr[minIndex]
-            self.PLS.emittancey = epsyArr[minIndex]
-            Li=LiArr[minIndex]
-            Lm,Lo=argArr[:,minIndex]
-            injector.LiOp=Li
-            injector.LmOp=Lm
-            injector.LoOp=Lo
-            A=injector.MFunc(Lm,Lo)[0,0]
-            #print("Spot size: ",np.round(np.abs(A*injector.xi*1000),2),'mm')
-            #print(injector.epsFunc(betax,alphax, *[Lm,Lo]))
-            #print(Lo,Lm,Li)
-
-
-            #if self.stablex==True:
-            #    beta=self.find_Beta_Injection('x')
-            #    epsArr = injector.epsFunc(beta,*argArr)
-            #    minIndex = np.argmin(epsArr)
-            #    print('x',minIndex,argArr[:,minIndex],LiArr[minIndex],injector.rpFunc(*argArr[:,minIndex]),epsArr[minIndex])
-            #    self.PLS.emittancex=epsArr[minIndex]
-            #if self.stabley==True:
-            #    beta=self.find_Beta_Injection('y')
-            #    epsArr = injector.epsFunc(beta,*argArr)
-            #    minIndex = np.argmin(epsArr)
-            #    print('y',minIndex,argArr[:,minIndex],LiArr[minIndex],injector.rpFunc(*argArr[:,minIndex]),epsArr[minIndex])
-            #    self.PLS.emittancey = epsArr[minIndex]
-
-
-
-        #xi, xdi = self.PLS.injector.compute_Xf_Xdf_RMS(*self.q)
-        #print("Injector image distance is", np.round(self.PLS.injector.LiFunc(*self.q)*100,1),'cm')
-        #xi,xdi=self.PLS.injector.compute_Xf_Xdf_RMS(*self.q)
-        #dzi=self.lengthList[self.PLS.combinerIndex]/self.totalLengthList[-1] #length of combiner element divided by total
-        #        #lattice length
-        #zi=self.totalLengthList[self.PLS.combinerIndex-1]/self.totalLengthList[-1] #length up to beginning of combiner,
-        #        #divided by total lattice length
-        #numPointsComb=int(self.numPoints*dzi) #number of points in combiner
-        #indexComb=int(zi*self.numPoints) #first index of zArr inside combiner
-        #if self.stablex==True: #only bother computing emittance for stable orbits
-        #    betax = np.min(self.beta[0][indexComb:indexComb + numPointsComb]) #find the injection point, which is assumed
-        #            #to be a point of minimum beta
-        #    self.PLS.emittancex=(xi**2+(betax*xdi)**2)/betax
-        #if self.stabley==True:
-        #    betay = np.min(self.beta[1][indexComb:indexComb + numPointsComb]) #see betax above
-        #    self.PLS.emittancey = (xi ** 2 + (betay * xdi) ** 2)/betay
 
 
 
@@ -499,6 +396,7 @@ class InteractivePlot:
         self.axEta.set_xlim(0, self.z[-1])
 
     def launch(self):
+        print('launching')
         self.initial_Plot()
         self.master.mainloop()
 
@@ -510,32 +408,32 @@ class InteractivePlot:
 
 
 PLS = PeriodicLatticeSolver(200, .02, axis='both', catchErrors=False)
-PLS.add_Injector(.45,.002,10/200)
-PLS.set_Track_Length(1)
-L1 = PLS.Variable('L1', varMin=.01, varMax=.3,varInit=.3)
-L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.3)
-L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
+
+L1 = PLS.Variable('L1', varMin=.01, varMax=.5,varInit=.17)
+PLS.set_Track_Length(L1)
+#L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.1)
+#L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
 #L4= PLS.Variable('L4', varMin=.01, varMax=.3)
 
-Bp1 = PLS.Variable('Bp1', varMin=.01, varMax=.45,varInit=.387)
-Bp2 = PLS.Variable('Bp2', varMin=.01, varMax=.45,varInit=.1068)
-Bp3 = PLS.Variable('Bp3', varMin=.01, varMax=.01)
+Bp1 = PLS.Variable('Bp1', varMin=.01, varMax=2,varInit=1)
+Bp2 = PLS.Variable('Bp2', varMin=.01, varMax=2,varInit=1)
+#Bp3 = PLS.Variable('Bp3', varMin=.01, varMax=.01)
 #Bp4 = PLS.Variable('Bp4', varMin=.01, varMax=.45)
 
 
 PLS.begin_Lattice()
 
-PLS.add_Bend(np.pi, 1, .45)
-PLS.add_Lens(L1, Bp1, .025)
+PLS.add_Bend(np.pi, 1, 1,rp=.03)
+#PLS.add_Lens(L1, Bp1, .02)
 PLS.add_Drift()
-PLS.add_Combiner(S=.5)
+#PLS.add_Combiner(S=.5)
+#PLS.add_Drift()
+#PLS.add_Lens(L2, Bp2, .025)
+PLS.add_Bend(np.pi, 1, 1,rp=.03)
 PLS.add_Drift()
-PLS.add_Lens(L2, Bp2, .025)
-PLS.add_Bend(np.pi, 1, .45)
-PLS.add_Lens(L3, Bp3, .025)
-PLS.add_Drift()
-PLS.add_Lens(L2, Bp2, .025)
-
+#PLS.add_Lens(L2, Bp2, .02)
+#PLS.add_Drift()
+#PLS.add_Lens(L1, Bp2, .025)
 PLS.end_Lattice()
 app=InteractivePlot(PLS)
 app.launch()

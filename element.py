@@ -97,7 +97,8 @@ class Element:
             self.angle=args[0]
             self.r0 = args[1]
             self.Bp=args[2]
-            self.S=args[3]
+            self.rp=args[3]
+            self.S=args[4]
             if self.angle is not None:
                 self.Length=self.angle*self.r0
         elif self.elType==self.elTypeList[1]: #lens
@@ -122,7 +123,6 @@ class Element:
             self.riMax=args[5]
         else:
             raise Exception('INVALID element NAME PROVIDED!')
-
         #if self.velocityVar==True:
         #    self.v = sym.symbols('v', real=True, positive=True, nonzero=True)
         #else:
@@ -140,7 +140,8 @@ class Element:
             # NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
             #x component of matrix
             k0=1/self.r0
-            self.rp=self.r0*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.v ** 2)) #from the theory of what the maximum bore is
+            if self.rp is None:
+                self.rp=self.r0*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.v ** 2)) #from the theory of what the maximum bore is
             k =2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
             kappa=k0**2+k
             phi = sym.sqrt(kappa) * L
