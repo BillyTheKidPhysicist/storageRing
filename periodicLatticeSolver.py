@@ -183,8 +183,8 @@ class PeriodicLatticeSolver:
         self.trackLength=None #total track length of the lattice
         self.TL1=None #tracklength of section 1
         self.TL2=None #tracklength of section2
-        self.m = 1.16503E-26 #mass of lithium 7, SI
-        self.u0 = 9.274009E-24 #bohr magneton, SI
+        self.m = 1.1648E-26 #mass of lithium 7, SI
+        self.u0 = 9.274009994E-24 #bohr magneton, SI
         self.kb=1.38064852E-23 #boltzman constant, SI
         self.began=False #check if the lattice has begun
         self.lattice = [] #list to hold lattice magnet objects
@@ -416,8 +416,6 @@ class PeriodicLatticeSolver:
                         el.S=self.trackLength-el.Length/2
 
             if el.elType=='DRIFT': #-----------adjust the drift lengths
-
-
                 if el.index==self.numElements-1: #if the drift is the last element
                     if self.lattice[-2].elType=='BEND': #if the drift element is the only element in that track
                         if el.Length is not None:
@@ -428,7 +426,6 @@ class PeriodicLatticeSolver:
                         edgeL = self.lattice[-2].S + self.lattice[-2].Length / 2
                         el.Length=self.trackLength-edgeL
                         el.S = self.trackLength - el.Length / 2
-
                 elif el.index==self.benderIndices[0]+1 or el.index==self.benderIndices[1]+1: #edge case for drift right
                             # after bend. The lattice starts with first element as bend so there are two cases here for now
                     if self.lattice[el.index+1].elType=='BEND': #the drift is sandwiched between two bends
@@ -446,6 +443,9 @@ class PeriodicLatticeSolver:
                                 # the distance of the element edge from the beggining of the bend
                     el.Length=self.trackLength-edgeL #distance from previous element end to beginning of bend
                     el.S=self.trackLength-el.Length/2
+                elif el.index==0 and self.lattice[1].elType=='BEND': #if drift is first and only element in the first track
+                    el.Length=self.trackLength
+                    el.S=self.trackLength/2
                 else: #if drift is somewhere else
                     if self.lattice[el.index+1].S != None and self.lattice[el.index+1].Length != None: #if the next element has
                                 #definite position and length
@@ -458,7 +458,6 @@ class PeriodicLatticeSolver:
                         self.lattice[el.index+1].S=self.trackLength-self.lattice[el.index+2].Length-self.lattice[el.index+1].Length/2
                         el.Length=(self.lattice[el.index+1].S-self.lattice[el.index+1].Length/2)-(self.lattice[el.index-1].S-self.lattice[el.index-1].Length/2)
                         el.S=self.lattice[el.index-1].S+self.lattice[el.index-1].Length/2+self.lattice[el.index].Length/2
-
         for el in self.lattice:
             if type(el.Length)==float:
                 if el.Length<0:

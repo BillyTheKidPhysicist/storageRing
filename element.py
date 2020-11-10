@@ -22,7 +22,7 @@ class Element:
         self.elType = elType  # type of element, DRIFT,FOCUS,BEND,COMBINER
         self.Length =   None  # Length of element
         self.Lo=None #distance from object to beginning of the lens. only for injector
-        self.r0=None #bending radius, used in bending magnet and combiner
+        self.rb=None #bending radius, used in bending magnet and combiner
         self.Bp = None  # field strength at pole
         self.rp = None  # radius of bore, distance from center to pole face
         self.alpha=None #dipole term of multipole expansion
@@ -95,12 +95,12 @@ class Element:
         #args: arguments provided by PLS
         if self.elType==self.elTypeList[0]: #bend magnet
             self.angle=args[0]
-            self.r0 = args[1]
+            self.rb = args[1]
             self.Bp=args[2]
             self.rp=args[3]
             self.S=args[4]
             if self.angle is not None:
-                self.Length=self.angle*self.r0
+                self.Length=self.angle*self.rb
         elif self.elType==self.elTypeList[1]: #lens
             self.Length=args[0]
             self.Bp=args[1]
@@ -113,7 +113,7 @@ class Element:
             self.alpha=args[1]
             self.beta=args[2]
             self.S = args[3]
-            self.r0=args[4]
+            self.rb=args[4]
         elif self.elType==self.elTypeList[4]: #injector
             self.Length=args[0]
             self.Lo=args[1]
@@ -139,12 +139,22 @@ class Element:
             #combined function magnet with predominatly quadrupole and dipole terms
             # NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
             #x component of matrix
-            k0=1/self.r0
-            if self.rp is None:
-                self.rp=self.r0*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.v ** 2)) #from the theory of what the maximum bore is
-            k =2 * self.PLS.u0 * self.Bp / (self.PLS.m * self.v ** 2 * self.rp ** 2)
-            kappa=k0**2+k
-            phi = sym.sqrt(kappa) * L
+
+            k = 2 * self.PLS.u0 * self.Bp / (self.PLS.m * (self.v) ** 2 * self.rp ** 2)
+            #bending radius of particle's trajectory is not exactly the radius of the bender because particles right on the
+            #outside edge. also, longitudinal velocity is decreased
+
+            #rOffset= np.sqrt(self.rb**2/16+1/(2*k))-self.rb/4 #accounts for energy reduction,
+            rOffset = np.sqrt(self.rb**2/ 4 + 1/k) - self.rb / 2 #does not account
+                #for energy reduction,
+            rbActual=self.rb+rOffset
+            k0=1/rbActual**2
+            if self.rp is None: #if rp is not provided calculated what the value should be to maximize area for trapped
+                    #particles.
+                    #TODO: LOOK OVER THIS, I DOUBT IT NOW
+                self.rp=self.rb*(self.PLS.u0*self.Bp/(2*.5*self.PLS.m * self.v ** 2)) #from the theory of what the maximum bore is
+            kappa=(k+3*k0)
+            phi = sym.sqrt(kappa) * L*(rbActual/self.rb) #to account for actual trajectory of atoms
             M[0, 0] = sym.cos(phi)
             M[0, 1] = sym.sin(phi) / sym.sqrt(kappa)
             M[1, 0] = -sym.sqrt(kappa) * sym.sin(phi)
@@ -199,7 +209,7 @@ class Element:
             # NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
             #x component of matrix
             k0 = self.beta * self.PLS.u0 / (self.PLS.m * self.v ** 2)
-            self.r0 = 1 / k0
+            self.rb = 1 / k0
             kappaX = k0 ** 2
             phiX = sym.sqrt(kappaX) * L
             M[0,0] = sym.cos(phiX)

@@ -76,7 +76,7 @@ class InteractivePlot:
         #self.autoMinCheckBox=tk.Checkbutton(self.master,command=self.enable_Auto_Min_Emittance)
         #self.autoMinCheckBox.grid(column=len(self.PLS.VOList),row=2)
         for item in PLS.VOList:
-            sliderSteps=100 #number of steps between min and max of slider
+            sliderSteps=101 #number of steps between min and max of slider
             resolution=(item.varMax-item.varMin)/sliderSteps # increment size of the slider
             wrapper=functools.partial(self.update_Plot,sliderID) #This is so that each slider passes a ID number
                     #to the function update_Plot when moved.
@@ -209,6 +209,8 @@ class InteractivePlot:
     #    else:
     #        print('Emittance auto minimization disabled')
     def update_Plot(self,sliderID,val,initial=True):
+
+
         val=float(val)+self.eps#val comes in as a string
         if val!=self.q[sliderID]: #to circumvent some annoying behaviour with setting scale value. It seems to call this
                             #for every slider that was set to a value besides it's default initial value based
@@ -286,6 +288,19 @@ class InteractivePlot:
                 self.elNameTextListy[i].set_position((xEnd-self.lengthList[i]/2,self.envBetaYMax+1.5*self.betaEnvyBorder))
             self.fig.canvas.draw() #render it!
             #plt.pause(.05) #otherwise the text doesn't move!
+
+        print('---------------------------------------------------------')
+        #-0.0009729087730278518
+        xi=-2.5e-3
+        xdi=0
+        M=np.eye(2)
+        for el in self.PLS.lattice:
+            print('-----',el.elType,'-----')
+            M=el.M_Func(*self.q)[:2,:2]@M
+            print(el.M_Func(*self.q)[:2,:2])
+            #print(M)
+            print(1e6*(M[0,0]*xi+M[0,1]*xdi))
+            print(1e3*(200*(M[1,0]*xi+M[1,1]*xdi)))
     def make_Plot_Data(self,args,initial=False,sliderID=None):
         #this generates points on the z axis and the corresponding envelope/beta/eta values. It also find which solutions are
         #stable or not and only return stable ones, then labels them. It also finds the tune
@@ -409,29 +424,33 @@ class InteractivePlot:
 
 PLS = PeriodicLatticeSolver(200, .02, axis='both', catchErrors=False)
 
-L1 = PLS.Variable('L1', varMin=.01, varMax=.5,varInit=.17)
+L1 = PLS.Variable('L1', varMin=.05, varMax=1.0,varInit=.09)
 PLS.set_Track_Length(L1)
 #L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.1)
 #L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
 #L4= PLS.Variable('L4', varMin=.01, varMax=.3)
 
-Bp1 = PLS.Variable('Bp1', varMin=.01, varMax=2,varInit=1)
-Bp2 = PLS.Variable('Bp2', varMin=.01, varMax=2,varInit=1)
+Bp1 = 1#PLS.Variable('Bp1', varMin=.8, varMax=1.2,varInit=1)
+#Bp2 = PLS.Variable('Bp2', varMin=.8, varMax=1.2,varInit=1)
 #Bp3 = PLS.Variable('Bp3', varMin=.01, varMax=.01)
 #Bp4 = PLS.Variable('Bp4', varMin=.01, varMax=.45)
 
 
 PLS.begin_Lattice()
 
-PLS.add_Bend(np.pi, 1, 1,rp=.03)
-#PLS.add_Lens(L1, Bp1, .02)
-PLS.add_Drift()
-#PLS.add_Combiner(S=.5)
+
+#PLS.add_Lens(1, 1, .01)
 #PLS.add_Drift()
-#PLS.add_Lens(L2, Bp2, .025)
-PLS.add_Bend(np.pi, 1, 1,rp=.03)
 PLS.add_Drift()
-#PLS.add_Lens(L2, Bp2, .02)
+PLS.add_Bend(np.pi, 1, 1,rp=.01)
+
+#PLS.add_Combiner(S=.5)
+PLS.add_Drift()
+#PLS.add_Lens(np.pi, 1, .01)
+#PLS.add_Drift()
+PLS.add_Bend(np.pi, 1, 1,rp=.01)
+
+#PLS.add_Lens(1, 1, .01)
 #PLS.add_Drift()
 #PLS.add_Lens(L1, Bp2, .025)
 PLS.end_Lattice()
