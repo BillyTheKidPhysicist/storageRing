@@ -424,7 +424,7 @@ class InteractivePlot:
 
 PLS = PeriodicLatticeSolver(200, .02, axis='both', catchErrors=False)
 
-L1 = PLS.Variable('L1', varMin=.05, varMax=1.0,varInit=.09)
+L1 = PLS.Variable('L1', varMin=.7, varMax=1,varInit=1)
 PLS.set_Track_Length(L1)
 #L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.1)
 #L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
