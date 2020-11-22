@@ -18,20 +18,19 @@ from shapely.affinity import translate, rotate
 class Element:
     #Class to represent the lattice element such as a drift/lens/bender/combiner.
     def __init__(self,args,type,PT):
-        self.PT=PT #particle tracer object
+        self.args=args
         self.type=type #type of element. Options are 'BENDER', 'DRIFT', 'LENS', 'COMBINER'
+        self.PT = PT  # particle tracer object
         self.Bp=None #field strength at bore of element, T
+        self.c1=None #dipole component of combiner, T
+        self.c2=None #quadrupole component of combiner, T/m
         self.rp=None #bore of element, m
         self.L=None #length of element, m
         self.rb=None #'bending' radius of magnet. actual bending radius of atoms is slightly different cause they
                 #ride on the outside edge, m
         self.r0=None #center of element (for bender this is at bending radius center),vector, m
         self.ro=None #bending radius of orbit, m
-        self.ang=None #bending angle of bender, radians
-        self.xb=None
-        self.yb = None
-        self.xe = None
-        self.ye = None
+        self.ang=None #bending angle of bender or combiner, radians
         self.r1=None #position vector of beginning of element, m
         self.r2=None #position vector of ending of element, m
         self.ne=None #normal vector to end of element
@@ -50,25 +49,24 @@ class Element:
             #in general and must be recalculated each time
 
 
-        self.unpack_Args_And_Fill_Params(args)
 
 
-    def unpack_Args_And_Fill_Params(self,args):
+    def unpack_Args_And_Fill_Params(self):
         if self.type=='LENS':
-            self.Bp=args[0]
-            self.rp=args[1]
-            self.L=args[2]
-            self.ap=args[3]
-            self.K = (2 * self.Bp * self.PT.u0_Actual / self.rp ** 2) / self.PT.m_Actual  # reduced force
+            self.Bp=self.args[0]
+            self.rp=self.args[1]
+            self.L=self.args[2]
+            self.ap=self.args[3]
+            self.K =(2*self.Bp*self.PT.u0_Actual/self.rp**2)/self.PT.m_Actual  # reduced force
         elif self.type=='DRIFT':
-            self.L=args[0]
-            self.ap=args[1]
+            self.L=self.args[0]
+            self.ap=self.args[1]
         elif self.type=='BENDER':
-            self.Bp=args[0]
-            self.rb=args[1]
-            self.rp=args[2]
-            self.ang=args[3]
-            self.ap=args[4]
+            self.Bp=self.args[0]
+            self.rb=self.args[1]
+            self.rp=self.args[2]
+            self.ang=self.args[3]
+            self.ap=self.args[4]
             self.K=(2*self.Bp*self.PT.u0_Actual/self.rp**2)/self.PT.m_Actual #reduced force
             self.rOffset = np.sqrt(self.rb**2/4+self.PT.m*self.PT.v0Nominal**2/self.K)-self.rb/2 #this method does not
                 #account for reduced speed in the bender from energy conservation
@@ -76,10 +74,14 @@ class Element:
                 #energy
             self.ro=self.rb+self.rOffset
             self.L = self.ang * self.ro
+        elif self.type=='COMBINER':
+            self.L=self.args[0]
+            self.ap=self.args[1]
+            self.c1=self.args[2]
+            self.c2=self.args[3]
+            self.ang=self.args[4]
         else:
             raise Exception('No proper element name provided')
-
-
 class particleTracer:
     def __init__(self):
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
@@ -105,6 +107,9 @@ class particleTracer:
         self.h=None #current step size. This changes near boundaries
         self.h0=None # initial step size.
         self.particleOutside=False #if the particle has stepped outside the chamber
+        self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
+            #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
+        self.combinerIndex=None #the index in the lattice where the combiner is
 
         self.vacuumTube=None #holds the vacuum tube object
         self.lattice=[] #to hold all the lattice elements
@@ -139,7 +144,6 @@ class particleTracer:
         el.index = len(self.lattice) #where the element is in the lattice
         self.lattice.append(el) #add element to the list holding lattice elements in order
 
-
     def add_Drift(self,L,ap=.03):
         #add drift region to the lattice
         #L: length of drift element, m
@@ -162,11 +166,27 @@ class particleTracer:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-
         args=[Bp,rb,rp,ang,ap]
         el=Element(args,'BENDER',self) #create a bender element object
         el.index = len(self.lattice) #where the element is in the lattice
+        self.benderIndices.append(el.index)
         self.lattice.append(el) #add element to the list holding lattice elements in order
+    def add_Combiner(self,L=.187,c1=1,c2=20,ap=.015):
+        #add combiner (stern gerlacht) element to lattice
+        #L: length of combiner
+        #c1: dipole component of combiner
+        #c2: quadrupole component of bender
+        args=[L,ap,c1,c2]
+        ang=self.compute_Angle_For_Combiner(args)
+        args.append(ang)
+        el=Element(args,'COMBINER',self) #create a combiner element object
+        el.index = len(self.lattice) #where the element is in the lattice
+        self.combinerIndex=el.index
+        self.lattice.append(el) #add element to the list holding lattice elements in order
+
+
+    def compute_Angle_For_Combiner(self,args):
+        return .01
     def reset(self):
         self.qList=[]
         self.pList=[]
@@ -255,14 +275,10 @@ class particleTracer:
         for i in range(iMax):
             q2=self.q+.5*self.h*(self.p+p0)
             el,coordsxy=self.which_Element_Wrapper(q2)
-            if el is None:
-                self.particleOutside=True
-                break
-            if el is not self.currentEl:
-                self.q,self.p=self.handle_Element_Edge(self.currentEl,self.q,self.p)
-                self.cumulativeLength+=self.currentEl.L
-                self.currentEl=el
-                break
+
+            exit = self.check_Element_And_Handle_Edge_Event(el)
+            if exit == True:
+                return
             F2=self.force(q2,el=el,coordsxy=coordsxy)
 
             psi = self.p + .5 * self.h * ( F1+F2 ) - p0
@@ -309,13 +325,9 @@ class particleTracer:
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         el, coordsxy = self.which_Element_Wrapper(q_n)
-        if el is None:
-            self.particleOutside = True
-            return
-        if el is not self.currentEl:
-            self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
-            self.cumulativeLength += self.currentEl.L
-            self.currentEl = el
+
+        exit=self.check_Element_And_Handle_Edge_Event(el)
+        if exit==True:
             return
 
         F_n=self.force(q_n,el=el,coordsxy=coordsxy)
@@ -333,7 +345,6 @@ class particleTracer:
             self.time_Step_Trapezoid()
         elif method=='RK4':
             self.time_Step_RK4()
-
         else:
             raise Exception('No proper method propvided')
     def time_Step_RK4(self):
@@ -341,26 +352,67 @@ class particleTracer:
         h=self.h
         q=self.q
 
+
+
         #k1
         q1=q
         el1, coordsxy = self.which_Element_Wrapper(q1)
-        k1=(h**2/2)*self.force(q1,el=el1,coordsxy=coordsxy)
+        exit=self.check_Element_And_Handle_Edge_Event(el1)
+        if exit==True:
+            return
+        k1v=h*self.force(q1,el=el1,coordsxy=coordsxy)
+        k1x=h*(self.p/self.m)
+
 
         #k2
-        q2=q+(h/2)*self.p/self.m+k1/4
+        q2=q+k1x/2
         el2, coordsxy = self.which_Element_Wrapper(q2)
-        k2=(h**2/2)*self.force(q2, el=el2, coordsxy=coordsxy)
+        exit=self.check_Element_And_Handle_Edge_Event(el2)
+        if exit==True:
+            return
+        k2v=h*self.force(q2, el=el2, coordsxy=coordsxy)
+        k2x=h*(self.p/self.m + k1v/2)
+
 
         #k3
-        k3=k2
+        q3=q+k2x/2
+        el3, coordsxy = self.which_Element_Wrapper(q3)
+        exit=self.check_Element_And_Handle_Edge_Event(el3)
+        if exit==True:
+            return
+        k3v=h*self.force(q3, el=el3, coordsxy=coordsxy)
+        k3x=h*(self.p/self.m + k2v/2)
 
         #k4
-        q4=q+h*self.p/self.m+k3
+        q4=q+h*k3x
         el4,coordsxy = self.which_Element_Wrapper(q2)
-        k4=(h**2/2)*self.force(q4, el=el4, coordsxy=coordsxy)
+        exit=self.check_Element_And_Handle_Edge_Event(el4)
+        if exit==True:
+            return
+        k4v=h*self.force(q4, el=el4, coordsxy=coordsxy)
+        k4x=h*(self.p/self.m+k3v)
 
-        self.q=self.q+(self.p/self.m)*h+(k1+k2+k3)/3
-        self.p=self.p+self.m*(k1+2*k2+2*k3+k4)/(3*h)
+
+        self.q=self.q+(k1x+2*k2x+2*k3x+k4x)/6
+        self.p=self.p+self.m*(k1v+2*k2v+2*k3v+k4v)/6
+
+    def check_Element_And_Handle_Edge_Event(self,el):
+        #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
+        #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
+        #This returns True if the particle has been walked to the edge or is outside the element becuase the element
+        #is none type, which occurs if the particle is found to be outside the lattice when evaluating force
+        exit=False
+        if el is None:
+            self.particleOutside = True
+            exit=True
+        if el is not self.currentEl:
+            self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
+            self.cumulativeLength += self.currentEl.L
+            self.currentEl = el
+            exit=True
+        return exit
+
+
 
     def get_Jacobian_Inv(self,q,el=None):
         if el is None:
@@ -600,9 +652,46 @@ class particleTracer:
         self.p[0]+=deltav*el.nb[0]*self.m
         self.p[1]+=deltav*el.nb[1]*self.m
     def end_Lattice(self):
-        self.catch_Errors() 
+        self.catch_Errors()
+        self.update_Element_Params()
         self.set_Element_Coordinates()
         self.make_Geometry()
+    def update_Element_Params(self):
+        #when the lattice is fully specified use the provided values to shape the lattice to work correctly.
+        #This is only necesary right now for if a combiner is present. Unlike PeriodicLatticeSolver all lengths must
+        #must be specified. This picks the angles for the benders
+        for el in self.lattice:
+            el.unpack_Args_And_Fill_Params()
+
+        if self.combinerIndex is None: #no need to massage any angles
+            return 
+        #else, find the correct angles
+
+        #otherwise set all the angle correctly
+        # algorithm courtesy of Jamie Hall
+
+        #L1 = .5
+        #L2 = .3
+        #print(self.benderIndices)
+        #r1 = self.lattice[self.benderIndices[0]].rb
+        #r2 = self.lattice[self.benderIndices[1]].rb
+        #theta = self.lattice[self.combinerIndex].ang
+        #print(theta,r1,r2)
+        #L3 = np.sqrt((L1 - np.sin(theta) * r2 + L2 * np.cos(theta)) ** 2 + (
+        #            L2 * np.sin(theta) - r2 * (1 - np.cos(theta)) + (r2 - r1)) ** 2)
+        #angle1=np.pi * 1.5 - np.arctan(L1 / r1) - np.arccos(
+        #    (L3 ** 2 + L1 ** 2 - L2 ** 2) / (2 * L3 * np.sqrt(L1 ** 2 + r1 ** 2)))
+        #angle2 = np.pi * 1.5 - np.arctan(L2 / r2) - np.arccos(
+        #    (L3 ** 2 + L2 ** 2 - L1 ** 2) / (2 * L3 * np.sqrt(L2 ** 2 + r2 ** 2)))
+#
+        #self.lattice[self.benderIndices[0]].angle = angle1
+        #self.lattice[self.benderIndices[1]].angle = angle2
+        ##self.lattice[self.benderIndices[0]].Length = r1 * angle1
+        ##self.lattice[self.benderIndices[1]].Length = r2 * angle2
+        #print(angle1,angle2)
+#
+        #sys.exit()
+
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
         #it could be changed to only use the shapely objects for plotting, but it would take some clever algorithm I think
@@ -748,26 +837,27 @@ class particleTracer:
             plt.scatter(*particleCoords, marker='o', s=50, c='r')
         plt.grid()
         plt.show()
-
-test=particleTracer()
-test.add_Lens(1,1,.01)
-#test.add_Drift(Ld)
-test.add_Bender(np.pi,1,1,.01)
-#test.add_Drift(Ld)
-test.add_Lens(1,1,.01)
-test.add_Bender(np.pi,1,1,.01)
-test.end_Lattice()
 #
-#
-q0=np.asarray([-0*1E-10,1e-3,0])
-v0=np.asarray([-200.0,0,0])
-#hArr=np.logspace(-6,-4,num=20)
-q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 1.9/ 200,method='verlet')
-##test.show_Lattice(particleCoords=q[-1])
-#print(qo[-1])
-plt.plot(qo[:,0],qo[:,1])
-plt.show()
-#
+# test=particleTracer()
+# Lc=.2
+# #test.add_Drift(2)
+# test.add_Lens(2,1,.01)
+# test.add_Bender(np.pi,1,1,.01)
+# test.add_Lens(2,1,.01)
+# test.add_Bender(np.pi,1,1,.01)
+# test.end_Lattice()
+# ###
+# ###
+# q0=np.asarray([-0*1E-10,1e-3,0])
+# v0=np.asarray([-200.0,0,0])
+# ####hArr=np.logspace(-6,-4,num=20)
+# q, p, qo, po, particleOutside = test.trace(q0, v0, 5e-5, 2/ 200,method='RK4')
+# #print(qo[-1])
+# #####test.show_Lattice(particleCoords=q[-1])
+# ####print(qo[-1])
+# plt.plot(qo[:,0],qo[:,1])
+# plt.show()
+# #
 #q, p, qo, po, particleOutside = test.trace(q0, v0, hArr[0], 3/ 200,method='verlet')
 #dqList=[]
 #qe=qo[-1]
@@ -781,99 +871,3 @@ plt.show()
 #plt.loglog(hArr[1:],dqList)
 #plt.grid()
 #plt.show()
-
-
-
-
-#tList=[]
-#qo=None
-#for i in range(20):
-#    t = time.time()
-#    q,p,qo,po,particleOutside=test.trace(q0,v0,1e-6,2/200)
-#    tList.append(time.time()-t)
-#tArr=1e3*np.asarray(tList)
-#print(np.round(np.mean(tArr)),np.round(np.std(tArr)))
-#func1=spi.interp1d(qo[:,0],qo[:,1],kind='quadratic')
-#print(qo[-1])
-#xTest=np.linspace(qo[0,0],qo[-1,0],num=100000)
-#print(func1(9))
-# 1e-5:   0.0008887655269614747
-# 5e-6:   0.0008804349298904833
-# 2.5e-6: 0.0008783077859440379
-# 1e-6:   0.0008777090081069874
-
-
-#plt.plot(xTest,func1(xTest))
-#plt.show()
-
-'''
-xi=-2e-5
-vi=0
-
-el=test.lattice[1]
-L=2*(1*Ld+1*np.pi*(1+test.lattice[1].rOffset))
-Lt=100*L
-print(Lt)
-dt=1e-6
-
-#
-q0=np.asarray([-1E-10,xi,0])
-v0=np.asarray([-200.0,vi,0])
-q,p,qo,po,particleOutside=test.trace(q0,v0,dt,1.05*Lt/200)
-print(particleOutside)
-func1=spi.interp1d(qo[:,0],qo[:,1],kind='quadratic')
-func11=spi.interp1d(qo[:,0],po[:,1],kind='quadratic')
-xTest1=np.linspace(1e-3,qo[-1][0],num=100000)
-
-
-#q0=np.asarray([-1E-10,-xi,0])
-#v0=np.asarray([-200.0,-vi,0])
-#q,p,qo,po,particleOutside=test.trace(q0,v0,dt,1.05*Lt/200)
-test.show_Lattice(particleCoords=q[-1])
-#print(particleOutside)
-#func2=spi.interp1d(qo[:,0],qo[:,1],kind='quadratic')
-#func22=spi.interp1d(qo[:,0],po[:,1],kind='quadratic')
-#xTest2=np.linspace(1e-3,qo[-1][0],num=100000)
-#
-#
-#print(1e6*func1(Lt),-1e6*func2(Lt),(1e6*func1(Lt)-1e6*func2(Lt))/2) #332.3062292540387
-#print(1e3*func11(Lt),-1e3*func22(Lt),(1e3*func11(Lt)-1e3*func22(Lt))/2) #332.3062292540387
-
-
-
-#a=1e6*func1(Lt)-1e6*func11(Lt)*Ld/po[-1,0]
-#b=1e6*func2(Lt)-1e6*func22(Lt)*Ld/po[-1,0]
-#print(a,b,(a-b)/2)
-# +:-198.3161555885482
-# -:198.31711977089498
-
-#+: -198.31757256461063
-#-: 198.31783446125363
-
-
-#print(1e6*qo[-1][1])#,qo[-1,0])#,-1e3*p[-1,1],qo[-1,0])
-#test.show_Lattice(particleCoords=q[-1])
-#test.EList
-EArr=np.asarray(test.EList)
-plt.plot(EArr)
-plt.show()
-#plt.show()
-#
-#
-
-#print(particleOutside)
-#plt.plot(qo[:,0],np.sqrt(np.sum(p**2,axis=1)))
-
-##
-##`plt.plot(xTest,func(xTest))
-#print(np.trapz(po[:,0],dx=1e-7))
-#plt.plot(xTest1,func11(xTest1))
-#plt.plot(xTest2,func22(xTest2))
-#plt.grid()
-#plt.show()
-
-plt.plot(xTest1,func1(xTest1))
-##plt.plot(xTest2,func2(xTest2))
-plt.grid()
-plt.show()
-'''

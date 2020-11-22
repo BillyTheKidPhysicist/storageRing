@@ -181,8 +181,9 @@ class PeriodicLatticeSolver:
         self.T=T #temperature of atoms
         self.catchErrors=catchErrors
         self.trackLength=None #total track length of the lattice
-        self.TL1=None #tracklength of section 1
-        self.TL2=None #tracklength of section2
+        #TL1 and TL2 are used to find the correct angles of the benders to accomdate the bending angle of the combiner
+        self.TL1=None #tracklength of section 1, the section from last bender to end of combiner.
+        self.TL2=None #tracklength of section 2, the section from end of combiner to beginning of next bender
         self.m = 1.1648E-26 #mass of lithium 7, SI
         self.u0 = 9.274009994E-24 #bohr magneton, SI
         self.kb=1.38064852E-23 #boltzman constant, SI
@@ -302,10 +303,6 @@ class PeriodicLatticeSolver:
         #alpha: dipole term
         #beta: quadrupole term
         #NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
-        if self.TL1!=None and S!=None:
-            raise Exception('you cannot set S if you are specifying track length')
-        if self.TL1!=None:
-            S=self.TL2
         self.numElements += 1
         args = self.unpack_VariableObjects([L,alpha,beta,S])
         r0 = self.m * self.v0 ** 2 / (self.u0 * beta) #bending radius of the combiner. The combiner is basically a bender
