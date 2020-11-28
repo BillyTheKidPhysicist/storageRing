@@ -42,7 +42,7 @@ class InteractivePlot:
         self.traceList=[] #A list of the trace of transfer matrix. trace in [x plane, y plane]
         self.injectorText=None #to hold the text object that displays the injector parameters
         self.shaperText=None #to hold text object that displays radius of shaping magnet
-        self.numPoints=250 #number of points to use along an axis in model
+        self.numPoints=1000 #number of points to use along an axis in model
         self.lengthList=[] #to hold values of element lengths after each slider event
         self.totalLengthList=[]#to hold values of cumulative(inclusive) element lengths after each slider event
         self.tracexAbs=None #absolute value of trace over x dimension transfer matrix
@@ -289,18 +289,18 @@ class InteractivePlot:
             self.fig.canvas.draw() #render it!
             #plt.pause(.05) #otherwise the text doesn't move!
 
-        print('---------------------------------------------------------')
-        #-0.0009729087730278518
-        xi=-2.5e-3
-        xdi=0
-        M=np.eye(2)
-        for el in self.PLS.lattice:
-            print('-----',el.elType,'-----')
-            M=el.M_Func(*self.q)[:2,:2]@M
-            print(el.M_Func(*self.q)[:2,:2])
-            #print(M)
-            print(1e6*(M[0,0]*xi+M[0,1]*xdi))
-            print(1e3*(200*(M[1,0]*xi+M[1,1]*xdi)))
+        #print('---------------------------------------------------------')
+        ##-0.0009729087730278518
+        #xi=-2.5e-3
+        #xdi=0
+        #M=np.eye(2)
+        #for el in self.PLS.lattice:
+        #    print('-----',el.elType,'-----')
+        #    M=el.M_Func(*self.q)[:2,:2]@M
+        #    print(el.M_Func(*self.q)[:2,:2])
+        #    #print(M)
+        #    print(1e6*(M[0,0]*xi+M[0,1]*xdi))
+        #    print(1e3*(200*(M[1,0]*xi+M[1,1]*xdi)))
     def make_Plot_Data(self,args,initial=False,sliderID=None):
         #this generates points on the z axis and the corresponding envelope/beta/eta values. It also find which solutions are
         #stable or not and only return stable ones, then labels them. It also finds the tune
@@ -424,7 +424,7 @@ class InteractivePlot:
 
 PLS = PeriodicLatticeSolver(200, .02, axis='both', catchErrors=False)
 
-L1 = PLS.Variable('L1', varMin=.7, varMax=1,varInit=1)
+L1 = PLS.Variable('L1', varMin=.01, varMax=.5,varInit=.25)
 PLS.set_Track_Length(L1)
 #L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.1)
 #L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
@@ -441,11 +441,11 @@ PLS.begin_Lattice()
 
 #PLS.add_Lens(1, 1, .01)
 #PLS.add_Drift()
-PLS.add_Drift()
+PLS.add_Drift(L1)
 PLS.add_Bend(np.pi, 1, 1,rp=.01)
 
 #PLS.add_Combiner(S=.5)
-PLS.add_Drift()
+PLS.add_Drift(L1)
 #PLS.add_Lens(np.pi, 1, .01)
 #PLS.add_Drift()
 PLS.add_Bend(np.pi, 1, 1,rp=.01)

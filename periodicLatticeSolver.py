@@ -273,15 +273,15 @@ class PeriodicLatticeSolver:
         el.index = self.numElements - 1
         self.lensIndices.append(el.index)
 
-    def add_Bend(self, angle, r0,Bp,rp=None,S=None):
+    def add_Bend(self, angle, rb,Bp,rp=None,S=None):
         #add a bending magnet. A hexapole magnet
         #angle: bending angle, radians
-        #r0: bending radius, m
+        #rb: bending radius, m
         #Bp: field strength at poles, T
         #rp: Bore radius of hexapole. If None, the bore radius that maximizes capture is calculated
         self.numElements += 1
         self.benderIndices.append(self.numElements-1)
-        args = self.unpack_VariableObjects([angle,r0,Bp,rp,S])
+        args = self.unpack_VariableObjects([angle,rb,Bp,rp,S])
         el = Element(self,'BEND',args)
         self.lattice.append(el)
         el.index = self.numElements - 1
@@ -305,8 +305,8 @@ class PeriodicLatticeSolver:
         #NOTE: the form of the potential here quadrupole does not have the 2. ie Vquad=beta*x*y
         self.numElements += 1
         args = self.unpack_VariableObjects([L,alpha,beta,S])
-        r0 = self.m * self.v0 ** 2 / (self.u0 * beta) #bending radius of the combiner. The combiner is basically a bender
-        args.append(r0)
+        rb = self.m * self.v0 ** 2 / (self.u0 * beta) #bending radius of the combiner. The combiner is basically a bender
+        args.append(rb)
         el = Element(self,'COMBINER',args)
         self.lattice.append(el)
         self.combinerIndex=self.numElements-1
@@ -318,6 +318,7 @@ class PeriodicLatticeSolver:
             M=self.lattice[i].M @ M #remember, first matrix is on the right!
         return M
     def set_Track_Length(self,trackLength=None,TL1=None,TL2=None):
+        #TODO: THIS DOESN'T MAKE SENSE
         #this is to set the length of the straight awayas between bends. As of now this is the same for each
         # straight away
 
@@ -366,7 +367,7 @@ class PeriodicLatticeSolver:
     def _update_Element_Parameters_And_Functions(self):
         #after adding all the elements to the lattice set the lengths and positions such that all the constraints
         #are satisfied. Also set parameters and functions that couldn't be set before
-
+        print(self.lattice[self.benderIndices[0]].angle)
         if self.lattice[self.benderIndices[0]].angle is None: #set the angle with constraints
             if self.combinerIndex==None: #if there is no combiner in the lattice. Settings angles is then easy
                 angle=2*np.pi/len(self.benderIndices)
@@ -374,14 +375,18 @@ class PeriodicLatticeSolver:
                     self.lattice[i].angle=angle
             elif len(self.benderIndices)==2: # if there are two benders and a combiner
                 #algorithm courtesy of Jamie Hall
+                #print(self.lattice[self.combinerIndex].S,self.lattice[self.combinerIndex].Length/2)
                 self.TL2=self.lattice[self.combinerIndex].S + self.lattice[self.combinerIndex].Length/2
                 self.TL1=self.trackLength-self.TL2
+                print(self.TL1,self.TL2)
                 L1=self.TL2
                 L2=self.TL1
-                r1=self.lattice[self.benderIndices[0]].r0
-                r2 = self.lattice[self.benderIndices[1]].r0
-                theta=self.lattice[self.combinerIndex].Length/self.lattice[self.combinerIndex].r0 #approximation, but very accurate
-                L3=sym.sqrt((L1-sym.sin(theta)*r2 +L2*sym.cos(theta))**2+(L2*sym.sin(theta)-r2*(1-sym.cos(theta))+(r2-r1))**2  )
+                r1=self.lattice[self.benderIndices[0]].rb
+                r2 = self.lattice[self.benderIndices[1]].rb
+                theta=self.lattice[self.combinerIndex].Length/self.lattice[self.combinerIndex].rb #approximation, but very accurate
+                L3=sym.sqrt((L1-sym.sin(theta)*r2+L2*sym.cos(theta))**2+(L2*sym.sin(theta)-r2*(1-sym.cos(theta))+(r2-r1))**2)
+                print(L3)
+                raise Exception('SOMETHING DOESN\'T MAKE SENSE HERE, L3 ISN\'T USED')
                 angle1=sym.pi*1.5-sym.atan(L1/r1)-sym.acos((L3**2+L1**2-L2**2)/(2*L3*sym.sqrt(L1**2+r1**2)))
                 angle2=sym.pi*1.5-sym.atan(L2/r2)-sym.acos((L3**2+L2**2-L1**2)/(2*L3*sym.sqrt(L2**2+r2**2)))
                 self.lattice[self.benderIndices[0]].angle=angle1
@@ -779,3 +784,46 @@ class PeriodicLatticeSolver:
                 temp.append(M)
             j+=1
         return temp
+PLS = PeriodicLatticeSolver(200, .02)
+PLS.add_Injector()
+
+L1= .5#PLS.Variable('L1', varMin=.01, varMax=.5)
+L2= .5#PLS.Variable('L2', varMin=.01, varMax=.5)
+L3= .5#PLS.Variable('L3', varMin=.01, varMax=.5)
+L4= .5#PLS.Variable('L4', varMin=.01, varMax=.5)
+
+Bp1 = PLS.Variable('Bp1', varMin=.1, varMax=.45)
+Bp2 = PLS.Variable('Bp2', varMin=.1, varMax=.45)
+Bp3 = PLS.Variable('Bp3', varMin=.1, varMax=.45)
+Bp4 = PLS.Variable('Bp4', varMin=.1, varMax=.45)
+
+rp1 =.03# PLS.Variable('rp1', varMin=.005, varMax=.03)
+rp2 =.03# PLS.Variable('rp2', varMin=.005, varMax=.03)
+rp3 =.03# PLS.Variable('rp3', varMin=.005, varMax=.03)
+rp4 =.03# PLS.Variable('rp4', varMin=.005, varMax=.03)
+
+#s = PLS.Variable('s', varMin=.005, varMax=.03)
+
+rb=1
+#TL1=PLS.Variable('TL1',varMin=.5,varMax=1.5)
+#TL2=PLS.Variable('TL2',varMin=.5,varMax=1.5)
+
+
+PLS.set_Track_Length(trackLength=1)
+PLS.begin_Lattice()
+
+PLS.add_Bend(None, rb, .45)
+#PLS.add_Drift(L=test)
+PLS.add_Lens(L4, Bp4, rp4)
+PLS.add_Drift()
+PLS.add_Combiner(S=.5)
+PLS.add_Drift()
+PLS.add_Lens(L1, Bp1,rp1)
+#PLS.add_Drift(L=.05)
+PLS.add_Bend(None, rb, .45)
+#PLS.add_Drift(L=.05)
+PLS.add_Lens(L2, Bp2, rp2)
+PLS.add_Drift()
+PLS.add_Lens(L3, Bp3, rp3)
+#PLS.add_Drift(L=.05)
+PLS.end_Lattice()
