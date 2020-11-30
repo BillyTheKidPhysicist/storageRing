@@ -67,7 +67,7 @@ class Element:
             self.ang=self.args[3]
             self.ap=self.args[4]
             self.K=(2*self.Bp*self.PT.u0_Actual/self.rp**2)/self.PT.m_Actual #reduced force
-            self.rOffset = np.sqrt(self.rb**2/4+self.PT.m*self.PT.v0Nominal**2/self.K)-self.rb/2 #this method does not
+            self.rOffset = 0#np.sqrt(self.rb**2/4+self.PT.m*self.PT.v0Nominal**2/self.K)-self.rb/2 #this method does not
                 #account for reduced speed in the bender from energy conservation
             #self.rOffset=np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal**2/(2*self.K))-self.rb/4 #this acounts for reduced
                 #energy
@@ -182,7 +182,9 @@ class particleTracer:
         #c1: dipole component of combiner
         #c2: quadrupole component of bender
         args=[L,ap,c1,c2]
-        ang=L/(50/c2)#self.compute_Angle_For_Combiner(args)
+        ang=self.compute_Angle_For_Combiner(args)
+        print(ang)
+        sys.exit()
         args.append(ang)
         el=Element(args,'COMBINER',self) #create a combiner element object
         el.index = len(self.lattice) #where the element is in the lattice
@@ -191,6 +193,7 @@ class particleTracer:
 
 
     def compute_Angle_For_Combiner(self,args):
+        #angle needs to be calculated to respect that the inner edge needs to be L for the combiner
         L=args[0]
         c2=args[2]
         r=50.0/c2
@@ -571,7 +574,7 @@ class particleTracer:
             qNew[1]=qNew[1]-el.r1[1]
         elif el.type=='BENDER':
             qNew[:2]=qNew[:2]-el.r0
-        elif el.type=='COMBINER': #
+        elif el.type=='COMBINER':
             sys.exit()
             pass
         else:
@@ -688,9 +691,7 @@ class particleTracer:
             vals.append(errorFunc(arg))
         vals = np.asarray(vals)
         x0 = temp[np.argmin(vals)]
-        res = spo.minimize(errorFunc, x0, method='Nelder-Mead')
-        x0 = res.x
-        res = spo.minimize(errorFunc, x0, method='Nelder-Mead')
+        res = spo.minimize(errorFunc, x0, method='Nelder-Mead',options={'xtol':1e-26,'fatol':1e-26,'maxiter':512})
         return res.x
 
 
@@ -715,12 +716,7 @@ class particleTracer:
                 q4=np.asarray([xb+np.sin(theta)*ap,yb-ap*np.cos(theta)]) #bottom left when theta=0
                 el.SO=Polygon([q1,q2,q3,q4])
             elif el.type=='BENDER' or el.type=='COMBINER':
-                if el.type=='BENDER': #see set_Element_Coordinates for explanation
-                    r=el.rb
-                elif el.type=='COMBINER':
-                    r=el.rb+el.ap
-                else:
-                    raise Exception('No correct element provided')
+                r=el.rb
                 phiArr=np.linspace(0,-el.ang,num=benderPoints)+theta+np.pi/2 #angles swept out
                 xInner=(r-ap)*np.cos(phiArr)+el.r0[0] #x values for inner bend
                 yInner=(r-ap)*np.sin(phiArr)+el.r0[1] #y values for inner bend
@@ -791,15 +787,9 @@ class particleTracer:
                 elif el.type=='BENDER' or el.type=='COMBINER':
                     #the bender and combiner can be tilted so this is tricky. This is a rotation about a point that is
                     #not the origin. First I need to find that point.
-                    
-                    #the radius of the bender is just the bending radius at the nominal trajectory. The combiner however
-                    #has a larger radius than it's bending radius because it is square so the inner edge must be the length
-                    #of the combiner. By inner edge I mean straight line connecting input and output, which is larger
-                    #towards the outside
-                    if el.type == 'BENDER':
-                        r = el.rb
-                    else:
-                        r = el.rb + el.ap
+
+
+                    r = el.rb
                     xc=xb+np.sin(theta)*r #without including trajectory offset
                     yc=yb-np.cos(theta)*r
                     #now use the point to rotate around
@@ -814,7 +804,7 @@ class particleTracer:
                     ye+=el.rOffset*(-np.cos(el.theta))
                     el.nb=np.asarray([np.cos(el.theta-np.pi), np.sin(el.theta-np.pi)])  # normal vector to input
                     el.ne=np.asarray([np.cos(el.theta-np.pi+(np.pi-el.ang)), np.sin(el.theta-np.pi+(np.pi-el.ang))])  # normal vector to output
-                    el.r0=np.asarray([xb+el.rb*np.sin(theta),yb-el.rb*np.cos(theta)]) #coordinates of center of bender,
+                    el.r0=np.asarray([xb+r*np.sin(theta),yb-r*np.cos(theta)]) #coordinates of center of bender,
                         #including offset
                 else:
                     raise Exception('No correct element name provided')
@@ -832,8 +822,10 @@ class particleTracer:
             el.ne=np.round(el.ne,10)
             el.nb=np.round(el.nb,10)
 
+
             el.r1=np.round(np.asarray([xb,yb]),12) #position vector of beginning of element
             el.r2=np.round(np.asarray([xe,ye]),12) #position vector of ending of element
+            print(el.type, el.r1, el.r2)
             if i==len(self.lattice)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
                 if el.type=='BENDER' or el.type=='COMBINER':
@@ -845,7 +837,6 @@ class particleTracer:
         deltax=np.abs(rbo[0]-reo[0])
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
-
         if deltax>smallNum or deltay>smallNum:
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
     def show_Lattice(self,particleCoords=None):
@@ -862,28 +853,39 @@ class particleTracer:
 
 test=particleTracer()
 
-r1=50/20
-phi1=.2/(r1)
+c1=1
+c2=20
+L=.2
+combinerAp=.015
+r1=50/20+combinerAp
+
+
+
+r1=1
+phi1=.08
 L2=2
 L3=2
 rb=1
-phi2,phi3,L1=test.solve_Monge_Problem(r1,rb,rb,L2,L3,phi1)
-phi2=np.pi
-phi3=np.pi
-L1=.5
 
-test.add_Lens(.5,1,.01)
-#test.add_Combiner()
-#test.add_Drift(.15)
-# #test.add_Drift(2)
-#
-# #test.add_Drift(2)
-# #test.add_Lens(2,1,.01)
-test.add_Bender(phi2,1,1,.01)
-# test.add_Drift(2)
+
+phi2,phi3,L1=test.solve_Monge_Problem(r1,rb,rb,L2,L3,phi1)
+#sys.exit()
+
+
+
+test.add_Lens(L2,1,.01)
+test.add_Combiner(L=L,c1=c1,c2=c2,ap=combinerAp)
+#test.add_Bender(phi1,r1,1,.01)
+test.add_Drift(L3)
+## #test.add_Drift(2)
+##
+## #test.add_Drift(2)
+## #test.add_Lens(2,1,.01)
+test.add_Bender(phi2,rb,1,.01)
+## test.add_Drift(2)
 test.add_Drift(L1)
-#test.add_Lens(21,.01)
-test.add_Bender(phi3,1,1,.01)
+##test.add_Lens(21,.01)
+test.add_Bender(phi3,rb,1,.01)
 test.end_Lattice()
 ###
 ###
@@ -891,10 +893,10 @@ q0=np.asarray([0.0,1e-3,0.0])
 v0=np.asarray([-200.0,0,0])
 ####hArr=np.logspace(-6,-4,num=20)
 #t=time.time()
-q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 4.1/ 200,method='verlet')
+#q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 4.1/ 200,method='verlet')
 #print(time.time()-t)
 # #print(qo[-1])
-test.show_Lattice(particleCoords=q[-1][:2])
+test.show_Lattice()
 # ####print(qo[-1])
 #plt.plot(qo[:,0],qo[:,1])
 #plt.show()
