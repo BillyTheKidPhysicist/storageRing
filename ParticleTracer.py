@@ -89,8 +89,8 @@ class Element:
             self.ap=self.args[1]
             self.c1=self.args[2]
             self.c2=self.args[3]
-            self.ang=0.1
-            self.inputOffset=.007
+            self.ang=0.08
+            self.inputOffset=.008
 
         else:
             raise Exception('No proper element name provided')
