@@ -11,9 +11,8 @@ from shapely.ops import unary_union
 import sympy as sym
 from shapely.affinity import translate, rotate
 
-#TODO: MAKE IMPLICIT
 #TODO: CLEAN UP REDUNDANT FUNCTION CALLS
-#TODO: DEAL WITH BOUNDARIES BETTER
+
 
 
 class Element:
@@ -22,7 +21,9 @@ class Element:
     #Lens and Drift: Input is centered at origin and points to the 'west' with the ouput pointing towards the 'east'
     #Bender: output is facing south and aligned with y=0. The center of the bender is at the origin. Input is at some
         #positive angle relative to the output. A pi/2 bend would have the input aligned with x=0 for example
-
+    #combiner: the output is at the origin, and the input is towards the east, but pointing a bit up at north. Note that
+        #the input/beginning is considered to be at the origin. This doesn't really make sense and sould be changed
+        #TODO: SWITCH THIS
     def __init__(self,args,type,PT):
         self.args=args
         self.type=type #type of element. Options are 'BENDER', 'DRIFT', 'LENS', 'COMBINER'
@@ -38,8 +39,12 @@ class Element:
         self.ro=None #bending radius of orbit, m. Includes trajectory offset
         self.ang=0 #Angle that the particles are bent, either bender or combiner. this is the change in  angle in
             # polar coordinates
-        self.r1=None #position vector of beginning of element, m
-        self.r2=None #position vector of ending of element, m
+        self.r1=None #position vector of beginning of element in lab frame, m
+        self.r2=None #position vector of ending of element in lab frame, m
+        self.r1El=None #position vector of beginning of element in element frame, m
+        self.r2El=None #position vector of ending of element in element frame, m
+
+
         self.ne=None #normal vector to end of element
         self.nb=None #normal vector to beginning of element
         self.theta=None #angle from horizontal of element. zero degrees is to the right in polar coordinates
@@ -57,9 +62,16 @@ class Element:
         self.inputOffset=None #for the combiner. Incoming particles enter the combiner with an offset relative to its
             #geometric center. A positive value is more corresponds to moved up the y axis in the combiner's regerence
             #frame.
-
-
+        self.LFunc=None #for the combiner. The length along the trajector that the particle has traveled. This length
+            #is referring to the nominal trajectory, not the actual distance of the particle
+        self.distFunc=None #The transerse distance from the nominal trajectory of the particle.
+        self.cFact=None #factor in the function y=c*x**2. This is used for finding the trajectory of the particle
+            #in the combiner.
+        self.trajLength=None #total length of trajectory, m. This is for combiner because it is not trivial like
+            #benders or lens or drifts
+        
         self.unpack_Args_And_Fill_Params()
+        
 
     def unpack_Args_And_Fill_Params(self):
         if self.type=='LENS':
@@ -89,11 +101,59 @@ class Element:
             self.ap=self.args[1]
             self.c1=self.args[2]
             self.c2=self.args[3]
-            self.ang=0.08
-            self.inputOffset=.008
+            self.ang=0.09919697740853377
+            self.inputOffset=0.009952363060046456
+            self.cFact=0.2488090765
+
+
+            #solve for LFunc and distFunc. These equation are very big so I use sympy to handle them
+            x1,x,y1,c=sym.symbols('x1 x y1 c',real=True,positive=True,nonzero=True)
+            dist=sym.sqrt((x1-x)**2+(y1-self.cFact*x**2)**2)
+            func=x1-x+2*self.cFact*x*(y1-self.cFact*x**2)
+            x0=sym.simplify(sym.solve(func,x)[0]) #REMEMBER, THE CORRECT ANSWER CAN CHANGE POSITION WITH DIFFERENT
+                #INPUT
+            #NEED TO NAME FUNCTIONS DIFFERENTLY EACH TIME. LAMBDA EVALUATES A FUNCTION IN IT'S LAST STATE, SO MULTIPLE
+            #TEMPORARY FUNCTIONS WITH THE SAME NAME INTERFERE WITH EACH OTHER
+            tempFunc1=sym.lambdify([x1,y1],dist.subs(x,x0))
+            self.distFunc=lambda x1,y1: np.real(tempFunc1(x1+0J,y1)) #need input to be complex to avoid error on
+                #roots of negative numbers. There is a tiny imaginary component from numerical imprecision, so I take
+                #only the real
+            tempFunc2=sym.lambdify([x1,y1],sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,x0)))
+            self.LFunc=lambda x1,y1: np.real(tempFunc2(x1+0J,y1))
+
+            self.trajLength=sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,self.L)).subs(x,self.L)
 
         else:
             raise Exception('No proper element name provided')
+    def trajectory(self,q):
+        #This returns the nominal orbit in the element's reference frame.
+        #q: particles position in the element's reference frame
+        #The description for each element is given below.
+        qo=q.copy()
+        if self.type == 'LENS' or self.type == 'DRIFT':
+           pass
+        elif self.type == 'BENDER':
+            qo = q.copy()
+            phi = self.ang-np.arctan2(q[1]+1e-10,q[0])  # angle swept out by particle in trajectory. This is zero
+            # when the particle first enters
+            ds=self.ro*phi
+            qos=ds
+            qox=np.sqrt(q[0]**2+q[1]**2)-self.ro
+            qo[0]=qos
+            qo[1]=qox
+        elif self.type=='COMBINER':
+            if qo[0]>self.L:
+                dr=self.r2El-qo[:2]
+                rot=np.asarray([[np.cos(-self.ang),-np.sin(-self.ang)],[np.sin(-self.ang),np.cos(-self.ang)]])
+                qo[:2]=rot@dr
+            else:
+                qo[0]=self.trajLength-self.LFunc(q[0],q[1])+np.sin(self.ang)*(self.ap-self.inputOffset)
+                qo[1]=0#self.distFunc(q[0],q[1]) TODO: FUCKING FIX THIS....
+
+        else:
+            raise Exception('No correct element name provided')
+        return qo
+
 class particleTracer:
     def __init__(self):
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
@@ -233,6 +293,7 @@ class particleTracer:
         self.poList.append(self.get_Momentum_In_Orbit_Frame(self.q,self.p))
 
 
+
         self.E0=sum(self.get_Energies())
         self.EList.append(self.E0)
 
@@ -260,8 +321,21 @@ class particleTracer:
                 break
             self.qList.append(self.q)
             self.pList.append(self.p)
-            #self.qoList.append(self.get_Coords_In_Orbit_Frame(self.q,self.currentEl))
-            #self.poList.append(self.get_Momentum_In_Orbit_Frame(self.q,self.p))
+            self.qoList.append(self.get_Coords_In_Orbit_Frame(self.q,self.currentEl))
+            self.poList.append(self.get_Momentum_In_Orbit_Frame(self.q,self.p))
+            if self.currentEl.type == 'COMBINER':
+                coords=self.transform_Coords_To_Element_Frame(self.q,self.currentEl)
+                #if coords[0]<.2:
+                #    print('here1')
+                #    p=self.poList[-1]
+                #    m=p[1]/p[0]
+                #    y=coords[1]
+                #    x=coords[0]
+                #    dx=x-.2
+                #    y2=m*(-dx)+y
+                #    print(p,m,y,x,dx)
+                #    print(y2)
+                #    sys.exit()
             #temp=self.get_Energies() #sum the potential and kinetic energy
             #self.VList.append(temp[0])
             #self.TList.append(temp[1])
@@ -476,23 +550,10 @@ class particleTracer:
 
     def get_Coords_In_Orbit_Frame(self,q,el):
         #need to rotate coordinate system to align with the element
-        coordsxy = self.transform_Coords_To_Element_Frame(q[:-1], el)
-        if el.type=='LENS' or el.type=='DRIFT':
-            qos=self.cumulativeLength+coordsxy[0]
-            qox=coordsxy[1]
-        elif el.type=='BENDER':
-            phi=el.ang-np.arctan2(coordsxy[1]+1e-10,coordsxy[0]) #angle swept out by particle in trajectory. This is zero
-                #when the particle first enters
-            ds=el.ro*phi
-            qos=self.cumulativeLength+ds
-            qox=np.sqrt(coordsxy[0]**2+coordsxy[1]**2)-el.ro
-        elif self.type=='COMBINER':
-            pass
+        coordsxy = self.transform_Coords_To_Element_Frame(q, el)
 
-        else:
-            raise Exception('No correct element name provided')
-        qoy = q[2]
-        qo=np.asarray([qos, qox, qoy])
+        qo=el.trajectory(coordsxy)
+        qo[0]=qo[0]+self.cumulativeLength
         return qo
 
     def get_Momentum_In_Orbit_Frame(self,q,p):
@@ -509,8 +570,10 @@ class particleTracer:
             po=np.asarray([sDot,rDot,pNew[2]])
             return po
         elif el.type=='LENS' or el.type == 'DRIFT':
-            pNew = p.copy()
             return pNew
+        else:
+            return pNew
+            raise Exception('no correct element name provided')
     def loop_Check(self):
         z=self.q[2]
         if z>2:
@@ -558,8 +621,10 @@ class particleTracer:
             F[2] =-el.K*q[2]
             F = self.transform_Force_Out_Of_Element_Frame(F, el)
         elif el.type=='COMBINER':
-            if q[0]<el.L:
-                F[1]=el.c2*self.u0
+            if coordsxy[0]<el.L:
+                B0=np.sqrt((el.c2*coordsxy[2])**2+(el.c1+el.c2*coordsxy[1])**2)
+                F[1]=self.u0*el.c2*(el.c1+el.c2*coordsxy[1])/B0
+                F[2]=self.u0*el.c2**2*coordsxy[2]/B0
         else:
             raise Exception('No correct element name provided')
         return F
@@ -574,7 +639,7 @@ class particleTracer:
         #q: particle coords in x and y plane. numpy array
         #el: element object to transform to
         #get the coordinates of the particle in the element's frame. See element class for description
-        qNew=q.copy() #only use x and y. CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
+        qNew=q.copy() #CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
         if el.type=='DRIFT' or el.type=='LENS':
             qNew[0]=qNew[0]-el.r1[0]
             qNew[1]=qNew[1]-el.r1[1]
@@ -582,7 +647,6 @@ class particleTracer:
             qNew[:2]=qNew[:2]-el.r0
         elif el.type=='COMBINER':
             qNew[:2]=qNew[:2]-el.r2
-            pass
         else:
             raise Exception('No correct element name provided')
         qNewx=qNew[0]
@@ -618,6 +682,7 @@ class particleTracer:
     def which_Element_Shapely(self,q):
         # Use shapely to find where the element is. If the object is exaclty on the edge, it should catch that
         point = Point([q[0], q[1]])
+
         for el in self.lattice:
             if el.SO.contains(point) == True:
                 if np.abs(q[2]) > el.ap:  # element clips in the z direction
@@ -632,6 +697,7 @@ class particleTracer:
         el=self.which_Element_Shapely(q)
         if el is not None: #if particle is definitely inside an element.
             return el
+
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
         #add up all the beginnings and end of elements and average them
@@ -644,13 +710,14 @@ class particleTracer:
         r=center-q[:-1]
 
         #now rotate this and add the difference to our original vector. rotate by a small amount
-        dphi=-1e-6 #need a clock wise rotation. 1 microradian
-        R=np.array([[np.cos(dphi),np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
-        dr=R@r-r
+        dphi=-1e-9 #need a clock wise rotation. 1 nanooradian
+        R=np.array([[np.cos(dphi),-np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
+        dr=R@(q[:2]-r)-(q[:2]-r)
         #add that to the position and try once more
         qNew=q.copy()
         qNew[:-1]=qNew[:-1]+dr
         el=self.which_Element_Shapely(qNew)
+
         return el
     def adjust_Energy(self):
         #when the particel traverses an element boundary, energy needs to be conserved. This would be irrelevant if I
@@ -825,15 +892,19 @@ class particleTracer:
                         #more than 360 deg
 
                     #to find location of output coords use vector that connects input and output in element frame
-                    #and rotate it
+                    #and rotate it. Input is where nominal trajectory particle enters
                     drx=-(el.L+np.cos(el.ang)*np.sin(el.ang)*(el.ap-el.inputOffset))
                     dry=-(el.inputOffset+np.sin(el.ang)**2*(el.ap-el.inputOffset))
+
+                    el.r1El=np.asarray([0,0])
+                    el.r2El=-np.asarray([drx,dry])
                     dr=np.asarray([drx,dry]) #position vector between input and output of element.
                     R = np.asarray([[np.cos(el.theta), -np.sin(el.theta)], [np.sin(el.theta), np.cos(el.theta)]])
                     dr=R@dr
-                    xe,ye,=xb+dr[0],yb+dr[1]
+                    xe,ye=xb+dr[0],yb+dr[1]
                     el.ne=-np.asarray([np.cos(el.theta),np.sin(el.theta)])
                     el.nb=np.asarray([np.cos(el.theta+el.ang),np.sin(el.theta+el.ang)])
+                    #print(el.ne,el.nb)
                 else:
                     raise Exception('No correct element name provided')
             #need to make rotation matrices for bender, lens and drift now. Already made for combiner
@@ -879,22 +950,22 @@ class particleTracer:
             plt.scatter(*particleCoords,marker='x',s=1000,c='r')
             plt.scatter(*particleCoords, marker='o', s=50, c='r')
         plt.grid()
-        plt.gca().set_aspect('equal')
+        #plt.gca().set_aspect('equal')
         plt.show()
 
 test=particleTracer()
-test.add_Lens(.1,1,.01)
+test.add_Lens(1,1,.01)
 test.add_Combiner()
-#test.add_Lens(1,1,.01)
+test.add_Lens(1,1,.01)
 #test.add_Bender(np.pi,1,1,.01)
-#test.add_Lens(2,1,.01)
+#test.add_Lens(1,1,.01)
 #test.add_Bender(np.pi,1,1,.01)
 test.end_Lattice()
 
-q0=np.asarray([0.0,0,0.0])
+q0=np.asarray([-1e-10,-1e-3,0.0])
 v0=np.asarray([-200.0,0,0])
-q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, .15/ 200,method='verlet')
-plt.plot(q[:,0],q[:,1])
+q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 1.5/ 200,method='verlet')
+plt.plot(qo[:,1])
 #plt.gca().set_aspect('equal')
 plt.show()
 test.show_Lattice(particleCoords=q[-1])
