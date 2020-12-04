@@ -101,9 +101,9 @@ class Element:
             self.ap=self.args[1]
             self.c1=self.args[2]
             self.c2=self.args[3]
-            self.ang=0.09919697740853377
-            self.inputOffset=0.009952363060046456
-            self.cFact=0.2488090765
+            self.ang=0.07945130224178842
+            self.inputOffset=0.007961890448108933
+            self.cFact=0.1990472612
 
 
             #solve for LFunc and distFunc. These equation are very big so I use sympy to handle them
@@ -148,7 +148,9 @@ class Element:
                 qo[:2]=rot@dr
             else:
                 qo[0]=self.trajLength-self.LFunc(q[0],q[1])+np.sin(self.ang)*(self.ap-self.inputOffset)
-                qo[1]=0#self.distFunc(q[0],q[1]) TODO: FUCKING FIX THIS....
+                qo[1]=self.distFunc(q[0],q[1]) #TODO: FUCKING FIX THIS....
+                #print(q[0],q[1],qo[1])
+                #sys.exit()
 
         else:
             raise Exception('No correct element name provided')
@@ -325,6 +327,7 @@ class particleTracer:
             self.poList.append(self.get_Momentum_In_Orbit_Frame(self.q,self.p))
             if self.currentEl.type == 'COMBINER':
                 coords=self.transform_Coords_To_Element_Frame(self.q,self.currentEl)
+                p=self.poList[-1]
                 #if coords[0]<.2:
                 #    print('here1')
                 #    p=self.poList[-1]
@@ -384,8 +387,8 @@ class particleTracer:
         #This method calculates the correct timestep to put the particle just on the other side of the end of the element
         #using velocity verlet
         r=el.r2-q[:2]
-        rt=npl.norm(el.nb*r[:2])
-        pt=npl.norm(el.nb*p[:2]) #tangential momentum vector to surface of element's end
+        rt=npl.norm(el.nb*r[:2]) #perindicular position vector to element's end
+        pt=npl.norm(el.nb*p[:2]) #perpindicular momentum vector to surface of element's end
         F1=self.force(q,el=el)
         Ft=npl.norm(el.nb*F1[:2])
 
@@ -401,7 +404,7 @@ class particleTracer:
         q=q+h*p/self.m+.5*(F1/self.m)*h**2
         F2=self.force(q,el=el)
         p=p+.5*(F1+F2)*h
-        eps=1e-9 #tiny step to put the particle on the other side
+        eps=1e-12 #tiny step to put the particle on the other side
         np=p/npl.norm(p) #normalized vector of particle direction
         q=q+np*eps
         return q,p
@@ -491,6 +494,7 @@ class particleTracer:
             self.particleOutside = True
             exit=True
         if el is not self.currentEl:
+
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
             self.cumulativeLength += self.currentEl.L
             self.currentEl = el
@@ -569,7 +573,7 @@ class particleTracer:
             rDot=(coordsxy[0]*pNew[0]+coordsxy[1]*pNew[1])/np.sqrt((coordsxy[0]**2+coordsxy[1]**2))
             po=np.asarray([sDot,rDot,pNew[2]])
             return po
-        elif el.type=='LENS' or el.type == 'DRIFT':
+        elif el.type=='LENS' or el.type == 'DRIFT' or el.type=='COMBINER':
             return pNew
         else:
             return pNew
@@ -625,6 +629,7 @@ class particleTracer:
                 B0=np.sqrt((el.c2*coordsxy[2])**2+(el.c1+el.c2*coordsxy[1])**2)
                 F[1]=self.u0*el.c2*(el.c1+el.c2*coordsxy[1])/B0
                 F[2]=self.u0*el.c2**2*coordsxy[2]/B0
+                #print(self.u0*el.c2)
         else:
             raise Exception('No correct element name provided')
         return F
@@ -954,18 +959,18 @@ class particleTracer:
         plt.show()
 
 test=particleTracer()
-test.add_Lens(1,1,.01)
+test.add_Lens(.1,1,.01)
 test.add_Combiner()
 test.add_Lens(1,1,.01)
-#test.add_Bender(np.pi,1,1,.01)
+test.add_Bender(np.pi,1,1,.01)
 #test.add_Lens(1,1,.01)
 #test.add_Bender(np.pi,1,1,.01)
 test.end_Lattice()
 
-q0=np.asarray([-1e-10,-1e-3,0.0])
+q0=np.asarray([-1e-10,0,0.0])
 v0=np.asarray([-200.0,0,0])
-q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 1.5/ 200,method='verlet')
+q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 3/ 200,method='verlet')
 plt.plot(qo[:,1])
-#plt.gca().set_aspect('equal')
+##plt.gca().set_aspect('equal')
 plt.show()
 test.show_Lattice(particleCoords=q[-1])
