@@ -57,8 +57,6 @@ class Element:
             #matrix OUT of the element frame
         self.RIn=None #rotation matrix so values don't need to be calculated over and over. This is the rotation
             #matrix IN to the element frame
-        self.inputAng=None #the combiner's input is tilted, this that value. 0 is the input pointing to the east,
-            #pi is pointing to the west, pi/2 is pointing north
         self.inputOffset=None #for the combiner. Incoming particles enter the combiner with an offset relative to its
             #geometric center. A positive value is more corresponds to moved up the y axis in the combiner's regerence
             #frame.
@@ -101,27 +99,25 @@ class Element:
             self.ap=self.args[1]
             self.c1=self.args[2]
             self.c2=self.args[3]
-            self.ang=0.07945130224178842
-            self.inputOffset=0.007961890448108933
-            self.cFact=0.1990472612
+            if self.inputOffset is not None:
+                #if self.inputOffset is none, then this feature is not being used. This will happen so that the combiner element
+                #can be used to predict what the trajectory looks like inside before final use.
+                #solve for LFunc and distFunc. These equation are very big so I use sympy to handle them
+                x1,x,y1,c=sym.symbols('x1 x y1 c',real=True,positive=True,nonzero=True)
+                dist=sym.sqrt((x1-x)**2+(y1-self.cFact*x**2)**2)
+                func=x1-x+2*self.cFact*x*(y1-self.cFact*x**2)
+                x0=sym.simplify(sym.solve(func,x)[0]) #REMEMBER, THE CORRECT ANSWER CAN CHANGE POSITION WITH DIFFERENT
+                    #INPUT
+                #NEED TO NAME FUNCTIONS DIFFERENTLY EACH TIME. LAMBDA EVALUATES A FUNCTION IN IT'S LAST STATE, SO MULTIPLE
+                #TEMPORARY FUNCTIONS WITH THE SAME NAME INTERFERE WITH EACH OTHER
+                tempFunc1=sym.lambdify([x1,y1],dist.subs(x,x0))
+                self.distFunc=lambda x1,y1: np.real(tempFunc1(x1+0J,y1)) #need input to be complex to avoid error on
+                    #roots of negative numbers. There is a tiny imaginary component from numerical imprecision, so I take
+                    #only the real
+                tempFunc2=sym.lambdify([x1,y1],sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,x0)))
+                self.LFunc=lambda x1,y1: np.real(tempFunc2(x1+0J,y1))
 
-
-            #solve for LFunc and distFunc. These equation are very big so I use sympy to handle them
-            x1,x,y1,c=sym.symbols('x1 x y1 c',real=True,positive=True,nonzero=True)
-            dist=sym.sqrt((x1-x)**2+(y1-self.cFact*x**2)**2)
-            func=x1-x+2*self.cFact*x*(y1-self.cFact*x**2)
-            x0=sym.simplify(sym.solve(func,x)[0]) #REMEMBER, THE CORRECT ANSWER CAN CHANGE POSITION WITH DIFFERENT
-                #INPUT
-            #NEED TO NAME FUNCTIONS DIFFERENTLY EACH TIME. LAMBDA EVALUATES A FUNCTION IN IT'S LAST STATE, SO MULTIPLE
-            #TEMPORARY FUNCTIONS WITH THE SAME NAME INTERFERE WITH EACH OTHER
-            tempFunc1=sym.lambdify([x1,y1],dist.subs(x,x0))
-            self.distFunc=lambda x1,y1: np.real(tempFunc1(x1+0J,y1)) #need input to be complex to avoid error on
-                #roots of negative numbers. There is a tiny imaginary component from numerical imprecision, so I take
-                #only the real
-            tempFunc2=sym.lambdify([x1,y1],sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,x0)))
-            self.LFunc=lambda x1,y1: np.real(tempFunc2(x1+0J,y1))
-
-            self.trajLength=sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,self.L)).subs(x,self.L)
+                self.trajLength=sym.integrate(sym.sqrt(1+(2*self.cFact*x)**2),(x,0,self.L)).subs(x,self.L)
 
         else:
             raise Exception('No proper element name provided')
@@ -149,15 +145,15 @@ class Element:
             else:
                 qo[0]=self.trajLength-self.LFunc(q[0],q[1])+np.sin(self.ang)*(self.ap-self.inputOffset)
                 qo[1]=self.distFunc(q[0],q[1]) #TODO: FUCKING FIX THIS....
-                #print(q[0],q[1],qo[1])
-                #sys.exit()
+
 
         else:
             raise Exception('No correct element name provided')
         return qo
 
 class particleTracer:
-    def __init__(self):
+    def __init__(self,v0Nominal):
+        self.v0Nominal = v0Nominal  # Design particle speed
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
@@ -191,11 +187,10 @@ class particleTracer:
 
         self.currentEl=None #to keep track of the element the particle is currently in
         self.elHasChanged=False # to record if the particle has changed to another element
-        self.timeAdapted=False #wether the time step has been shrunk because nearness to a new element
+
 
         self.v0=None #the particles total speed. TODO: MAKE CHANGE WITH HARD EDGE MODEL
         self.vs=None #particle speed along orbit
-        self.v0Nominal=200 #Design particle speed
         self.E0=None #total initial energy of particle
 
         self.VList=[] #list of potential energy
@@ -247,17 +242,19 @@ class particleTracer:
         self.benderIndices.append(el.index)
         self.lattice.append(el) #add element to the list holding lattice elements in order
     def add_Combiner(self,L=.2,c1=1,c2=20,ap=.015):
+        #THIS IS CURRENTLY INCOMPLETE. WHAT NEEDS TO BE FINISHED IS A GOOD WAY OF FITTING THE COMBINER INTO THE LATTICE,
+        #BECAUSE LATTICE NEEDS TO CHANGE FOR IT. ALSO, REFERENCING THE PARTICLE'S NOMINAL TRAJECTORY
         #TODO: UPDATE COMBINER LENGTH AND ANGLE
         #add combiner (stern gerlacht) element to lattice
         #L: length of combiner
         #c1: dipole component of combiner
         #c2: quadrupole component of bender
+        raise Exception('currently broken!!')
         args=[L,ap,c1,c2]
         el=Element(args,'COMBINER',self) #create a combiner element object
         el.index = len(self.lattice) #where the element is in the lattice
         self.combinerIndex=el.index
         self.lattice.append(el) #add element to the list holding lattice elements in order
-
 
     def compute_Angle_For_Combiner(self,args):
         #angle needs to be calculated to respect that the inner edge needs to be L for the combiner
@@ -299,13 +296,13 @@ class particleTracer:
         self.E0=sum(self.get_Energies())
         self.EList.append(self.E0)
 
-    def trace(self,qi,vi,h,T0,method='verlet'):
+    def trace(self,qi,pi,h,T0,method='verlet'):
 
         self.q=qi.copy().astype(float)
-        self.p=vi.copy().astype(float)*self.m
+        self.p=pi.copy().astype(float)*self.m
         self.h=h
         self.h0=h
-        self.v0 = npl.norm(vi)
+        self.v0 = npl.norm(pi)/self.m
         self.initialize_For_Particle()
 
         if self.currentEl is None:
@@ -386,6 +383,7 @@ class particleTracer:
         #when the particle has stepped over into the next element in time_Step_Trapezoid this method is called.
         #This method calculates the correct timestep to put the particle just on the other side of the end of the element
         #using velocity verlet
+        #TODO: SHOULD WE BE USING EL.NB
         r=el.r2-q[:2]
         rt=npl.norm(el.nb*r[:2]) #perindicular position vector to element's end
         pt=npl.norm(el.nb*p[:2]) #perpindicular momentum vector to surface of element's end
@@ -531,26 +529,7 @@ class particleTracer:
             Jinv=npl.inv(J)
             return Jinv
 
-    #def is_Particle_Inside(self,q):
-    #    #this could be done with which_Element, but this is faster
-    #    if self.currentEl is None:
-    #        return False
-    #    if np.abs(q[2])>self.currentEl.ap: #check z axis
-    #        self.particleOutside=True
-    #        return False
-    #    coordsxy = self.transform_Coords_To_Element_Frame(q[:-1], self.currentEl)
-    #    if self.currentEl.type=='LENS' or self.currentEl.type=='DRIFT':
-    #        if np.abs(coordsxy[1])>self.currentEl.ap or coordsxy[0]>self.currentEl.L:
-    #            self.particleOutside=True
-    #            return False
-#
-    #    elif self.currentEl.type=='BENDER':
-    #        r=np.sqrt(np.sum(coordsxy**2))
-    #        deltar=r-self.currentEl.rb
-    #        if np.abs(deltar)>self.currentEl.ap:
-    #            self.particleOutside=True
-    #            return False
-    #    return True
+
 
     def get_Coords_In_Orbit_Frame(self,q,el):
         #need to rotate coordinate system to align with the element
@@ -604,6 +583,7 @@ class particleTracer:
             KE = np.sum(self.p ** 2) / (2 * self.m)
         return PE,KE
     def force(self,q,coordsxy=None,el=None):
+        #todo: remove redundant q and coordsxy
         if el is None:
             el=self.which_Element(q) #find element the particle is in
         if coordsxy is None:
@@ -629,7 +609,6 @@ class particleTracer:
                 B0=np.sqrt((el.c2*coordsxy[2])**2+(el.c1+el.c2*coordsxy[1])**2)
                 F[1]=self.u0*el.c2*(el.c1+el.c2*coordsxy[1])/B0
                 F[2]=self.u0*el.c2**2*coordsxy[2]/B0
-                #print(self.u0*el.c2)
         else:
             raise Exception('No correct element name provided')
         return F
@@ -740,38 +719,21 @@ class particleTracer:
         self.catch_Errors()
         self.set_Element_Coordinates()
         self.make_Geometry()
-    def solve_Monge_Problem(self,r1,r2,r3,L2,L3,phi1):
-        #courtesy of the QFT nerd Tyler Guglielmo
-        #this is the problem of 3 circles connected by their tangents. there are 3 lengths, L1 L2 L3, and 3 angles phi1,
-        #phi2,phi3. Here phi1 is the bending angle of the combiner and L2 and L3 the length of elements leading into it.
-        #phi2 and phi3 are bending angles of the benders and L1 the length between them. Similarly, r1 is bending angle
-        # of the combiner and r2 and r3 of the benders
-        def errorFunc(x):
-            phi2,phi3,L1=x
-            s1=L1+r2*np.tan(phi2/2)+r3*np.tan(phi3/2)
-            s2=L2+r1*np.tan(phi1/2)+r3*np.tan(phi3/2)
-            s3=L3+r1*np.tan(phi1/2)+r2*np.tan(phi2/2)
+    def solve_Triangle_Problem(self,phi1,L1,L2,r1,r2):
+        #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
+        #with the combiner and the two benders.
+        #phi1: bending angle of the combiner, or the amount of 'kink'
+        #L1: length of the section after the kink to the bender
+        #L2: length of the section before the kink to the bender
+        #r1: radius of circle after the combiner
+        #r2: radius of circle before the combiner
+        #note that L1 and L2 INCLUDE the sections in the combiner. This function will likely be used by another function
+        #that sorts that all out.
 
-            errors1=s2**2+s3**2-2*s2*s3*np.cos(np.pi-phi1)-s1**2
-            errors2=s1**2+s3**2-2*s1*s3*np.cos(np.pi-phi2)-s2**2
-            errors3=s1**2+s2**2-2*s1*s2*np.cos(np.pi-phi3)-s3**2
-            error=np.sqrt(errors1**2+errors2**2+errors3**2)
-            return error#errors1,errors2,errors3
-        num = 50
-        x1 = np.linspace(np.pi - phi1, np.pi, num=num)
-        x2 = np.linspace(np.pi - phi1, np.pi, num=num)
-        x3 = np.linspace((L2 + L3), (L2 + L3), num=num ** 2)
-        temp = np.asarray(np.meshgrid(x1, x2))
-        temp = temp.T.reshape(num ** 2, 2)
-        temp = np.column_stack((temp, x3))
-        vals = []
-        for arg in temp:
-            vals.append(errorFunc(arg))
-        vals = np.asarray(vals)
-        x0 = temp[np.argmin(vals)]
-        res = spo.minimize(errorFunc, x0, method='Nelder-Mead',options={'xtol':1e-26,'fatol':1e-26,'maxiter':512})
-        return res.x
-
+        L3=sym.sqrt((L1-sym.sin(phi1)*r2+L2*sym.cos(phi1))**2+(L2*sym.sin(phi1)-r2*(1-sym.cos(phi1))+(r2-r1))**2)
+        phi2=sym.pi*1.5-sym.atan(L1/r1)-sym.acos((L3**2+L1**2-L2**2)/(2*L3*sym.sqrt(L1**2+r1**2)))
+        phi3=sym.pi*1.5-sym.atan(L2/r2)-sym.acos((L3**2+L2**2-L1**2)/(2*L3*sym.sqrt(L2**2+r2**2)))
+        return phi2,phi3,L3
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
@@ -941,8 +903,43 @@ class particleTracer:
         deltax=np.abs(rbo[0]-reo[0])
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
-        #if deltax>smallNum or deltay>smallNum:
-        #    raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+        if deltax>smallNum or deltay>smallNum:
+            raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+
+
+    def compute_Output_Angle_And_Offset(self,L,ap,c1,c2,v0,h=1e-6):
+        #this computes the output angle and offset for a combiner magnet
+        #L: length of combiner magnet
+        #c1: dipole moment
+        #c2: quadrupole moment
+        #ap: apeture of combiner in x axis, half gap
+        #v0: nominal particle speed
+        args=[L,ap,c1,c2]
+        el=Element(args,'COMBINER',self) #create a combiner element object
+        q = np.asarray([0, 0, 0])
+        p=self.m*np.asarray([v0,0,0])
+        while True:
+            F=self.force(q,coordsxy=q,el=el)
+            a=F/self.m
+            q_n=q+(p/self.m)*h+.5*a*h**2
+            F_n=self.force(q_n,coordsxy=q_n,el=el)
+            a_n = F_n / self.m  # acceleration new or acceleration sub n+1
+            p_n=p+self.m*.5*(a+a_n)*h
+            if q_n[0]>L:
+                dr=L-q[0]
+                dt=dr/(p[0]/self.m)
+                q_n=q+(p/self.m)*dt+.5*a*dt**2
+                F_n=self.force(q_n,coordsxy=q_n,el=el)
+                a_n = F_n / self.m  # acceleration new or acceleration sub n+1
+                p_n=p+self.m*.5*(a+a_n)*dt
+                q=q_n
+                p=p_n
+                break
+            q=q_n
+            p=p_n
+        outputAngle = np.arctan2(p[1], p[0])
+        outputOffset = q[1]
+        return outputAngle,outputOffset
     def show_Lattice(self,particleCoords=None):
         #plot the lattice using shapely
         #particleCoords: Array or list holding particle coordinate such as [x,y]
@@ -958,19 +955,21 @@ class particleTracer:
         #plt.gca().set_aspect('equal')
         plt.show()
 
-test=particleTracer()
-test.add_Lens(.1,1,.01)
-test.add_Combiner()
-test.add_Lens(1,1,.01)
-test.add_Bender(np.pi,1,1,.01)
-#test.add_Lens(1,1,.01)
-#test.add_Bender(np.pi,1,1,.01)
-test.end_Lattice()
 
-q0=np.asarray([-1e-10,0,0.0])
+
+
+
+test=particleTracer(200)
+test.add_Lens(1,1,.02)
+test.add_Bender(np.pi,1,1,.01)
+test.add_Lens(1,1,.02)
+test.add_Bender(np.pi,1,1,.01)
+test.end_Lattice()
+q0=np.asarray([-1e-10,1e-3,0.0])
 v0=np.asarray([-200.0,0,0])
-q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-5, 3/ 200,method='verlet')
-plt.plot(qo[:,1])
-##plt.gca().set_aspect('equal')
+q, p, qo, po, particleOutside = test.trace(q0, v0, 1e-6, 50/200,method='verlet')
+print(particleOutside)
+
+plt.plot(qo[:,0],qo[:,1])
 plt.show()
-test.show_Lattice(particleCoords=q[-1])
+#test.show_Lattice(particleCoords=q[-1])
