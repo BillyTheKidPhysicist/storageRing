@@ -3,7 +3,7 @@ import sympy as sym
 import sympy.utilities.autowrap as symWrap
 from numpy.linalg import inv
 import numpy as np
-from element import Element
+from elementPLS import Element
 import functools
 import sys
 
@@ -269,6 +269,7 @@ class PeriodicLatticeSolver:
         self.numElements += 1
         args = self.unpack_VariableObjects([L, Bp, rp,S])
         el = Element(self, 'LENS',args)
+
         self.lattice.append(el)
         el.index = self.numElements - 1
         self.lensIndices.append(el.index)
@@ -367,7 +368,6 @@ class PeriodicLatticeSolver:
     def _update_Element_Parameters_And_Functions(self):
         #after adding all the elements to the lattice set the lengths and positions such that all the constraints
         #are satisfied. Also set parameters and functions that couldn't be set before
-        print(self.lattice[self.benderIndices[0]].angle)
         if self.lattice[self.benderIndices[0]].angle is None: #set the angle with constraints
             if self.combinerIndex==None: #if there is no combiner in the lattice. Settings angles is then easy
                 angle=2*np.pi/len(self.benderIndices)
@@ -784,46 +784,46 @@ class PeriodicLatticeSolver:
                 temp.append(M)
             j+=1
         return temp
-PLS = PeriodicLatticeSolver(200, .02)
-PLS.add_Injector()
-
-L1= .5#PLS.Variable('L1', varMin=.01, varMax=.5)
-L2= .5#PLS.Variable('L2', varMin=.01, varMax=.5)
-L3= .5#PLS.Variable('L3', varMin=.01, varMax=.5)
-L4= .5#PLS.Variable('L4', varMin=.01, varMax=.5)
-
-Bp1 = PLS.Variable('Bp1', varMin=.1, varMax=.45)
-Bp2 = PLS.Variable('Bp2', varMin=.1, varMax=.45)
-Bp3 = PLS.Variable('Bp3', varMin=.1, varMax=.45)
-Bp4 = PLS.Variable('Bp4', varMin=.1, varMax=.45)
-
-rp1 =.03# PLS.Variable('rp1', varMin=.005, varMax=.03)
-rp2 =.03# PLS.Variable('rp2', varMin=.005, varMax=.03)
-rp3 =.03# PLS.Variable('rp3', varMin=.005, varMax=.03)
-rp4 =.03# PLS.Variable('rp4', varMin=.005, varMax=.03)
-
-#s = PLS.Variable('s', varMin=.005, varMax=.03)
-
-rb=1
-#TL1=PLS.Variable('TL1',varMin=.5,varMax=1.5)
-#TL2=PLS.Variable('TL2',varMin=.5,varMax=1.5)
-
-
-PLS.set_Track_Length(trackLength=1)
-PLS.begin_Lattice()
-
-PLS.add_Bend(None, rb, .45)
-#PLS.add_Drift(L=test)
-PLS.add_Lens(L4, Bp4, rp4)
-PLS.add_Drift()
-PLS.add_Combiner(S=.5)
-PLS.add_Drift()
-PLS.add_Lens(L1, Bp1,rp1)
-#PLS.add_Drift(L=.05)
-PLS.add_Bend(None, rb, .45)
-#PLS.add_Drift(L=.05)
-PLS.add_Lens(L2, Bp2, rp2)
-PLS.add_Drift()
-PLS.add_Lens(L3, Bp3, rp3)
-#PLS.add_Drift(L=.05)
-PLS.end_Lattice()
+# PLS = PeriodicLatticeSolver(200, .02)
+# PLS.add_Injector()
+#
+# L1= .5#PLS.Variable('L1', varMin=.01, varMax=.5)
+# L2= .5#PLS.Variable('L2', varMin=.01, varMax=.5)
+# L3= .5#PLS.Variable('L3', varMin=.01, varMax=.5)
+# L4= .5#PLS.Variable('L4', varMin=.01, varMax=.5)
+#
+# Bp1 = PLS.Variable('Bp1', varMin=.1, varMax=.45)
+# Bp2 = PLS.Variable('Bp2', varMin=.1, varMax=.45)
+# Bp3 = PLS.Variable('Bp3', varMin=.1, varMax=.45)
+# Bp4 = PLS.Variable('Bp4', varMin=.1, varMax=.45)
+#
+# rp1 =.03# PLS.Variable('rp1', varMin=.005, varMax=.03)
+# rp2 =.03# PLS.Variable('rp2', varMin=.005, varMax=.03)
+# rp3 =.03# PLS.Variable('rp3', varMin=.005, varMax=.03)
+# rp4 =.03# PLS.Variable('rp4', varMin=.005, varMax=.03)
+#
+# #s = PLS.Variable('s', varMin=.005, varMax=.03)
+#
+# rb=1
+# #TL1=PLS.Variable('TL1',varMin=.5,varMax=1.5)
+# #TL2=PLS.Variable('TL2',varMin=.5,varMax=1.5)
+#
+#
+# PLS.set_Track_Length(trackLength=1)
+# PLS.begin_Lattice()
+#
+# PLS.add_Bend(None, rb, .45)
+# #PLS.add_Drift(L=test)
+# PLS.add_Lens(L4, Bp4, rp4)
+# PLS.add_Drift()
+# PLS.add_Combiner(S=.5)
+# PLS.add_Drift()
+# PLS.add_Lens(L1, Bp1,rp1)
+# #PLS.add_Drift(L=.05)
+# PLS.add_Bend(None, rb, .45)
+# #PLS.add_Drift(L=.05)
+# PLS.add_Lens(L2, Bp2, rp2)
+# PLS.add_Drift()
+# PLS.add_Lens(L3, Bp3, rp3)
+# #PLS.add_Drift(L=.05)
+# PLS.end_Lattice()

@@ -95,6 +95,9 @@ class InteractivePlot:
             tempList.append(float(item.get())+self.eps) #returned item is a string, needs to be casted to float
         return tempList
     def initial_Plot(self):
+
+
+
         self.totalLengthList = self.PLS.totalLengthListFunc(*self.q)  # List of the total length up to that the end of that
         # element for each element
         self.lengthList = self.PLS.lengthListFunc(*self.q)  # List of length of each element.
@@ -120,10 +123,38 @@ class InteractivePlot:
         self.PLS.emittancex=1
         self.PLS.emittancey=1
         #---------------
+        self.make_Plot_Data(self.q, initial=True)  # create the data (and tune and determine stability)
 
 
 
-        self.make_Plot_Data(self.q,initial=True) #create the data (and tune and determine stability)
+        print('---------------------------------------------------------')
+        self.make_Zarr()
+        xi=-1e-6
+        xdi=0
+        beta=self.beta[0][0]
+        alpha=(self.beta[0][1]-self.beta[0][0])/(self.z[1]-self.z[0])
+        eps = (xi ** 2 + (beta * xdi) ** 2 + (alpha * xi) ** 2 + 2 * alpha * xdi * xi * beta) / beta
+        self.PLS.emittancex=eps
+        print(eps)
+
+        M=np.eye(2)
+        tempList=self.PLS.lattice[1:]
+        tempList.append(self.PLS.lattice[0])
+        for el in tempList:
+            print('-----',el.elType,'-----')
+            M=el.M_Func(*self.q)[:2,:2]@M
+            print(el.M_Func(*self.q)[:2,:2])
+            #print(M)
+            print(1e3*(M[0,0]*xi+M[0,1]*xdi))
+            print((200*(M[1,0]*xi+M[1,1]*xdi)))
+
+        self.make_Plot_Data(self.q, initial=True)  # create the data (and tune and determine stability)
+
+
+
+
+
+
         self.set_Y_Ranges() #set range in matplotlib graph for y axis. A little tricky to get the words and lines to
                 #show up nicely, so it takes some work
 
@@ -202,6 +233,10 @@ class InteractivePlot:
             self.elNameTextListy.append(texty) #store text object to manipulate later
 
         plt.show(block=False)
+
+
+
+
     #def enable_Auto_Min_Emittance(self):
     #    self.autoMinEnabled=not self.autoMinEnabled
     #    if self.autoMinEnabled==True:
@@ -289,18 +324,6 @@ class InteractivePlot:
             self.fig.canvas.draw() #render it!
             #plt.pause(.05) #otherwise the text doesn't move!
 
-        #print('---------------------------------------------------------')
-        ##-0.0009729087730278518
-        #xi=-2.5e-3
-        #xdi=0
-        #M=np.eye(2)
-        #for el in self.PLS.lattice:
-        #    print('-----',el.elType,'-----')
-        #    M=el.M_Func(*self.q)[:2,:2]@M
-        #    print(el.M_Func(*self.q)[:2,:2])
-        #    #print(M)
-        #    print(1e6*(M[0,0]*xi+M[0,1]*xdi))
-        #    print(1e3*(200*(M[1,0]*xi+M[1,1]*xdi)))
     def make_Plot_Data(self,args,initial=False,sliderID=None):
         #this generates points on the z axis and the corresponding envelope/beta/eta values. It also find which solutions are
         #stable or not and only return stable ones, then labels them. It also finds the tune
@@ -422,10 +445,10 @@ class InteractivePlot:
 
 
 
-PLS = PeriodicLatticeSolver(200, .02, axis='both', catchErrors=False)
+PLS = PeriodicLatticeSolver(200, .02, axis='both')
 
-L1 = PLS.Variable('L1', varMin=.01, varMax=.5,varInit=.25)
-PLS.set_Track_Length(L1)
+L1=  PLS.Variable('L1', varMin=.35, varMax=.65,varInit=.49)
+PLS.set_Track_Length(1)
 #L2= PLS.Variable('L2', varMin=.01, varMax=.3,varInit=.1)
 #L3 = PLS.Variable('L3', varMin=.01, varMax=.0825)
 #L4= PLS.Variable('L4', varMin=.01, varMax=.3)
@@ -435,24 +458,20 @@ Bp1 = 1#PLS.Variable('Bp1', varMin=.8, varMax=1.2,varInit=1)
 #Bp3 = PLS.Variable('Bp3', varMin=.01, varMax=.01)
 #Bp4 = PLS.Variable('Bp4', varMin=.01, varMax=.45)
 
-
 PLS.begin_Lattice()
 
-
-#PLS.add_Lens(1, 1, .01)
-#PLS.add_Drift()
-PLS.add_Drift(L1)
 PLS.add_Bend(np.pi, 1, 1,rp=.01)
+PLS.add_Drift()
+PLS.add_Lens(L1, 1, .01,S=.5)
+PLS.add_Drift()
 
-#PLS.add_Combiner(S=.5)
-PLS.add_Drift(L1)
-#PLS.add_Lens(np.pi, 1, .01)
-#PLS.add_Drift()
+
 PLS.add_Bend(np.pi, 1, 1,rp=.01)
+PLS.add_Drift()
+PLS.add_Lens(L1, 1, .01,S=.5)
+PLS.add_Drift()
 
-#PLS.add_Lens(1, 1, .01)
-#PLS.add_Drift()
-#PLS.add_Lens(L1, Bp2, .025)
+
 PLS.end_Lattice()
 app=InteractivePlot(PLS)
 app.launch()
