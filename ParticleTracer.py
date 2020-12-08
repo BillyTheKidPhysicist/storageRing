@@ -9,6 +9,9 @@ import numpy.linalg as npl
 import sympy as sym
 from elementPT import Element
 
+def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle):
+    rb=L/(2*np.tan(angle/(2*numMagnets)))+yokeWidth+rp
+    return rb
 
 class particleTracer:
     def __init__(self,v0Nominal):
@@ -18,8 +21,7 @@ class particleTracer:
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
         # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
         self.m=1 #adjusted value of mass. 1 is equal to li7 mass
-        self.u0=self.u0_Actual/self.m_Actual #Adjusted value of permeability of free space. About equal to 800
-
+        self.u0=self.u0_Actual/self.m_Actual #Adjusted value of bohr magneton, about equal to 800
         self.kb = 1.38064852E-23  # boltzman constant, SI
         self.q=np.zeros(3) #contains the particles current position coordinates, m
         self.p=np.zeros(3) #contains the particles current momentum. m is set to 1 so this is the same
@@ -88,10 +90,30 @@ class particleTracer:
         el=Element(args,'DRIFT',self)#create a drift element object
         el.index = len(self.lattice) #where the element is in the lattice
         self.lattice.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal(self,ang,rb,Bp,rp,ap=None):
+    def add_Bender_Ideal_Segmented(self,L,Bp,rb,rp,yokeWidth,numMagnets,ap=None):
+        #L: Length of individual magnet.
+        #Bp: Field strength at pole face
+        # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
+            #outside this, m
+        #rp: Bore radius of element
+        #yokeWidth: width of the yoke, but also refers to the width of the magnetic material
+        #numMagnet: number of magnets in segmented bender
+
+        apFrac=.9 #apeture fraction
+        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
+            ap=apFrac*rp
+        else:
+            if ap > rp:
+                raise Exception('Apeture cant be bigger than bore radius')
+        args=[L,Bp,rb,rp,yokeWidth,numMagnets,ap]
+        el=Element(args,"BENDER_IDEAL_SEGMENTED",self)
+        el.index = len(self.lattice)  # where the element is in the lattice
+        self.lattice.append(el)
+    def add_Bender_Ideal(self,ang,Bp,rb,rp,ap=None):
         #add bender to lattice
         #ang: Bending angle of bender, radians
-        #rb: nominal bending radius of bender. Actual radius is larger because particle 'rides' a little outside this, m
+        #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
+        # outside this, m
         #Bp: field strength at pole face of lens, T
         #rp: bore radius of element, m
         #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius, unitless
@@ -230,7 +252,6 @@ class particleTracer:
         q=self.q #q old or q sub n
         p=self.p #p old or p sub n
         F=self.force(q)
-
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         el, coordsxy = self.which_Element_Wrapper(q_n)
@@ -297,7 +318,9 @@ class particleTracer:
             el=self.which_Element(q) #find element the particle is in
         if coordsxy is None:
             coordsxy = el.transform_Lab_Coords_Into_Element_Frame(q)
+        print(el.type)
         F=el.force(coordsxy)
+
         return el.transform_Vector_Out_Of_Element_Frame(F)
 
     def distance_From_End(self,coordsxy,el):
@@ -423,7 +446,7 @@ class particleTracer:
                 q3=np.asarray([xe+np.sin(theta)*ap,ye-ap*np.cos(theta)]) #bottom right when theta=0
                 q4=np.asarray([xb+np.sin(theta)*ap,yb-ap*np.cos(theta)]) #bottom left when theta=0
                 el.SO=Polygon([q1,q2,q3,q4])
-            elif el.type=='BENDER_IDEAL':
+            elif el.type=='BENDER_IDEAL'or el.type=='BENDER_IDEAL_SEGMENTED':
                 phiArr=np.linspace(0,-el.ang,num=benderPoints)+theta+np.pi/2 #angles swept out
                 xInner=(el.rb-ap)*np.cos(phiArr)+el.r0[0] #x values for inner bend
                 yInner=(el.rb-ap)*np.sin(phiArr)+el.r0[1] #y values for inner bend
@@ -476,6 +499,7 @@ class particleTracer:
                 prevEl = self.lattice[i - 1]
                 #set end coordinates
                 if el.type=='DRIFT' or el.type=='LENS_IDEAL':
+
                     if prevEl.type=='COMBINER':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
@@ -485,7 +509,7 @@ class particleTracer:
                     ye=yb+el.L*np.sin(el.theta)
                     el.nb = -np.asarray([np.cos(el.theta), np.sin(el.theta)])  # normal vector to input
                     el.ne = -el.nb #normal vector to end
-                    if prevEl.type=='BENDER_IDEAL':
+                    if prevEl.type=='BENDER_IDEAL' or prevEl.type=='BENDER_IDEAL_SEGMENTED':
                         n=np.zeros(2)
                         n[0]=-prevEl.ne[1]
                         n[1]=prevEl.ne[0]
@@ -495,7 +519,7 @@ class particleTracer:
                         xe+=dr[0]
                         ye+=dr[1]
                     el.r0=np.asarray([(xb+xe)/2,(yb+ye)/2]) #center of lens or drift is midpoint of line connecting beginning and end
-                elif el.type=='BENDER_IDEAL':
+                elif el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED':
                     if prevEl.type=='COMBINER':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
@@ -541,7 +565,7 @@ class particleTracer:
                 else:
                     raise Exception('No correct element name provided')
             #need to make rotation matrices for bender, lens and drift now. Already made for combiner
-            if el.type=='BENDER_IDEAL':
+            if el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED':
                 rot = (el.theta - el.ang + np.pi / 2)
             elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER':
                 rot = el.theta
@@ -560,7 +584,7 @@ class particleTracer:
             el.r2=np.round(np.asarray([xe,ye]),12) #position vector of ending of element
             if i==len(self.lattice)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
-                if el.type=='BENDER_IDEAL' or el.type=='COMBINER':
+                if el.type=='BENDER_IDEAL' or el.type=='COMBINER'or el.type=='BENDER_IDEAL_SEGMENTED':
                     reo[0]+=el.rOffset * np.sin(el.theta)
                     reo[1]+=el.rOffset*(-np.cos(el.theta))
             i+=1
@@ -618,42 +642,49 @@ class particleTracer:
             plt.scatter(*particleCoords,marker='x',s=1000,c='r')
             plt.scatter(*particleCoords, marker='o', s=50, c='r')
         plt.grid()
-        #plt.gca().set_aspect('equal')
+        plt.gca().set_aspect('equal')
         plt.show()
 
 
 
-# test=particleTracer(200)
-# #test.add_Lens_Sim('sampleData.dat')
-#
+test=particleTracer(200)
 # Lt=1
-# L1=.49
+L1=.5
+
+
+Lm=.05
+rp=.01
+yokeWidth=.015
+angle=np.pi
+numMagnets=50
+
+
+rb=Compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,angle)
 # #Ld=(Lt-L1)/2
 # Ld=.05
 #
 #
 #
 #
+# #test.add_Drift(Ld)
+test.add_Lens_Ideal(L1,1,.01)
+test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets)
+# #test.add_Drift(Ld)
 #
 # #test.add_Drift(Ld)
-# test.add_Lens_Ideal(L1,1,.01)
-# #test.add_Drift(Ld)
-# test.add_Bender_Ideal(np.pi,1,1,.01)
-#
-# #test.add_Drift(Ld)
-# test.add_Lens_Ideal(L1,1,.01)
+test.add_Lens_Ideal(L1,1,.01)
+test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets)
 # ##test.add_Drift(Ld)
-# test.add_Bender_Ideal(np.pi,1,1,.01)
 #
-# test.end_Lattice()
+test.end_Lattice()
 #
+# #
 #
-#
-# q0=np.asarray([-1e-10,1e-3,0])
-# v0=np.asarray([-200.0,0,0])
-#
-# q, p, qo, po, particleOutside = test.trace(q0, v0,2.5e-6, 2*(2+2*np.pi)/200,method='verlet')
-# print(particleOutside)
+q0=np.asarray([-1e-10,1e-3,0])
+v0=np.asarray([-200.0,0,0])
+
+q, p, qo, po, particleOutside = test.trace(q0, v0,1e-5, .55/200,method='verlet')
+#print(particleOutside)
 #
 # ##----------------find envelope----------------
 # qoFunc=spi.interp1d(qo[:,0],qo[:,1])
@@ -672,10 +703,10 @@ class particleTracer:
 # #plt.plot(test.EList)
 # #plt.show()
 #
-# plt.plot(qo[:,0],qo[:,1])
-# plt.grid()
-# plt.show()
-# test.show_Lattice(particleCoords=q[-1])
+plt.plot(qo[:,0],qo[:,1])
+plt.grid()
+plt.show()
+test.show_Lattice()#particleCoords=q[-1])
 #
 
 
@@ -683,11 +714,11 @@ class particleTracer:
 
 
 
-q0=np.asarray([1,.01,0])
-args=[.025,1,.01,1,.05]
-PT=particleTracer(200)
-el=Element(args,"BENDER_IDEAL_SEGMENTED",PT)
-print(el.transform_Element_Into_Unit_Cell_Frame(q0))
+#q0=np.asarray([1,.01,0])
+#args=[.025,1,.01,1,.05,100]
+#PT=particleTracer(200)
+#el=Element(args,"BENDER_IDEAL_SEGMENTED",PT)
+#print(el.transform_Element_Into_Unit_Cell_Frame(q0))
 
 
 
