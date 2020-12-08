@@ -7,10 +7,7 @@ from shapely.geometry import Polygon,Point
 import scipy.interpolate as spi
 import numpy.linalg as npl
 import sympy as sym
-
-
-
-
+from elementPT import Element
 
 
 class particleTracer:
@@ -83,7 +80,7 @@ class particleTracer:
         el=Element(args,'LENS_SIM',self)
         el.index = len(self.lattice) #where the element is in the lattice
         self.lattice.append(el) #add element to the list holding lattice elements in order
-    def add_Drift_Ideal(self,L,ap=.03):
+    def add_Drift(self,L,ap=.03):
         #add drift region to the lattice
         #L: length of drift element, m
         #ap:apeture. Default value of 3 cm radius, unitless
@@ -106,7 +103,7 @@ class particleTracer:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
         args=[Bp,rb,rp,ang,ap]
-        el=Element(args,'BENDER',self) #create a bender element object
+        el=Element(args,'BENDER_IDEAL',self) #create a bender element object
         el.index = len(self.lattice) #where the element is in the lattice
         self.benderIndices.append(el.index)
         self.lattice.append(el) #add element to the list holding lattice elements in order
@@ -199,38 +196,7 @@ class particleTracer:
         pArr=np.asarray(self.pList)
         qoArr=np.asarray(self.qoList)
         poArr=np.asarray(self.poList)
-
-
         return qArr,pArr,qoArr,poArr,self.particleOutside
-    def time_Step_Trapezoid(self):
-        #This time stepping solves an implicit equation. In order to find the solution, a function's root
-        #needs to be found.
-        el, coordsxy = self.which_Element_Wrapper(self.q)
-        if el is None:
-            self.particleOutside=True
-            return
-
-        F1 = self.force(self.q)
-        p0=self.p+self.h*F1/self.m
-        tol=1e-8
-        iMax=10
-        for i in range(iMax):
-            q2=self.q+.5*self.h*(self.p+p0)
-            el,coordsxy=self.which_Element_Wrapper(q2)
-
-            exit = self.check_Element_And_Handle_Edge_Event(el)
-            if exit == True:
-                return
-            F2=self.force(q2,el=el,coordsxy=coordsxy)
-
-            psi = self.p + .5 * self.h * ( F1+F2 ) - p0
-
-            phi = self.get_Jacobian_Inv(q2, el=el)
-            p0 = p0 - (phi @ psi)
-            if np.all(np.abs(psi)<tol):
-                self.q = q2
-                self.p = p0
-                break
 
     def handle_Element_Edge(self, el, q, p):
         #when the particle has stepped over into the next element in time_Step_Trapezoid this method is called.
@@ -282,8 +248,6 @@ class particleTracer:
     def time_Step(self,method='verlet'):
         if method=='verlet':
             self.time_Step_Verlet()
-        elif method=='trapezoid':
-            self.time_Step_Trapezoid()
         else:
             raise Exception('No proper method propvided')
 
@@ -301,41 +265,11 @@ class particleTracer:
         if el is not self.currentEl:
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
             qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength)
-            #print(self.currentEl.type,qo[1]*1e3)
-            self.cumulativeLength += self.currentEl.L
+            self.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
             exit=True
             #self.adjust_Energy()
         return exit
-
-
-
-    def get_Jacobian_Inv(self,q,el=None):
-        if el is None:
-            el=self.which_Element_Wrapper(q) #find element the particle is in, and the coords in
-            #the element frame as well
-        if el.type=='LENS_IDEAL':
-            temp=-1/(1+self.h**2*el.K/4)
-            Jinv=np.asarray([[-1,0,0],[1,temp,0],[0,0,temp]])
-            return Jinv
-        if el.type=='DRIFT':
-            return np.eye(3)
-        if el.type=='BENDER':
-            coordsxy = self.transform_Coords_To_Element_Frame(q, el)
-            theta=np.arctan2(coordsxy[1],coordsxy[0])
-            k=el.K
-            h=self.h
-            #J00=-h*k*np.cos(theta)**2/2
-            #J01=h*k*np.sin(2*theta)/4
-            #J10=J01
-            #J11=-h*k*np.sin(theta)**2/2
-            J00=-(h**2*k*np.cos(theta)**2/8+1)
-            J11=-(h**2*k*np.sin(theta)**2/8+1)
-            J01=h**2*k*np.sin(2*theta)/8
-            J10=J01
-            J=np.asarray([[J00,J01,0],[J10,J11,0],[0,0,-h**2*k/4-1]])
-            Jinv=npl.inv(J)
-            return Jinv
 
     def get_Energies(self):
         PE =0
@@ -349,7 +283,7 @@ class particleTracer:
         elif self.currentEl.type == 'DRIFT':
             PE = 0
             KE = np.sum(self.p ** 2) / (2 * self.m)
-        elif self.currentEl.type == 'BENDER':
+        elif self.currentEl.type == 'BENDER_IDEAL':
             qxy = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.q[:-1])  # only x and y coords
             r = np.sqrt(qxy[0] ** 2 + qxy[1] ** 2) - self.currentEl.rb
             B = self.currentEl.Bp * r ** 2 / self.currentEl.rp ** 2
@@ -368,11 +302,11 @@ class particleTracer:
 
     def distance_From_End(self,coordsxy,el):
         #determine the distance along the orbit that the particle is from the end of the element
-        if el.type=='BENDER':
+        if el.type=='BENDER_IDEAL':
             s=el.rb*np.arctan2(coordsxy[1],coordsxy[0])
             return s
         elif el.type=='LENS_IDEAL' or el.type=='DRIFT':
-            return el.L-coordsxy[0]
+            return el.Lo-coordsxy[0]
         pass
     def which_Element_Wrapper(self,q):
         #TODO: USING SHAPELY IS PRETTY SLOW. ITS WOULD BE MUCH FASTER TO USE THE COORDS IN THE ELEMENT FRAME AND
@@ -451,7 +385,7 @@ class particleTracer:
 
         self.totalLength=0
         for el in self.lattice:
-            self.totalLength+=el.L
+            self.totalLength+=el.Lo
     def solve_Triangle_Problem(self,phi1,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders.
@@ -489,7 +423,7 @@ class particleTracer:
                 q3=np.asarray([xe+np.sin(theta)*ap,ye-ap*np.cos(theta)]) #bottom right when theta=0
                 q4=np.asarray([xb+np.sin(theta)*ap,yb-ap*np.cos(theta)]) #bottom left when theta=0
                 el.SO=Polygon([q1,q2,q3,q4])
-            elif el.type=='BENDER':
+            elif el.type=='BENDER_IDEAL':
                 phiArr=np.linspace(0,-el.ang,num=benderPoints)+theta+np.pi/2 #angles swept out
                 xInner=(el.rb-ap)*np.cos(phiArr)+el.r0[0] #x values for inner bend
                 yInner=(el.rb-ap)*np.sin(phiArr)+el.r0[1] #y values for inner bend
@@ -513,7 +447,7 @@ class particleTracer:
     def catch_Errors(self):
         #catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         #kinds
-        if self.lattice[0].type=='BENDER': #first element can't be a bending element
+        if self.lattice[0].type=='BENDER_IDEAL': #first element can't be a bending element
             raise Exception('FIRST ELEMENT CANT BE A BENDER')
         if self.lattice[0].type=='COMBINER': #first element can't be a bending element
             raise Exception('FIRST ELEMENT CANT BE A COMBINER')
@@ -551,7 +485,7 @@ class particleTracer:
                     ye=yb+el.L*np.sin(el.theta)
                     el.nb = -np.asarray([np.cos(el.theta), np.sin(el.theta)])  # normal vector to input
                     el.ne = -el.nb #normal vector to end
-                    if prevEl.type=='BENDER':
+                    if prevEl.type=='BENDER_IDEAL':
                         n=np.zeros(2)
                         n[0]=-prevEl.ne[1]
                         n[1]=prevEl.ne[0]
@@ -561,7 +495,7 @@ class particleTracer:
                         xe+=dr[0]
                         ye+=dr[1]
                     el.r0=np.asarray([(xb+xe)/2,(yb+ye)/2]) #center of lens or drift is midpoint of line connecting beginning and end
-                elif el.type=='BENDER':
+                elif el.type=='BENDER_IDEAL':
                     if prevEl.type=='COMBINER':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
@@ -604,11 +538,10 @@ class particleTracer:
                     xe,ye=xb+dr[0],yb+dr[1]
                     el.ne=-np.asarray([np.cos(el.theta),np.sin(el.theta)])
                     el.nb=np.asarray([np.cos(el.theta+el.ang),np.sin(el.theta+el.ang)])
-                    #print(el.ne,el.nb)
                 else:
                     raise Exception('No correct element name provided')
             #need to make rotation matrices for bender, lens and drift now. Already made for combiner
-            if el.type=='BENDER':
+            if el.type=='BENDER_IDEAL':
                 rot = (el.theta - el.ang + np.pi / 2)
             elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER':
                 rot = el.theta
@@ -627,7 +560,7 @@ class particleTracer:
             el.r2=np.round(np.asarray([xe,ye]),12) #position vector of ending of element
             if i==len(self.lattice)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
-                if el.type=='BENDER' or el.type=='COMBINER':
+                if el.type=='BENDER_IDEAL' or el.type=='COMBINER':
                     reo[0]+=el.rOffset * np.sin(el.theta)
                     reo[1]+=el.rOffset*(-np.cos(el.theta))
             i+=1
@@ -690,57 +623,72 @@ class particleTracer:
 
 
 
-test=particleTracer(200)
-#test.add_Lens_Sim('sampleData.dat')
-
-Lt=1
-L1=.49
-#Ld=(Lt-L1)/2
-Ld=.05
-
-
-
-
-
-test.add_Drift_Ideal(Ld)
-test.add_Lens_Ideal(L1,1,.01)
-test.add_Drift_Ideal(Ld)
-test.add_Bender_Ideal(np.pi,1,1,.01)
-
-test.add_Drift_Ideal(Ld)
-test.add_Lens_Ideal(L1,1,.01)
-test.add_Drift_Ideal(Ld)
-test.add_Bender_Ideal(np.pi,1,1,.01)
-
-test.end_Lattice()
-
-
-
-q0=np.asarray([-1e-10,-2.5e-3,0.0])
-v0=np.asarray([-200.0,0,0])
-
-#0.000938736030108476
-
-q, p, qo, po, particleOutside = test.trace(q0, v0,5e-6, 15*(2+2*np.pi)/200,method='verlet')
-print(particleOutside)
-
-##----------------find envelope----------------
-qoFunc=spi.interp1d(qo[:,0],qo[:,1])
-revs=int(qo[-1,0]/test.totalLength)
-sArr=np.linspace(1e-3,test.totalLength,num=10000)
-envList=[]
-for s0 in sArr:
-    samps=np.arange(0,revs)*test.totalLength+s0
-    env=np.max(np.abs(qoFunc(samps)))
-    envList.append(env)
-plt.plot(sArr,envList)
-plt.grid()
-plt.show()
+# test=particleTracer(200)
+# #test.add_Lens_Sim('sampleData.dat')
 #
-#plt.plot(test.EList)
-#plt.show()
+# Lt=1
+# L1=.49
+# #Ld=(Lt-L1)/2
+# Ld=.05
+#
+#
+#
+#
+#
+# #test.add_Drift(Ld)
+# test.add_Lens_Ideal(L1,1,.01)
+# #test.add_Drift(Ld)
+# test.add_Bender_Ideal(np.pi,1,1,.01)
+#
+# #test.add_Drift(Ld)
+# test.add_Lens_Ideal(L1,1,.01)
+# ##test.add_Drift(Ld)
+# test.add_Bender_Ideal(np.pi,1,1,.01)
+#
+# test.end_Lattice()
+#
+#
+#
+# q0=np.asarray([-1e-10,1e-3,0])
+# v0=np.asarray([-200.0,0,0])
+#
+# q, p, qo, po, particleOutside = test.trace(q0, v0,2.5e-6, 2*(2+2*np.pi)/200,method='verlet')
+# print(particleOutside)
+#
+# ##----------------find envelope----------------
+# qoFunc=spi.interp1d(qo[:,0],qo[:,1])
+# revs=int(qo[-1,0]/test.totalLength)
+# print(revs)
+# sArr=np.linspace(qo[0][0],test.totalLength,num=10000)
+# envList=[]
+# for s0 in sArr:
+#     samps=np.arange(0,revs)*test.totalLength+s0
+#     env=np.max(np.abs(qoFunc(samps)))
+#     envList.append(env)
+# plt.plot(sArr,envList)
+# plt.grid()
+# plt.show()
+#
+# #plt.plot(test.EList)
+# #plt.show()
+#
+# plt.plot(qo[:,0],qo[:,1])
+# plt.grid()
+# plt.show()
+# test.show_Lattice(particleCoords=q[-1])
+#
 
-plt.plot(qo[:,0],qo[:,1])
-plt.show()
-test.show_Lattice(particleCoords=q[-1])
+
+
+
+
+
+q0=np.asarray([1,.01,0])
+args=[.025,1,.01,1,.05]
+PT=particleTracer(200)
+el=Element(args,"BENDER_IDEAL_SEGMENTED",PT)
+print(el.transform_Element_Into_Unit_Cell_Frame(q0))
+
+
+
 

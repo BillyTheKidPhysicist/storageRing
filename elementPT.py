@@ -1,11 +1,22 @@
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.interpolate as spi
+import sympy as sym
+
 class Element:
     # Class to represent the lattice element such as a drift/lens/bender/combiner.
-    # each element type has its own reference frame, which I will described below.
+    # each element type has its own reference frame, as well as attributes, which I will described below
     # Lens and Drift: Input is centered at origin and points to the 'west' with the ouput pointing towards the 'east'
     # Bender: output is facing south and aligned with y=0. The center of the bender is at the origin. Input is at some
-    # positive angle relative to the output. A pi/2 bend would have the input aligned with x=0 for example
+        # positive angle relative to the output. A pi/2 bend would have the input aligned with x=0 for example
     # combiner: the output is at the origin, and the input is towards the east, but pointing a bit up at north. Note that
-    # the input/beginning is considered to be at the origin. This doesn't really make sense and sould be changed
+        # the input/beginning is considered to be at the origin. This doesn't really make sense and sould be changed
+    # Bender, Segemented: This bending section is composed of discrete elements. It is modeled by considering a unit
+        #cell and transforming the particle's coordinates into that frame to compute the force. The unit cell is
+        # half a magnet at y=0, x=rb. An imaginary plane is at some angle to y=0 that defines the unit cell angle. Say the
+        # unit cell angle is phi, and the particle is at angle theta, then the particle's angle in the unit cell is
+        # theta-phi*(theta//phi)
     # TODO: SWITCH THIS
     def __init__(self, args, type, PT):
         self.args = args
@@ -15,9 +26,15 @@ class Element:
         self.c1 = None  # dipole component of combiner, T
         self.c2 = None  # quadrupole component of combiner, T/m
         self.rp = None  # bore of element, m
-        self.L = None  # length of element, m
+        self.L = None  # length of element, the actual magnet (for segmented this is length of 1 segment), m
+        self.Lo = None  # length of orbit inside element. This is different for bending, m
         self.rb = None  # 'bending' radius of magnet. actual bending radius of atoms is slightly different cause they
         # ride on the outside edge, m
+        self.magnetHeight=None #height of the individual magnets used to make the array. If there are mutliple layers
+            #the height is the height of one magnet in each layer
+        self.ucAng=None #the angle that the unit cell makes with the origin. This is for the segmented bender. It is
+            #modeled as a unit cell and the particle's coordinates are rotated into it's reference frame
+
         self.r0 = None  # center of element (for bender this is at bending radius center),vector, m
         self.ro = None  # bending radius of orbit, m. Includes trajectory offset
         self.ang = 0  # Angle that the particles are bent, either bender or combiner. this is the change in  angle in
@@ -62,25 +79,41 @@ class Element:
             self.Bp = self.args[0]
             self.rp = self.args[1]
             self.L = self.args[2]
+            self.Lo=self.args[2]
             self.ap = self.args[3]
-            self.K = (2 * self.Bp * self.PT.u0_Actual / self.rp ** 2) / self.PT.m_Actual  # reduced force
+            self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
         elif self.type == 'DRIFT':
             self.L = self.args[0]
+            self.Lo = self.args[0]
             self.ap = self.args[1]
-        elif self.type == 'BENDER':
+        elif self.type == 'BENDER_IDEAL':
             self.Bp = self.args[0]
             self.rb = self.args[1]
             self.rp = self.args[2]
             self.ang = self.args[3]
             self.ap = self.args[4]
-            self.K = (2 * self.Bp * self.PT.u0_Actual / self.rp ** 2) / self.PT.m_Actual  # reduced force
-            self.rOffset = np.sqrt(
-                self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
-            # account for reduced speed in the bender from energy conservation
+            self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
+            self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+                # account for reduced speed in the bender from energy conservation
             # self.rOffset=np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal**2/(2*self.K))-self.rb/4 #this acounts for reduced
             # energy
             self.ro = self.rb + self.rOffset
-            self.L = self.ang * self.ro
+            self.L = self.ang * self.rb
+            self.Lo = self.ang * self.ro
+        elif self.type=="BENDER_IDEAL_SEGMENTED":
+            self.L=self.args[0]
+            self.rb=self.args[1]
+            self.rp=self.args[2]
+            self.Bp=self.args[3]
+            self.magnetHeight=self.args[4]
+            self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
+            self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+                # account for reduced speed in the bender from energy conservation
+            self.ro = self.rb + self.rOffset
+            self.Lo = self.ang * self.ro
+
+            #compute the angle that the unit cell makes
+            self.ucAng=np.arctan(self.L/(self.rb-self.rp-self.magnetHeight))
         elif self.type == 'COMBINER':
             self.L = self.args[0]
             self.ap = self.args[1]
@@ -133,7 +166,7 @@ class Element:
         if self.type == 'DRIFT' or self.type == 'LENS_IDEAL':
             qNew[0] = qNew[0] - self.r1[0]
             qNew[1] = qNew[1] - self.r1[1]
-        elif self.type == 'BENDER':
+        elif self.type == 'BENDER_IDEAL':
             qNew[:2] = qNew[:2] - self.r0
         elif self.type == 'COMBINER':
             qNew[:2] = qNew[:2] - self.r2
@@ -150,7 +183,7 @@ class Element:
         qo = q.copy()
         if self.type == 'LENS_IDEAL' or self.type == 'DRIFT':
             pass
-        elif self.type == 'BENDER':
+        elif self.type == 'BENDER_IDEAL':
             qo = q.copy()
             phi = self.ang - np.arctan2(q[1] + 1e-10, q[0])  # angle swept out by particle in trajectory. This is zero
             # when the particle first enters
@@ -174,7 +207,7 @@ class Element:
         F = np.zeros(3)  # force vector starts out as zero
         if self.type == 'DRIFT':  # no force from drift region
             pass
-        elif self.type == 'BENDER':
+        elif self.type == 'BENDER_IDEAL':
             r = np.sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
             F0 = -self.K * (r - self.rb)  # force in x y plane
             phi = np.arctan2(q[1], q[0])
@@ -190,9 +223,23 @@ class Element:
                 B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
                 F[1] = self.PT.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
                 F[2] = self.PT.u0 * self.c2 ** 2 * q[2] / B0
-        return F
+        elif self.type=='BENDER_IDEAL_SEGMENTED':
+            if q[1]<self.L: #if particle is inside the magnet region
+                F[0]=self.K*q[0]
+                F[2]=self.K*q[2]
+            else: #if instead it's in the sliver that isn't inside the magnet
+                pass
 
-    def transform_Vector_Out_Of_Element_Frame(self, vec):
+
+        return F
+    def transform_Element_Into_Unit_Cell_Frame(self,q):
+        qNew=q.copy()
+        phi=np.arctan2(q[1],q[0])
+        theta=phi-self.ucAng*(phi//self.ucAng)
+        qNew[0]=q[0]*np.cos(theta) #cartesian coords in unit cell frame
+        qNew[1]=q[1]*np.sin(theta) #cartesian coords in unit cell frame
+        return qNew
+    def transform_Vector_Out_Of_Element_Frame(self,vec):
         # rotation matrix is 3x3 to account for z axis
         vecx = vec[0]
         vecy = vec[1]
@@ -205,7 +252,7 @@ class Element:
         pNew = p.copy()
         pNew[0] = p[0] * self.RIn[0, 0] + p[1] * self.RIn[0, 1]
         pNew[1] = p[0] * self.RIn[1, 0] + p[1] * self.RIn[1, 1]
-        if self.type == 'BENDER':  # need to use a change of vectors from cartesian to polar for bender
+        if self.type == 'BENDER_IDEAL':  # need to use a change of vectors from cartesian to polar for bender
             q = self.transform_Lab_Coords_Into_Element_Frame(q)
             pNew = p.copy()
             sDot = (q[0] * pNew[1] - q[1] * pNew[0]) / np.sqrt((q[0] ** 2 + q[1] ** 2))
@@ -216,3 +263,5 @@ class Element:
             return pNew
         if self.type == 'COMBINER':
             raise Exception('NOT YET IMPLEMENTED')
+
+
