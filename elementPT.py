@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
 import sympy as sym
+from numba import jit
+import numba
 import sys
 
 class Element:
@@ -18,6 +20,9 @@ class Element:
         # half a magnet at y=0, x=rb. An imaginary plane is at some angle to y=0 that defines the unit cell angle. Say the
         # unit cell angle is phi, and the particle is at angle theta, then the particle's angle in the unit cell is
         # theta-phi*(theta//phi)
+    #Bender, simulated, segmented: Particle is traced using the force from a COMSOL simulation of the magnetic field. The
+        #bore radius, bending radius and UCAngle is computed from the supplied field by finding the
+        #maximum value in the y direction.
     # TODO: SWITCH THIS
     def __init__(self, args, type, PT):
         self.args = args
@@ -27,7 +32,7 @@ class Element:
         self.c1 = None  # dipole component of combiner, T
         self.c2 = None  # quadrupole component of combiner, T/m
         self.rp = None  # bore of element, m
-        self.L = None  # length of element,(for segmented this is length of 1 segment). This can also
+        self.L = None  # length of element (or for vacuum tube), (for segmented this is length of 1 segment). This can also
             #include gaps. Not necesarily the length of the magnetic material. m
         self.Lo = None  # length of orbit inside element. This is different for bending, m
         self.rb = None  # 'bending' radius of magnet. actual bending radius of atoms is slightly different cause they
@@ -37,6 +42,12 @@ class Element:
             #modeled as a unit cell and the particle's coordinates are rotated into it's reference frame, rad
         self.numMagnets=None #the number of magnets. Keep in mind for a segmented bender two units cells make a total
             #of 1 magnet with each unit cell having half a magnet.
+        self.space=None #extra space added to the length of the magnet in each direction to make up for width
+            #of the yoke. The total increase in width is TWICE this value
+        self.BGradXFunc=None #Fit functions for the provided field gradients data
+        self.BGradyFunc=None #Fit functions for the provided field gradients data
+        self.BGradzFunc=None #Fit functions for the provided field gradients data
+
 
         self.r0 = None  # center of element (for bender this is at bending radius center),vector, m
         self.ro = None  # bending radius of orbit. Includes trajectory offset, m
@@ -79,6 +90,7 @@ class Element:
 
     def unpack_Args_And_Fill_Params(self):
         if self.type == 'LENS_IDEAL':
+
             self.Bp = self.args[0]
             self.rp = self.args[1]
             self.L = self.args[2]
@@ -103,6 +115,9 @@ class Element:
             self.ro = self.rb + self.rOffset
             self.L = self.ang * self.rb
             self.Lo = self.ang * self.ro
+        elif self.type=="BENDER_SIM_SEGMENTED":
+            sys.exit()
+            pass
         elif self.type=="BENDER_IDEAL_SEGMENTED":
             self.L=self.args[0]
             self.Bp = self.args[1]
@@ -111,16 +126,17 @@ class Element:
             self.yokeWidth=self.args[4]
             self.numMagnets=self.args[5] #number of magnets which is half the number of unit cells.
             self.ap=self.args[6]
+            self.space=self.args[7]
+            self.L=self.L+self.space*2 #add extra space
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
             self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
                 # account for reduced speed in the bender from energy conservation
             self.ro = self.rb + self.rOffset
-            self.Lo = self.ang * self.ro
             #compute the angle that the unit cell makes as well as total bent angle
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.L / (2 * D))
             self.ang=2*self.numMagnets * self.ucAng #number of units cells times bending angle of 1 cell
-
+            self.Lo = self.ang * self.ro
         elif self.type == 'COMBINER':
             self.L = self.args[0]
             self.ap = self.args[1]
@@ -232,36 +248,40 @@ class Element:
                 F[1] = self.PT.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
                 F[2] = self.PT.u0 * self.c2 ** 2 * q[2] / B0
         elif self.type=='BENDER_IDEAL_SEGMENTED':
-
             quc=self.transform_Element_Into_Unit_Cell_Frame(q) #get unit cell coords
-            print(q)
-            print(quc)
-            if q[1]<self.L: #if particle is inside the magnet region
-                F[0]=self.K*quc[0]
-                F[2]=self.K*quc[2]
+            if quc[1]<self.L/2: #if particle is inside the magnet region
+                F[0]=-self.K*(quc[0]-self.rb)
+                F[2]=-self.K*quc[2]
+                F = self.transform_Unit_Cell_Vector_Into_Element_Frame(F, q, quc)
             else: #if instead it's in the sliver that isn't inside the magnet
                 pass
-            self.transform_Unit_Cell_Vector_Into_Element_Frame(F,q,quc)
-            sys.exit()
-
+            #print(quc[1],F[0])
 
         return F
     def transform_Element_Into_Unit_Cell_Frame(self,q):
         if self.type == 'BENDER_IDEAL_SEGMENTED':
             qNew=q.copy()
-            print(qNew)
-            phi=np.arctan2(q[1],q[0])
+            phi=self.ang-np.arctan2(q[1],q[0])
+
+            r=np.sqrt(q[0]**2+q[1]**2)
             theta=phi-self.ucAng*(phi//self.ucAng)
-            qNew[0]=q[0]*np.cos(theta)-q[1]*np.sin(theta) #cartesian coords in unit cell frame
-            qNew[1]=q[0]*np.sin(theta)+q[1]*np.cos(theta) #cartesian coords in unit cell frame
-            print(qNew)
-            sys.exit()
+            qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
+            qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
             return qNew
         else:
             raise Exception('not implemented')
+
+
     def transform_Unit_Cell_Vector_Into_Element_Frame(self,vec,q,quc):
         vecNew=vec.copy()
-        rotAngle=np.arctan2(q[1],q[0])-np.arctan2(quc[1],quc[0])
+        rotAngle=-(np.arctan2(quc[1],quc[0])-np.arctan2(q[1],q[0]))
+        vecx=vecNew[0]
+        vecy=vecNew[1]
+        vecNew[0] = vecx * np.cos(rotAngle) - vecy *np.sin(rotAngle)
+        vecNew[1] = vecx*np.sin(rotAngle) +vecy*np.cos(rotAngle)
+        return vecNew
+
+
     def transform_Vector_Out_Of_Element_Frame(self,vec):
         # rotation matrix is 3x3 to account for z axis
         vecNew=vec.copy()

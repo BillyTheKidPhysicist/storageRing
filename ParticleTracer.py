@@ -9,8 +9,11 @@ import numpy.linalg as npl
 import sympy as sym
 from elementPT import Element
 
-def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle):
-    rb=L/(2*np.tan(angle/(2*numMagnets)))+yokeWidth+rp
+def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
+    #ucAng=angle/(2*numMagnets)
+    rb=(L+2*space)/(2*np.tan(angle/(2*numMagnets)))+yokeWidth+rp
+    #ucAng1=np.arctan((L/2)/(rb-rp-yokeWidth))
+    #print(ucAng,ucAng1*2*numMagnets)
     return rb
 
 class particleTracer:
@@ -58,6 +61,18 @@ class particleTracer:
         self.TList=[] #list of kinetic energy
         self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
             #This won't always be on
+
+        #Parameters for adaptive timestepping. Very simple model. Time step is interpolated between F1 and F2
+        #starting at self.h/self.hFact and ending at self.h
+        BMax=1 #maximum expected B value
+        rpMin=.01 #minimum expected pole radius
+        rTypical=rpMin/5 #typical r value to use as maximum
+        FMax=2 * BMax * self.u0 *rTypical/ rpMin**2  # approximate maximum force value for a particle
+        self.hFact=5 #maximum value to grow the time step by
+        self.Fnorm=None #Last force value on particle. This is for adapting the time step to acceleration. When value is
+            #None, smallest time step is used
+        self.F1=0
+        self.F2=FMax
     def add_Lens_Ideal(self,L,Bp,rp,ap=None):
         #add a lens to the lattice
         #L: Length of lens, m
@@ -90,7 +105,11 @@ class particleTracer:
         el=Element(args,'DRIFT',self)#create a drift element object
         el.index = len(self.lattice) #where the element is in the lattice
         self.lattice.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal_Segmented(self,L,Bp,rb,rp,yokeWidth,numMagnets,ap=None):
+    def add_Bender_Sim_Segmented(self,file,L,extraspace):
+        args=[file,L,extraspace]
+        el=Element(args,'BENDER_SIM_SEGMENTED',self)
+        pass
+    def add_Bender_Ideal_Segmented(self,L,Bp,rb,rp,yokeWidth,numMagnets,ap=None,space=None):
         #L: Length of individual magnet.
         #Bp: Field strength at pole face
         # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -98,6 +117,9 @@ class particleTracer:
         #rp: Bore radius of element
         #yokeWidth: width of the yoke, but also refers to the width of the magnetic material
         #numMagnet: number of magnets in segmented bender
+        #ap: apeture of magnet, ie the inner radius of the vacuum tube
+        #space: extra space from magnet holder in the direction of the length of the magnet. This effectively add length
+            #to the magnet. total length will be changed by TWICE this value, the space is on each end
 
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
@@ -105,7 +127,7 @@ class particleTracer:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        args=[L,Bp,rb,rp,yokeWidth,numMagnets,ap]
+        args=[L,Bp,rb,rp,yokeWidth,numMagnets,ap,space]
         el=Element(args,"BENDER_IDEAL_SEGMENTED",self)
         el.index = len(self.lattice)  # where the element is in the lattice
         self.lattice.append(el)
@@ -200,20 +222,20 @@ class particleTracer:
         while(True):
             if self.T+self.h>T0:
                 break
-            #self.adapt_Time_Step(self.currentEl)
+
             self.time_Step(method=method)
+            #self.adapt_Time_Step(self.currentEl)
             if self.particleOutside==True:
                 break
             self.qList.append(self.q)
             self.pList.append(self.p)
             self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength))
-            self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q, self.p))
+            #self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q, self.p))
             self.T += self.h #TODO: THIS DOESN'T ACCOUNT FOR HANDLE EDGE
-            temp=self.get_Energies()
-            self.VList.append(temp[0])
-            self.TList.append(temp[1])
-            self.EList.append(sum(temp))
-
+            #temp=self.get_Energies()
+            #self.VList.append(temp[0])
+            #self.TList.append(temp[1])
+            #self.EList.append(sum(temp))
         qArr=np.asarray(self.qList)
         pArr=np.asarray(self.pList)
         qoArr=np.asarray(self.qoList)
@@ -265,7 +287,7 @@ class particleTracer:
 
         self.q=q_n
         self.p=p_n
-
+        self.Fnorm=np.sqrt(np.sum(F_n**2))
     def time_Step(self,method='verlet'):
         if method=='verlet':
             self.time_Step_Verlet()
@@ -285,9 +307,10 @@ class particleTracer:
             exit=True
         if el is not self.currentEl:
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
-            qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength)
             self.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
+            self.h=self.h0
+            self.Fnorm=None
             exit=True
             #self.adjust_Energy()
         return exit
@@ -318,10 +341,9 @@ class particleTracer:
             el=self.which_Element(q) #find element the particle is in
         if coordsxy is None:
             coordsxy = el.transform_Lab_Coords_Into_Element_Frame(q)
-        print(el.type)
         F=el.force(coordsxy)
-
-        return el.transform_Vector_Out_Of_Element_Frame(F)
+        F=el.transform_Vector_Out_Of_Element_Frame(F)
+        return F
 
     def distance_From_End(self,coordsxy,el):
         #determine the distance along the orbit that the particle is from the end of the element
@@ -344,11 +366,17 @@ class particleTracer:
             else:
                 return el, coordsxy
     def adapt_Time_Step(self,el):
-        raise Exception('broken')
-        if el.type=='DRIFT':
-            self.h=10e-3/self.v0 #step size of 1cm
-        else:
-            self.h=self.h0
+        #TODO: needs more reasearch, no working as easiy as hoped
+        if self.Fnorm is not None:
+
+            if self.Fnorm>self.F2:
+                self.h=self.h0
+            elif self.Fnorm<self.F1:
+                self.h=self.h0/self.hFact
+            else:
+                self.h=self.h0*self.hFact+self.h0*(1-self.hFact)*((self.Fnorm-self.F1)/(self.F2-self.F1))**(1.0/2.0)
+        raise Exception('work in progress')
+
 
     def which_Element_Shapely(self,q):
         # Use shapely to find where the element is. If the object is exaclty on the edge, it should catch that
@@ -409,6 +437,7 @@ class particleTracer:
         self.totalLength=0
         for el in self.lattice:
             self.totalLength+=el.Lo
+
     def solve_Triangle_Problem(self,phi1,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders.
@@ -648,43 +677,49 @@ class particleTracer:
 
 
 test=particleTracer(200)
-# Lt=1
-L1=.5
 
 
-Lm=.05
-rp=.01
-yokeWidth=.015
-angle=np.pi
-numMagnets=50
 
-
-rb=Compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,angle)
-# #Ld=(Lt-L1)/2
-# Ld=.05
+#
+# L1=1
 #
 #
+# Lm=.02
+# rp=.01
+# yokeWidth=.015
+# angle=np.pi
+# numMagnets=175
+# space=0.001
 #
 #
-# #test.add_Drift(Ld)
-test.add_Lens_Ideal(L1,1,.01)
-test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets)
-# #test.add_Drift(Ld)
-#
-# #test.add_Drift(Ld)
-test.add_Lens_Ideal(L1,1,.01)
-test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets)
-# ##test.add_Drift(Ld)
-#
-test.end_Lattice()
-#
+# rb=Compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,angle,space=space)
+# # #Ld=(Lt-L1)/2
+# # Ld=.05
 # #
+# #
+# #
+# #
+# # #test.add_Drift(Ld)
+# test.add_Lens_Ideal(L1,1,.01)
+# test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
+# # #test.add_Drift(Ld)
+# #
+# # #test.add_Drift(Ld)
+# test.add_Lens_Ideal(L1,1,.01)
+# test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
+# # ##test.add_Drift(Ld)
+# #
+# test.end_Lattice()
+# #
+# # #
+# #
+# q0=np.asarray([-1e-10,1e-3,0])
+# v0=np.asarray([-200.0,0,0])
 #
-q0=np.asarray([-1e-10,1e-3,0])
-v0=np.asarray([-200.0,0,0])
-
-q, p, qo, po, particleOutside = test.trace(q0, v0,1e-5, .55/200,method='verlet')
-#print(particleOutside)
+# t=time.time()
+# q, p, qo, po, particleOutside = test.trace(q0, v0,1e-6, 1*(2*L1+2*np.pi)/200,method='verlet')
+# print(1e3*(time.time()-t))
+# print(particleOutside)
 #
 # ##----------------find envelope----------------
 # qoFunc=spi.interp1d(qo[:,0],qo[:,1])
@@ -703,13 +738,12 @@ q, p, qo, po, particleOutside = test.trace(q0, v0,1e-5, .55/200,method='verlet')
 # #plt.plot(test.EList)
 # #plt.show()
 #
-plt.plot(qo[:,0],qo[:,1])
-plt.grid()
-plt.show()
-test.show_Lattice()#particleCoords=q[-1])
 #
-
-
+#plt.plot(qo[:,0],qo[:,1])
+#plt.grid()
+#plt.show()
+#test.show_Lattice(particleCoords=q[-1])
+#
 
 
 
