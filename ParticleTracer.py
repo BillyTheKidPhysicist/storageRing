@@ -276,7 +276,6 @@ class particleTracer:
         np=p/npl.norm(p) #normalized vector of particle direction
         q=q+np*eps
         return q,p
-
     def time_Step_Verlet(self):
         #print('---------FORCE---------')
         q=self.q #q old or q sub n
@@ -287,7 +286,7 @@ class particleTracer:
             F=self.force(q)
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
-        el, coordsxy = self.which_Element_Wrapper(q_n)
+        el, qel = self.which_Element_Wrapper(q_n)
         exit=self.check_Element_And_Handle_Edge_Event(el)
         if exit==True:
             self.test=q_n
@@ -296,7 +295,7 @@ class particleTracer:
         else:
             self.elHasChanged=False
 
-        F_n=self.force(q_n,el=el,coordsxy=coordsxy)
+        F_n=self.force(q_n,el=el,qel=qel)
         a_n = F_n / self.m  # acceleration new or acceleration sub n+1
         p_n=p+self.m*.5*(a+a_n)*self.h
 
@@ -330,31 +329,41 @@ class particleTracer:
         return  PE,KE
 
 
-    def force(self,q,coordsxy=None,el=None):
+    def force(self,q,qel=None,el=None):
         #calculate force. The force from the element is in the element coordinates, and the particle's coordinates
         #must be in the element frame
         #q: particle's coordinates in lab frame
         #todo: remove redundant q and coordsxy
         if el is None:
             el=self.which_Element(q) #find element the particle is in
-        if coordsxy is None:
-            coordsxy = el.transform_Lab_Coords_Into_Element_Frame(q)
-        Fel=el.force(coordsxy) #force in element frame
-        FLab=el.transform_Vector_Out_Of_Element_Frame(Fel) #force in lab frame
+        if qel is None:
+            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
+        Fel=el.force(qel) #force in element frame
+        FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
         return FLab
 
 
-    def which_Element_Wrapper(self,q):
+    def which_Element_Wrapper(self,q,return_qel=True):
+        #find which element the particle is in, but check the current element first to see if it's there ,which save time
+        #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
 
-        el = self.which_Element(q)
-        if el is None:
-            return None, None
-        else:
-            coordsxy = self.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
-            if np.abs(q[-1])>el.ap:
-                return None,None
+        qel = self.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
+        isInside=self.currentEl.is_Coord_Inside(qel)
+        if isInside==True: #is the particle is inside the current element, then we found it! Otherwise, go on to search
+            #with shapely
+            if return_qel==True:
+                return self.currentEl,qel
             else:
-                return el, coordsxy
+                return self.currentEl
+        else: #if not inside current element, search everywhere now
+            el = self.which_Element(q)
+            if el is None: #if there is no element, then there are also no corresponding coordinates
+                qel=None
+            if return_qel == True:
+                return el,qel
+            else:
+                return el
+
 
     def which_Element_Shapely(self,q):
         # Use shapely to find where the element is. If the object is exaclty on the edge, it should catch that
@@ -371,8 +380,13 @@ class particleTracer:
         #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
         #or between two element. So try scooting the particle on a tiny bit and try again.
         el=self.which_Element_Shapely(q)
+
         if el is not None: #if particle is definitely inside an element.
-            return el
+            #now test for the z clipping
+            if np.abs(q[2])>el.ap:
+                return None
+            else:
+                return el
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
         #add up all the beginnings and end of elements and average them
@@ -393,7 +407,11 @@ class particleTracer:
         qNew[:-1]=qNew[:-1]+dr
         el=self.which_Element_Shapely(qNew)
 
-        return el
+        # now test for the z clipping
+        if np.abs(q[2]) > el.ap:
+            return None
+        else:
+            return el
     def adjust_Energy(self):
         #when the particle traverses an element boundary, energy needs to be conserved. This would be irrelevant if I
         #included fringe field effects
@@ -651,9 +669,6 @@ class particleTracer:
         plt.gca().set_aspect('equal')
         plt.show()
 
-q0=np.loadtxt('poop')
-
-
 
 test=particleTracer(200)
 file='data.txt'
@@ -662,7 +677,7 @@ file='data.txt'
 
 
 
-L1=.25
+L1=1
 
 Lm=.0254
 rp=.0125
@@ -674,21 +689,23 @@ space=1000e-6
 #test.add_Bender_Sim_Segmented(file,Lm,space)
 
 
-rb=Compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,angle,space=space)
+#rb=Compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,angle,space=space)
 
 
 
 #test.add_Drift(L1)
 test.add_Lens_Ideal(L1,1,.01)
-test.add_Bender_Sim_Segmented(file,Lm,rp,space,yokeWidth,numMagnets)#test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
+#test.add_Bender_Sim_Segmented(file,Lm,rp,space,yokeWidth,numMagnets)#test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
 #test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
+test.add_Bender_Ideal(np.pi,1,1,.01)
 #test.add_Drift(Ld)
 #
 #test.add_Drift(L1)
-test.add_Lens_Ideal(L1/3.0,1.0,.01)
-test.add_Drift(L1/3.0)
-test.add_Lens_Ideal(L1/3.0,1.0,.01)
-test.add_Bender_Sim_Segmented(file,Lm,rp,space,yokeWidth,numMagnets)
+test.add_Lens_Ideal(L1,1.0,.01)
+#test.add_Drift(L1/3.0)
+#test.add_Lens_Ideal(L1/3.0,1.0,.01)
+#test.add_Bender_Sim_Segmented(file,Lm,rp,space,yokeWidth,numMagnets)
+test.add_Bender_Ideal(np.pi,1,1,.01)
 #test.add_Bender_Ideal_Segmented(Lm,1,rb,rp,yokeWidth,numMagnets,space=space)
 # ##test.add_Drift(Ld)
 #
@@ -697,19 +714,23 @@ test.end_Lattice()
 #
 #
 
-q0=np.asarray([-1e-10,3e-3,0])
+q0=np.asarray([-1e-10,1e-3,0])
 v0=np.asarray([-200.0,0,0])
 
-t=time.time()
-Lt=L1
+Lt=10*L1
 print(Lt)
 dt=1e-6
 #q, p, qo, po, particleOutside = test.trace(q0, v0,dt, Lt/200,method='verlet')
+
 def speed():
     test.trace(q0, v0, dt, Lt / 200, method='verlet')
-cProfile.run('speed()')
-
-
+t=time.time()
+#cProfile.run('speed()')
+#q, p, qo, po, particleOutside = test.trace(q0, v0,dt, Lt/200,method='verlet')
+#print(time.time()-t)
+#print(q[-1])
+# [-1.64437006  0.23518299  0.        ]
+#time: 4 sec
 
 # print(particleOutside)
 # dataSteps=5
@@ -740,6 +761,7 @@ cProfile.run('speed()')
 #
 #
 #plt.plot(qo[:,0],qo[:,1])
+#plt.show()
 #print(test.EList)
 #v0Arr=np.sum(p**2,axis=1)
 #plt.plot(qo[:,0],qo[:,2])

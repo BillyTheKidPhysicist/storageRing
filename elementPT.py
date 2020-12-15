@@ -422,3 +422,31 @@ class Element:
         else:
             raise Exception('not implemented')
         return PE
+    def is_Coord_Inside(self,q):
+        #check if the supplied coordinates are inside the element's vacuum chamber. This does not use shapely, only
+        #geometry
+        #q: coordinates to test
+        if self.type=='LENS_IDEAL' or self.type=='DRIFT':
+            if np.abs(q[2])>self.ap:
+                return False
+            elif np.abs(q[1])>self.ap:
+                return False
+            elif q[0]<0 or q[0]>self.L:
+                return False
+            else:
+                return True
+        elif self.type=='BENDER_IDEAL' or self.type=='BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
+            if np.abs(q[2])>self.ap: #if clipping in z direction
+                return False
+
+            phi=np.arctan2(q[1],q[0])
+            if (phi>self.ang and phi<2*np.pi) or phi<0: #if outside bender's angle range
+                return False
+
+            r=np.sqrt(q[0]**2+q[1]**2)
+            if r<self.rb-self.ap or r>self.rb+self.ap:
+                return False
+
+            return True
+        else:
+            raise Exception('not implemented')
