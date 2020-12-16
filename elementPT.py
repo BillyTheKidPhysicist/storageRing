@@ -17,12 +17,14 @@ class Element:
         # the input/beginning is considered to be at the origin. This doesn't really make sense and sould be changed
     # Bender, Segemented: This bending section is composed of discrete elements. It is modeled by considering a unit
         #cell and transforming the particle's coordinates into that frame to compute the force. The unit cell is
-        # half a magnet at y=0, x=rb. An imaginary plane is at some angle to y=0 that defines the unit cell angle. Say the
+        # half a magnet at y=0, x=rb. An imaginary plane is at some angle to x,y=0,0 that defines the unit cell angle. Say the
         # unit cell angle is phi, and the particle is at angle theta, then the particle's angle in the unit cell is
-        # theta-phi*(theta//phi)
+        # theta-phi*(theta//phi). The modeled data must be in the format that comsol exports a grid as, and the model
+        #must be pointing in the positive z direction and be located at x=rb
     #Bender, simulated, segmented: Particle is traced using the force from a COMSOL simulation of the magnetic field. The
         #bore radius, bending radius and UCAngle is computed from the supplied field by finding the
-        #maximum value in the y direction.
+        #maximum value in the y direction. The provided data is oriented such that the input points in the -z direction,
+        #so it must be rotated when calling the force
     # TODO: SWITCH THIS
     def __init__(self, args, type, PT):
         self.args = args
@@ -118,40 +120,58 @@ class Element:
             self.Lo = self.ang * self.ro
         elif self.type=="BENDER_SIM_SEGMENTED":
             data=np.loadtxt(self.args[0])
-            xArr = np.unique(data[:, 0])
-            yArr = np.unique(data[:, 1])
-            zArr = np.unique(data[:, 2])
-            self.rb=(xArr.max()+xArr.min())/2
-            self.space=self.args[3]
+            self.rb=self.args[3]
+            self.space=self.args[4]
             self.Lseg=self.args[1]+2*self.space #total length is hard magnet length plus 2 times extra space
             self.rp=self.args[2]
-            self.yokeWidth=self.args[4]
-            self.numMagnets=self.args[5]
-            self.ap=self.args[6]
+            self.yokeWidth=self.args[5]
+            self.numMagnets=self.args[6]
+            self.ap=self.args[7]
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
             self.ang = 2 * self.numMagnets * self.ucAng  # number of units cells times bending angle of 1 cell
 
+            xArr = np.unique(data[:, 0])
+            yArr = np.unique(data[:, 1])
+            zArr = np.unique(data[:, 2])
             BGradx=data[:,3]
             BGrady=data[:,4]
             BGradz=data[:,5]
 
-
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
-            BGradxMatrix = BGradx.reshape((numx,numy,numz),order='F')
-            BGradyMatrix = BGrady.reshape((numx, numy, numz), order='F')
-            BGradzMatrix = BGradz.reshape((numx, numy, numz), order='F')
+
+
+
+            BGradxMatrix = BGradx.reshape((numz, numy, numx))
+            BGradyMatrix = BGrady.reshape((numz, numy, numx))
+            BGradzMatrix = BGradz.reshape((numz, numy, numx))
+            #plt.imshow(BGradyMatrix[0,:,:])
+            #plt.show()
 
 
             BGradxMatrix=np.ascontiguousarray(BGradxMatrix)
             BGradyMatrix=np.ascontiguousarray(BGradyMatrix)
             BGradzMatrix=np.ascontiguousarray(BGradzMatrix)
+#
+            tempx = interp_3d.Interp3D(-self.PT.u0*BGradxMatrix, zArr, yArr, xArr)
+            tempy = interp_3d.Interp3D(-self.PT.u0*BGradyMatrix, zArr, yArr, xArr)
+            tempz = interp_3d.Interp3D(-self.PT.u0*BGradzMatrix, zArr, yArr, xArr)
+            self.FxFunc=lambda x,y,z:tempx((y,-z,x))
+            self.FyFunc = lambda x, y, z: tempz((y, -z, x))
+            self.FzFunc = lambda x, y, z: -tempy((y, -z, x))
+            ##testFunc = spi.RegularGridInterpolator((zArr, yArr, xArr), BGradMatrix)
+            ##print(zArr.max(),yArr.max(),xArr.max(),)
+            #z0 = self.rp/2#np.linspace(-self.rp*.9,self.rp*.9)
+            #y0 = 0#np.linspace(0,self.Lseg/3)
+            #x0 =self.rb+np.linspace(-self.rp/2,self.rp/2)
+            #temp = []
+            #for x in x0:
+            #    temp.append(self.FxFunc(x,y0,z0))
+            #plt.plot(x0, temp)
+            #plt.show()
 
-            self.FxFunc = interp_3d.Interp3D(-self.PT.u0*BGradxMatrix, xArr, yArr, zArr)
-            self.FyFunc = interp_3d.Interp3D(-self.PT.u0*BGradyMatrix, xArr, yArr, zArr)
-            self.FzFunc = interp_3d.Interp3D(-self.PT.u0*BGradzMatrix, xArr, yArr, zArr)
 
 
             self.K=self.find_K_Value()
@@ -161,6 +181,90 @@ class Element:
             self.Lo = self.ang * self.ro
             self.L=self.rb*self.ang
 
+        elif self.type == "BENDER_SIM_SEGMENTED_CAP":
+            data = np.loadtxt(self.args[0])
+            self.L=self.args[1]
+            self.rOffset=self.args[2]
+            self.rp=self.args[3]
+            self.ap=self.args[4]
+            self.Lo=self.L
+            xArr = np.unique(data[:, 0])
+            yArr = np.unique(data[:, 1])
+            zArr = np.unique(data[:, 2])
+            BGradx=data[:,3]
+            BGrady=data[:,4]
+            BGradz=data[:,5]
+            numx = xArr.shape[0]
+            numy = yArr.shape[0]
+            numz = zArr.shape[0]
+            zArr=np.flip(zArr)
+
+            BGradxMatrix = BGradx.reshape((numz, numy, numx))
+            BGradyMatrix = BGrady.reshape((numz, numy, numx))
+            BGradzMatrix = BGradz.reshape((numz, numy, numx))
+
+
+            BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+            BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+            BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+            #
+            tempx = interp_3d.Interp3D(-self.PT.u0*BGradxMatrix, zArr, yArr, xArr)
+            tempy = interp_3d.Interp3D(-self.PT.u0*BGradyMatrix, zArr, yArr, xArr)
+            tempz = interp_3d.Interp3D(-self.PT.u0*BGradzMatrix, zArr, yArr, xArr)
+
+            self.FxFunc = lambda x,y,z:tempz((x-self.L,y,z))
+            self.FyFunc = lambda x, y, z: tempy((x-self.L,y,z))
+            self.FzFunc = lambda x, y, z: -tempx((x-self.L,y,z))
+
+            #print(xArr.min(),xArr.max(),yArr.min(),yArr.max(),zArr.min(),zArr.max())
+            #print(tempy((-.02,self.rp/4,self.rp/4)))
+            #sys.exit()
+
+            # #test=BGrady.reshape((numx,numy,numz)).T
+            # #testFunc=spi.RegularGridInterpolator((zArr,yArr,xArr),test)
+            # #print(numx, numy, numz, test.shape)
+            #z0 =0*self.rp/4#-self.L/2# np.linspace(0,-self.L*.99)
+            #y0 =self.rp/4# np.linspace(-self.rp/2,self.rp/2)#self.rp / 4
+            #x0 =np.linspace(0,self.L*.9)
+            #temp = []
+            #for x in x0:
+            #    temp.append(self.FyFunc(x,y0,z0))
+            #plt.plot(x0, temp)
+            #plt.show()
+            # #plt.imshow(test[:,:,0])
+            # #plt.show()
+            #
+            # sys.exit()
+            #
+            #
+            #
+            # BGradxMatrix = BGradx.reshape((numx,numy,numz))#,order='F')
+            # BGradyMatrix = BGrady.reshape((numx,numy,numz))#, order='F')
+            # BGradzMatrix = BGradz.reshape((numx,numy,numz))#, order='F')
+            #
+            #
+            # BGradxMatrix=np.ascontiguousarray(BGradxMatrix)
+            # BGradyMatrix=np.ascontiguousarray(BGradyMatrix)
+            # BGradzMatrix=np.ascontiguousarray(BGradzMatrix)
+            #
+            #
+            # print(numx,numy,numz)
+            # self.FxFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradxMatrix)#interp_3d.Interp3D(BGradxMatrix, xArr, yArr, zArr)
+            # self.FyFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradyMatrix)#interp_3d.Interp3D(BGradyMatrix, xArr, yArr, zArr)
+            # self.FzFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradzMatrix)#interp_3d.Interp3D(BGradzMatrix, xArr, yArr, zArr)
+            #
+            # z0=self.rp/4
+            # y0=self.rp/4
+            # xPlot=np.linspace(0,self.L*.99)
+            # temp=[]
+            # for x in xPlot:
+            #     temp.append(self.FxFunc((x,y0,z0)))
+            # plt.plot(xArr,temp)
+            # plt.show()
+            #
+            # y0=self.rp/2
+            # z0=self.rp/2
+            # sys.exit()
         elif self.type=="BENDER_IDEAL_SEGMENTED":
             self.Bp = self.args[1]
             self.rb=self.args[2]
@@ -209,29 +313,27 @@ class Element:
                 self.trajLength = sym.integrate(sym.sqrt(1 + (2 * self.cFact * x) ** 2), (x, 0, self.L)).subs(x, self.L)
         elif self.type == 'LENS_SIM':
             self.data = self.args[0]
-            print('here')
             Fx = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 3] * self.PT.u0)
-            print('here')
             Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
-            print('here')
             Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
-            print(Fx(0, .1, .1))
         else:
             raise Exception('No proper element name provided')
 
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
+
         qo = self.transform_Element_Coords_Into_Orbit_Frame(q) #then element frame into orbit frame
         qo[0] = qo[0] + cumulativeLength #orbit frame is in the element's frame, so the preceding length needs to be
             #accounted for
+
         return qo
     def find_K_Value(self):
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
         xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.rb
         yFit=[]
         for x in xFit:
-            yFit.append(self.FxFunc((x,0,0)))
+            yFit.append(self.FxFunc(x,0,0))
         xFit=xFit-self.rb
         K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
         return K
@@ -240,7 +342,7 @@ class Element:
         # self: element object to transform to
         # get the coordinates of the particle in the element's frame. See element class for description
         qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
-        if self.type == 'DRIFT' or self.type == 'LENS_IDEAL':
+        if self.type == 'DRIFT' or self.type == 'LENS_IDEAL' or self.type=="BENDER_SIM_SEGMENTED_CAP":
             qNew[0] = qNew[0] - self.r1[0]
             qNew[1] = qNew[1] - self.r1[1]
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
@@ -260,6 +362,8 @@ class Element:
         qo = q.copy()
         if self.type == 'LENS_IDEAL' or self.type == 'DRIFT':
             pass
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP":
+            qo[1]=qo[1]-self.rOffset
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             qo = q.copy()
             phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
@@ -269,6 +373,7 @@ class Element:
             qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
             qo[0] = qos
             qo[1] = qox
+
         elif self.type == 'COMBINER':
             if qo[0] > self.L:
                 dr = self.r2El - qo[:2]
@@ -314,13 +419,16 @@ class Element:
         elif self.type=='BENDER_SIM_SEGMENTED':
             quc = self.transform_Element_Into_Unit_Cell_Frame(q)  # get unit cell coords
             qucCopy=quc.copy()
-            qucCopy[1]=quc[2]
-            qucCopy[2]=quc[1]
-            F[0]=self.FxFunc(qucCopy)
-            F[1]=self.FzFunc(qucCopy) #element is rotated 90 degrees so they are swapped
-            F[2]=self.FyFunc(qucCopy) #element is rotated 90 degrees so they are swapped
-            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q, quc)#transform unit cell coordinates into
-            #element frame
+            F[0]=self.FxFunc(*qucCopy)
+            F[1]=self.FyFunc(*qucCopy) #element is rotated 90 degrees so they are swapped
+            F[2]=self.FzFunc(*qucCopy) #element is rotated 90 degrees so they are swapped
+            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q,quc)#transform unit cell coordinates into
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP":
+            F[0] = self.FxFunc(*q)
+            F[1] = self.FyFunc(*q)  # element is rotated 90 degrees so they are swapped
+            F[2] = self.FzFunc(*q)  # element is rotated 90 degrees so they are swapped
+        else:
+            raise Exception('not yet implemented')
         return F
     def transform_Element_Into_Unit_Cell_Frame(self,q):
         #As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
@@ -343,27 +451,36 @@ class Element:
             raise Exception('not implemented')
 
 
-    def transform_Unit_Cell_Force_Into_Element_Frame(self, F, q):
+    def transform_Unit_Cell_Force_Into_Element_Frame(self, F, q,quc):
         #transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
         #that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
         # or leaving the element interface as mirror images of each other.
         #F: Force to be rotated out of unit cell frame
         #q: particle's position in the unit cell where the force is acting
         FNew=F.copy() #copy input vector to not modify the original
-        phi = self.ang - np.arctan2(q[1], q[0]) #the anglular displacement from input to bender of the particle
-        cells = int(phi // self.ucAng)+1 #cell number that particle is in, starts at one
-        if cells%2==0: #if in an even number cell, then the y direction is the mirror image, so change the sign
-            FNew[1]=-FNew[1]
+        phi =np.arctan2(q[1], q[0]) #the anglular displacement from output of bender to the particle. I use
+        #output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
+        cellNum = int(phi // self.ucAng)+1 #cell number that particle is in, starts at one
 
-        rotAngle = self.ang-2*(cells//2)*self.ucAng #angle to rotate the particle back into the element frame from the
-        #unit cell frame. This only depends on the cell number and unit cell angle, not the particle's position! the
-        #reference frame is the unit cell
 
-        #now rotate
+
+
+        if cellNum%2==1: #if odd number cell. Then the unit cell only needs to be rotated into that position
+            rotAngle = 2 * (cellNum // 2) * self.ucAng
+        else:
+            m = np.tan(self.ucAng)
+            M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
+            Fx = FNew[0]
+            Fy = FNew[1]
+            FNew[0]=M[0,0]*Fx+M[0,1]*Fy
+            FNew[1]=M[1,0]*Fx+M[1,1]*Fy
+            rotAngle = 2 * ((cellNum-1) // 2) * self.ucAng
+
         Fx = FNew[0]
         Fy = FNew[1]
         FNew[0] = Fx * np.cos(rotAngle) - Fy *np.sin(rotAngle)
         FNew[1] = Fx*np.sin(rotAngle) +Fy*np.cos(rotAngle)
+
         return FNew
 
     def transform_Element_Frame_Vector_To_Lab_Frame(self, vec):
@@ -392,9 +509,9 @@ class Element:
             rDot = (q[0] * pNew[0] + q[1] * pNew[1]) / np.sqrt((q[0] ** 2 + q[1] ** 2))
             po = np.asarray([sDot, rDot, pNew[2]])
             return po
-        elif self.type == 'LENS_IDEAL' or self.type == 'DRIFT':
+        elif self.type == 'LENS_IDEAL' or self.type == 'DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP":
             return pNew
-        if self.type == 'COMBINER':
+        else:
             raise Exception('NOT YET IMPLEMENTED')
     def get_Potential_Energy(self,q):
         #compute potential energy of element. For ideal elements it's a simple formula, for simulated elements the magnet
@@ -419,6 +536,8 @@ class Element:
                 deltar=np.sqrt(quc[0]**2+quc[2]**2)-self.rb
                 B = self.Bp * deltar ** 2 / self.rp ** 2
                 PE = self.PT.u0 * B
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="BENDER_SIM_SEGMENTED":
+            pass
         else:
             raise Exception('not implemented')
         return PE
@@ -426,7 +545,7 @@ class Element:
         #check if the supplied coordinates are inside the element's vacuum chamber. This does not use shapely, only
         #geometry
         #q: coordinates to test
-        if self.type=='LENS_IDEAL' or self.type=='DRIFT':
+        if self.type=='LENS_IDEAL' or self.type=='DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP":
             if np.abs(q[2])>self.ap:
                 return False
             elif np.abs(q[1])>self.ap:
