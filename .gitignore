@@ -7,3 +7,6 @@ sampleData
 .idea/
 data.txt
 dataCap.txt
+dataLens.txt
+dataLensFringe.txt
+test.ipynb

@@ -7,25 +7,36 @@ import numpy.linalg as npl
 import sys
 from interp3d import interp_3d
 
+
 class Element:
     # Class to represent the lattice element such as a drift/lens/bender/combiner.
-    # each element type has its own reference frame, as well as attributes, which I will described below
-    # Lens and Drift: Input is centered at origin and points to the 'west' with the ouput pointing towards the 'east'
-    # Bender: output is facing south and aligned with y=0. The center of the bender is at the origin. Input is at some
-        # positive angle relative to the output. A pi/2 bend would have the input aligned with x=0 for example
-    # combiner: the output is at the origin, and the input is towards the east, but pointing a bit up at north. Note that
-        # the input/beginning is considered to be at the origin. This doesn't really make sense and sould be changed
-    # Bender, Segemented: This bending section is composed of discrete elements. It is modeled by considering a unit
-        #cell and transforming the particle's coordinates into that frame to compute the force. The unit cell is
-        # half a magnet at y=0, x=rb. An imaginary plane is at some angle to x,y=0,0 that defines the unit cell angle. Say the
-        # unit cell angle is phi, and the particle is at angle theta, then the particle's angle in the unit cell is
-        # theta-phi*(theta//phi). The modeled data must be in the format that comsol exports a grid as, and the model
-        #must be pointing in the positive z direction and be located at x=rb
-    #Bender, simulated, segmented: Particle is traced using the force from a COMSOL simulation of the magnetic field. The
-        #bore radius, bending radius and UCAngle is computed from the supplied field by finding the
-        #maximum value in the y direction. The provided data is oriented such that the input points in the -z direction,
-        #so it must be rotated when calling the force
-    # TODO: SWITCH THIS
+    # each element type has its own reference frame, as well as attributes, which I will described below. Note that
+    # the details of the exported data from COMSOL must be carefully adhered to. For now, the way to do that is to just modify
+    # the comsol files that produce the field values.
+    # LENS_IDEAL: simple hard edge model of lens. Field is modeled as Bp*r**2/rp**2, where Bp is field at pole and rp
+    # is radius of bore. Reference frame is with the input centered at the origin and output pointing at 0 degree
+    # in the x,y plane
+    # LENS_SIM_CAP: A short stub of a hexapole lens. The length of this stub is just enough that the magnetic field has
+    # reached 99% of it inside the magnet, and fallen to 1% outside. These elements are used to efficiently simulate
+    # a real lens. The inner portion's field is sampled from a transverse fit, whereas the ends are sampled from
+    # these caps. As long as the caps are long enough, the inner region is mostly represented by a 2d slice. It seems
+    # like a cap with a length of 3-4 boreradius is sufficient. Reference frame is with input centered at origin and output
+    # facing 0 degree. NOTE!! the transform from lab to element must account for wether the element is at the input
+    # or output because the element is not symmetric along its length
+    #DRIFT: element free region. reference frame same as lens
+    # BENDER_IDEAL: Simple hardedge model of ideal bender. Field is modeled as Bp*dr**2/rp**2 where dr=r-rb, where
+    # r is the particles orbit relative to the center of the bending segment (not center of the bore), and rb is the
+    # bending radius. reference frame is output is facing south and aligned with y=0 at (rb,0) where rb is bending radiu.
+    # The center of the bender is at the origin. Input is at some positive angle relative to the output. A pi/2 bend
+    # would have the input aligned with x=0 at position (0,rb) for example
+    #BENDER_SIM_SEGMENTED This bending section is composed of discrete elements. It is modeled by considering a unit
+    #cell and transforming the particle's coordinates into that frame to compute the force. The unit cell is
+    # half a magnet at y=0, x=rb. An imaginary plane is at some angle to x,y=0,0 that defines the unit cell angle. Say the
+    # unit cell angle is phi, and the particle is at angle theta, then the particle's angle in the unit cell is
+    # theta-phi*(theta//phi). The modeled data must be in the format that comsol exports a grid as, and the model
+    #must be pointing in the positive z direction and be located at x=rb
+    # BENDER_SIM_SEGMENTED_CAP: same idea as lens cap. Reference frame element input at origin pointing south.
+
     def __init__(self, args, type, PT):
         self.args = args
         self.type = type  # type of element. Options are 'BENDER', 'DRIFT', 'LENS_IDEAL', 'COMBINER'
@@ -50,6 +61,7 @@ class Element:
         self.FxFunc=None #Fit functions for froce from comsol data
         self.FyFunc=None #Fit functions for froce from comsol data
         self.FzFunc=None #Fit functions for froce from comsol data
+        self.position=None #for bender 'caps' wether it's at the inlet or out of the bender
 
 
         self.r0 = None  # center of element (for bender this is at bending radius center),vector, m
@@ -100,10 +112,62 @@ class Element:
             self.Lo=self.args[2]
             self.ap = self.args[3]
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)
+        elif self.type=='LENS_SIM_CAP':
+            data = np.loadtxt(self.args[0])
+            self.rp=self.args[1]
+            self.ap=self.args[2]
+            self.position = self.args[3]
+            edgeFact=self.args[4] #length of edge section as a multiple of bore radius
+            self.L=edgeFact*self.rp
+            self.Lo=self.L
+
+            xArr = np.unique(data[:, 0])
+            yArr = np.unique(data[:, 1])
+            zArr = np.unique(data[:, 2])
+            BGradx = data[:, 3]
+            BGrady = data[:, 4]
+            BGradz = data[:, 5]
+            numx = xArr.shape[0]
+            numy = yArr.shape[0]
+            numz = zArr.shape[0]
+
+            BGradxMatrix = BGradx.reshape((numz, numy, numx))
+            BGradyMatrix = BGrady.reshape((numz, numy, numx))
+            BGradzMatrix = BGradz.reshape((numz, numy, numx))
+
+            BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+            BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+            BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+            #
+            tempx = interp_3d.Interp3D(-self.PT.u0 * BGradxMatrix, zArr, yArr, xArr)
+            tempy = interp_3d.Interp3D(-self.PT.u0 * BGradyMatrix, zArr, yArr, xArr)
+            tempz = interp_3d.Interp3D(-self.PT.u0 * BGradzMatrix, zArr, yArr, xArr)
+
+            self.FxFunc = lambda x, y, z: -tempz((self.L-x, y, z))
+            self.FyFunc = lambda x, y, z: tempy((self.L-x, y, z))
+            self.FzFunc = lambda x, y, z: tempx((self.L-x, y, z))
+
+
+        elif self.type=="LENS_SIM_TRANSVERSE":
+            data = np.loadtxt(self.args[0])
+            self.L=self.args[1]
+            self.Lo=self.L
+            self.rp=self.args[2]
+            self.ap=self.args[3]
+            data[:,2:]=-data[:,2:]*self.PT.u0
+
+            tempx=spi.LinearNDInterpolator(data[:,:2],data[:,2])
+            tempy = spi.LinearNDInterpolator(data[:, :2], data[:, 3])
+            self.FyFunc=lambda x,y,z: tempy(-z,y)
+            self.FzFunc = lambda x, y, z: -tempx(-z,y)
+            self.FxFunc=lambda x,y,z: 0.0
+
         elif self.type == 'DRIFT':
             self.L = self.args[0]
             self.Lo = self.args[0]
             self.ap = self.args[1]
+
+
         elif self.type == 'BENDER_IDEAL':
             self.Bp = self.args[0]
             self.rb = self.args[1]
@@ -137,7 +201,6 @@ class Element:
             BGradx=data[:,3]
             BGrady=data[:,4]
             BGradz=data[:,5]
-
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
@@ -161,18 +224,6 @@ class Element:
             self.FxFunc=lambda x,y,z:tempx((y,-z,x))
             self.FyFunc = lambda x, y, z: tempz((y, -z, x))
             self.FzFunc = lambda x, y, z: -tempy((y, -z, x))
-            ##testFunc = spi.RegularGridInterpolator((zArr, yArr, xArr), BGradMatrix)
-            ##print(zArr.max(),yArr.max(),xArr.max(),)
-            #z0 = self.rp/2#np.linspace(-self.rp*.9,self.rp*.9)
-            #y0 = 0#np.linspace(0,self.Lseg/3)
-            #x0 =self.rb+np.linspace(-self.rp/2,self.rp/2)
-            #temp = []
-            #for x in x0:
-            #    temp.append(self.FxFunc(x,y0,z0))
-            #plt.plot(x0, temp)
-            #plt.show()
-
-
 
             self.K=self.find_K_Value()
             self.rOffset =np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal ** 2 / (2 * self.K)) - self.rb / 4  # this
@@ -187,6 +238,7 @@ class Element:
             self.rOffset=self.args[2]
             self.rp=self.args[3]
             self.ap=self.args[4]
+            self.position=self.args[5]
             self.Lo=self.L
             xArr = np.unique(data[:, 0])
             yArr = np.unique(data[:, 1])
@@ -216,55 +268,6 @@ class Element:
             self.FyFunc = lambda x, y, z: tempy((x-self.L,y,z))
             self.FzFunc = lambda x, y, z: -tempx((x-self.L,y,z))
 
-            #print(xArr.min(),xArr.max(),yArr.min(),yArr.max(),zArr.min(),zArr.max())
-            #print(tempy((-.02,self.rp/4,self.rp/4)))
-            #sys.exit()
-
-            # #test=BGrady.reshape((numx,numy,numz)).T
-            # #testFunc=spi.RegularGridInterpolator((zArr,yArr,xArr),test)
-            # #print(numx, numy, numz, test.shape)
-            #z0 =0*self.rp/4#-self.L/2# np.linspace(0,-self.L*.99)
-            #y0 =self.rp/4# np.linspace(-self.rp/2,self.rp/2)#self.rp / 4
-            #x0 =np.linspace(0,self.L*.9)
-            #temp = []
-            #for x in x0:
-            #    temp.append(self.FyFunc(x,y0,z0))
-            #plt.plot(x0, temp)
-            #plt.show()
-            # #plt.imshow(test[:,:,0])
-            # #plt.show()
-            #
-            # sys.exit()
-            #
-            #
-            #
-            # BGradxMatrix = BGradx.reshape((numx,numy,numz))#,order='F')
-            # BGradyMatrix = BGrady.reshape((numx,numy,numz))#, order='F')
-            # BGradzMatrix = BGradz.reshape((numx,numy,numz))#, order='F')
-            #
-            #
-            # BGradxMatrix=np.ascontiguousarray(BGradxMatrix)
-            # BGradyMatrix=np.ascontiguousarray(BGradyMatrix)
-            # BGradzMatrix=np.ascontiguousarray(BGradzMatrix)
-            #
-            #
-            # print(numx,numy,numz)
-            # self.FxFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradxMatrix)#interp_3d.Interp3D(BGradxMatrix, xArr, yArr, zArr)
-            # self.FyFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradyMatrix)#interp_3d.Interp3D(BGradyMatrix, xArr, yArr, zArr)
-            # self.FzFunc = spi.RegularGridInterpolator((xArr,yArr,zArr),BGradzMatrix)#interp_3d.Interp3D(BGradzMatrix, xArr, yArr, zArr)
-            #
-            # z0=self.rp/4
-            # y0=self.rp/4
-            # xPlot=np.linspace(0,self.L*.99)
-            # temp=[]
-            # for x in xPlot:
-            #     temp.append(self.FxFunc((x,y0,z0)))
-            # plt.plot(xArr,temp)
-            # plt.show()
-            #
-            # y0=self.rp/2
-            # z0=self.rp/2
-            # sys.exit()
         elif self.type=="BENDER_IDEAL_SEGMENTED":
             self.Bp = self.args[1]
             self.rb=self.args[2]
@@ -342,9 +345,18 @@ class Element:
         # self: element object to transform to
         # get the coordinates of the particle in the element's frame. See element class for description
         qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
-        if self.type == 'DRIFT' or self.type == 'LENS_IDEAL' or self.type=="BENDER_SIM_SEGMENTED_CAP":
+        if self.type == 'DRIFT' or self.type == 'LENS_IDEAL' or self.type=="LENS_SIM_TRANSVERSE":
             qNew[0] = qNew[0] - self.r1[0]
             qNew[1] = qNew[1] - self.r1[1]
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=='LENS_SIM_CAP':
+            if self.position=='INLET':
+                r=self.r1
+            elif self.position=='OUTLET':
+                r=self.r2
+            else:
+                raise Exception('NOT IMPLEMENTED')
+            qNew[0]=qNew[0]-r[0]
+            qNew[1]=qNew[1]-r[1]
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             qNew[:2] = qNew[:2] - self.r0
         elif self.type == 'COMBINER':
@@ -360,10 +372,15 @@ class Element:
         # q: particles position in the element's reference frame
         # The description for each element is given below.
         qo = q.copy()
-        if self.type == 'LENS_IDEAL' or self.type == 'DRIFT':
+        if self.type == 'LENS_IDEAL' or self.type == 'DRIFT' or self.type=="LENS_SIM_TRANSVERSE":
             pass
-        elif self.type=="BENDER_SIM_SEGMENTED_CAP":
-            qo[1]=qo[1]-self.rOffset
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=='LENS_SIM_CAP':
+            if self.position=='INLET':
+                qo[1] = qo[1]-self.rOffset
+            elif self.position=='OUTLET':
+                qo[1] = -qo[1] -self.rOffset
+                qo[0]=self.L-q[0]
+
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             qo = q.copy()
             phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
@@ -386,6 +403,7 @@ class Element:
         return qo
 
     def force(self, q):
+        #TODO: CONSOLIDATE FORCE INTO FUNCTIONS?
         # force at point q in element frame
         #q: particle's position in element frame
         F = np.zeros(3)  # force vector starts out as zero
@@ -423,10 +441,10 @@ class Element:
             F[1]=self.FyFunc(*qucCopy) #element is rotated 90 degrees so they are swapped
             F[2]=self.FzFunc(*qucCopy) #element is rotated 90 degrees so they are swapped
             F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q,quc)#transform unit cell coordinates into
-        elif self.type=="BENDER_SIM_SEGMENTED_CAP":
+        elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="LENS_SIM_TRANSVERSE" or self.type=='LENS_SIM_CAP':
             F[0] = self.FxFunc(*q)
-            F[1] = self.FyFunc(*q)  # element is rotated 90 degrees so they are swapped
-            F[2] = self.FzFunc(*q)  # element is rotated 90 degrees so they are swapped
+            F[1] = self.FyFunc(*q)
+            F[2] = self.FzFunc(*q)
         else:
             raise Exception('not yet implemented')
         return F
@@ -509,7 +527,8 @@ class Element:
             rDot = (q[0] * pNew[0] + q[1] * pNew[1]) / np.sqrt((q[0] ** 2 + q[1] ** 2))
             po = np.asarray([sDot, rDot, pNew[2]])
             return po
-        elif self.type == 'LENS_IDEAL' or self.type == 'DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP":
+        elif self.type == 'LENS_IDEAL' or self.type == 'DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type == 'LENS_SIM_TRANSVERSE'\
+                or self.type=='LENS_SIM_CAP':
             return pNew
         else:
             raise Exception('NOT YET IMPLEMENTED')
@@ -536,8 +555,6 @@ class Element:
                 deltar=np.sqrt(quc[0]**2+quc[2]**2)-self.rb
                 B = self.Bp * deltar ** 2 / self.rp ** 2
                 PE = self.PT.u0 * B
-        elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="BENDER_SIM_SEGMENTED":
-            pass
         else:
             raise Exception('not implemented')
         return PE
@@ -545,7 +562,8 @@ class Element:
         #check if the supplied coordinates are inside the element's vacuum chamber. This does not use shapely, only
         #geometry
         #q: coordinates to test
-        if self.type=='LENS_IDEAL' or self.type=='DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP":
+        if self.type=='LENS_IDEAL' or self.type=='DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="LENS_SIM_TRANSVERSE"\
+                or self.type=='LENS_SIM_CAP':
             if np.abs(q[2])>self.ap:
                 return False
             elif np.abs(q[1])>self.ap:
