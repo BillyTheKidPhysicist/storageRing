@@ -220,18 +220,21 @@ class particleTracer:
         el.index = len(self.lattice) #where the element is in the lattice
         self.benderIndices.append(el.index)
         self.lattice.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Ideal(self,L=.2,c1=1,c2=20,ap=.015):
+    def add_Combiner_Ideal(self,La,Lb,ang,offset,c1=1,c2=20,ap=.01):
         # Add element to the lattice. see elementPT.py for more details on specific element
-        #THIS IS CURRENTLY INCOMPLETE. WHAT NEEDS TO BE FINISHED IS A GOOD WAY OF FITTING THE COMBINER INTO THE LATTICE,
-        #BECAUSE LATTICE NEEDS TO CHANGE FOR IT. ALSO, REFERENCING THE PARTICLE'S NOMINAL TRAJECTORY
-        #TODO: UPDATE COMBINER LENGTH AND ANGLE
         #add combiner (stern gerlacht) element to lattice
-        #L: length of combiner
+        #La: input length of combiner. The bent portion outside of combiner
+        #Lb:  length of vacuum tube through the combiner. The segment that contains the field
+        #ang: angle that particle enters the combiner at
+        # offset: particle enters inner section with some offset
         #c1: dipole component of combiner
         #c2: quadrupole component of bender
-        raise Exception('currently broken!!')
-        args=[L,ap,c1,c2]
-        el=Element(args,'COMBINER',self) #create a combiner element object
+        #check to see if inlet length is too short. The minimum length is a function of apeture and angle
+        minLa=ap*np.sin(ang)
+        if La<minLa:
+            raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
+        args=[La,Lb,ang,offset,ap,c1,c2]
+        el=Element(args,'COMBINER_IDEAL',self) #create a combiner element object
         el.index = len(self.lattice) #where the element is in the lattice
         self.combinerIndex=el.index
         self.lattice.append(el) #add element to the list holding lattice elements in order
@@ -387,11 +390,10 @@ class particleTracer:
         #This returns True if the particle has been walked to the edge or is outside the element becuase the element
         #is none type, which occurs if the particle is found to be outside the lattice when evaluating force
         exit=False
-
         if el is None:
             self.particleOutside = True
             exit=True
-        if el is not self.currentEl:
+        elif el is not self.currentEl:
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
             self.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
@@ -431,14 +433,14 @@ class particleTracer:
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
 
         qel = self.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
-        isInside=self.currentEl.is_Coord_Inside(qel)
-        if isInside==True: #is the particle is inside the current element, then we found it! Otherwise, go on to search
+        isInside=self.currentEl.is_Coord_Inside(qel) #this returns True or None or false
+        if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
             #with shapely
             if return_qel==True:
                 return self.currentEl,qel
             else:
                 return self.currentEl
-        else: #if not inside current element, search everywhere now
+        else: #if not defintely inside current element, search everywhere and more carefully (and slowly) with shapely
             el = self.which_Element(q)
             if el is None: #if there is no element, then there are also no corresponding coordinates
                 qel=None
@@ -519,24 +521,32 @@ class particleTracer:
         self.make_Geometry()
 
         self.totalLength=0
-        for el in self.lattice: #total length of particle's orbit in an element
-            self.totalLength+=el.Lo
+        #for el in self.lattice: #total length of particle's orbit in an element
+        #    self.totalLength+=el.Lo
 
-    def solve_Triangle_Problem(self,phi1,L1,L2,r1,r2):
+    def solve_Triangle_Problem(self,phi1,L1,L2,offset,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders.
         #phi1: bending angle of the combiner, or the amount of 'kink'
         #L1: length of the section after the kink to the bender
         #L2: length of the section before the kink to the bender
+        #offset: offset of input trajectory to y=0 and input plane at field section of vacuum.
         #r1: radius of circle after the combiner
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner. This function will likely be used by another function
         #that sorts that all out.
 
-        L3=sym.sqrt((L1-sym.sin(phi1)*r2+L2*sym.cos(phi1))**2+(L2*sym.sin(phi1)-r2*(1-sym.cos(phi1))+(r2-r1))**2)
-        phi2=sym.pi*1.5-sym.atan(L1/r1)-sym.acos((L3**2+L1**2-L2**2)/(2*L3*sym.sqrt(L1**2+r1**2)))
-        phi3=sym.pi*1.5-sym.atan(L2/r2)-sym.acos((L3**2+L2**2-L1**2)/(2*L3*sym.sqrt(L2**2+r2**2)))
-        return phi2,phi3,L3
+
+        L1=L1-offset/np.tan(phi1)
+        L2=L2-offset*np.sin(phi1)+offset/np.sin(phi1)
+
+
+        L3=np.sqrt((L1-np.sin(phi1)*r2+L2*np.cos(phi1))**2+(L2*np.sin(phi1)-r2*(1-np.cos(phi1))+(r2-r1))**2)
+        phi2=np.pi*1.5-np.arctan(L2/r2)-np.arccos((L3**2+L2**2-L1**2)/(2*L3*np.sqrt(L2**2+r2**2))) #bending radius of bender
+        #after combiner
+        phi3=np.pi*1.5-np.arctan(L1/r1)-np.arccos((L3**2+L1**2-L2**2)/(2*L3*np.sqrt(L1**2+r1**2)))#bending radius of bender
+        #before combiner
+        return phi3,phi2,L3
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
@@ -544,7 +554,7 @@ class particleTracer:
         #and I am in a crunch kind of.
         #----
         #all of these take some thinking to visualize what's happening.
-        benderPoints=50 #how many points to represent the bender with along each curve
+        benderPoints=500 #how many points to represent the bender with along each curve
         for el in self.lattice:
             L=el.L
             xb=el.r1[0]
@@ -569,13 +579,14 @@ class particleTracer:
                 x=np.append(xInner,xOuter) #list of x values in order
                 y=np.append(yInner,yOuter) #list of y values in order
                 el.SO=Polygon(np.column_stack((x,y))) #shape the coordinates and make the object
-            elif el.type=='COMBINER':
+            elif el.type=='COMBINER_IDEAL':
                 q1=np.asarray([0,ap]) #top left when theta=0
-                q2=np.asarray([L,ap]) #top right when theta=0
-                q3=np.asarray([np.cos(el.ang)*np.sin(el.ang)*2*ap+L, np.sin(el.ang)**2*2*ap-ap])  # bottom right when theta=0
-                q4=np.asarray([L,-ap]) #bottom middle when theta=0
-                q5=np.asarray([0,-ap]) #bottom left when theta=0
-                points=[q1,q2,q3,q4,q5]
+                q2=np.asarray([el.Lb,ap]) #top middle when theta=0
+                q3=np.asarray([el.Lb+(el.La-el.ap*np.sin(el.ang))*np.cos(el.ang),ap+(el.La-el.ap*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
+                q4=np.asarray([el.Lb+(el.La+el.ap*np.sin(el.ang))*np.cos(el.ang),-ap+(el.La+el.ap*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
+                q5=np.asarray([el.Lb,-ap]) #bottom middle when theta=0
+                q6 = np.asarray([0, -ap])  # bottom left when theta=0
+                points=[q1,q2,q3,q4,q5,q6]
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2
                 el.SO=Polygon(points)
@@ -607,13 +618,13 @@ class particleTracer:
                 ye=el.L*np.sin(el.theta) #set ending coords
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input
                 el.ne=-el.nb
-            else:
+            else: #if element is not the first
                 xb=self.lattice[i-1].r2[0]#set beginning coordinates to end of last
                 yb=self.lattice[i-1].r2[1]#set beginning coordinates to end of last
                 prevEl = self.lattice[i - 1]
                 #set end coordinates
                 if el.type=='DRIFT' or el.type=='LENS_IDEAL' or el.type=="LENS_SIM_TRANSVERSE" or el.type=='LENS_SIM_CAP':
-                    if prevEl.type=='COMBINER':
+                    if prevEl.type=='COMBINER_IDEAL':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -649,7 +660,7 @@ class particleTracer:
                         xe += el.rOffset * np.sin(el.theta)
                         ye += el.rOffset * (-np.cos(el.theta))
                 elif el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED':
-                    if prevEl.type=='COMBINER':
+                    if prevEl.type=='COMBINER_IDEAL':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -675,32 +686,37 @@ class particleTracer:
                     el.nb=np.asarray([np.cos(el.theta-np.pi), np.sin(el.theta-np.pi)])  # normal vector to input
                     el.ne=np.asarray([np.cos(el.theta-np.pi+(np.pi-el.ang)), np.sin(el.theta-np.pi+(np.pi-el.ang))])  # normal vector to output
                     el.r0=np.asarray([xb+el.rb*np.sin(el.theta),yb-el.rb*np.cos(el.theta)]) #coordinates of center of bender
-                elif el.type=='COMBINER':
+                elif el.type=='COMBINER_IDEAL':
                     el.theta=2*np.pi-el.ang-(np.pi-prevEl.theta)# Tilt the combiner down by el.ang so y=0 is perpindicular
                         #to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
                         #np.pi because the combiner's input is not at the origin, but faces 'east'
                     el.theta=el.theta-2*np.pi*(el.theta//(2*np.pi)) #the above logic can cause the element to have to rotate
                         #more than 360 deg
-
                     #to find location of output coords use vector that connects input and output in element frame
                     #and rotate it. Input is where nominal trajectory particle enters
-                    drx=-(el.L+np.cos(el.ang)*np.sin(el.ang)*(el.ap-el.inputOffset))
-                    dry=-(el.inputOffset+np.sin(el.ang)**2*(el.ap-el.inputOffset))
+                    drx=-(el.Lb+(el.La-el.inputOffset*np.sin(el.ang))*np.cos(el.ang))
+                    dry=-(el.inputOffset+(el.La-el.inputOffset*np.sin(el.ang))*np.sin(el.ang))
+
+                    #drx = -(el.Lb+el.La *np.cos(el.ang))
+                    #dry = -(el.La*np.sin(el.ang))
+
+
 
                     el.r1El=np.asarray([0,0])
                     el.r2El=-np.asarray([drx,dry])
-                    dr=np.asarray([drx,dry]) #position vector between input and output of element.
+                    dr=np.asarray([drx,dry]) #position vector between input and output of element in element frame
                     R = np.asarray([[np.cos(el.theta), -np.sin(el.theta)], [np.sin(el.theta), np.cos(el.theta)]])
-                    dr=R@dr
+                    dr=R@dr #rotate to lab frame
                     xe,ye=xb+dr[0],yb+dr[1]
-                    el.ne=-np.asarray([np.cos(el.theta),np.sin(el.theta)])
-                    el.nb=np.asarray([np.cos(el.theta+el.ang),np.sin(el.theta+el.ang)])
+                    el.ne=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #output normal vector
+                    el.nb=np.asarray([np.cos(el.theta+el.ang),np.sin(el.theta+el.ang)]) #input normal vector
+
                 else:
                     raise Exception('No correct element name provided')
-            #need to make rotation matrices for bender, lens and drift now. Already made for combiner
+            #need to make rotation matrices for element
             if el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED':
                 rot = (el.theta - el.ang + np.pi / 2)
-            elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER' or el.type=="LENS_SIM_TRANSVERSE":
+            elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER_IDEAL' or el.type=="LENS_SIM_TRANSVERSE":
                 rot = el.theta
             elif el.type=="BENDER_SIM_SEGMENTED_CAP" or el.type=='LENS_SIM_CAP':
                 if el.position=='INLET':
@@ -721,11 +737,11 @@ class particleTracer:
             el.nb=np.round(el.nb,10)
 
 
-            el.r1=np.round(np.asarray([xb,yb]),12) #position vector of beginning of element
-            el.r2=np.round(np.asarray([xe,ye]),12) #position vector of ending of element
+            el.r1=np.asarray([xb,yb])#position vector of beginning of element
+            el.r2=np.asarray([xe,ye])#position vector of ending of element
             if i==len(self.lattice)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
-                if el.type=='BENDER_IDEAL' or el.type=='COMBINER'or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED'\
+                if el.type=='BENDER_IDEAL' or el.type=='COMBINER_IDEAL'or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED'\
                         or el.type=='BENDER_SIM_SEGMENTED_CAP':
                     reo[1]-=el.rOffset
             i+=1
@@ -808,4 +824,3 @@ class particleTracer:
         for job in jobs:
             results.append(job.get()) #get the results. wait for the result in order given
         return results
-

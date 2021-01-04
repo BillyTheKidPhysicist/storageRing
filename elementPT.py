@@ -36,6 +36,9 @@ class Element:
     # theta-phi*(theta//phi). The modeled data must be in the format that comsol exports a grid as, and the model
     #must be pointing in the positive z direction and be located at x=rb
     # BENDER_SIM_SEGMENTED_CAP: same idea as lens cap. Reference frame element input at origin pointing south.
+    # COMBINER_IDEAL: combiner modeled as a combination of quadrupole and dipole. The outlet is facing 180 degrees and
+    # the inlet as at some angle in the upper right quadrant. The vacuum tube looks like a rectangular shape with another
+    # recangular shape (the inlet) attached at some angle
 
     def __init__(self, args, type, PT):
         self.args = args
@@ -67,14 +70,14 @@ class Element:
         self.r0 = None  # center of element (for bender this is at bending radius center),vector, m
         self.ro = None  # bending radius of orbit. Includes trajectory offset, m
         self.ang = 0  # Angle that the particles are bent, either bender or combiner. this is the change in  angle in
-        # polar coordinates
+        # polar coordinates for a particle.
         self.r1 = None  # position vector of beginning of element in lab frame, m
         self.r2 = None  # position vector of ending of element in lab frame, m
         self.r1El = None  # position vector of beginning of element in element frame, m
         self.r2El = None  # position vector of ending of element in element frame, m
 
-        self.ne = None  # normal vector to end of element
-        self.nb = None  # normal vector to beginning of element
+        self.ne = None  # normal vector to input of element. 2D, only in xy plane
+        self.nb = None  # normal vector to output of element. 2D, only in xy plane
         self.theta = None  # angle from horizontal of element. zero degrees is to the right, or 'east', in polar coordinates
         self.ap = None  # size of apeture. For now the same in both dimensions and vacuum tubes are square
         self.SO = None  # shapely object used to find if particle is inside
@@ -85,9 +88,14 @@ class Element:
         # matrix OUT of the element frame
         self.RIn = None  # rotation matrix so values don't need to be calculated over and over. This is the rotation
         # matrix IN to the element frame
+        self.La=None #inlet length of combiner. This is for the section of the combiner that particles enter into that is bent
+        #relative to the combienr
+        self.Lb=None #the length of the portion of the vaccuum tube that goes through the combiner. This is where the field
+        #primarily is
         self.inputOffset = None  # for the combiner. Incoming particles enter the combiner with an offset relative to its
-        # geometric center. A positive value is more corresponds to moved up the y axis in the combiner's regerence
-        # frame.
+        # geometric center. A positive value corresponds to a trajectory that is shifted up from the center line
+        #of y=0. This picture is most clear when imagining a the ideal case of a hard edge combiner, but works with
+        # the real field model as well
         self.LFunc = None  # for the combiner. The length along the trajector that the particle has traveled. This length
         # is referring to the nominal trajectory, not the actual distance of the particle
         self.distFunc = None  # The transerse distance from the nominal trajectory of the particle.
@@ -175,7 +183,7 @@ class Element:
             self.ang = self.args[3]
             self.ap = self.args[4]
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            self.rOffset = 0#np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
                 # account for reduced speed in the bender from energy conservation
             # self.rOffset=np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal**2/(2*self.K))-self.rb/4 #this acounts for reduced
             # energy
@@ -288,37 +296,21 @@ class Element:
             self.ang=2*self.numMagnets * self.ucAng #number of units cells times bending angle of 1 cell
             self.Lo = self.ang * self.ro
             self.L=self.ang*self.rb
-        elif self.type == 'COMBINER':
-            self.L = self.args[0]
-            self.ap = self.args[1]
-            self.c1 = self.args[2]
-            self.c2 = self.args[3]
-            if self.inputOffset is not None:
-                # if self.inputOffset is none, then this feature is not being used. This will happen so that the combiner element
-                # can be used to predict what the trajectory looks like inside before final use.
-                # solve for LFunc and distFunc. These equation are very big so I use sympy to handle them
-                x1, x, y1, c = sym.symbols('x1 x y1 c', real=True, positive=True, nonzero=True)
-                dist = sym.sqrt((x1 - x) ** 2 + (y1 - self.cFact * x ** 2) ** 2)
-                func = x1 - x + 2 * self.cFact * x * (y1 - self.cFact * x ** 2)
-                x0 = sym.simplify(
-                    sym.solve(func, x)[0])  # REMEMBER, THE CORRECT ANSWER CAN CHANGE POSITION WITH DIFFERENT
-                # INPUT
-                # NEED TO NAME FUNCTIONS DIFFERENTLY EACH TIME. LAMBDA EVALUATES A FUNCTION IN IT'S LAST STATE, SO MULTIPLE
-                # TEMPORARY FUNCTIONS WITH THE SAME NAME INTERFERE WITH EACH OTHER
-                tempFunc1 = sym.lambdify([x1, y1], dist.subs(x, x0))
-                self.distFunc = lambda x1, y1: np.real(
-                    tempFunc1(x1 + 0J, y1))  # need input to be complex to avoid error on
-                # roots of negative numbers. There is a tiny imaginary component from numerical imprecision, so I take
-                # only the real
-                tempFunc2 = sym.lambdify([x1, y1], sym.integrate(sym.sqrt(1 + (2 * self.cFact * x) ** 2), (x, 0, x0)))
-                self.LFunc = lambda x1, y1: np.real(tempFunc2(x1 + 0J, y1))
-
-                self.trajLength = sym.integrate(sym.sqrt(1 + (2 * self.cFact * x) ** 2), (x, 0, self.L)).subs(x, self.L)
+        elif self.type == 'COMBINER_IDEAL':
+            self.La = self.args[0]
+            self.Lb = self.args[1]
+            self.ang=self.args[2]
+            self.inputOffset=self.args[3]
+            self.ap = self.args[4]
+            self.c1 = self.args[5]
+            self.c2 = self.args[6]
+            self.L=self.La+self.Lb
+            self.Lo=self.L
         elif self.type == 'LENS_SIM':
             self.data = self.args[0]
-            Fx = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 3] * self.PT.u0)
-            Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
-            Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
+            self.Fx = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 3] * self.PT.u0)
+            self.Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
+            self.Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
         else:
             raise Exception('No proper element name provided')
 
@@ -359,7 +351,7 @@ class Element:
             qNew[1]=qNew[1]-r[1]
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             qNew[:2] = qNew[:2] - self.r0
-        elif self.type == 'COMBINER':
+        elif self.type == 'COMBINER_IDEAL':
             qNew[:2] = qNew[:2] - self.r2
         qNewx = qNew[0]
         qNewy = qNew[1]
@@ -391,19 +383,11 @@ class Element:
             qo[0] = qos
             qo[1] = qox
 
-        elif self.type == 'COMBINER':
-            if qo[0] > self.L:
-                dr = self.r2El - qo[:2]
-                rot = np.asarray([[np.cos(-self.ang), -np.sin(-self.ang)], [np.sin(-self.ang), np.cos(-self.ang)]])
-                qo[:2] = rot @ dr
-            else:
-                qo[0] = self.trajLength - self.LFunc(q[0], q[1]) + np.sin(self.ang) * (self.ap - self.inputOffset)
-                qo[1] = self.distFunc(q[0], q[1])  # TODO: FUCKING FIX THIS....
-                raise Exception('doesnt quite work right')
+        elif self.type == 'COMBINER_IDEAL':
+            qo=np.zeros(3)
         return qo
 
     def force(self, q):
-        #TODO: CONSOLIDATE FORCE INTO FUNCTIONS?
         # force at point q in element frame
         #q: particle's position in element frame
         F = np.zeros(3)  # force vector starts out as zero
@@ -420,8 +404,8 @@ class Element:
             # note: for the perfect lens, in it's frame, there is never force in the x direction
             F[1] = -self.K * q[1]
             F[2] = -self.K * q[2]
-        elif self.type == 'COMBINER':
-            if q[0] < self.L:
+        elif self.type == 'COMBINER_IDEAL':
+            if q[0] < self.Lb:
                 B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
                 F[1] = self.PT.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
                 F[2] = self.PT.u0 * self.c2 ** 2 * q[2] / B0
@@ -559,8 +543,9 @@ class Element:
             raise Exception('not implemented')
         return PE
     def is_Coord_Inside(self,q):
-        #check if the supplied coordinates are inside the element's vacuum chamber. This does not use shapely, only
-        #geometry
+        #check with fast geometric arguments if the particle is inside the element. This won't necesarily work for all
+        #elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
+        #returned, it is unknown
         #q: coordinates to test
         if self.type=='LENS_IDEAL' or self.type=='DRIFT' or self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="LENS_SIM_TRANSVERSE"\
                 or self.type=='LENS_SIM_CAP':
@@ -575,7 +560,6 @@ class Element:
         elif self.type=='BENDER_IDEAL' or self.type=='BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             if np.abs(q[2])>self.ap: #if clipping in z direction
                 return False
-
             phi=np.arctan2(q[1],q[0])
             if (phi>self.ang and phi<2*np.pi) or phi<0: #if outside bender's angle range
                 return False
@@ -583,7 +567,16 @@ class Element:
             r=np.sqrt(q[0]**2+q[1]**2)
             if r<self.rb-self.ap or r>self.rb+self.ap:
                 return False
-
             return True
+        elif self.type=='COMBINER_IDEAL':
+            if np.abs(q[2])>self.ap:
+                return False
+            elif q[0]<self.Lb and q[0]>0: #particle is in the straight section that passes through the combiner
+                if np.abs(q[1])<self.ap:
+                    return True
+            else: #particle is in the bent section leading into combiner
+                #TODO: ADD THIS LOGIC
+
+                return None
         else:
             raise Exception('not implemented')
