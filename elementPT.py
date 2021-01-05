@@ -216,21 +216,19 @@ class Element:
 
             tempx=spi.LinearNDInterpolator(self.data[:,:2],self.data[:,2])
             tempy = spi.LinearNDInterpolator(self.data[:, :2], self.data[:, 3])
-            self.FyFunc=lambda x,y,z: tempy(-z,y)
+            self.FyFunc = lambda x, y, z: tempy(-z,y)
             self.FzFunc = lambda x, y, z: -tempx(-z,y)
-            self.FxFunc=lambda x,y,z: 0.0
-
+            self.FxFunc = lambda x, y, z: 0.0
         elif self.type == 'DRIFT':
             pass
         elif self.type == 'BENDER_IDEAL':
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset =np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            self.rOffset =0.0#np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
                 # account for reduced speed in the bender from energy conservation
-            # self.rOffset=np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal**2/(2*self.K))-self.rb/4 #this acounts for reduced
-            # energy
             self.ro = self.rb + self.rOffset
-            self.L = self.ang * self.rb
-            self.Lo = self.ang * self.ro
+            if self.ang is not None:
+                self.L = self.ang * self.rb
+                self.Lo = self.ang * self.ro
         elif self.type=="BENDER_SIM_SEGMENTED":
             data=np.loadtxt(self.args[0])
             D = self.rb - self.rp - self.yokeWidth

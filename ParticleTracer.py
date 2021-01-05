@@ -22,6 +22,7 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 class ParticleTracer:
     def __init__(self,latticeObject):
         self.lattice = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.test=latticeObject
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
@@ -56,7 +57,6 @@ class ParticleTracer:
         self.TList=[] #list of kinetic energy
         self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
             #This won't always be on
-        self.test=[]
 
 
 
@@ -86,7 +86,7 @@ class ParticleTracer:
                 raise Exception('STEP SIZE TOO LARGE')
 
 
-        self.currentEl = self.which_Element(self.q)
+        self.currentEl = self.which_Element_Slow(self.q)
         if self.currentEl is None:
             raise Exception('Particle\'s initial position is outside vacuum' )
 
@@ -127,7 +127,7 @@ class ParticleTracer:
             self.pList.append(self.p)
             self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength))
             #self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q, self.p))
-            self.test.append(npl.norm(self.p))
+            #self.test.append(npl.norm(self.p))
             self.T += self.h
             #temp=self.get_Energies(self.q,self.p,self.currentEl)
             #self.VList.append(temp[0])
@@ -141,26 +141,29 @@ class ParticleTracer:
         return qArr,pArr,qoArr,poArr,self.particleOutside
 
     def handle_Element_Edge(self, el, q, p):
+        import numpy as np #todo: wtf is happening here, why do I need this
         #when the particle has stepped over into the next element in time_Step_Trapezoid this method is called.
         #This method calculates the correct timestep to put the particle just on the other side of the end of the element
         #using velocity verlet
         #print(q[0])
+
         r=el.r2-q[:2]
-        rt=npl.norm(el.nb*r[:2]) #perindicular position  to element's end
-        pt=npl.norm(el.nb*p[:2]) #perpindicular momentum to surface of element's end
 
-
-        F1=self.force(q,el=el)
-        Ft=npl.norm(el.nb*F1[:2])
-        #print(rt,pt)
-
+        rt=np.abs(np.sum(el.ne*r[:2])) #perindicular position  to element's end
+        pt=np.abs(np.sum(el.ne*p[:2]))#npl.norm(el.ne*p[:2]) #perpindicular momentum to surface of element's end
         h=rt/(pt/self.m)
         self.T += h-self.h #to account for the smaller step size here
         q=q+(self.p/self.m)*h
 
         eps=1e-9 #tiny step to put the particle on the other side
-        np=p/npl.norm(p) #normalized vector of particle direction
+        np=p/npl.norm(p) #normalized vector of particle velocity direction
+        #print(el.r1,el.r2,np)
+
         q=q+np*eps
+
+        #print('edge',el.type,self.currentEl.type,self.which_Element_Slow(q).type)
+
+
         return q,p
         #TODO: FIX THIS, IT'S BROKEN. DOESN'T WORK WITH FORCE :(
         ##precision loss is killing me here! Usually Force in the direction of the input to the next element is basically
@@ -180,42 +183,50 @@ class ParticleTracer:
         #q=q+np*eps
         #return q,p
     def time_Step_Verlet(self):
+
         q=self.q #q old or q sub n
         p=self.p #p old or p sub n
-        if self.elHasChanged==False and self.ForceLast is not None:
+        if self.elHasChanged==False and self.ForceLast is not None: #if the particle is inside the lement it was in
+            #last time step, and it's not the first time step, then recycle the force. The particle is starting at the
+            #same position it stopped at last time, thus same force
             F=self.ForceLast
-        else:
+        else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
-        el, qel = self.which_Element_Wrapper(q_n)
+        el, qel = self.which_Element(q_n)
+
         exit=self.check_Element_And_Handle_Edge_Event(el)
         if exit==True:
             self.elHasChanged = True
             return
-        else:
-            self.elHasChanged=False
-
         F_n=self.force(q_n,el=el,qel=qel)
+
         a_n = F_n / self.m  # acceleration new or acceleration sub n+1
         p_n=p+self.m*.5*(a+a_n)*self.h
 
         self.q=q_n
         self.p=p_n
         self.ForceLast=F_n #record the force to be recycled
-
+        self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
     def check_Element_And_Handle_Edge_Event(self,el):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
-        #This returns True if the particle has been walked to the edge or is outside the element becuase the element
-        #is none type, which occurs if the particle is found to be outside the lattice when evaluating force
+        #This returns True if the particle has been walked to the next element with a special algorithm, or is when
+        #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
+        #None. Most of the time this return false and the leapfrog algorithm continues
         exit=False
-        if el is None:
+        if el is None: #if the particle is outside the lattice, the simulation is over
             self.particleOutside = True
-            exit=True
+            return True
         elif el is not self.currentEl:
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
+            #it's possible that the particle is now outside the lattice, so check which element it's in
+            if self.which_Element_Slow(self.q) is None:
+                exit=True
+                self.particleOutside=True
+                return exit
             self.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
             exit=True
@@ -224,32 +235,28 @@ class ParticleTracer:
     def get_Energies(self,q,p,el):
         PE =el.get_Potential_Energy(q)
         KE =npl.norm(p)**2/(2*self.m)
-
         return  PE,KE
-
 
     def force(self,q,qel=None,el=None):
         #calculate force. The force from the element is in the element coordinates, and the particle's coordinates
         #must be in the element frame
         #q: particle's coordinates in lab frame
         if el is None:
-            el=self.which_Element(q) #find element the particle is in
+            #print('----here----')
+            #print(self.currentEl.type)
+            el=self.which_Element_Slow(q) #find element the particle is in
+            #print(el.type)
+            #print('-----done-----')
+            if el is None: #if particle is outside!
+                return None
         if qel is None:
             qel = el.transform_Lab_Coords_Into_Element_Frame(q)
         Fel=el.force(qel) #force in element frame
         FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
-        #self.test.append(npl.norm(FLab))
-        #if self.q[0]!=q[0]:
-        #    self.test.append(npl.norm(FLab))
-        #if el.type=="BENDER_SIM_SEGMENTED":
-        #    print(el.type,qel[:2],qel[0]+el.rb)
-        #else:
-        #    print(el.type, qel[:2])
-
         return FLab
 
 
-    def which_Element_Wrapper(self,q,return_qel=True):
+    def which_Element(self,q,return_qel=True):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
 
@@ -262,7 +269,7 @@ class ParticleTracer:
             else:
                 return self.currentEl
         else: #if not defintely inside current element, search everywhere and more carefully (and slowly) with shapely
-            el = self.which_Element(q)
+            el = self.which_Element_Slow(q)
             if el is None: #if there is no element, then there are also no corresponding coordinates
                 qel=None
             else:
@@ -284,11 +291,10 @@ class ParticleTracer:
                     # now check to make sure the particle isn't exactly on and edge
                     return el  # return the element the particle is in
         return None #if no element found
-    def which_Element(self,q):
+    def which_Element_Slow(self,q):
         #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
         #or between two element. So try scooting the particle on a tiny bit and try again.
         el=self.which_Element_Shapely(q)
-
         if el is not None: #if particle is definitely inside an element.
             #now test for the z clipping
             if np.abs(q[2])>el.ap:

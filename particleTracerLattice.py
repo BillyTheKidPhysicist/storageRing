@@ -217,8 +217,8 @@ class ParticleTracerLattice:
         self.make_Geometry()
 
         self.totalLength=0
-        #for el in self.elList: #total length of particle's orbit in an element
-        #    self.totalLength+=el.Lo
+        for el in self.elList: #total length of particle's orbit in an element
+            self.totalLength+=el.Lo
     def constrain_Lattice(self):
         if self.combinerIndex is not None:
             combinerEl=self.elList[self.combinerIndex]
@@ -252,12 +252,17 @@ class ParticleTracerLattice:
             if self.elList[i].ang!=0: #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
                 break
             L2 += self.elList[i].L
-        r1=self.elList[self.benderIndices[0]].rb
-        r2=self.elList[self.benderIndices[1]].rb
+
+        self.elList[self.benderIndices[0]].fill_Params_And_Functions()
+        self.elList[self.benderIndices[1]].fill_Params_And_Functions()
+
+        r1=self.elList[self.benderIndices[0]].ro
+        r2=self.elList[self.benderIndices[1]].ro
+
         inputAng=self.elList[self.combinerIndex].ang
         inputOffset=self.elList[self.combinerIndex].inputOffset
         phi2,phi3,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
-        print(inputOffset)
+
         return phi2,phi3,L3
 
 
@@ -488,9 +493,8 @@ class ParticleTracerLattice:
         deltax=np.abs(rbo[0]-reo[0])
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
-
-        #if deltax>smallNum or deltay>smallNum:
-        #    raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+        if deltax>smallNum or deltay>smallNum:
+            raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
 
 
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
@@ -539,30 +543,7 @@ class ParticleTracerLattice:
         plt.gca().set_aspect('equal')
         plt.show()
 
-lattice=ParticleTracerLattice(200)
-particleTracer=ParticleTracer(lattice)
-
-Llens=.25
-
-lattice.add_Lens_Ideal(Llens,1,.01)
-lattice.add_Combiner_Ideal()
-lattice.add_Lens_Ideal(Llens,1,.01)
-lattice.add_Bender_Ideal(None,1,1,.01)
-lattice.add_Lens_Ideal(None,1,.01)
-lattice.add_Bender_Ideal(None,1,1,.01)
-lattice.end_Lattice()
-#lattice.show_Lattice()
 
 
-q0=np.asarray([-1e-10,1e-3,0])
-v0=np.asarray([-200.0,0,0])
 
-Lt=500e-2
 
-dt=10e-6
-q, p, qo, po, particleOutside = particleTracer.trace(q0, v0,dt, Lt/200)
-print(particleOutside)
-plt.plot(qo[:,0],qo[:,1])
-plt.show()
-
-lattice.show_Lattice(particleCoords=q[-1])

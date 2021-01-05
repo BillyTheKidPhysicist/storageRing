@@ -155,4 +155,53 @@ plt.show()
 # #PT=particleTracer(200)
 # #el=Element(args,"BENDER_IDEAL_SEGMENTED",PT)
 # #print(el.transform_Element_Into_Unit_Cell_Frame(q0))#
+
+
+
+
+
+
+
+#-------------------------------------------------------
+LlensArr=np.linspace(.1,.4,num=50)
+survivalList=[]
+for Llens in LlensArr:
+    rBend=1.0
+
+    lattice = ParticleTracerLattice(200.0)
+    particleTracer = ParticleTracer(lattice)
+    lattice.add_Lens_Ideal(Llens,1,.015)
+    lattice.add_Combiner_Ideal()
+    lattice.add_Lens_Ideal(Llens,1,.015)
+    lattice.add_Bender_Ideal(None,rBend,1.0,.01)
+    lattice.add_Lens_Ideal(None,1,.01)
+    lattice.add_Bender_Ideal(None,rBend,1.0,.01)
+    lattice.end_Lattice()
+
+    q0=np.asarray([-1e-10,0e-3,0])
+    v0=np.asarray([-200.0,0,0])
+
+    Lt=lattice.totalLength*100
+
+    dt=10e-6
+    print(Llens,Lt)
+    q, p, qo, po, particleOutside = particleTracer.trace(q0, v0,dt, Lt/200)
+    #plt.plot(qo[:,0],qo[:,1])
+    #plt.show()
+    survival=qo[-1,0]/lattice.totalLength
+    survivalList.append(survival)
+    print(particleOutside,survival)
+plt.plot(LlensArr,survivalList)
+plt.show()
+#plt.plot(qo[:,0],qo[:,1])
+#plt.show()
+##
+#lattice.show_Lattice(particleCoords=q[-1])
+
+
+
+
+
+
+
 '''
