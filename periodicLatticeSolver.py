@@ -1,11 +1,8 @@
-import time
 import sympy as sym
 import sympy.utilities.autowrap as symWrap
-from numpy.linalg import inv
 import numpy as np
-from elementPLS import Element
+from oldStuff.elementPLS import Element
 import functools
-import sys
 
 
 class VariableObject:

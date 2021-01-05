@@ -7,7 +7,7 @@ import numpy.linalg as npl
 import sys
 from interp3d import interp_3d
 
-
+#TODO: BREAK UP ELEMENTS INTO THEIR OWN CLASSES? USE POLYMORPHISM OR OTHER METHOD TO SIMPLIFY?
 class Element:
     # Class to represent the lattice element such as a drift/lens/bender/combiner.
     # each element type has its own reference frame, as well as attributes, which I will described below. Note that
@@ -104,37 +104,91 @@ class Element:
         self.trajLength = None  # total length of trajectory, m. This is for combiner because it is not trivial like
         # benders or lens or drifts
 
-        self.data = None  # 6xn array containing the numeric values of a magnetic field. n is the number of data points.
-        # each row of the data must be in the format x,y,z,Bx',By',Bz'. x,y,z are in the element's frame. Bi' is the
-        # gradient in the i direction
+        self.data = None  # array containing the numeric values of a magnetic field. can be for 2d or 3d data. 
         self.forceFitFunc = None  # an interpolation that the force in the x,y,z direction at a given point
 
-        self.unpack_Args_And_Fill_Params()
-
-    def unpack_Args_And_Fill_Params(self):
-        #unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
+        self.unpack_Args()
+    def unpack_Args(self):
+        # unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
         if self.type == 'LENS_IDEAL':
             self.Bp = self.args[0]
             self.rp = self.args[1]
             self.L = self.args[2]
-            self.Lo=self.args[2]
             self.ap = self.args[3]
+        elif self.type == 'LENS_SIM_CAP':
+            self.data = np.loadtxt(self.args[0])
+            self.rp = self.args[1]
+            self.ap = self.args[2]
+            self.position = self.args[3]
+        elif self.type == "LENS_SIM_TRANSVERSE":
+            self.data = np.loadtxt(self.args[0])
+            self.L = self.args[1]
+            self.rp = self.args[2]
+            self.ap = self.args[3]
+        elif self.type == 'DRIFT':
+            self.L = self.args[0]
+            self.Lo = self.args[0]
+            self.ap = self.args[1]
+        elif self.type == 'BENDER_IDEAL':
+            self.Bp = self.args[0]
+            self.rb = self.args[1]
+            self.rp = self.args[2]
+            self.ang = self.args[3]
+            self.ap = self.args[4]
+        elif self.type == "BENDER_SIM_SEGMENTED":
+            self.data = np.loadtxt(self.args[0])
+            self.rb = self.args[3]
+            self.space = self.args[4]
+            self.Lseg = self.args[1] + 2 * self.space  # total length is hard magnet length plus 2 times extra space
+            self.rp = self.args[2]
+            self.yokeWidth = self.args[5]
+            self.numMagnets = self.args[6]
+            self.ap = self.args[7]
+        elif self.type == "BENDER_SIM_SEGMENTED_CAP":
+            self.data = np.loadtxt(self.args[0])
+            self.L = self.args[1]
+            self.rOffset = self.args[2]
+            self.rp = self.args[3]
+            self.ap = self.args[4]
+            self.position = self.args[5]
+        elif self.type == "BENDER_IDEAL_SEGMENTED":
+            self.Bp = self.args[1]
+            self.rb = self.args[2]
+            self.rp = self.args[3]
+            self.yokeWidth = self.args[4]
+            self.numMagnets = self.args[5]  # number of magnets which is half the number of unit cells.
+            self.ap = self.args[6]
+            self.space = self.args[7]
+            self.Lm = self.args[0]
+        elif self.type == 'COMBINER_IDEAL':
+            self.Lb = self.args[0]
+            self.ang = self.args[1]
+            self.inputOffset = self.args[2]
+            self.ap = self.args[3]
+            self.c1 = self.args[4]
+            self.c2 = self.args[5]
+        elif self.type == 'LENS_SIM':
+            self.data = np.loadtxt(self.args[0])
+            pass
+        else:
+            raise Exception('No proper element name provided')
+
+    def fill_Params_And_Functions(self):
+        #unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
+        if self.type == 'LENS_IDEAL':
+            self.Lo=self.L
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)
         elif self.type=='LENS_SIM_CAP':
-            data = np.loadtxt(self.args[0])
-            self.rp=self.args[1]
-            self.ap=self.args[2]
-            self.position = self.args[3]
             edgeFact=self.args[4] #length of edge section as a multiple of bore radius
             self.L=edgeFact*self.rp
             self.Lo=self.L
 
-            xArr = np.unique(data[:, 0])
-            yArr = np.unique(data[:, 1])
-            zArr = np.unique(data[:, 2])
-            BGradx = data[:, 3]
-            BGrady = data[:, 4]
-            BGradz = data[:, 5]
+            xArr = np.unique(self.data[:, 0])
+            yArr = np.unique(self.data[:, 1])
+            zArr = np.unique(self.data[:, 2])
+            BGradx = self.data[:, 3]
+            BGrady = self.data[:, 4]
+            BGradz = self.data[:, 5]
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
@@ -157,33 +211,20 @@ class Element:
 
 
         elif self.type=="LENS_SIM_TRANSVERSE":
-            data = np.loadtxt(self.args[0])
-            self.L=self.args[1]
-            self.Lo=self.L
-            self.rp=self.args[2]
-            self.ap=self.args[3]
-            data[:,2:]=-data[:,2:]*self.PT.u0
+            self.Lo = self.L
+            self.data[:,2:]=-self.data[:,2:]*self.PT.u0
 
-            tempx=spi.LinearNDInterpolator(data[:,:2],data[:,2])
-            tempy = spi.LinearNDInterpolator(data[:, :2], data[:, 3])
+            tempx=spi.LinearNDInterpolator(self.data[:,:2],self.data[:,2])
+            tempy = spi.LinearNDInterpolator(self.data[:, :2], self.data[:, 3])
             self.FyFunc=lambda x,y,z: tempy(-z,y)
             self.FzFunc = lambda x, y, z: -tempx(-z,y)
             self.FxFunc=lambda x,y,z: 0.0
 
         elif self.type == 'DRIFT':
-            self.L = self.args[0]
-            self.Lo = self.args[0]
-            self.ap = self.args[1]
-
-
+            pass
         elif self.type == 'BENDER_IDEAL':
-            self.Bp = self.args[0]
-            self.rb = self.args[1]
-            self.rp = self.args[2]
-            self.ang = self.args[3]
-            self.ap = self.args[4]
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset = 0#np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            self.rOffset =np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
                 # account for reduced speed in the bender from energy conservation
             # self.rOffset=np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal**2/(2*self.K))-self.rb/4 #this acounts for reduced
             # energy
@@ -192,13 +233,6 @@ class Element:
             self.Lo = self.ang * self.ro
         elif self.type=="BENDER_SIM_SEGMENTED":
             data=np.loadtxt(self.args[0])
-            self.rb=self.args[3]
-            self.space=self.args[4]
-            self.Lseg=self.args[1]+2*self.space #total length is hard magnet length plus 2 times extra space
-            self.rp=self.args[2]
-            self.yokeWidth=self.args[5]
-            self.numMagnets=self.args[6]
-            self.ap=self.args[7]
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
             self.ang = 2 * self.numMagnets * self.ucAng  # number of units cells times bending angle of 1 cell
@@ -212,8 +246,6 @@ class Element:
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
-
-
 
             BGradxMatrix = BGradx.reshape((numz, numy, numx))
             BGradyMatrix = BGrady.reshape((numz, numy, numx))
@@ -241,19 +273,13 @@ class Element:
             self.L=self.rb*self.ang
 
         elif self.type == "BENDER_SIM_SEGMENTED_CAP":
-            data = np.loadtxt(self.args[0])
-            self.L=self.args[1]
-            self.rOffset=self.args[2]
-            self.rp=self.args[3]
-            self.ap=self.args[4]
-            self.position=self.args[5]
             self.Lo=self.L
-            xArr = np.unique(data[:, 0])
-            yArr = np.unique(data[:, 1])
-            zArr = np.unique(data[:, 2])
-            BGradx=data[:,3]
-            BGrady=data[:,4]
-            BGradz=data[:,5]
+            xArr = np.unique(self.data[:, 0])
+            yArr = np.unique(self.data[:, 1])
+            zArr = np.unique(self.data[:, 2])
+            BGradx=self.data[:,3]
+            BGrady=self.data[:,4]
+            BGradz=self.data[:,5]
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
@@ -277,14 +303,6 @@ class Element:
             self.FzFunc = lambda x, y, z: -tempx((x-self.L,y,z))
 
         elif self.type=="BENDER_IDEAL_SEGMENTED":
-            self.Bp = self.args[1]
-            self.rb=self.args[2]
-            self.rp=self.args[3]
-            self.yokeWidth=self.args[4]
-            self.numMagnets=self.args[5] #number of magnets which is half the number of unit cells.
-            self.ap=self.args[6]
-            self.space=self.args[7]
-            self.Lm = self.args[0]
             self.Lseg=self.Lm+self.space*2 #add extra space
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
             self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
@@ -297,17 +315,10 @@ class Element:
             self.Lo = self.ang * self.ro
             self.L=self.ang*self.rb
         elif self.type == 'COMBINER_IDEAL':
-            self.La = self.args[0]
-            self.Lb = self.args[1]
-            self.ang=self.args[2]
-            self.inputOffset=self.args[3]
-            self.ap = self.args[4]
-            self.c1 = self.args[5]
-            self.c2 = self.args[6]
-            self.L=self.La+self.Lb
+            self.La = self.ap * np.sin(self.ang)
+            self.L=self.La*np.cos(self.ang)+self.Lb
             self.Lo=self.L
         elif self.type == 'LENS_SIM':
-            self.data = self.args[0]
             self.Fx = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 3] * self.PT.u0)
             self.Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
             self.Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
@@ -382,9 +393,11 @@ class Element:
             qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
             qo[0] = qos
             qo[1] = qox
-
         elif self.type == 'COMBINER_IDEAL':
-            qo=np.zeros(3)
+            #TODO: FIX THIS
+            qo[0]=self.L-qo[0]
+            qo[1]=qo[1]-self.inputOffset
+
         return qo
 
     def force(self, q):
@@ -575,8 +588,7 @@ class Element:
                 if np.abs(q[1])<self.ap:
                     return True
             else: #particle is in the bent section leading into combiner
-                #TODO: ADD THIS LOGIC
-
+                #TODO: ADD THIS LOGIc
                 return None
         else:
             raise Exception('not implemented')
