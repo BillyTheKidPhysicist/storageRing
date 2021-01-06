@@ -38,6 +38,12 @@ class ParticleTracerLattice:
 
         self.elList=[] #to hold all the lattice elements
 
+    def add_Combiner_Sim(self,file):
+        #file: name of the file that contains the simulation data from comsol. must be in a very specific format
+        args = [file]
+        el = Element(args, 'COMBINER_SIM', self)  # create a lens element object
+        el.index = len(self.elList) #where the element is in the lattice
+        self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Lens_Ideal(self,L,Bp,rp,ap=None):
         #Add element to the lattice. see elementPT.py for more details on specific element
@@ -543,6 +549,10 @@ class ParticleTracerLattice:
         plt.gca().set_aspect('equal')
         plt.show()
 
+
+
+lattice=ParticleTracerLattice(200.0)
+lattice.add_Combiner_Sim('combinerData.txt')
 
 
 

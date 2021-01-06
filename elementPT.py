@@ -48,19 +48,20 @@ class Element:
         self.c1 = None  # dipole component of combiner, T
         self.c2 = None  # quadrupole component of combiner, T/m
         self.rp = None  # bore of element, m
-        self.L = None  # length of element (or for vacuum tube).Not necesarily the length of the magnetic material. m
-        self.Lo = None  # length of orbit inside element. This is different for bending, m
-        self.Lseg=None #length of segment
+        self.L = None  #length of element (or for vacuum tube).Not necesarily the length of the magnetic material. m
+        self.Lo = None  #length of orbit inside element. This is different for bending, m
+        self.Lseg=None #length of segment. Really, this is the length at the inner edge of the yoke, the edge closest to
+        #the center of the bending ring.
         self.Lm=None #hard edge length of magnet in a segment
-        self.rb = None  # 'bending' radius of magnet. actual bending radius of atoms is slightly different cause they
+        self.rb = None  #'bending' radius of magnet. actual bending radius of atoms is slightly different cause they
         # ride on the outside edge, m
         self.yokeWidth=None #Thickness of the yoke, but also refers to the thickness of the permanent magnets, m
         self.ucAng=None #the angle that the unit cell makes with the origin. This is for the segmented bender. It is
             #modeled as a unit cell and the particle's coordinates are rotated into it's reference frame, rad
         self.numMagnets=None #the number of magnets. Keep in mind for a segmented bender two units cells make a total
             #of 1 magnet with each unit cell having half a magnet.
-        self.space=None #extra space added to the length of the magnet in each direction to make up for width
-            #of the yoke. The total increase in width is TWICE this value
+        self.space=None #extra space added to the length of the magnet in each direction. This is to account for the
+        #fact that you can't perfectly line them up.
         self.FxFunc=None #Fit functions for froce from comsol data
         self.FyFunc=None #Fit functions for froce from comsol data
         self.FzFunc=None #Fit functions for froce from comsol data
@@ -106,6 +107,8 @@ class Element:
 
         self.data = None  # array containing the numeric values of a magnetic field. can be for 2d or 3d data. 
         self.forceFitFunc = None  # an interpolation that the force in the x,y,z direction at a given point
+
+        self.width=None #width of combiner vacuum tube
 
         self.unpack_Args()
     def unpack_Args(self):
@@ -170,6 +173,8 @@ class Element:
         elif self.type == 'LENS_SIM':
             self.data = np.loadtxt(self.args[0])
             pass
+        elif self.type=='COMBINER_SIM':
+            self.data=np.loadtxt(self.args[0])
         else:
             raise Exception('No proper element name provided')
 
@@ -230,17 +235,16 @@ class Element:
                 self.L = self.ang * self.rb
                 self.Lo = self.ang * self.ro
         elif self.type=="BENDER_SIM_SEGMENTED":
-            data=np.loadtxt(self.args[0])
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
             self.ang = 2 * self.numMagnets * self.ucAng  # number of units cells times bending angle of 1 cell
 
-            xArr = np.unique(data[:, 0])
-            yArr = np.unique(data[:, 1])
-            zArr = np.unique(data[:, 2])
-            BGradx=data[:,3]
-            BGrady=data[:,4]
-            BGradz=data[:,5]
+            xArr = np.unique(self.data[:, 0])
+            yArr = np.unique(self.data[:, 1])
+            zArr = np.unique(self.data[:, 2])
+            BGradx=self.data[:,3]
+            BGrady=self.data[:,4]
+            BGradz=self.data[:,5]
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
@@ -320,6 +324,50 @@ class Element:
             self.Fx = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 3] * self.PT.u0)
             self.Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
             self.Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
+        elif self.type=='COMBINER_SIM':
+
+            extraSpace=.0001 #extraspace added in each dimension past the vacuum tube. This is so the interpolation works
+                #correctly, but the specific value is used here to infer the dimensions of the vacuum tub. This value
+                #is added in each dimension at the beginning and end when exporting a grid from comsol
+
+
+            xArr = np.unique(self.data[:, 0])
+            yArr = np.unique(self.data[:, 1])
+            zArr = np.unique(self.data[:, 2])
+            BGradx=self.data[:,3]
+            BGrady=self.data[:,4]
+            BGradz=self.data[:,5]
+            numx = xArr.shape[0]
+            numy = yArr.shape[0]
+            numz = zArr.shape[0]
+
+
+
+            L=xArr.max()-xArr.min()-2*extraSpace
+            width = yArr.max() - yArr.min() - 2 * extraSpace
+            ap=zArr.max()-zArr.min()-2*extraSpace
+            numx = xArr.shape[0]
+            numy = yArr.shape[0]
+            numz = zArr.shape[0]
+
+            BGradxMatrix = BGradx.reshape((numz, numy, numx))
+            BGradyMatrix = BGrady.reshape((numz, numy, numx))
+            BGradzMatrix = BGradz.reshape((numz, numy, numx))
+
+            BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+            BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+            BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+            #
+            tempx = interp_3d.Interp3D(-self.PT.u0 * BGradxMatrix, zArr, yArr, xArr)
+            tempy = interp_3d.Interp3D(-self.PT.u0 * BGradyMatrix, zArr, yArr, xArr)
+            tempz = interp_3d.Interp3D(-self.PT.u0 * BGradzMatrix, zArr, yArr, xArr)
+
+
+
+
+
+
+            sys.exit()
         else:
             raise Exception('No proper element name provided')
 
