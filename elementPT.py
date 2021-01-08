@@ -1,8 +1,7 @@
 import time
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.interpolate as spi
-import sympy as sym
+import pandas as pd
 import numpy.linalg as npl
 import sys
 from interp3d import interp_3d
@@ -60,8 +59,9 @@ class Element:
             #modeled as a unit cell and the particle's coordinates are rotated into it's reference frame, rad
         self.numMagnets=None #the number of magnets. Keep in mind for a segmented bender two units cells make a total
             #of 1 magnet with each unit cell having half a magnet.
-        self.space=None #extra space added to the length of the magnet in each direction. This is to account for the
-        #fact that you can't perfectly line them up.
+        self.space=None #extra space added to the length of the magnet in each direction. With segments this is to account for the
+        #fact that you can't perfectly line them up. with the combiner this is to account for the extra space added for
+        #fringe fields at each end
         self.FxFunc=None #Fit functions for froce from comsol data
         self.FyFunc=None #Fit functions for froce from comsol data
         self.FzFunc=None #Fit functions for froce from comsol data
@@ -104,13 +104,16 @@ class Element:
         # in the combiner.
         self.trajLength = None  # total length of trajectory, m. This is for combiner because it is not trivial like
         # benders or lens or drifts
-
+        self.extraSpace = .0001  # extraspace added in each dimension past the vacuum tube. This is so the interpolation works
+        # correctly, but the specific value is used here to infer the dimensions of the vacuum tub. This value
+        # is added in each dimension at the beginning and end when exporting a grid from comsol
         self.data = None  # array containing the numeric values of a magnetic field. can be for 2d or 3d data. 
         self.forceFitFunc = None  # an interpolation that the force in the x,y,z direction at a given point
 
         self.width=None #width of combiner vacuum tube
 
         self.unpack_Args()
+        #self.fill_Params_And_Functions()
     def unpack_Args(self):
         # unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
         if self.type == 'LENS_IDEAL':
@@ -119,15 +122,15 @@ class Element:
             self.L = self.args[2]
             self.ap = self.args[3]
         elif self.type == 'LENS_SIM_CAP':
-            self.data = np.loadtxt(self.args[0])
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.rp = self.args[1]
             self.ap = self.args[2]
             self.position = self.args[3]
         elif self.type == "LENS_SIM_TRANSVERSE":
-            self.data = np.loadtxt(self.args[0])
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.L = self.args[1]
-            self.rp = self.args[2]
-            self.ap = self.args[3]
+            self.rp=self.data[:,0].max()-self.extraSpace
+            self.ap=.9*self.rp
         elif self.type == 'DRIFT':
             self.L = self.args[0]
             self.Lo = self.args[0]
@@ -139,7 +142,7 @@ class Element:
             self.ang = self.args[3]
             self.ap = self.args[4]
         elif self.type == "BENDER_SIM_SEGMENTED":
-            self.data = np.loadtxt(self.args[0])
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.rb = self.args[3]
             self.space = self.args[4]
             self.Lseg = self.args[1] + 2 * self.space  # total length is hard magnet length plus 2 times extra space
@@ -148,7 +151,7 @@ class Element:
             self.numMagnets = self.args[6]
             self.ap = self.args[7]
         elif self.type == "BENDER_SIM_SEGMENTED_CAP":
-            self.data = np.loadtxt(self.args[0])
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.L = self.args[1]
             self.rOffset = self.args[2]
             self.rp = self.args[3]
@@ -171,12 +174,12 @@ class Element:
             self.c1 = self.args[4]
             self.c2 = self.args[5]
         elif self.type == 'LENS_SIM':
-            self.data = np.loadtxt(self.args[0])
-            pass
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
         elif self.type=='COMBINER_SIM':
-            self.data=np.loadtxt(self.args[0])
+            self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
         else:
             raise Exception('No proper element name provided')
+
 
     def fill_Params_And_Functions(self):
         #unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
@@ -317,6 +320,9 @@ class Element:
             self.Lo = self.ang * self.ro
             self.L=self.ang*self.rb
         elif self.type == 'COMBINER_IDEAL':
+            inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(1, 200)
+            self.ang=inputAngle
+            self.inputOffset=inputOffset
             self.La = self.ap * np.sin(self.ang)
             self.L=self.La*np.cos(self.ang)+self.Lb
             self.Lo=self.L
@@ -326,11 +332,11 @@ class Element:
             self.Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
         elif self.type=='COMBINER_SIM':
 
-            extraSpace=.0001 #extraspace added in each dimension past the vacuum tube. This is so the interpolation works
-                #correctly, but the specific value is used here to infer the dimensions of the vacuum tub. This value
-                #is added in each dimension at the beginning and end when exporting a grid from comsol
 
-
+            self.space=4*1.1E-2 #extra space past the hard edge on either end to account for fringe fields
+            self.Lm=.18
+            self.Lb=self.space+self.Lm #the combiner vacuum tube will go from a short distance from the ouput right up
+            #to the hard edge of the input
             xArr = np.unique(self.data[:, 0])
             yArr = np.unique(self.data[:, 1])
             zArr = np.unique(self.data[:, 2])
@@ -341,14 +347,8 @@ class Element:
             numy = yArr.shape[0]
             numz = zArr.shape[0]
 
+            self.ap = (yArr.max() - yArr.min() - 2 * self.extraSpace)/2.0
 
-
-            L=xArr.max()-xArr.min()-2*extraSpace
-            width = yArr.max() - yArr.min() - 2 * extraSpace
-            ap=zArr.max()-zArr.min()-2*extraSpace
-            numx = xArr.shape[0]
-            numy = yArr.shape[0]
-            numz = zArr.shape[0]
 
             BGradxMatrix = BGradx.reshape((numz, numy, numx))
             BGradyMatrix = BGrady.reshape((numz, numy, numx))
@@ -362,15 +362,65 @@ class Element:
             tempy = interp_3d.Interp3D(-self.PT.u0 * BGradyMatrix, zArr, yArr, xArr)
             tempz = interp_3d.Interp3D(-self.PT.u0 * BGradzMatrix, zArr, yArr, xArr)
 
+            self.FxFunc = lambda x, y, z: tempx((z,y,x))
+            self.FyFunc = lambda x, y, z: tempy((z,y,x))
+            self.FzFunc = lambda x, y, z: tempz((z,y,x))
+            inputAngle,inputOffset=self.compute_Input_Angle_And_Offset(1,200)
+            self.ang=inputAngle
+            self.inputOffset=inputOffset-np.tan(inputOffset)*self.space #the input offset is measure at the end of the hard
+            #edge
 
 
-
-
-
-            sys.exit()
+            #the inlet length needs to be long enough to extend past the fringe fields
+            #TODO: MAKE EXACT, now it overshoots
+            self.La=self.space+np.tan(self.ang)*self.ap
+            self.Lo=self.La+self.Lb
+            self.L=self.Lo
+            #plot along x
+            #xPlot=np.linspace(0,self.Lm+2*self.space)
+            #y0=0
+            #z0=0
+            #plotList=[]
+            #for x in xPlot:
+            #    plotList.append(self.FxFunc(x,y0,z0))
+            #plt.plot(xPlot,plotList)
+            #plt.show()
         else:
             raise Exception('No proper element name provided')
 
+    def compute_Input_Angle_And_Offset(self,m,v0, h=10e-6,):
+        # this computes the output angle and offset for a combiner magnet
+        q = np.asarray([0, 0, 0])
+        p = m * np.asarray([v0, 0, 0])
+        #xList=[]
+        #yList=[]
+        if self.type=="COMBINER_IDEAL":
+            limit=self.Lb
+        elif self.type=='COMBINER_SIM':
+            limit=self.Lm+2*self.space
+        else:
+            raise Exception('NOT IMPLEMENTED')
+        while True:
+            F = self.force(q)
+            a = F / m
+            q_n = q + (p / m) * h + .5 * a * h ** 2
+            F_n = self.force(q_n)
+            a_n = F_n / m  # accselferation new or accselferation sub n+1
+            p_n = p + m * .5 * (a + a_n) * h
+            if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
+                dr = self.Lb - q[0]
+                dt = dr / (p[0] / m)
+                q = q + (p / m) * dt
+                break
+            #xList.append(q[0])
+            #yList.append(F[0])
+            q = q_n
+            p = p_n
+        #plt.plot(xList,yList)
+        #plt.show()
+        outputAngle = np.arctan2(p[1], p[0])
+        outputOffset = q[1]
+        return outputAngle, outputOffset
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -408,7 +458,7 @@ class Element:
             qNew[1]=qNew[1]-r[1]
         elif self.type == 'BENDER_IDEAL' or self.type == 'BENDER_IDEAL_SEGMENTED' or self.type=='BENDER_SIM_SEGMENTED':
             qNew[:2] = qNew[:2] - self.r0
-        elif self.type == 'COMBINER_IDEAL':
+        elif self.type == 'COMBINER_IDEAL' or self.type=='COMBINER_SIM':
             qNew[:2] = qNew[:2] - self.r2
         qNewx = qNew[0]
         qNewy = qNew[1]
@@ -439,7 +489,7 @@ class Element:
             qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
             qo[0] = qos
             qo[1] = qox
-        elif self.type == 'COMBINER_IDEAL':
+        elif self.type == 'COMBINER_IDEAL' or self.type=='COMBINER_SIM':
             #TODO: FIX THIS
             qo[0]=self.L-qo[0]
             qo[1]=qo[1]-self.inputOffset
@@ -463,11 +513,16 @@ class Element:
             # note: for the perfect lens, in it's frame, there is never force in the x direction
             F[1] = -self.K * q[1]
             F[2] = -self.K * q[2]
-        elif self.type == 'COMBINER_IDEAL':
+        elif self.type == 'COMBINER_IDEAL' or self.type=='COMBINER_IDEAL':
             if q[0] < self.Lb:
                 B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
                 F[1] = self.PT.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
                 F[2] = self.PT.u0 * self.c2 ** 2 * q[2] / B0
+        elif self.type=='COMBINER_SIM':
+            F[0] = self.FxFunc(*q)
+            F[1] = self.FyFunc(*q)
+            F[2] = self.FzFunc(*q)
+            #print(F, q[1], q[0],q[0]-self.Lb, self.type)
         elif self.type=='BENDER_IDEAL_SEGMENTED':
             #This is a little tricky. The coordinate in the element frame must be transformed into the unit cell frame and
             #then the force is computed from that. That force is then transformed back into the unit cell frame
@@ -490,6 +545,7 @@ class Element:
             F[2] = self.FzFunc(*q)
         else:
             raise Exception('not yet implemented')
+
         return F
     def transform_Element_Into_Unit_Cell_Frame(self,q):
         #As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
@@ -627,7 +683,7 @@ class Element:
             if r<self.rb-self.ap or r>self.rb+self.ap:
                 return False
             return True
-        elif self.type=='COMBINER_IDEAL':
+        elif self.type=='COMBINER_IDEAL' or self.type=='COMBINER_SIM':
             if np.abs(q[2])>self.ap:
                 return False
             elif q[0]<self.Lb and q[0]>0: #particle is in the straight section that passes through the combiner

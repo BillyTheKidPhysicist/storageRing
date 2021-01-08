@@ -1,16 +1,11 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import multiprocessing as mp
-import cProfile
 import sys
 from shapely.geometry import Polygon,Point
-from pathos.pools import ProcessPool
 import pathos as pa
-import scipy.interpolate as spi
 import numpy.linalg as npl
-import sympy as sym
-from elementPT import Element
+
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
     #ucAng=angle/(2*numMagnets)
@@ -19,6 +14,9 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 
     return rb
 
+
+
+#this class does the work of tracing the particles through the lattice with timestepping algorithms
 class ParticleTracer:
     def __init__(self,latticeObject):
         self.lattice = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
@@ -62,7 +60,7 @@ class ParticleTracer:
 
 
     def reset(self):
-        #reset parameters related to the particle to do another simulation. Doesn't change anything about the lattice though.
+        #reset parameters related to the particle to do another simulation.
         self.qList=[]
         self.pList=[]
         self.qoList=[]
@@ -77,8 +75,8 @@ class ParticleTracer:
         self.deltaT=0
         self.ForceLast=None
     def initialize(self):
+        # prepare for a single particle to be traced
         self.reset() #reset params
-        #prepare for a particle to be traced
         self.vs = np.abs(self.p[0] / self.m)
         dl=self.vs*self.h #approximate stepsize
         for el in self.lattice:
@@ -141,11 +139,12 @@ class ParticleTracer:
         return qArr,pArr,qoArr,poArr,self.particleOutside
 
     def handle_Element_Edge(self, el, q, p):
+        # This method calculates the correct timestep to put the particle just on the other side of the end of the element
+        # using velocity verlet. I had intended this to use the force right at the end of the element, but that didn't
+        # work right. For now it simply uses explicit euler more or less
+        #
+
         import numpy as np #todo: wtf is happening here, why do I need this
-        #when the particle has stepped over into the next element in time_Step_Trapezoid this method is called.
-        #This method calculates the correct timestep to put the particle just on the other side of the end of the element
-        #using velocity verlet
-        #print(q[0])
 
         r=el.r2-q[:2]
 
@@ -157,12 +156,8 @@ class ParticleTracer:
 
         eps=1e-9 #tiny step to put the particle on the other side
         np=p/npl.norm(p) #normalized vector of particle velocity direction
-        #print(el.r1,el.r2,np)
 
         q=q+np*eps
-
-        #print('edge',el.type,self.currentEl.type,self.which_Element_Slow(q).type)
-
 
         return q,p
         #TODO: FIX THIS, IT'S BROKEN. DOESN'T WORK WITH FORCE :(
@@ -183,7 +178,8 @@ class ParticleTracer:
         #q=q+np*eps
         #return q,p
     def time_Step_Verlet(self):
-
+        #the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
+        #possible
         q=self.q #q old or q sub n
         p=self.p #p old or p sub n
         if self.elHasChanged==False and self.ForceLast is not None: #if the particle is inside the lement it was in
@@ -233,6 +229,7 @@ class ParticleTracer:
         return exit
 
     def get_Energies(self,q,p,el):
+        #get the energy of the particle at the given point and momentum
         PE =el.get_Potential_Energy(q)
         KE =npl.norm(p)**2/(2*self.m)
         return  PE,KE
@@ -242,11 +239,7 @@ class ParticleTracer:
         #must be in the element frame
         #q: particle's coordinates in lab frame
         if el is None:
-            #print('----here----')
-            #print(self.currentEl.type)
             el=self.which_Element_Slow(q) #find element the particle is in
-            #print(el.type)
-            #print('-----done-----')
             if el is None: #if particle is outside!
                 return None
         if qel is None:
@@ -259,7 +252,6 @@ class ParticleTracer:
     def which_Element(self,q,return_qel=True):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
-
         qel = self.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
         isInside=self.currentEl.is_Coord_Inside(qel) #this returns True or None or false
         if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
@@ -281,7 +273,8 @@ class ParticleTracer:
 
 
     def which_Element_Shapely(self,q):
-        # Use shapely to find where the element is. If the object is exaclty on the edge, it should catch that
+        # Use shapely to find where the element is. If the object is exaclty on the edge, this will return None. This
+        #is slower than using simple geometry and should be avoided
         point = Point([q[0], q[1]])
         for el in self.lattice:
             if el.SO.contains(point) == True:
@@ -290,7 +283,7 @@ class ParticleTracer:
                 else:
                     # now check to make sure the particle isn't exactly on and edge
                     return el  # return the element the particle is in
-        return None #if no element found
+        return None #if no element found, or particle exactly on an edge
     def which_Element_Slow(self,q):
         #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
         #or between two element. So try scooting the particle on a tiny bit and try again.
@@ -331,6 +324,7 @@ class ParticleTracer:
     def adjust_Energy(self):
         #when the particle traverses an element boundary, energy needs to be conserved. This would be irrelevant if I
         #included fringe field effects
+        #TODO: BROKEN
         raise Exception('something doenst make sense')
         el=self.currentEl
         E=sum(self.get_Energies())

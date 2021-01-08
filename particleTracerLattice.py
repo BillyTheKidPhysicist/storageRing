@@ -1,15 +1,9 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import multiprocessing as mp
-import cProfile
 import sys
 from shapely.geometry import Polygon,Point
-from pathos.pools import ProcessPool
-import pathos as pa
-import scipy.interpolate as spi
 import numpy.linalg as npl
-import sympy as sym
 from elementPT import Element
 from ParticleTracer import ParticleTracer
 
@@ -43,6 +37,7 @@ class ParticleTracerLattice:
         args = [file]
         el = Element(args, 'COMBINER_SIM', self)  # create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
+        self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Lens_Ideal(self,L,Bp,rp,ap=None):
@@ -70,18 +65,12 @@ class ParticleTracerLattice:
         el=Element(args,'DRIFT',self)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Sim_Transverse(self,file,L,rp,ap=None):
+    def add_Lens_Sim_Transverse(self,file,L):
         #Add element to the lattice. see elementPT.py for more details on specific element
         # file: string filename of file containing field data. rows contains points and values
         # L: Hard edge length of segment magnet in a segment
         # rp: bore radius of segment magnet
-        apFrac = .9  # apeture fraction
-        if ap is None:  # set the apeture as fraction of bore radius to account for tube thickness
-            ap = apFrac * rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-        args=[file,L,rp,ap]
+        args=[file,L]
         el=Element(args,"LENS_SIM_TRANSVERSE",self)
         self.elList.append(el)
     def add_Lens_Sim_With_Fringe_Fields(self,fileTransverse,fileFringe,L,rp,ap=None,edgeFact=3):
@@ -216,7 +205,8 @@ class ParticleTracerLattice:
 
 
     def end_Lattice(self):
-
+        #call various functions to construct the lattice geometry, the shapely objects for visualization and finding particle
+        # positions, catch errors, enforce constraints and fill parameter(s)
         self.catch_Errors()
         self.constrain_Lattice()
         self.set_Element_Coordinates()
@@ -226,26 +216,28 @@ class ParticleTracerLattice:
         for el in self.elList: #total length of particle's orbit in an element
             self.totalLength+=el.Lo
     def constrain_Lattice(self):
+        #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
+        #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
+        #between bending segments must be set in this manner as well
         if self.combinerIndex is not None:
             combinerEl=self.elList[self.combinerIndex]
-
-            inputAng,inputOffset=self.compute_Input_Angle_And_Offset(combinerEl) #TODO: PUT THIS INTO ELEMENT CLASS?
-            combinerEl.ang=inputAng
-            combinerEl.inputOffset=inputOffset
             combinerEl.fill_Params_And_Functions()
-
             phi2,phi3,L3=self.solve_Combiner_Constraints()
 
-            lensIndex = 4 #temporary!!
+            lensIndex = 4 #TODO: temporary!!
             self.elList[self.benderIndices[0]].ang=phi2
             self.elList[self.benderIndices[1]].ang=phi3
             self.elList[lensIndex].L=L3
 
         for el in self.elList:
-            el.fill_Params_And_Functions()
+            if el.type != 'COMBINER_IDEAL' and el.type!= 'COMBINER_SIM':
+                el.fill_Params_And_Functions()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
-        #as well as the distance between the two on the segment without the combiner
+        #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
+        #an implicit equation because the number of segments must be an integer. For continuously extruded benders
+        #it is an explicit equation, courtesy of Jamie Hall. This is mostly a wrapper that handles the overhead, the actual
+        #equations are contained in functions
 
         #find the distance from the kink in the combiner from the bender before it, and the distance to the bender after
         # (clockwise)
@@ -274,7 +266,8 @@ class ParticleTracerLattice:
 
     def solve_Triangle_Problem(self,inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
-        #with the combiner and the two benders.
+        #with the combiner and the two benders. With segmented benders however this become a more difficult implicit problem
+        #because there needs to be a integer number of segments in the bender
         #phi1: bending angle of the combiner, or the amount of 'kink'
         #L1: length of the section before the kink to the bender
         #L2: length of the section after the kink to the bender
@@ -296,9 +289,8 @@ class ParticleTracerLattice:
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
-        #it could be changed to only use the shapely objects for plotting, but it would take some clever algorithm I think
-        #and I am in a crunch kind of.
-        #----
+        #Ideally I would never need to use this to find which particle the elment is in because it's slower
+        #----------
         #all of these take some thinking to visualize what's happening.
         benderPoints=500 #how many points to represent the bender with along each curve
         for el in self.elList:
@@ -324,7 +316,7 @@ class ParticleTracerLattice:
                 x=np.append(xInner,xOuter) #list of x values in order
                 y=np.append(yInner,yOuter) #list of y values in order
                 el.SO=Polygon(np.column_stack((x,y))) #shape the coordinates and make the object
-            elif el.type=='COMBINER_IDEAL':
+            elif el.type=='COMBINER_IDEAL' or el.type=='COMBINER_SIM':
                 q1=np.asarray([0,ap]) #top left when theta=0
                 q2=np.asarray([el.Lb,ap]) #top middle when theta=0
                 q3=np.asarray([el.Lb+(el.La-el.ap*np.sin(el.ang))*np.cos(el.ang),ap+(el.La-el.ap*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
@@ -353,7 +345,7 @@ class ParticleTracerLattice:
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
         #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element 
         # builds upon that. The final element's ending coordinates must match the beginning elements beginning coordinates
-        i=0
+        i=0 #too keep track of the current element
         rbo=np.asarray([0,0]) #beginning of first element, vector. Always 0,0
         reo=None #end of last element, vector. This is not the geometri beginning but where the orbit enters the element,
         #it could be the geometric point though
@@ -373,7 +365,7 @@ class ParticleTracerLattice:
                 prevEl = self.elList[i - 1]
                 #set end coordinates
                 if el.type=='DRIFT' or el.type=='LENS_IDEAL' or el.type=="LENS_SIM_TRANSVERSE" or el.type=='LENS_SIM_CAP':
-                    if prevEl.type=='COMBINER_IDEAL':
+                    if prevEl.type=='COMBINER_IDEAL' or prevEl.type=='COMBINER_SIM':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -409,7 +401,7 @@ class ParticleTracerLattice:
                         xe += el.rOffset * np.sin(el.theta)
                         ye += el.rOffset * (-np.cos(el.theta))
                 elif el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED':
-                    if prevEl.type=='COMBINER_IDEAL':
+                    if prevEl.type=='COMBINER_IDEAL' or prevEl.type=='COMBINER_SIM':
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -435,7 +427,7 @@ class ParticleTracerLattice:
                     el.nb=np.asarray([np.cos(el.theta-np.pi), np.sin(el.theta-np.pi)])  # normal vector to input
                     el.ne=np.asarray([np.cos(el.theta-np.pi+(np.pi-el.ang)), np.sin(el.theta-np.pi+(np.pi-el.ang))])  # normal vector to output
                     el.r0=np.asarray([xb+el.rb*np.sin(el.theta),yb-el.rb*np.cos(el.theta)]) #coordinates of center of bender
-                elif el.type=='COMBINER_IDEAL':
+                elif el.type=='COMBINER_IDEAL' or el.type=='COMBINER_SIM':
                     el.theta=2*np.pi-el.ang-(np.pi-prevEl.theta)# Tilt the combiner down by el.ang so y=0 is perpindicular
                         #to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
                         #np.pi because the combiner's input is not at the origin, but faces 'east'
@@ -465,7 +457,8 @@ class ParticleTracerLattice:
             #need to make rotation matrices for element
             if el.type=='BENDER_IDEAL' or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED':
                 rot = (el.theta - el.ang + np.pi / 2)
-            elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER_IDEAL' or el.type=="LENS_SIM_TRANSVERSE":
+            elif el.type=='LENS_IDEAL' or el.type=='DRIFT' or el.type=='COMBINER_IDEAL' or el.type=="LENS_SIM_TRANSVERSE"\
+                    or el.type=='COMBINER_SIM':
                 rot = el.theta
             elif el.type=="BENDER_SIM_SEGMENTED_CAP" or el.type=='LENS_SIM_CAP':
                 if el.position=='INLET':
@@ -491,7 +484,7 @@ class ParticleTracerLattice:
             if i==len(self.elList)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
                 if el.type=='BENDER_IDEAL' or el.type=='COMBINER_IDEAL'or el.type=='BENDER_IDEAL_SEGMENTED' or el.type=='BENDER_SIM_SEGMENTED'\
-                        or el.type=='BENDER_SIM_SEGMENTED_CAP':
+                        or el.type=='BENDER_SIM_SEGMENTED_CAP' or el.type=='COMBINER_SIM':
                     reo[1]-=el.rOffset
             i+=1
         #check that the last point matchs the first point within a small number.
@@ -504,12 +497,8 @@ class ParticleTracerLattice:
 
 
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
-        #this computes the output angle and offset for a combiner magnet
-        #L: length of combiner magnet
-        #c1: dipole moment
-        #c2: quadrupole moment
-        #ap: apeture of combiner in x axis, half gap
-        #v0: nominal particle speed
+        #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
+        #for numerical fields. For consistency, this is also used on the analytic hard edge combiner.
         q = np.asarray([0, 0, 0])
         p=self.m*np.asarray([self.v0Nominal,0,0])
         #xList=[]
@@ -551,9 +540,64 @@ class ParticleTracerLattice:
 
 
 
-lattice=ParticleTracerLattice(200.0)
-lattice.add_Combiner_Sim('combinerData.txt')
+# combinerFile='combinerData.txt'
+# transFile='lens2D.txt'
+#
+#
+# lattice=ParticleTracerLattice(200.0)
+#
+# Llens=.25
+# rBend=1.0
+# particleTracer = ParticleTracer(lattice)
+# lattice.add_Lens_Sim_Transverse(transFile,Llens)
+# #lattice.add_Lens_Sim_With_Fringe_Fields(fileTransverse,fileFringe,L,rp,ap=None,edgeFact=3)
+# #lattice.add_Lens_Ideal(Llens, 1, .015)
+# lattice.add_Combiner_Sim(combinerFile)
+# lattice.add_Lens_Sim_Transverse(transFile,Llens)
+# lattice.add_Bender_Ideal(None, rBend, 1.0, .01)
+# lattice.add_Lens_Sim_Transverse(transFile,Llens)
+# lattice.add_Bender_Ideal(None, rBend, 1.0, .01)
+# lattice.end_Lattice()
+# #lattice.show_Lattice()
 
 
 
 
+
+
+#
+# #-------------------------------------------------------
+# B0Arr=np.linspace(.1,.4,num=25)
+# survivalList=[]
+# Llens=.3
+# print('begin')
+# i=0
+# for B0 in B0Arr:
+#     rBend=1.0
+#
+#     lattice = ParticleTracerLattice(200.0)
+#     particleTracer = ParticleTracer(lattice)
+#     lattice.add_Lens_Ideal(Llens,B0,.015)
+#     lattice.add_Combiner_Sim(combinerFile)
+#     lattice.add_Lens_Ideal(Llens,B0,.015)
+#     lattice.add_Bender_Ideal(None,rBend,1.0,.01)
+#     lattice.add_Lens_Ideal(None,1,.01)
+#     lattice.add_Bender_Ideal(None,rBend,1.0,.01)
+#     lattice.end_Lattice()
+#
+#     q0=np.asarray([-1e-10,0e-3,0])
+#     v0=np.asarray([-200.0,0,0])
+#
+#     Lt=lattice.totalLength*250
+#
+#     dt=10e-6
+#     print('tracing',i)
+#     q, p, qo, po, particleOutside = particleTracer.trace(q0, v0,dt, Lt/200)
+#     #plt.plot(qo[:,0],qo[:,1])
+#     #plt.show()
+#     survival=qo[-1,0]/lattice.totalLength
+#     survivalList.append(survival)
+#     print(particleOutside,survival)
+#     i+=1
+# plt.plot(B0Arr,survivalList)
+# plt.show()
