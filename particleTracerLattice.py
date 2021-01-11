@@ -257,17 +257,18 @@ class ParticleTracerLattice:
 
         #find the distance from the kink in the combiner from the bender before it, and the distance to the bender after
         # (clockwise)
-        L1=self.elList[self.combinerIndex].La #from previous bender to kink
-        L2=self.elList[self.combinerIndex].Lb #from kink to next bender
+        L1=self.elList[self.combinerIndex].Lb #from kink to next bender
+        L2=self.elList[self.combinerIndex].La #from previous bender to kink
         inputAng = self.elList[self.combinerIndex].ang
         inputOffset = self.elList[self.combinerIndex].inputOffset
-        for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
-            #lattice element list
-            L1+=self.elList[i].L
         for i in range(self.combinerIndex+1,len(self.elList)+1): #TODO: FIX THIS HACKY METHOD
             if self.elList[i].ang!=0 or self.elList[i].type=='BENDER_IDEAL_SEGMENTED': #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
                 break
-            L2 += self.elList[i].L
+            L1 += self.elList[i].L
+        for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
+            #lattice element list
+            L2+=self.elList[i].L
+
         if self.bender1.type=='BENDER_IDEAL_SEGMENTED' and self.bender2.type=='BENDER_IDEAL_SEGMENTED':
             #TODO: HOW TO DEAL WITH THE TWO BENDERS NEEDING TO BE IDENTICAL??
             Lseg=self.bender1.Lseg
@@ -293,40 +294,19 @@ class ParticleTracerLattice:
         def cost(args):
             #print('------')
             #print(args)
-            N1,r1,r2,L3 = args
-            phi1=int(N1)*(2*np.arctan(.5*Lseg/(r1-D)))
-            phi2=2*np.pi-phi1-inputAng
-            N2=int(phi2/(2*np.arctan(.5*Lseg/(r2-D))))
-            phi2=N2*(2*np.arctan(.5*Lseg/(r2-D)))
-            print(phi1,phi2)
+            r1,r2 = args
+            phi1,phi2,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
 
-            sys.exit()
-
-
-            #phi1, phi2, L3 = self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
-            
-            #numbering convention is a little weird here. #todo: explain
-            s1 = L3 + r1 * np.tan(phi1 / 2) + r2 * np.tan(phi2 / 2)
-            s2 = L2 + r1 * np.tan(phi1 / 2)
-            s3 = L1 + r2 * np.tan(phi2 / 2)
-            #print(s1,s2,s3)
-
-            cost1 = np.sqrt(s2 ** 2 + s3 ** 2 - 2 * s2 * s3 * np.cos(np.pi-inputAng)) - s1
-            cost2 = np.sqrt(s1 ** 2 + s3 ** 2 - 2 * s1 * s3 * np.cos(np.pi-phi2)) - s2
-            cost3 = np.sqrt(s1 ** 2 + s2 ** 2 - 2 * s1 * s2 * np.cos(np.pi-phi1)) - s3
-            cost4 = 0#np.abs(phi1 * (r1 - yokeWidth) / sigma - int(phi1 * (r1 - yokeWidth) / sigma))
-            cost5 = 0#np.abs(phi2 * (r2 - yokeWidth) / sigma - int(phi2 * (r2 - yokeWidth) / sigma))
-
-            #print(cost1,cost2,cost3,cost4,cost5)
+            #phi1=int(N1)*(2*np.arctan(.5*Lseg/(r1-D)))
+            #phi2=2*np.pi-phi1-inputAng
+            UCAng1=np.arctan(.5*Lseg/(r2-D))
+            UCAng2 = np.arctan(.5 * Lseg / (r1 - D))
+            N1=int(phi1/UCAng1)
+            N2=int(phi2/UCAng2)
 
 
-            #print(cost4,cost5)
-            if r1<0 or r2<0:
-                cost= np.inf
-            else:
-                cost=np.sqrt(10*cost1**2+10*cost2**2+10*cost3**2+cost4**2+cost5**2)
-            return cost
-        print('here')
+
+        print('--here--')
         sys.exit()
         return phi1,phi2,r1,r2,L3
 
@@ -352,7 +332,7 @@ class ParticleTracerLattice:
 
 
     @staticmethod
-    @njit()
+    #@njit()
     def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. With segmented benders however this become a more difficult implicit problem
@@ -365,9 +345,8 @@ class ParticleTracerLattice:
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner. This function will likely be used by another function
         #that sorts that all out.
-
-
-        L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
+        '''
+         L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
         L2+=-inputOffset/np.tan(inputAng)
 
         theta3 = np.pi - inputAng
@@ -381,6 +360,27 @@ class ParticleTracerLattice:
         tau = np.arctan((r2 - r1) / L3)
         theta1 = 2 * np.pi - np.pi / 2 - c - alpha - tau
         theta2 = 2 * np.pi - inputAng - theta1
+        '''
+
+
+        L1 += -inputOffset / np.tan(inputAng)
+        L2 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
+
+
+        theta3 = np.pi - inputAng
+        a = theta3 - np.arctan(r1 / L1) - np.arctan(r2 / L2)
+        B = np.sqrt(L1 ** 2 + r1 ** 2)
+        C = np.sqrt(L2 ** 2 + r2 ** 2)
+        A = np.sqrt(B ** 2 + C ** 2 - 2 * B * C * np.cos(a))
+        L3 = np.sqrt(A ** 2 - (r2 - r1) ** 2)
+        c = np.arccos(-(C ** 2 - B ** 2 - A ** 2) / (2 * A * B))
+        alpha = np.pi / 2 - np.arctan(r1 / L1)
+        tau = np.arctan((r2 - r1) / L3)
+        theta1 = 2 * np.pi - np.pi / 2 - c - alpha - tau
+        theta2 = 2 * np.pi - inputAng - theta1
+        print(theta1,theta2)
+        #3.102081323095968 3.1024439051791184
+        #sys.exit()
         return theta1,theta2,L3
 
     def make_Geometry(self):
@@ -658,12 +658,12 @@ lattice.add_Lens_Ideal(Llens, 1, .015)
 lattice.add_Combiner_Ideal()
 #lattice.add_Lens_Sim_Transverse(transFile,Llens)
 lattice.add_Lens_Ideal(Llens, 1, .015)
-lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
-#lattice.add_Bender_Ideal(None, 1,rBend*1.01, .01)
+#lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
+lattice.add_Bender_Ideal(None, 1,rBend*1.001, .01)
 #lattice.add_Lens_Sim_Transverse(transFile,Llens)
 lattice.add_Lens_Ideal(None, 1, .015)
-lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
-#lattice.add_Bender_Ideal(None, 1,rBend*1.0, .01)
+#lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
+lattice.add_Bender_Ideal(None, 1,rBend*1.0, .01)
 lattice.end_Lattice()
 #lattice.show_Lattice()
 
