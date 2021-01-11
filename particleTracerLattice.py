@@ -268,40 +268,24 @@ class ParticleTracerLattice:
             if self.elList[i].ang!=0 or self.elList[i].type=='BENDER_IDEAL_SEGMENTED': #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
                 break
             L2 += self.elList[i].L
-
         if self.bender1.type=='BENDER_IDEAL_SEGMENTED' and self.bender2.type=='BENDER_IDEAL_SEGMENTED':
             #TODO: HOW TO DEAL WITH THE TWO BENDERS NEEDING TO BE IDENTICAL??
             Lseg=self.bender1.Lseg
             yokeWidth=self.bender1.yokeWidth
             rp1=self.bender1.rp
             rp2 = self.bender2.rp
-            args=(Lseg,yokeWidth , inputAng,inputOffset, L1, L2,self.bender1.rb,self.bender2.rb)
-            phi1,phi2,r1,r2,L3=self.solve_Implicit_Segmented_Triangle_Problem(*args)
-
-
-            numMags1= float(phi1 /(2*np.arctan(.5*Lseg/(r1 - yokeWidth-rp1))))
-            numMags2= float(phi2 /(2*np.arctan(.5*Lseg/(r2 - yokeWidth-rp2))))
-            print('args', r1, r2, phi1, phi2,numMags1,numMags2)
-            params=[phi1,phi2,r1,r2,numMags1,numMags2,L3]
-            return params
+            D=rp1+yokeWidth
+            args=(Lseg,D , inputAng,inputOffset, L1, L2,self.bender1.rb,self.bender2.rb)
+            params=self.solve_Implicit_Segmented_Triangle_Problem(*args)
         else: #todo: add correct cases
             self.bender1.fill_Params_And_Functions()
             self.bender2.fill_Params_And_Functions()
             r1=self.bender1.ro
             r2=self.bender2.ro
+            params=self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
+        return params
 
-            #phi2,phi3,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
-            args = (self.bender1.Lseg, self.bender1.yokeWidth, inputAng, inputOffset, L1, L2, r1,r2)
-#
-
-            phi2,phi3,r1,r2,L3=self.solve_Implicit_Segmented_Triangle_Problem(*args)
-            self.bender1.rb=r1
-            self.bender2.rb=r2
-            raise Exception('needs work, use is being diverted')
-            return phi2,phi3,L3
-
-
-    def solve_Implicit_Segmented_Triangle_Problem( self,sigma, yokeWidth, inputAng, inputOffset, L1, L2,r10,r20):
+    def solve_Implicit_Segmented_Triangle_Problem( self,Lseg, D, inputAng, inputOffset, L1, L2,r10,r20):
         # todo: change phi naming convention
         L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
         L2+=-inputOffset/np.tan(inputAng)
@@ -309,8 +293,14 @@ class ParticleTracerLattice:
         def cost(args):
             #print('------')
             #print(args)
-            phi1,r1,r2,L3 = args
+            N1,r1,r2,L3 = args
+            phi1=int(N1)*(2*np.arctan(.5*Lseg/(r1-D)))
             phi2=2*np.pi-phi1-inputAng
+            N2=int(phi2/(2*np.arctan(.5*Lseg/(r2-D))))
+            phi2=N2*(2*np.arctan(.5*Lseg/(r2-D)))
+            print(phi1,phi2)
+
+            sys.exit()
 
 
             #phi1, phi2, L3 = self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
@@ -336,24 +326,7 @@ class ParticleTracerLattice:
             else:
                 cost=np.sqrt(10*cost1**2+10*cost2**2+10*cost3**2+cost4**2+cost5**2)
             return cost
-
-
-        x0 = np.asarray([3.1,1.025,1.025,.99*(L2+L1)])#np.asarray([r10, r20,np.pi-inputAng/2,L1+L2])
-        #bounds=((.5*r10,1.5*r10),(.5*r20,1.5*r20),(np.pi-inputAng,np.pi),(.5*(L1+L2),1.1*(L1+L2)))
-        bounds=((np.pi-inputAng,np.pi+inputAng),(r10*.95,r10*1.05),(r20*.95,r20*1.05),(.5*(L1+L2),1.5*(L1+L2)))
-        sol=None
-        sol = spo.differential_evolution(cost, bounds, tol=1e-12, polish=False, maxiter=1000, mutation=.75)
-        print(sol)
-        #self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
-        #print(phi1 + phi2 + inputAng - 2 * np.pi)
-        phi1, r1, r2, L3 = sol.x
-        phi2 = 2 * np.pi - phi1 - inputAng
-        numMagnets1=phi1 * (r1 - yokeWidth) / sigma
-        numMagnets2 = phi2 * (r2 - yokeWidth) / sigma
-#
-#
-        #print(numMagnets1,numMagnets2)
-        print(cost(sol.x))
+        print('here')
         sys.exit()
         return phi1,phi2,r1,r2,L3
 
@@ -377,7 +350,10 @@ class ParticleTracerLattice:
         sys.exit()
         return sol.x
 
-    def solve_Triangle_Problem(self,inputAng,inputOffset,L1,L2,r1,r2):
+
+    @staticmethod
+    @njit()
+    def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. With segmented benders however this become a more difficult implicit problem
         #because there needs to be a integer number of segments in the bender
@@ -389,18 +365,23 @@ class ParticleTracerLattice:
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner. This function will likely be used by another function
         #that sorts that all out.
-        if r1!=r2: #todo: fix this!
-            raise Exception('ALGORITHM NOT SET UP FOR DIFFERENT RADII')
+
 
         L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
         L2+=-inputOffset/np.tan(inputAng)
 
-        L3=np.sqrt((L1-np.sin(inputAng)*r2+L2*np.cos(inputAng))**2+(L2*np.sin(inputAng)-r2*(1-np.cos(inputAng))+(r2-r1))**2)
-        phi2=np.pi*1.5-np.arctan(L2/r2)-np.arccos((L3**2+L2**2-L1**2)/(2*L3*np.sqrt(L2**2+r2**2))) #bending radius of bender
-        #after combiner
-        phi3=np.pi*1.5-np.arctan(L1/r1)-np.arccos((L3**2+L1**2-L2**2)/(2*L3*np.sqrt(L1**2+r1**2)))#bending radius of bender
-        #before combiner
-        return phi2,phi3,L3
+        theta3 = np.pi - inputAng
+        a = theta3 - np.arctan(r1 / L1) - np.arctan(r2 / L2)
+        B = np.sqrt(L1 ** 2 + r1 ** 2)
+        C = np.sqrt(L2 ** 2 + r2 ** 2)
+        A = np.sqrt(B ** 2 + C ** 2 - 2 * B * C * np.cos(a))
+        L3 = np.sqrt(A ** 2 - (r2 - r1) ** 2)
+        c = np.arccos(-(C ** 2 - B ** 2 - A ** 2) / (2 * A * B))
+        alpha = np.pi / 2 - np.arctan(r1 / L1)
+        tau = np.arctan((r2 - r1) / L3)
+        theta1 = 2 * np.pi - np.pi / 2 - c - alpha - tau
+        theta2 = 2 * np.pi - inputAng - theta1
+        return theta1,theta2,L3
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
