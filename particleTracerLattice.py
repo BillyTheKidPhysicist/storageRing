@@ -6,6 +6,8 @@ from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
 from elementPT import Element
 from ParticleTracer import ParticleTracer
+import scipy.optimize as spo
+from numba import njit
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
     #ucAng=angle/(2*numMagnets)
@@ -30,6 +32,10 @@ class ParticleTracerLattice:
         self.combinerIndex=None #the index in the lattice where the combiner is
         self.totalLength=None #total length of lattice, m
 
+        self.bender1=None #bender element object
+        self.bender2=None #bender element object
+        self.combiner=None #combiner element object
+
         self.elList=[] #to hold all the lattice elements
 
     def add_Combiner_Sim(self,file):
@@ -37,6 +43,7 @@ class ParticleTracerLattice:
         args = [file]
         el = Element(args, 'COMBINER_SIM', self)  # create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
+        self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
@@ -121,6 +128,7 @@ class ParticleTracerLattice:
         args=[file,L,rp,rb,extraspace,yokeWidth,numMagnets,ap]
         el=Element(args,'BENDER_SIM_SEGMENTED',self)
         self.elList.append(el)
+
     def add_Bender_Sim_Segmented_With_End_Cap(self,fileBend,fileCap,L,Lcap,rp,rb,extraspace,yokeWidth,numMagnets,ap=None):
         #Add element to the lattice. see elementPT.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
@@ -140,7 +148,7 @@ class ParticleTracerLattice:
         cap2 = Element(cap2Args, 'BENDER_SIM_SEGMENTED_CAP', self)
 
         self.elList.extend([cap1,bender,cap2])
-    def add_Bender_Ideal_Segmented(self,L,Bp,rb,rp,yokeWidth,numMagnets,ap=None,space=None):
+    def add_Bender_Ideal_Segmented(self,L,Bp,rb,rp,yokeWidth,numMagnets,space=0):
         #Add element to the lattice. see elementPT.py for more details on specific element
         #L: Length of individual magnet.
         #Bp: Field strength at pole face
@@ -149,19 +157,13 @@ class ParticleTracerLattice:
         #rp: Bore radius of element
         #yokeWidth: width of the yoke, but also refers to the width of the magnetic material
         #numMagnet: number of magnets in segmented bender
-        #ap: apeture of magnet, ie the inner radius of the vacuum tube
         #space: extra space from magnet holder in the direction of the length of the magnet. This effectively add length
             #to the magnet. total length will be changed by TWICE this value, the space is on each end
 
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-        args=[L,Bp,rb,rp,yokeWidth,numMagnets,ap,space]
+        args=[L,Bp,rb,rp,yokeWidth,numMagnets,space]
         el=Element(args,"BENDER_IDEAL_SEGMENTED",self)
         el.index = len(self.elList)  # where the element is in the lattice
+        self.benderIndices.append(el.index)
         self.elList.append(el)
     def add_Bender_Ideal(self,ang,Bp,rb,rp,ap=None):
         #Add element to the lattice. see elementPT.py for more details on specific element
@@ -200,6 +202,7 @@ class ParticleTracerLattice:
         args=[Lb,ang,offset,ap,c1,c2]
         el=Element(args,'COMBINER_IDEAL',self) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
+        self.combiner = el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
@@ -208,10 +211,13 @@ class ParticleTracerLattice:
         #call various functions to construct the lattice geometry, the shapely objects for visualization and finding particle
         # positions, catch errors, enforce constraints and fill parameter(s)
         self.catch_Errors()
+        if len(self.benderIndices) ==2:
+            self.bender1=self.elList[self.benderIndices[0]]   #save to use later
+            self.bender2 = self.elList[self.benderIndices[1]] #save to use later
+
         self.constrain_Lattice()
         self.set_Element_Coordinates()
         self.make_Geometry()
-
         self.totalLength=0
         for el in self.elList: #total length of particle's orbit in an element
             self.totalLength+=el.Lo
@@ -222,16 +228,26 @@ class ParticleTracerLattice:
         if self.combinerIndex is not None:
             combinerEl=self.elList[self.combinerIndex]
             combinerEl.fill_Params_And_Functions()
-            phi2,phi3,L3=self.solve_Combiner_Constraints()
-
-            lensIndex = 4 #TODO: temporary!!
-            self.elList[self.benderIndices[0]].ang=phi2
-            self.elList[self.benderIndices[1]].ang=phi3
-            self.elList[lensIndex].L=L3
-
+            lensIndex = 4  # TODO: temporary!!
+            params=self.solve_Combiner_Constraints()
+            if self.bender1.type=='BENDER_IDEAL' and self.bender2.type=='BENDER_IDEAL':
+                phi1,phi2,L3=params
+            elif self.bender1.type=='BENDER_IDEAL_SEGMENTED' and self.bender2.type=='BENDER_IDEAL_SEGMENTED':
+                phi1, phi2, r1, r2, numMags1,numMags2,L3=params
+                self.bender1.rb=r1
+                self.bender2.rb=r2
+                self.bender1.numMagnets=numMags1
+                self.bender2.numMagnets=numMags2
+            else:
+                raise Exception('ELEMENT MISMATCH OR NOT IMPLEMENTED')
+            self.bender1.ang = phi1
+            self.bender2.ang = phi2
+            self.elList[lensIndex].L = L3
         for el in self.elList:
             if el.type != 'COMBINER_IDEAL' and el.type!= 'COMBINER_SIM':
                 el.fill_Params_And_Functions()
+                if el.type=='BENDER_IDEAL_SEGMENTED':
+                    print(el.type,el.rb,el.ang,.5*el.ang/el.ucAng)
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
@@ -243,26 +259,123 @@ class ParticleTracerLattice:
         # (clockwise)
         L1=self.elList[self.combinerIndex].La #from previous bender to kink
         L2=self.elList[self.combinerIndex].Lb #from kink to next bender
+        inputAng = self.elList[self.combinerIndex].ang
+        inputOffset = self.elList[self.combinerIndex].inputOffset
         for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
             #lattice element list
             L1+=self.elList[i].L
-        for i in range(self.combinerIndex+1,len(self.elList)+1):
-            if self.elList[i].ang!=0: #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
+        for i in range(self.combinerIndex+1,len(self.elList)+1): #TODO: FIX THIS HACKY METHOD
+            if self.elList[i].ang!=0 or self.elList[i].type=='BENDER_IDEAL_SEGMENTED': #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
                 break
             L2 += self.elList[i].L
 
-        self.elList[self.benderIndices[0]].fill_Params_And_Functions()
-        self.elList[self.benderIndices[1]].fill_Params_And_Functions()
+        if self.bender1.type=='BENDER_IDEAL_SEGMENTED' and self.bender2.type=='BENDER_IDEAL_SEGMENTED':
+            #TODO: HOW TO DEAL WITH THE TWO BENDERS NEEDING TO BE IDENTICAL??
+            Lseg=self.bender1.Lseg
+            yokeWidth=self.bender1.yokeWidth
+            rp1=self.bender1.rp
+            rp2 = self.bender2.rp
+            args=(Lseg,yokeWidth , inputAng,inputOffset, L1, L2,self.bender1.rb,self.bender2.rb)
+            phi1,phi2,r1,r2,L3=self.solve_Implicit_Segmented_Triangle_Problem(*args)
 
-        r1=self.elList[self.benderIndices[0]].ro
-        r2=self.elList[self.benderIndices[1]].ro
 
-        inputAng=self.elList[self.combinerIndex].ang
-        inputOffset=self.elList[self.combinerIndex].inputOffset
-        phi2,phi3,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
+            numMags1= float(phi1 /(2*np.arctan(.5*Lseg/(r1 - yokeWidth-rp1))))
+            numMags2= float(phi2 /(2*np.arctan(.5*Lseg/(r2 - yokeWidth-rp2))))
+            print('args', r1, r2, phi1, phi2,numMags1,numMags2)
+            params=[phi1,phi2,r1,r2,numMags1,numMags2,L3]
+            return params
+        else: #todo: add correct cases
+            self.bender1.fill_Params_And_Functions()
+            self.bender2.fill_Params_And_Functions()
+            r1=self.bender1.ro
+            r2=self.bender2.ro
 
-        return phi2,phi3,L3
+            #phi2,phi3,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
+            args = (self.bender1.Lseg, self.bender1.yokeWidth, inputAng, inputOffset, L1, L2, r1,r2)
+#
 
+            phi2,phi3,r1,r2,L3=self.solve_Implicit_Segmented_Triangle_Problem(*args)
+            self.bender1.rb=r1
+            self.bender2.rb=r2
+            raise Exception('needs work, use is being diverted')
+            return phi2,phi3,L3
+
+
+    def solve_Implicit_Segmented_Triangle_Problem( self,sigma, yokeWidth, inputAng, inputOffset, L1, L2,r10,r20):
+        # todo: change phi naming convention
+        L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
+        L2+=-inputOffset/np.tan(inputAng)
+        @njit()
+        def cost(args):
+            #print('------')
+            #print(args)
+            phi1,r1,r2,L3 = args
+            phi2=2*np.pi-phi1-inputAng
+
+
+            #phi1, phi2, L3 = self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
+            
+            #numbering convention is a little weird here. #todo: explain
+            s1 = L3 + r1 * np.tan(phi1 / 2) + r2 * np.tan(phi2 / 2)
+            s2 = L2 + r1 * np.tan(phi1 / 2)
+            s3 = L1 + r2 * np.tan(phi2 / 2)
+            #print(s1,s2,s3)
+
+            cost1 = np.sqrt(s2 ** 2 + s3 ** 2 - 2 * s2 * s3 * np.cos(np.pi-inputAng)) - s1
+            cost2 = np.sqrt(s1 ** 2 + s3 ** 2 - 2 * s1 * s3 * np.cos(np.pi-phi2)) - s2
+            cost3 = np.sqrt(s1 ** 2 + s2 ** 2 - 2 * s1 * s2 * np.cos(np.pi-phi1)) - s3
+            cost4 = 0#np.abs(phi1 * (r1 - yokeWidth) / sigma - int(phi1 * (r1 - yokeWidth) / sigma))
+            cost5 = 0#np.abs(phi2 * (r2 - yokeWidth) / sigma - int(phi2 * (r2 - yokeWidth) / sigma))
+
+            #print(cost1,cost2,cost3,cost4,cost5)
+
+
+            #print(cost4,cost5)
+            if r1<0 or r2<0:
+                cost= np.inf
+            else:
+                cost=np.sqrt(10*cost1**2+10*cost2**2+10*cost3**2+cost4**2+cost5**2)
+            return cost
+
+
+        x0 = np.asarray([3.1,1.025,1.025,.99*(L2+L1)])#np.asarray([r10, r20,np.pi-inputAng/2,L1+L2])
+        #bounds=((.5*r10,1.5*r10),(.5*r20,1.5*r20),(np.pi-inputAng,np.pi),(.5*(L1+L2),1.1*(L1+L2)))
+        bounds=((np.pi-inputAng,np.pi+inputAng),(r10*.95,r10*1.05),(r20*.95,r20*1.05),(.5*(L1+L2),1.5*(L1+L2)))
+        sol=None
+        sol = spo.differential_evolution(cost, bounds, tol=1e-12, polish=False, maxiter=1000, mutation=.75)
+        print(sol)
+        #self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
+        #print(phi1 + phi2 + inputAng - 2 * np.pi)
+        phi1, r1, r2, L3 = sol.x
+        phi2 = 2 * np.pi - phi1 - inputAng
+        numMagnets1=phi1 * (r1 - yokeWidth) / sigma
+        numMagnets2 = phi2 * (r2 - yokeWidth) / sigma
+#
+#
+        #print(numMagnets1,numMagnets2)
+        print(cost(sol.x))
+        sys.exit()
+        return phi1,phi2,r1,r2,L3
+
+    def solve_Implicit_Segmented_Triangle_Problem1(self, sigma, yokeWidth, inputAng, inputOffset, L1, L2):
+        #todo: change phi naming convention
+        def cost(args):
+            r1,r2=args
+            phi1,phi2,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
+            cost1=np.abs(phi1*(r1-yokeWidth)/sigma-int(phi1*(r1-yokeWidth)/sigma))
+            cost2=np.abs(phi2*(r2-yokeWidth)/sigma-int(phi2*(r2-yokeWidth)/sigma))
+            return np.sqrt(cost1**2+cost2**2)
+        r10=self.bender1.rb
+        r20=self.bender2.rb
+        x0=np.asarray([r10,r20])
+        sol=spo.minimize(cost,x0,method='Nelder-Mead',tol=1e-12,options={'maxfev':1000})
+        r1,r2=sol.x
+        r1=.95
+        r2=1.05
+        phi1, phi2, L3 = self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, r1, r2)
+        print(phi1+phi2+inputAng-2*np.pi)
+        sys.exit()
+        return sol.x
 
     def solve_Triangle_Problem(self,inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
@@ -276,9 +389,11 @@ class ParticleTracerLattice:
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner. This function will likely be used by another function
         #that sorts that all out.
+        if r1!=r2: #todo: fix this!
+            raise Exception('ALGORITHM NOT SET UP FOR DIFFERENT RADII')
+
         L1 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
         L2+=-inputOffset/np.tan(inputAng)
-
 
         L3=np.sqrt((L1-np.sin(inputAng)*r2+L2*np.cos(inputAng))**2+(L2*np.sin(inputAng)-r2*(1-np.cos(inputAng))+(r2-r1))**2)
         phi2=np.pi*1.5-np.arctan(L2/r2)-np.arccos((L3**2+L2**2-L1**2)/(2*L3*np.sqrt(L2**2+r2**2))) #bending radius of bender
@@ -492,8 +607,9 @@ class ParticleTracerLattice:
         deltax=np.abs(rbo[0]-reo[0])
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
-        if deltax>smallNum or deltay>smallNum:
-            raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+        print(deltax,deltay)
+        #if deltax>smallNum or deltay>smallNum:
+        #    raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
 
 
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
@@ -540,25 +656,35 @@ class ParticleTracerLattice:
 
 
 
-# combinerFile='combinerData.txt'
-# transFile='lens2D.txt'
-#
-#
-# lattice=ParticleTracerLattice(200.0)
-#
-# Llens=.25
-# rBend=1.0
-# particleTracer = ParticleTracer(lattice)
-# lattice.add_Lens_Sim_Transverse(transFile,Llens)
-# #lattice.add_Lens_Sim_With_Fringe_Fields(fileTransverse,fileFringe,L,rp,ap=None,edgeFact=3)
-# #lattice.add_Lens_Ideal(Llens, 1, .015)
-# lattice.add_Combiner_Sim(combinerFile)
-# lattice.add_Lens_Sim_Transverse(transFile,Llens)
-# lattice.add_Bender_Ideal(None, rBend, 1.0, .01)
-# lattice.add_Lens_Sim_Transverse(transFile,Llens)
-# lattice.add_Bender_Ideal(None, rBend, 1.0, .01)
-# lattice.end_Lattice()
-# #lattice.show_Lattice()
+lattice=ParticleTracerLattice(200.0)
+
+
+
+
+combinerFile='combinerData.txt'
+transFile='lens2D.txt'
+
+
+lattice=ParticleTracerLattice(200.0)
+
+Llens=.25
+rBend=1.0
+particleTracer = ParticleTracer(lattice)
+#lattice.add_Lens_Sim_Transverse(transFile,Llens)
+#lattice.add_Lens_Sim_With_Fringe_Fields(fileTransverse,fileFringe,L,rp,ap=None,edgeFact=3)
+lattice.add_Lens_Ideal(Llens, 1, .015)
+#lattice.add_Combiner_Sim(combinerFile)
+lattice.add_Combiner_Ideal()
+#lattice.add_Lens_Sim_Transverse(transFile,Llens)
+lattice.add_Lens_Ideal(Llens, 1, .015)
+lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
+#lattice.add_Bender_Ideal(None, 1,rBend*1.01, .01)
+#lattice.add_Lens_Sim_Transverse(transFile,Llens)
+lattice.add_Lens_Ideal(None, 1, .015)
+lattice.add_Bender_Ideal_Segmented(.05,1,1,.01,.01,None)
+#lattice.add_Bender_Ideal(None, 1,rBend*1.0, .01)
+lattice.end_Lattice()
+#lattice.show_Lattice()
 
 
 

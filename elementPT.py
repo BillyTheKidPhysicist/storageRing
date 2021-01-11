@@ -158,14 +158,16 @@ class Element:
             self.ap = self.args[4]
             self.position = self.args[5]
         elif self.type == "BENDER_IDEAL_SEGMENTED":
+            self.Lm = self.args[0]
             self.Bp = self.args[1]
             self.rb = self.args[2]
             self.rp = self.args[3]
+            self.ap=self.rp*.9
             self.yokeWidth = self.args[4]
-            self.numMagnets = self.args[5]  # number of magnets which is half the number of unit cells.
-            self.ap = self.args[6]
-            self.space = self.args[7]
-            self.Lm = self.args[0]
+            self.numMagnets = self.args[5]  # number of magnets which is half the number of unit cells
+            self.space = self.args[6]
+            self.Lseg=self.Lm+2*self.space
+
         elif self.type == 'COMBINER_IDEAL':
             self.Lb = self.args[0]
             self.ang = self.args[1]
@@ -310,7 +312,7 @@ class Element:
         elif self.type=="BENDER_IDEAL_SEGMENTED":
             self.Lseg=self.Lm+self.space*2 #add extra space
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            self.rOffset =0# np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
                 # account for reduced speed in the bender from energy conservation
             self.ro = self.rb + self.rOffset
             #compute the angle that the unit cell makes as well as total bent angle
