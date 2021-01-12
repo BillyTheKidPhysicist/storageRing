@@ -5,6 +5,7 @@ import pandas as pd
 import numpy.linalg as npl
 import sys
 from interp3d import interp_3d
+import matplotlib.pyplot as plt
 
 #TODO: BREAK UP ELEMENTS INTO THEIR OWN CLASSES? USE POLYMORPHISM OR OTHER METHOD TO SIMPLIFY?
 class Element:
@@ -113,7 +114,8 @@ class Element:
         self.width=None #width of combiner vacuum tube
 
         self.unpack_Args()
-        #self.fill_Params_And_Functions()
+
+        self.fill_Params_And_Functions()
     def unpack_Args(self):
         # unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
         if self.type == 'LENS_IDEAL':
@@ -141,7 +143,9 @@ class Element:
             self.rp = self.args[2]
             self.ang = self.args[3]
             self.ap = self.args[4]
+            self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
         elif self.type == "BENDER_SIM_SEGMENTED":
+
             self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.rb = self.args[3]
             self.space = self.args[4]
@@ -167,7 +171,6 @@ class Element:
             self.numMagnets = self.args[5]  # number of magnets which is half the number of unit cells
             self.space = self.args[6]
             self.Lseg=self.Lm+2*self.space
-
         elif self.type == 'COMBINER_IDEAL':
             self.Lb = self.args[0]
             self.ang = self.args[1]
@@ -181,7 +184,6 @@ class Element:
             self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
         else:
             raise Exception('No proper element name provided')
-
 
     def fill_Params_And_Functions(self):
         #unload the user supplied arguments into the elements parameters. Also, load data and compute parameters
@@ -221,7 +223,8 @@ class Element:
 
 
         elif self.type=="LENS_SIM_TRANSVERSE":
-            self.Lo = self.L
+            if self.L is not None:
+                self.Lo = self.L
             self.data[:,2:]=-self.data[:,2:]*self.PT.u0
 
             tempx=spi.LinearNDInterpolator(self.data[:,:2],self.data[:,2])
@@ -233,17 +236,14 @@ class Element:
             pass
         elif self.type == 'BENDER_IDEAL':
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset =0.0#np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            if self.rb is not None:
+                self.rOffset =self.compute_rOffset()  # this method does not
                 # account for reduced speed in the bender from energy conservation
-            self.ro = self.rb + self.rOffset
+                self.ro = self.rb + self.rOffset
             if self.ang is not None:
                 self.L = self.ang * self.rb
                 self.Lo = self.ang * self.ro
         elif self.type=="BENDER_SIM_SEGMENTED":
-            D = self.rb - self.rp - self.yokeWidth
-            self.ucAng = np.arctan(self.Lseg / (2 * D))
-            self.ang = 2 * self.numMagnets * self.ucAng  # number of units cells times bending angle of 1 cell
-
             xArr = np.unique(self.data[:, 0])
             yArr = np.unique(self.data[:, 1])
             zArr = np.unique(self.data[:, 2])
@@ -272,12 +272,15 @@ class Element:
             self.FyFunc = lambda x, y, z: tempz((y, -z, x))
             self.FzFunc = lambda x, y, z: -tempy((y, -z, x))
 
-            self.K=self.find_K_Value()
-            self.rOffset =np.sqrt(self.rb**2/16+self.PT.m*self.PT.v0Nominal ** 2 / (2 * self.K)) - self.rb / 4  # this
-            # acounts for reduced energy
-            self.ro = self.rb + self.rOffset
-            self.Lo = self.ang * self.ro
-            self.L=self.rb*self.ang
+            self.K = self.compute_K_Value()
+            if self.rb is not None and self.numMagnets is not None:
+                D = self.rb - self.rp - self.yokeWidth
+                self.ucAng = np.arctan(self.Lseg / (2 * D))
+                self.ang = 2 * self.numMagnets * self.ucAng  # number of units cells times bending angle of 1 cel
+                self.rOffset =self.compute_rOffset()
+                self.ro = self.rb + self.rOffset
+                self.Lo = self.ang * self.ro
+                self.L=self.rb*self.ang
 
         elif self.type == "BENDER_SIM_SEGMENTED_CAP":
             self.Lo=self.L
@@ -312,15 +315,16 @@ class Element:
         elif self.type=="BENDER_IDEAL_SEGMENTED":
             self.Lseg=self.Lm+self.space*2 #add extra space
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)  # reduced force
-            self.rOffset =0# np.sqrt(self.rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / self.K) - self.rb / 2  # this method does not
+            if self.rb is not None and self.numMagnets is not None:
+                self.rOffset = self.compute_rOffset()  # this method does not
                 # account for reduced speed in the bender from energy conservation
-            self.ro = self.rb + self.rOffset
-            #compute the angle that the unit cell makes as well as total bent angle
-            D = self.rb - self.rp - self.yokeWidth
-            self.ucAng = np.arctan(self.Lseg / (2 * D))
-            self.ang=2*self.numMagnets * self.ucAng #number of units cells times bending angle of 1 cell
-            self.Lo = self.ang * self.ro
-            self.L=self.ang*self.rb
+                self.ro = self.rb + self.rOffset
+                #compute the angle that the unit cell makes as well as total bent angle
+                D = self.rb - self.rp - self.yokeWidth
+                self.ucAng = np.arctan(self.Lseg / (2 * D))
+                self.ang=2*self.numMagnets * self.ucAng #number of units cells times bending angle of 1 cell
+                self.Lo = self.ang * self.ro
+                self.L=self.ang*self.rb
         elif self.type == 'COMBINER_IDEAL':
             inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(1, 200)
             self.ang=inputAngle
@@ -333,8 +337,6 @@ class Element:
             self.Fy = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 4] * self.PT.u0)
             self.Fz = spi.LinearNDInterpolator(self.data[:, :3], self.data[:, 5] * self.PT.u0)
         elif self.type=='COMBINER_SIM':
-
-
             self.space=4*1.1E-2 #extra space past the hard edge on either end to account for fringe fields
             self.Lm=.18
             self.Lb=self.space+self.Lm #the combiner vacuum tube will go from a short distance from the ouput right up
@@ -369,9 +371,8 @@ class Element:
             self.FzFunc = lambda x, y, z: tempz((z,y,x))
             inputAngle,inputOffset=self.compute_Input_Angle_And_Offset(1,200)
             self.ang=inputAngle
-            self.inputOffset=inputOffset-np.tan(inputOffset)*self.space #the input offset is measure at the end of the hard
+            self.inputOffset=inputOffset-np.tan(inputAngle)*self.space #the input offset is measure at the end of the hard
             #edge
-
 
             #the inlet length needs to be long enough to extend past the fringe fields
             #TODO: MAKE EXACT, now it overshoots
@@ -389,9 +390,26 @@ class Element:
             #plt.show()
         else:
             raise Exception('No proper element name provided')
-
-    def compute_Input_Angle_And_Offset(self,m,v0, h=10e-6,):
+    def compute_rOffset(self,rb=None,K=None):
+        if K is None:
+            K=self.K
+        if rb is None:
+            rb=self.rb
+        if self.type=="BENDER_IDEAL_SEGMENTED" or self.type=='BENDER_IDEAL':
+            return  np.sqrt(rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / K) - rb / 2 #does not account for reduced
+                #energy
+        elif self.type=="BENDER_SIM_SEGMENTED":
+            #r1=np.sqrt(rb ** 2 / 4 + self.PT.m * self.PT.v0Nominal ** 2 / K) - rb / 2
+            #r2=np.sqrt(self.rb ** 2 / 16 + self.PT.m * self.PT.v0Nominal ** 2 / (2 * self.K)) - self.rb / 4
+            #print(r1,r2)
+            #sys.exit()
+            return np.sqrt(rb ** 2 / 16 + self.PT.m * self.PT.v0Nominal ** 2 / (2 * K)) - rb / 4  # this
+            # acounts for reduced energy
+        else:
+            raise Exception("NOT IMPLEMENTED")
+    def compute_Input_Angle_And_Offset(self,m,v0, h=10e-6):
         # this computes the output angle and offset for a combiner magnet
+        #todo: make proper edge handling
         q = np.asarray([0, 0, 0])
         p = m * np.asarray([v0, 0, 0])
         #xList=[]
@@ -410,12 +428,12 @@ class Element:
             a_n = F_n / m  # accselferation new or accselferation sub n+1
             p_n = p + m * .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
-                dr = self.Lb - q[0]
+                dr = limit - q[0]
                 dt = dr / (p[0] / m)
                 q = q + (p / m) * dt
                 break
             #xList.append(q[0])
-            #yList.append(F[0])
+            #yList.append(npl.norm(F))
             q = q_n
             p = p_n
         #plt.plot(xList,yList)
@@ -432,13 +450,13 @@ class Element:
             #accounted for
 
         return qo
-    def find_K_Value(self):
+    def compute_K_Value(self):
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
-        xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.rb
+        xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.data[:,0].mean()
         yFit=[]
         for x in xFit:
             yFit.append(self.FxFunc(x,0,0))
-        xFit=xFit-self.rb
+        xFit=xFit-self.data[:,0].mean()
         K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
         return K
     def transform_Lab_Coords_Into_Element_Frame(self, q):

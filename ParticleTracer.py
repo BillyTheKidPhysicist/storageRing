@@ -56,6 +56,7 @@ class ParticleTracer:
         self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
             #This won't always be on
 
+        self.test=[]
 
 
 
@@ -188,6 +189,7 @@ class ParticleTracer:
             F=self.ForceLast
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
+        self.test.append(npl.norm(F))
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         el, qel = self.which_Element(q_n)
