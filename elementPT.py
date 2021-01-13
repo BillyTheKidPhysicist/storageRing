@@ -8,6 +8,7 @@ from interp3d import interp_3d
 import matplotlib.pyplot as plt
 
 #TODO: BREAK UP ELEMENTS INTO THEIR OWN CLASSES? USE POLYMORPHISM OR OTHER METHOD TO SIMPLIFY?
+#todo: combine elements with more than one into one element
 class Element:
     # Class to represent the lattice element such as a drift/lens/bender/combiner.
     # each element type has its own reference frame, as well as attributes, which I will described below. Note that
@@ -107,12 +108,14 @@ class Element:
         # benders or lens or drifts
         self.extraSpace = .0001  # extraspace added in each dimension past the vacuum tube. This is so the interpolation works
         # correctly, but the specific value is used here to infer the dimensions of the vacuum tub. This value
-        # is added in each dimension at the beginning and end when exporting a grid from comsol
+        # is added in each dimension at the beginning and end when exporting a grid from comsol. THIS MUST BE ADDED
         self.data = None  # array containing the numeric values of a magnetic field. can be for 2d or 3d data. 
         self.forceFitFunc = None  # an interpolation that the force in the x,y,z direction at a given point
-
+        self.forceFact=1 #factor that multiplies field values to simulate
+        self.edgeFact=None #ratio of fringe field length to bore radius
         self.width=None #width of combiner vacuum tube
 
+        #TODO: THIS SYSTEM DOESN'T MAKE SENSE ANYMORE
         self.unpack_Args()
 
         self.fill_Params_And_Functions()
@@ -125,14 +128,16 @@ class Element:
             self.ap = self.args[3]
         elif self.type == 'LENS_SIM_CAP':
             self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
-            self.rp = self.args[1]
-            self.ap = self.args[2]
-            self.position = self.args[3]
+            apFrac = self.args[1] #fraction size of apeture
+            self.rp = self.data[:, 0].max() - self.extraSpace
+            self.ap=self.rp*apFrac
+            self.position = self.args[2] #wether inlet or outlet
         elif self.type == "LENS_SIM_TRANSVERSE":
             self.data=np.asarray(pd.read_csv(self.args[0],delim_whitespace=True,header=None))
             self.L = self.args[1]
             self.rp=self.data[:,0].max()-self.extraSpace
-            self.ap=.9*self.rp
+            self.ap=self.args[2]*self.rp
+            self.edgeFact=self.args[3]
         elif self.type == 'DRIFT':
             self.L = self.args[0]
             self.Lo = self.args[0]
@@ -191,9 +196,6 @@ class Element:
             self.Lo=self.L
             self.K = (2 * self.Bp * self.PT.u0 / self.rp ** 2)
         elif self.type=='LENS_SIM_CAP':
-            edgeFact=self.args[4] #length of edge section as a multiple of bore radius
-            self.L=edgeFact*self.rp
-            self.Lo=self.L
 
             xArr = np.unique(self.data[:, 0])
             yArr = np.unique(self.data[:, 1])
@@ -204,6 +206,13 @@ class Element:
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
+            #need to shift the data
+            self.L=zArr.max()-self.extraSpace-(zArr.min()+self.extraSpace)
+            self.edgeFact=self.L/self.rp
+            self.Lo=self.L
+            zArr=zArr-(np.min(zArr)+self.extraSpace) #shift down to zeroinclude additional space from comsol for overshooting the rgion
+
+
 
             BGradxMatrix = BGradx.reshape((numz, numy, numx))
             BGradyMatrix = BGrady.reshape((numz, numy, numx))
@@ -225,13 +234,12 @@ class Element:
         elif self.type=="LENS_SIM_TRANSVERSE":
             if self.L is not None:
                 self.Lo = self.L
-            self.data[:,2:]=-self.data[:,2:]*self.PT.u0
-
-            tempx=spi.LinearNDInterpolator(self.data[:,:2],self.data[:,2])
-            tempy = spi.LinearNDInterpolator(self.data[:, :2], self.data[:, 3])
+            tempx=spi.LinearNDInterpolator(self.data[:,:2],-self.data[:,2]*self.PT.u0)
+            tempy = spi.LinearNDInterpolator(self.data[:, :2], -self.data[:, 3]*self.PT.u0)
             self.FyFunc = lambda x, y, z: tempy(-z,y)
             self.FzFunc = lambda x, y, z: -tempx(-z,y)
             self.FxFunc = lambda x, y, z: 0.0
+
         elif self.type == 'DRIFT':
             pass
         elif self.type == 'BENDER_IDEAL':
@@ -485,7 +493,6 @@ class Element:
         qNew[0] = qNewx * self.RIn[0, 0] + qNewy * self.RIn[0, 1]
         qNew[1] = qNewx * self.RIn[1, 0] + qNewy * self.RIn[1, 1]
         return qNew
-
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
         # This returns the nominal orbit in the element's reference frame.
         # q: particles position in the element's reference frame
@@ -560,12 +567,14 @@ class Element:
             F[2]=self.FzFunc(*qucCopy) #element is rotated 90 degrees so they are swapped
             F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q,quc)#transform unit cell coordinates into
         elif self.type=="BENDER_SIM_SEGMENTED_CAP" or self.type=="LENS_SIM_TRANSVERSE" or self.type=='LENS_SIM_CAP':
+
             F[0] = self.FxFunc(*q)
             F[1] = self.FyFunc(*q)
             F[2] = self.FzFunc(*q)
+
         else:
             raise Exception('not yet implemented')
-
+        F=self.forceFact*F
         return F
     def transform_Element_Into_Unit_Cell_Frame(self,q):
         #As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak

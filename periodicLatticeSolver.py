@@ -2,6 +2,7 @@ import sympy as sym
 import sympy.utilities.autowrap as symWrap
 import numpy as np
 from oldStuff.elementPLS import Element
+import pathos as pa
 import functools
 
 
