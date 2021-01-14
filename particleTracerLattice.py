@@ -5,7 +5,7 @@ import pathos as pa
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
-from elementPT2 import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented
+from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
 from numba import njit
@@ -49,8 +49,8 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Lens_Ideal(self,L=None,Bp=None,rp=None,ap=None):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+    def add_Lens_Ideal(self,L,Bp,rp,ap=None):
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m
         #Bp: field strength at pole face of lens, T
         #rp: bore radius of element, m
@@ -61,20 +61,19 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=Lens_Ideal(self,Bp=Bp,L=L,rp=rp,ap=ap) #create a lens element object
+        el=Lens_Ideal(self,L,Bp,rp,ap=ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Drift(self,L,ap=.03):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: length of drift element, m
         #ap:apeture. Default value of 3 cm radius, unitless
-        args=[L,ap]
-        el=Element(args,'DRIFT',self)#create a drift element object
+        el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Sim_Transverse(self,file,L):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # file: string filename of file containing field data. rows contains points and values
         # L: Hard edge length of segment magnet in a segment
         # rp: bore radius of segment magnet
@@ -82,7 +81,7 @@ class ParticleTracerLattice:
         el=Element(args,"LENS_SIM_TRANSVERSE",self)
         self.elList.append(el)
     def add_Lens_Sim_With_Fringe_Fields(self,fileTransverse,fileFringe,L,apFrac=.9):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #fileTransverse: File containing transverse data for the lens
         #fileFringe: File containing grid data to model fringe fields
         # L: Hard edge length of segment magnet in a segment
@@ -120,7 +119,7 @@ class ParticleTracerLattice:
 
 
     def add_Bender_Sim_Segmented(self,file,L,rp,rb,extraspace,yokeWidth,numMagnets,ap=None):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #file: string filename of file containing field data. MUST BE DATA ON A GRID. Data is organized linearly though.
         #data must be exported exactly like it is in comsol or it will break. Field data is for 1 unit cell
         #L: Hard edge length of segment magnet in a segment
@@ -153,7 +152,7 @@ class ParticleTracerLattice:
         self.benderIndices.append(el.index)
         self.elList.append(el)
     def add_Bender_Sim_Segmented_With_End_Cap(self,fileBend,fileCap,L,Lcap,rp,rb,extraspace,yokeWidth,numMagnets,ap=None):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
@@ -172,7 +171,7 @@ class ParticleTracerLattice:
 
         self.elList.extend([cap1,bender,cap2])
     def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,ap=None):
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: hard edge Length of individual magnet.
         #Bp: Field strength at pole face
         # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -195,7 +194,7 @@ class ParticleTracerLattice:
         self.elList.append(el)
     def add_Bender_Ideal(self,ang=None,Bp=None,rb=None,rp=None,ap=None):
         #TODO: remove keyword args
-        #Add element to the lattice. see elementPT.py for more details on specific element
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
         #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
         # outside this, m
@@ -214,7 +213,7 @@ class ParticleTracerLattice:
         self.benderIndices.append(el.index)
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Combiner_Ideal(self,Lm=.2,c1=1,c2=20,ap=.015):
-        # Add element to the lattice. see elementPT.py for more details on specific element
+        # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #add combiner (stern gerlacht) element to lattice
         #La: input length of combiner. The bent portion outside of combiner
         #Lm:  hard edge length of the magnet, which is the same as the vacuum tube
@@ -651,20 +650,21 @@ class ParticleTracerLattice:
 def main():
 
     lattice=ParticleTracerLattice(200.0)
-    lattice.add_Lens_Ideal(.5,1.0,.01)
+    #lattice.add_Lens_Ideal(.5,1.0,.01)
+    lattice.add_Drift(.5)
     #lattice.add_Combiner_Ideal()
     #lattice.add_Lens_Ideal(.5, 1.0, .01)
-    #lattice.add_Bender_Ideal(np.pi/2,1.0,1.1,.01)
-    lattice.add_Bender_Ideal_Segmented_With_Cap(100,.02,.001,1,.01,0.7152241527915874,.005,.001)
+    lattice.add_Bender_Ideal(np.pi,1.0,1.1,.01)
+    #lattice.add_Bender_Ideal_Segmented_With_Cap(100,.02,.001,1,.01,0.7152241527915874,.005,.001)
     #lattice.add_Bender_Ideal_Segmented(100,.02,1,.01,0.7152241527915874,.005,.001)
     lattice.add_Lens_Ideal(.5, 1.0, .01)
     #lattice.add_Bender_Ideal_Segmented(100, .02, 1, .01, 0.7152241527915874, .005, .001)
-    lattice.add_Bender_Ideal_Segmented_With_Cap(100, .02, .001, 1, .01, 0.7152241527915874, .005, .001)
-    #lattice.add_Bender_Ideal(100, 1.0, 1.1, .01)
+    #lattice.add_Bender_Ideal_Segmented_With_Cap(100, .02, .001, 1, .01, 0.7152241527915874, .005, .001)
+    lattice.add_Bender_Ideal(np.pi,1.0,1.1,.01)
     lattice.end_Lattice()
-    #lattice.show_Lattice()
+    lattice.show_Lattice()
     particleTracer=ParticleTracer(lattice)
-    q0=np.asarray([0,1e-3,0])
+    q0=np.asarray([0,0e-3,0])
     v0=np.asarray([-200.0,0,0])
     dt=5e-6
     qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,.8/200.0)
