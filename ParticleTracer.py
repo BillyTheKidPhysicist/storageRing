@@ -81,7 +81,7 @@ class ParticleTracer:
         self.vs = np.abs(self.p[0] / self.m)
         dl=self.vs*self.h #approximate stepsize
         for el in self.lattice:
-            if dl*10>el.L:
+            if dl*10>el.Lo:
                 raise Exception('STEP SIZE TOO LARGE')
 
 
@@ -92,7 +92,7 @@ class ParticleTracer:
         self.qList.append(self.q)
         self.pList.append(self.p)
         self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength))
-        self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q,self.p))
+        #self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q,self.p))
 
         #temp = self.get_Energies(self.q, self.p, self.currentEl)
         #self.VList.append(temp[0])
@@ -147,7 +147,7 @@ class ParticleTracer:
 
         import numpy as np #todo: wtf is happening here, why do I need this
 
-        r=el.r2-q[:2]
+        r=el.r2-q
 
         rt=np.abs(np.sum(el.ne*r[:2])) #perindicular position  to element's end
         pt=np.abs(np.sum(el.ne*p[:2]))#npl.norm(el.ne*p[:2]) #perpindicular momentum to surface of element's end
@@ -301,7 +301,7 @@ class ParticleTracer:
         #add up all the beginnings and end of elements and average them
         center=np.zeros(2)
         for el in self.lattice:
-            center+=el.r1+el.r2
+            center+=el.r1[:-1]+el.r2[:-1]
         center=center/(2*len(self.lattice))
 
         #relative position vector
@@ -310,7 +310,7 @@ class ParticleTracer:
         #now rotate this and add the difference to our original vector. rotate by a small amount
         dphi=-1e-9 #need a clock wise rotation. 1 nanooradian
         R=np.array([[np.cos(dphi),-np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
-        dr=R@(q[:2]-r)-(q[:2]-r)
+        dr=R@(q[:-1]-r)-(q[:-1]-r)
         #add that to the position and try once more
         qNew=q.copy()
         qNew[:-1]=qNew[:-1]+dr

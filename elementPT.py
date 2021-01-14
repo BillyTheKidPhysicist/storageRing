@@ -456,7 +456,6 @@ class Element:
         qo = self.transform_Element_Coords_Into_Orbit_Frame(q) #then element frame into orbit frame
         qo[0] = qo[0] + cumulativeLength #orbit frame is in the element's frame, so the preceding length needs to be
             #accounted for
-
         return qo
     def compute_K_Value(self):
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
