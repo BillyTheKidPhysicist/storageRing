@@ -193,7 +193,6 @@ class ParticleTracer:
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         el, qel = self.which_Element(q_n)
-
         exit=self.check_Element_And_Handle_Edge_Event(el)
         if exit==True:
             self.elHasChanged = True
@@ -248,6 +247,7 @@ class ParticleTracer:
             qel = el.transform_Lab_Coords_Into_Element_Frame(q)
         Fel=el.force(qel) #force in element frame
         FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
+        print(FLab)
         return FLab
 
 

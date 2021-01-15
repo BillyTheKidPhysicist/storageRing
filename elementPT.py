@@ -1,5 +1,9 @@
 import numpy as np
+from interp3d import interp_3d
+import pandas as pd
+import numpy.linalg as npl
 import sys
+import matplotlib.pyplot as plt
 
 class Element:
     def __init__(self):
@@ -22,6 +26,7 @@ class Element:
         self.ro=None
         self.index=None #elements position in lattice
         self.cap=None
+        self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -56,11 +61,14 @@ class Lens_Ideal(Element):
         self.Bp = Bp
         self.rp = rp
         self.L = L
-        self.Lo=L
         self.ap = ap
         self.type='STRAIGHT'
-        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
         self.ang=0
+        self.fill_Params()
+    def fill_Params(self):
+        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
+        if self.L is not None:
+            self.Lo=self.L
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
         qNew[0] = qNew[0] - self.r1[0]
@@ -95,7 +103,7 @@ class Drift(Lens_Ideal):
         return np.zeros(3)
 
 class Bender_Ideal(Element):
-    def __init__(self,PTL,ang,Bp,rp,rb,ap):
+    def __init__(self,PTL,ang,Bp,rp,rb,ap,fillParams=True):
         super().__init__()
         self.PTL=PTL
         self.ang=ang
@@ -107,10 +115,14 @@ class Bender_Ideal(Element):
         self.rOffsetFunc=None
         self.segmented=False
         self.capped=False
-        self.fill_Params()
+        self.Lcap=0
+
+        if fillParams==True:
+            self.fill_Params()
     def fill_Params(self):
         self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
-        self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PTL.m * self.PTL.v0Nominal ** 2 / self.K) - self.rb / 2
+        self.rOffsetFunc=lambda rb: np.sqrt(rb ** 2 / 4 + self.PTL.m * self.PTL.v0Nominal ** 2 / self.K) -rb / 2
+        self.rOffset = self.rOffsetFunc(self.rb)
         self.ro=self.rb+self.rOffset
         if self.ang is not None: #calculation is being delayed until constraints are solved
             self.L  = self.rb * self.ang
@@ -174,7 +186,7 @@ class Combiner_Ideal(Element):
         self.L = self.La * np.cos(self.ang) + self.Lb #TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
         self.Lo = self.L
 
-    def compute_Input_Angle_And_Offset(self, limit,h=10e-6):
+    def compute_Input_Angle_And_Offset(self, limit,h=1e-6):
         # this computes the output angle and offset for a combiner magnet
         # todo: make proper edge handling
         q = np.asarray([0, 0, 0])
@@ -204,14 +216,15 @@ class Combiner_Ideal(Element):
         return outputAngle, outputOffset
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew=q.copy()
-        qNew[:2] = qNew[:2] - self.r2
+        qNew = qNew - self.r2
         qNew=self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
         # TODO: FIX THIS
         qo=q.copy()
         qo[0] = self.L - qo[0]
-        qo[1] = qo[1] - self.inputOffset
+        qo[1] = qo[1]
+
         return qo
     def force(self, q):
         # force at point q in element frame
@@ -232,37 +245,30 @@ class Combiner_Ideal(Element):
             # TODO: ADD THIS LOGIc
             return None
 
-class BenderIdealSegmented(Element):
+class BenderIdealSegmented(Bender_Ideal):
     def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
-        super().__init__()
-        self.PTL = PTL
+        super().__init__(PTL,None,Bp,rp,rb,ap,fillParams=False)
         self.numMagnets = numMagnets
         self.Lm = Lm
-        self.Bp = Bp
-        self.rp = rp
         self.space = space
-        self.rb = rb
         self.yokeWidth = yokeWidth
         self.ucAng = None
-        self.type = 'BEND'
         self.segmented = True
         self.cap = False
         self.ap = ap
         self.RIn_Ang = None
+        self.Lseg=None
         if fillParams==True:
             self.fill_Params()
 
     def fill_Params(self):
-        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
-        self.rOffset = np.sqrt(self.rb ** 2 / 4 + self.PTL.m * self.PTL.v0Nominal ** 2 / self.K) - self.rb / 2
-        self.ro = (self.rb + self.rOffset)
+        super().fill_Params()
+        self.Lseg=self.Lm+2*self.space
         if self.numMagnets is not None:
             self.ucAng = np.arctan((self.Lm / 2 + self.space) / (self.rb - self.yokeWidth - self.rp))
             self.ang = 2 * self.ucAng * self.numMagnets
             self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
             self.Lo = self.ro * self.ang
-            print(self.ang,self.rOffset)
-
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
@@ -403,6 +409,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
             qTest=q.copy()
             qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
             qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+
             if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
                 forcex = -self.K * (qTest[0] - self.rb)
                 F[0]=self.RIn_Ang[0,0]*forcex
@@ -429,4 +436,178 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
             if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
                 return True
         return False
-    
+
+class BenderSimSegmented(BenderIdealSegmented):
+    def __init__(self, PTL, fileName,numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
+        super().__init__( PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=False)
+        self.fileName=fileName
+        sys.exit()
+
+class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
+    def __init__(self,PTL, fileSeg,fileCap,Lm,numMagnets,rb,extraSpace,yokeWidth,ap):
+        super().__init__(PTL,numMagnets,Lm,None,None,None,rb,yokeWidth,extraSpace,ap,fillParams=False)
+        self.PTL=PTL
+        self.fileSeg=fileSeg
+        self.fileCap=fileCap
+        self.numMagnets=numMagnets
+        self.extraSpace=extraSpace
+        self.yokeWidth=yokeWidth
+        self.ap=ap
+        self.ucAng=None
+        self.dataSeg=None
+        self.dataCap=None
+        self.FxFunc_Seg=None
+        self.FyFunc_Seg=None
+        self.FzFunc_Seg=None
+        self.FxFunc_Cap=None
+        self.FyFunc_Cap=None
+        self.FzFunc_Cap=None
+        self.fill_Params()
+    def fill_Params(self):
+        self.Lseg=self.Lm+self.space*2
+
+
+        if self.dataSeg is None:
+            self.fill_Force_Func_Seg()
+            self.rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
+            if self.ap is None:
+                self.ap=self.rp*.9
+            elif self.ap>self.rp:
+                raise Exception('APETURE IS LARGER THAN BORE')
+            self.K = self.compute_K()
+            rOffsetFact=1.0012 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
+            self.rOffsetFunc = lambda rb: rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
+            # acounts for reduced energy
+        if self.dataCap is None:
+            self.fill_Force_Func_Cap()
+            self.Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
+        if self.numMagnets is not None:
+            D = self.rb - self.rp - self.yokeWidth
+            self.ucAng = np.arctan(self.Lseg / (2 * D))
+            self.ang = 2 * self.numMagnets * self.ucAng
+            self.rOffset=self.rOffsetFunc(self.rb)
+            self.ro=self.rb+self.rOffset
+            self.L=self.ang*self.rb
+            self.Lo=self.ang*self.ro
+            self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
+    def fill_Force_Func_Cap(self):
+        self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
+        xArr = np.unique(self.dataCap[:, 0])
+        yArr = np.unique(self.dataCap[:, 1])
+        zArr = np.flip(np.unique(self.dataCap[:, 2]))
+        BGradx = self.dataCap[:, 3]
+        BGrady = self.dataCap[:, 4]
+        BGradz = self.dataCap[:, 5]
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+
+        BGradxMatrix = BGradx.reshape((numz, numy, numx))
+        BGradyMatrix = BGrady.reshape((numz, numy, numx))
+        BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        # plt.imshow(BGradyMatrix[0,:,:])
+        # plt.show()
+
+        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        #
+        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        self.FxFunc_Cap = lambda x, y, z:  tempx((y, -z, x))
+        self.FyFunc_Cap = lambda x, y, z: tempz((y, -z, x)) #todo: THIS NEEDS TO BE TESTED MORE!!
+        self.FzFunc_Cap = lambda x, y, z: -tempy((y, -z, x))
+        #xPlot=np.linspace(-self.rp/2,self.rp/2)
+        #temp=[]
+        #for x in xPlot:
+        #    temp.append(tempy((-self.rp/20,x,0)))
+        #plt.plot(xPlot,temp)
+        #plt.show()
+        #sys.exit()
+
+    def fill_Force_Func_Seg(self):
+        self.dataSeg = np.asarray(pd.read_csv(self.fileSeg, delim_whitespace=True, header=None))
+        xArr = np.unique(self.dataSeg[:, 0])
+        yArr = np.unique(self.dataSeg[:, 1])
+        zArr = np.unique(self.dataSeg[:, 2])
+        BGradx = self.dataSeg[:, 3]
+        BGrady = self.dataSeg[:, 4]
+        BGradz = self.dataSeg[:, 5]
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+
+        BGradxMatrix = BGradx.reshape((numz, numy, numx))
+        BGradyMatrix = BGrady.reshape((numz, numy, numx))
+        BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        # plt.imshow(BGradyMatrix[0,:,:])
+        # plt.show()
+
+        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        #
+        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        self.FxFunc_Seg = lambda x, y, z: tempx((y, -z, x))
+        self.FyFunc_Seg = lambda x, y, z: tempz((y, -z, x))
+        self.FzFunc_Seg = lambda x, y, z: -tempy((y, -z, x))
+
+    def compute_K(self):
+        #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
+        xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.dataSeg[:,0].mean()
+        yFit=[]
+        for x in xFit:
+            yFit.append(self.FxFunc_Seg(x,0,0))
+        xFit=xFit-self.dataSeg[:,0].mean()
+        K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
+        return K
+    def force(self, q):
+        # force at point q in element frame
+        # q: particle's position in element frame
+        F = np.zeros(3)  # force vector starts out as zero
+        phi = np.arctan2(q[1], q[0])
+        if phi<0: #constraint to between zero and 2pi
+            phi+=2*np.pi
+        if phi<self.ang:
+            quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
+            print(quc,self.rb)
+            F[0] = self.FxFunc_Seg(*quc)
+            F[1] = self.FyFunc_Seg(*quc)
+            F[2] = self.FzFunc_Seg(*quc)
+            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
+                # element frame
+        elif phi>self.ang:  # if outside bender's angle range
+            print('here')
+            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
+                #westward side
+                x,y,z=q.copy()
+                x=x-self.rb
+                F[0] = self.FxFunc_Cap(x,y,z)
+                F[1] = self.FyFunc_Cap(x,y,z)
+                F[2] = self.FzFunc_Cap(x,y,z)
+
+            qTest=q.copy()
+            qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+            qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+            if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
+                x,y,z=qTest
+                x=x-self.rb
+                y=-y
+
+                F[0]=self.FxFunc_Cap(x,y,z)
+                F[1]=self.FyFunc_Cap(x,y,z)
+                F[2]=self.FzFunc_Cap(x,y,z)
+
+                m = np.tan(self.ang/2)
+                M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
+                Fx = F[0]
+                Fy = F[1]
+                F[0] = M[0, 0] * Fx + M[0, 1] * Fy
+                F[1] = M[1, 0] * Fx + M[1, 1] * Fy
+                qTest[0]+=-self.rb
+
+        print(npl.norm(F))
+        return F
