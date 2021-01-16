@@ -5,7 +5,8 @@ import pathos as pa
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
-from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift,BenderSimSegmentedWithCap
+from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift\
+    ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
 from numba import njit
@@ -42,13 +43,16 @@ class ParticleTracerLattice:
 
     def add_Combiner_Sim(self,file):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
-        args = [file]
-        el = Element(args, 'COMBINER_SIM', self)  # create a lens element object
+
+        el = CombinerSim(self,file)
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-
+    def add_Lens_Sim_With_Caps(self, file2D, file3D, L, ap=None):
+        el=LensSimWithCaps(self, file2D, file3D, L, ap)
+        el.index = len(self.elList) #where the element is in the lattice
+        self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Ideal(self,L,Bp,rp,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m
@@ -180,7 +184,7 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Ideal(self,ang=None,Bp=None,rb=None,rp=None,ap=None):
+    def add_Bender_Ideal(self,ang,Bp,rb,rp,ap=None):
         #TODO: remove keyword args
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
@@ -260,6 +264,9 @@ class ParticleTracerLattice:
             lens1Index=4
             #Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
             #L=L3-Lfringe
+            L=L3-self.bender1.Lcap*2
+            self.elList[lens1Index].set_Length(L)
+
             self.elList[lens1Index].L =L3-self.bender1.Lcap*2
             self.bender1.fill_Params()
             self.bender2.fill_Params()
@@ -363,23 +370,25 @@ class ParticleTracerLattice:
         #sys.exit()
 
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
-        sol=spo.differential_evolution(cost,ranges)
+        #sol=spo.differential_evolution(cost,ranges)
+        #print(sol)
         #print(sol)
         #print(cost(sol.x,returnParams=True))
         #sys.exit()
         #print(sol.x[0],sol.x[1])
         #print(sol.x[0],sol.x[1])
         #roffset 0.0033327012609907503 0.0033327012609907503
-        #x=[0.9904011222623733,0.999869300230635]
-        params = cost(sol.x, returnParams=True)
+        x=[0.9828434417578437,0.9720987498361284]
+        params = cost(x, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         #print(params)
-        print(params[0],params[1])
+        #print(params[0],params[1],params)
         #sys.exit()
-
-        if cost(params[:2])>tol:
-            raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
+        #print(cost(x))
+        #sys.exit()
+        #if cost(params[:2])>tol:
+        #    raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
     @staticmethod
     #@njit()
@@ -625,8 +634,8 @@ class ParticleTracerLattice:
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
         #print(deltax,deltay)
-        #if deltax>smallNum or deltay>smallNum:
-        #    raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+        if deltax>smallNum or deltay>smallNum:
+            raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
 
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
         #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
@@ -677,41 +686,109 @@ class ParticleTracerLattice:
 def main():
     lattice = ParticleTracerLattice(200.0)
     fileBend1='benderSeg1.txt'
+    fileBend2 = 'benderSeg2.txt'
     fileBender1Frige='benderFringeCap.txt'
+    file2DLens='lens2D.txt'
+    file3DLens='lens3D.txt'
+    fileCombiner='combinerData.txt'
     yokeWidth=.0254*5/8
     numMagnets=110
     extraSpace=1e-3
     Lm=.0254
     rp=.0125
     rb=lattice.compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,np.pi,extraSpace)
-
+    Llens1=.3
 
     #lattice.add_Lens_Ideal(.5,1.0,.01)
-    lattice.add_Lens_Ideal(.1,1.0,.01)
+    #lattice.add_Lens_Ideal(.1,1.0,.01)
+    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
+    #lattice.add_Drift(Llens1)
     #lattice.add_Combiner_Ideal()
+    lattice.add_Combiner_Sim(fileCombiner)
+    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
+    #lattice.add_Drift(Llens1)
     #lattice.add_Lens_Ideal(.1, 1.0, .01)
     #lattice.add_Lens_Ideal(.5, 1.0, .01)
-    #lattice.add_Bender_Ideal(np.pi,1.0,1.1,.01)
-    #lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Frige,Lm,None,rb,extraSpace,yokeWidth)
-    lattice.add_Bender_Ideal_Segmented_With_Cap(75,.02,1e-1,1,.01,1.0,.005,.001)
+    #lattice.add_Bender_Ideal(None,1.0,1.1,.01)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Frige,Lm,None,rb,extraSpace,yokeWidth)
+    #lattice.add_Bender_Ideal_Segmented_With_Cap(75,.02,1e-1,1,.01,1.0,.005,.001)
     #lattice.add_Bender_Ideal_Segmented(None,.02,1,.01,1,.005,.001)
-    lattice.add_Lens_Ideal(.1, 1.0, .01)
+    #lattice.add_Lens_Ideal(Llens1, 1.0, .01)
+    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
     #lattice.add_Bender_Ideal_Segmented(None, .02, 1, .01,1, .005, .001)
-    lattice.add_Bender_Ideal_Segmented_With_Cap(98, .02, 1e-1, 1, .01, 1.0, .005, .001)
-    #lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Frige, Lm, None, rb, extraSpace,
-    #                                              yokeWidth)
-    #lattice.add_Bender_Ideal(np.pi,1.0,1.1,.01)
+    #lattice.add_Bender_Ideal_Segmented_With_Cap(98, .02, 1e-1, 1, .01, 1.0, .005, .001)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender1Frige, Lm, None, rb, extraSpace,yokeWidth)
+    #lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
+    #lattice.add_Bender_Ideal(None,1.0,1.1,.01)
     lattice.end_Lattice()
     #lattice.show_Lattice()
-    particleTracer=ParticleTracer(lattice)
-    q0=np.asarray([0,0e-3,0])
-    v0=np.asarray([-200.0,0,0])
-    dt=10e-6
-    qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,.11/200.0)
-    print(particleOutside)
-    plt.plot(qoArr[:,1])
-    plt.show()
-    lattice.show_Lattice(particleCoords=qArr[-1])
 
+    #particleTracer=ParticleTracer(lattice)
+    #q0=np.asarray([-1e-9,0*1e-3,0])
+    #v0=np.asarray([-200.0,0,0])
+    #dt=10e-6
+#
+    #qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,100/200.0)
+    #print(particleOutside)
+    #plt.plot(qoArr[:,0],1e3*qoArr[:,1])
+    #plt.show()
+    #lattice.show_Lattice(particleCoords=qArr[-1])
+
+
+    def func(X):
+        F1, F2 = X
+        lattice.elList[2].forceFact = F1
+        lattice.elList[4].forceFact = F2
+
+        particleTracer = ParticleTracer(lattice)
+
+        v0 = np.asarray([-200.0, 0, 0])
+        dt = 10e-6
+        q0 = np.asarray([-1e-10, 0e-3, 0])
+        Lt=250*lattice.totalLength
+        q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
+        survival = qo[-1, 0] / lattice.totalLength
+        #start=-2e-3
+        #stop=2e-3
+        #num=5
+        #qyi=np.linspace(start,stop,num=num)
+        #survival=0
+        #for qy in qyi:
+        #    q0 = np.asarray([-1e-10, qy, 0])
+        #    q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
+        #    survival += qo[-1, 0] / lattice.totalLength
+        #survival=survival/num
+
+        return survival, X
+
+
+
+    num = 5
+    F1Arr = np.linspace(.1, 1, num=num)
+    F2Arr = np.linspace(.1, 1, num=num)
+    argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
+    # argsArr=F1Arr[:,None]
+
+    pool = pa.pools.ProcessPool(nodes=2)#pa.helpers.cpu_count())  # pool object to distribute work load
+    jobs = []  # list of jobs. jobs are distributed across processors
+    results = []  # list to hold results of particle tracing.
+    print('starting')
+    t = time.time()
+    for arg in argsArr:
+        jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
+    for job in jobs:
+        results.append(job.get())  # get the results. wait for the result in order given
+    print(time.time() - t)
+
+    survivalList = []
+    XList = []
+    for result in results:
+        survivalList.append(result[0])
+        XList.append(result[1])
+    survivalArr = np.asarray(survivalList)
+    XArr = np.asarray(XList)
+    print(survivalArr)
+    print(np.max(survivalArr))
+    print(XArr[np.argmax(survivalArr)])
 if __name__=='__main__':
     main()

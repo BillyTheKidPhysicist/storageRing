@@ -211,7 +211,7 @@ class Element:
             self.edgeFact=self.L/self.rp
             self.Lo=self.L
             zArr=zArr-(np.min(zArr)+self.extraSpace) #shift down to zeroinclude additional space from comsol for overshooting the rgion
-
+            sys.exit()
 
 
             BGradxMatrix = BGradx.reshape((numz, numy, numx))
@@ -358,10 +358,7 @@ class Element:
             numx = xArr.shape[0]
             numy = yArr.shape[0]
             numz = zArr.shape[0]
-
             self.ap = (yArr.max() - yArr.min() - 2 * self.extraSpace)/2.0
-
-
             BGradxMatrix = BGradx.reshape((numz, numy, numx))
             BGradyMatrix = BGrady.reshape((numz, numy, numx))
             BGradzMatrix = BGradz.reshape((numz, numy, numx))

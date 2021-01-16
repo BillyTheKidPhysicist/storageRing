@@ -132,7 +132,6 @@ class ParticleTracer:
             #self.VList.append(temp[0])
             #self.TList.append(temp[1])
             #self.EList.append(sum(temp))
-        #print(npl.norm(self.p))
         qArr=np.asarray(self.qList)
         pArr=np.asarray(self.pList)
         qoArr=np.asarray(self.qoList)
@@ -190,6 +189,7 @@ class ParticleTracer:
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
         self.test.append(npl.norm(F))
+
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
         el, qel = self.which_Element(q_n)
@@ -218,6 +218,7 @@ class ParticleTracer:
             self.particleOutside = True
             return True
         elif el is not self.currentEl:
+
             self.q, self.p = self.handle_Element_Edge(self.currentEl, self.q, self.p)
             #it's possible that the particle is now outside the lattice, so check which element it's in
             if self.which_Element_Slow(self.q) is None:
@@ -245,9 +246,9 @@ class ParticleTracer:
                 return None
         if qel is None:
             qel = el.transform_Lab_Coords_Into_Element_Frame(q)
+
         Fel=el.force(qel) #force in element frame
         FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
-        print(FLab)
         return FLab
 
 

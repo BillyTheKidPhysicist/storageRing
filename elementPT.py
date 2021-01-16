@@ -1,5 +1,6 @@
 import numpy as np
 from interp3d import interp_3d
+import scipy.interpolate as spi
 import pandas as pd
 import numpy.linalg as npl
 import sys
@@ -7,11 +8,18 @@ import matplotlib.pyplot as plt
 
 class Element:
     def __init__(self):
-        self.theta=None
-        self.nb=None
-        self.r0=None
-        self.ROut=None
-        self.Rin = None
+        self.theta=None #angle that describes an element's rotation in the xy plane.
+        #-straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
+        #east. for theta=90 the output is pointing up.
+        #-bending elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
+        # at some angle counterclockwise. a 180 degree bender would have the inlet at (-bending radius,0) pointing south
+        #-bending elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
+        #y=0
+        self.nb=None #normal vector to beginning of element
+        self.ne=None #normal vector to end of element
+        self.r0=None #coordinates of center of bender, minus any caps
+        self.ROut=None #2d matrix to rotate a vector out of the element's reference frame
+        self.Rin = None #2d matrix to rotate a vector into the element's reference frame
         self.r1=None
         self.r2=None
         self.SO = None
@@ -55,7 +63,7 @@ class Element:
         return vecNew
 
 class Lens_Ideal(Element):
-    def __init__(self,PTL,L,Bp,rp,ap):
+    def __init__(self,PTL,L,Bp,rp,ap,fillParams=True):
         super().__init__()
         self.PTL=PTL
         self.Bp = Bp
@@ -64,7 +72,8 @@ class Lens_Ideal(Element):
         self.ap = ap
         self.type='STRAIGHT'
         self.ang=0
-        self.fill_Params()
+        if fillParams==True:
+            self.fill_Params()
     def fill_Params(self):
         self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
         if self.L is not None:
@@ -168,16 +177,19 @@ class Bender_Ideal(Element):
         return True
 
 class Combiner_Ideal(Element):
-    def __init__(self,PTL,Lm,c1,c2,ap):
+    def __init__(self,PTL,Lm,c1,c2,ap,fillsParams=True):
         super().__init__()
         self.PTL=PTL
         self.ap = ap
         self.Lm=Lm
         self.Lb=self.Lm
+        self.La=None
         self.c1=c1
         self.c2=c2
         self.type='COMBINER'
-        self.fill_Params()
+        self.inputOffset=None
+        if fillsParams==True:
+            self.fill_Params()
     def fill_Params(self):
         inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(self.Lm)
         self.ang = inputAngle
@@ -187,12 +199,13 @@ class Combiner_Ideal(Element):
         self.Lo = self.L
 
     def compute_Input_Angle_And_Offset(self, limit,h=1e-6):
-        # this computes the output angle and offset for a combiner magnet
+        # this computes the output angle and offset for a combiner magnet.
+        # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # todo: make proper edge handling
         q = np.asarray([0, 0, 0])
         p = self.PTL.m * np.asarray([self.PTL.v0Nominal, 0, 0])
-        # xList=[]
-        # yList=[]
+        #xList=[]
+        #yList=[]
         while True:
             F = self.force(q)
             a = F / self.PTL.m
@@ -205,12 +218,14 @@ class Combiner_Ideal(Element):
                 dt = dr / (p[0] / self.PTL.m)
                 q = q + (p / self.PTL.m) * dt
                 break
-            # xList.append(q[0])
-            # yList.append(npl.norm(F))
+            #xList.append(q[0])
+            #yList.append(F[0])
             q = q_n
             p = p_n
-        # plt.plot(xList,yList)
-        # plt.show()
+
+        #plt.plot(xList,yList)
+        #plt.show()
+
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
         return outputAngle, outputOffset
@@ -223,17 +238,19 @@ class Combiner_Ideal(Element):
         # TODO: FIX THIS
         qo=q.copy()
         qo[0] = self.L - qo[0]
-        qo[1] = qo[1]
-
+        qo[1] = 0#qo[1]
         return qo
     def force(self, q):
         # force at point q in element frame
         #q: particle's position in element frame
         F = np.zeros(3)  # force vector starts out as zero
         if q[0] < self.Lb:
+
+
             B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
             F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
             F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
+
         return F
     def is_Coord_Inside(self,q):
         if np.abs(q[2]) > self.ap:
@@ -245,6 +262,62 @@ class Combiner_Ideal(Element):
             # TODO: ADD THIS LOGIc
             return None
 
+class CombinerSim(Combiner_Ideal):
+    def __init__(self,PTL,combinerFile):
+        super().__init__(PTL,.18,None,None,None,fillsParams=False)
+        self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields
+        self.data=None
+        self.combinerFile=combinerFile
+        self.FxFunc=None
+        self.FyFunc=None
+        self.FzFunc=None
+        self.fill_Params()
+    def fill_Params(self):
+
+        self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
+        self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
+        # to the hard edge of the input
+        xArr = np.unique(self.data[:, 0])
+        yArr = np.unique(self.data[:, 1])
+        zArr = np.unique(self.data[:, 2])
+        BGradx = self.data[:, 3]
+        BGrady = self.data[:, 4]
+        BGradz = self.data[:, 5]
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+        self.ap = (yArr.max() - yArr.min() - 2 * self.comsolExtraSpace) / 2.0
+        BGradxMatrix = BGradx.reshape((numz, numy, numx))
+        BGradyMatrix = BGrady.reshape((numz, numy, numx))
+        BGradzMatrix = BGradz.reshape((numz, numy, numx))
+
+        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        #
+        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+
+        self.FxFunc = lambda x, y, z: tempx((z, y, x))
+        self.FyFunc = lambda x, y, z: tempy((z, y, x))
+        self.FzFunc = lambda x, y, z: tempz((z, y, x))
+        inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(self.Lm+2*self.space)
+        self.ang = inputAngle
+        self.inputOffset=inputOffset-np.tan(inputAngle) * self.space  # the input offset is measure at the end of the hard
+        # edge
+
+        # the inlet length needs to be long enough to extend past the fringe fields
+        # TODO: MAKE EXACT, now it overshoots
+        self.La = self.space + np.tan(self.ang) * self.ap
+        self.Lo = self.La + self.Lb
+        self.L = self.Lo
+    def force(self,q):
+        F=np.zeros(3)
+        F[0] = self.FxFunc(*q)
+        F[1] = self.FyFunc(*q)
+        F[2] = self.FzFunc(*q)
+        return F
 class BenderIdealSegmented(Bender_Ideal):
     def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
         super().__init__(PTL,None,Bp,rp,rb,ap,fillParams=False)
@@ -476,7 +549,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 raise Exception('APETURE IS LARGER THAN BORE')
             self.K = self.compute_K()
             rOffsetFact=1.0012 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
-            self.rOffsetFunc = lambda rb: rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
+            self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
             # acounts for reduced energy
         if self.dataCap is None:
             self.fill_Force_Func_Cap()
@@ -563,6 +636,11 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             yFit.append(self.FxFunc_Seg(x,0,0))
         xFit=xFit-self.dataSeg[:,0].mean()
         K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
+        K0=12037000
+        if .99*K0<K<1.01*K0:
+            K=K0
+        else:
+            raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE BOUND')
         return K
     def force(self, q):
         # force at point q in element frame
@@ -573,14 +651,12 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             phi+=2*np.pi
         if phi<self.ang:
             quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-            print(quc,self.rb)
             F[0] = self.FxFunc_Seg(*quc)
             F[1] = self.FyFunc_Seg(*quc)
             F[2] = self.FzFunc_Seg(*quc)
             F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
                 # element frame
         elif phi>self.ang:  # if outside bender's angle range
-            print('here')
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
                 #westward side
                 x,y,z=q.copy()
@@ -609,5 +685,101 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 F[1] = M[1, 0] * Fx + M[1, 1] * Fy
                 qTest[0]+=-self.rb
 
-        print(npl.norm(F))
+        return F
+
+class LensSimWithCaps(Lens_Ideal):
+    def __init__(self, PTL, file2D, file3D, L, ap):
+        super().__init__(PTL, None, None, None, None,fillParams=False)
+        self.PTL=PTL
+        self.file2D=file2D
+        self.file3D=file3D
+        self.L=L
+        self.ap=ap
+        self.Lcap=None
+        self.Linner=None
+        self.data2D=None
+        self.data3D=None
+        self.FxFunc_Cap=None
+        self.FyFunc_Cap = None
+        self.FzFunc_Cap = None
+        self.FxFunc_Inner=None
+        self.FyFunc_Inner = None
+        self.FzFunc_Inner = None
+        self.forceFact=1.0
+        self.fill_Params()
+    def fill_Params(self):
+        if self.data3D is None:
+            self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
+            self.fill_Force_Func_Cap()
+            self.Lcap = self.data3D[:,2].max() - self.data3D[:,2].min() - 2 * self.comsolExtraSpace
+        if self.data2D is None:
+            self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
+            self.fill_Force_Func_2D()
+            self.rp=(self.data2D[:,0].max()-self.data2D[:,0].min()-2*self.comsolExtraSpace)/2
+            if self.ap is None:
+                self.ap=.9*self.rp
+        if self.L is not None:
+            self.set_Length(self.L)
+
+    def set_Length(self,L):
+        self.L=L
+        self.Linner=L-2*self.Lcap
+        if self.Linner < 0:
+            raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
+        self.Lo = self.L
+    def fill_Force_Func_Cap(self):
+        xArr = np.unique(self.data3D[:, 0])
+        yArr = np.unique(self.data3D[:, 1])
+        zArr = np.unique(self.data3D[:, 2])
+        BGradx = self.data3D[:, 3]
+        BGrady = self.data3D[:, 4]
+        BGradz = self.data3D[:, 5]
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+        BGradxMatrix = BGradx.reshape((numz, numy, numx))
+        BGradyMatrix = BGrady.reshape((numz, numy, numx))
+        BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        #
+        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        self.FxFunc_Cap = lambda x, y, z: tempz((x,y ,-z))
+        self.FyFunc_Cap = lambda x, y, z: tempy((x,y ,-z))
+        self.FzFunc_Cap = lambda x, y, z: -tempx((x,y ,-z))
+
+        #xPlot=np.linspace(0,L)
+        #yPlot=[]
+        #for x in xPlot:
+        #    yPlot.append(self.FxFunc_Cap(x,.003,.003))#tempy((x,.003,.003)))
+        #plt.plot(xPlot,yPlot)
+        #plt.show()
+#
+    def fill_Force_Func_2D(self):
+        tempx = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 2] * self.PTL.u0)
+        tempy = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 3] * self.PTL.u0)
+        self.FxFunc_Inner = lambda x, y, z: 0.0
+        self.FyFunc_Inner = lambda x, y, z: tempy(-z, y)
+        self.FzFunc_Inner = lambda x, y, z: -tempx(-z, y)
+    def force(self,q):
+        F=np.zeros(3)
+        if q[0]<self.Lcap:
+            x,y,z=q
+            x=self.Lcap-x
+            F[0]= -self.forceFact * self.FxFunc_Cap(x, y, z)
+            F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
+            F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
+        elif self.Lcap<q[0]<self.L-self.Lcap:
+            F[0]= self.forceFact * self.FxFunc_Inner(*q)
+            F[1]= self.forceFact * self.FyFunc_Inner(*q)
+            F[2]= self.forceFact * self.FzFunc_Inner(*q)
+        elif self.L-self.Lcap<q[0]<self.L:
+            x,y,z=q
+            x=x-(self.Linner+self.Lcap)
+            F[0]= self.forceFact * self.FxFunc_Cap(x, y, z)
+            F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
+            F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
         return F
