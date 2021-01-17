@@ -723,72 +723,72 @@ def main():
     lattice.end_Lattice()
     #lattice.show_Lattice()
 
-    #particleTracer=ParticleTracer(lattice)
-    #q0=np.asarray([-1e-9,0*1e-3,0])
-    #v0=np.asarray([-200.0,0,0])
-    #dt=10e-6
+    particleTracer=ParticleTracer(lattice)
+    q0=np.asarray([-1e-9,1e-3,0e-3])
+    v0=np.asarray([-200.0,0,0])
+    dt=10e-6
 #
-    #qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,100/200.0)
-    #print(particleOutside)
-    #plt.plot(qoArr[:,0],1e3*qoArr[:,1])
-    #plt.show()
-    #lattice.show_Lattice(particleCoords=qArr[-1])
+    qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,4.05/200.0)
+    print(particleOutside)
+    plt.plot(qoArr[:,0],1e3*qoArr[:,1])
+    plt.show()
+    lattice.show_Lattice(particleCoords=qArr[-1])
 
 
-    def func(X):
-        F1, F2 = X
-        lattice.elList[2].forceFact = F1
-        lattice.elList[4].forceFact = F2
-
-        particleTracer = ParticleTracer(lattice)
-
-        v0 = np.asarray([-200.0, 0, 0])
-        dt = 10e-6
-        q0 = np.asarray([-1e-10, 0e-3, 0])
-        Lt=250*lattice.totalLength
-        q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
-        survival = qo[-1, 0] / lattice.totalLength
-        #start=-2e-3
-        #stop=2e-3
-        #num=5
-        #qyi=np.linspace(start,stop,num=num)
-        #survival=0
-        #for qy in qyi:
-        #    q0 = np.asarray([-1e-10, qy, 0])
-        #    q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
-        #    survival += qo[-1, 0] / lattice.totalLength
-        #survival=survival/num
-
-        return survival, X
-
-
-
-    num = 5
-    F1Arr = np.linspace(.1, 1, num=num)
-    F2Arr = np.linspace(.1, 1, num=num)
-    argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
-    # argsArr=F1Arr[:,None]
-
-    pool = pa.pools.ProcessPool(nodes=2)#pa.helpers.cpu_count())  # pool object to distribute work load
-    jobs = []  # list of jobs. jobs are distributed across processors
-    results = []  # list to hold results of particle tracing.
-    print('starting')
-    t = time.time()
-    for arg in argsArr:
-        jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
-    for job in jobs:
-        results.append(job.get())  # get the results. wait for the result in order given
-    print(time.time() - t)
-
-    survivalList = []
-    XList = []
-    for result in results:
-        survivalList.append(result[0])
-        XList.append(result[1])
-    survivalArr = np.asarray(survivalList)
-    XArr = np.asarray(XList)
-    print(survivalArr)
-    print(np.max(survivalArr))
-    print(XArr[np.argmax(survivalArr)])
+    # def func(X):
+    #     F1, F2 = X
+    #     lattice.elList[2].forceFact = F1
+    #     lattice.elList[4].forceFact = F2
+    #
+    #     particleTracer = ParticleTracer(lattice)
+    #
+    #     v0 = np.asarray([-200.0, 0, 0])
+    #     dt = 10e-6
+    #     q0 = np.asarray([-1e-10, 0e-3, 0])
+    #     Lt=250*lattice.totalLength
+    #     q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
+    #     survival = qo[-1, 0] / lattice.totalLength
+    #     #start=-2e-3
+    #     #stop=2e-3
+    #     #num=5
+    #     #qyi=np.linspace(start,stop,num=num)
+    #     #survival=0
+    #     #for qy in qyi:
+    #     #    q0 = np.asarray([-1e-10, qy, 0])
+    #     #    q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
+    #     #    survival += qo[-1, 0] / lattice.totalLength
+    #     #survival=survival/num
+    #
+    #     return survival, X
+    #
+    #
+    #
+    # num = 5
+    # F1Arr = np.linspace(.1, 1, num=num)
+    # F2Arr = np.linspace(.1, 1, num=num)
+    # argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
+    # # argsArr=F1Arr[:,None]
+    #
+    # pool = pa.pools.ProcessPool(nodes=2)#pa.helpers.cpu_count())  # pool object to distribute work load
+    # jobs = []  # list of jobs. jobs are distributed across processors
+    # results = []  # list to hold results of particle tracing.
+    # print('starting')
+    # t = time.time()
+    # for arg in argsArr:
+    #     jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
+    # for job in jobs:
+    #     results.append(job.get())  # get the results. wait for the result in order given
+    # print(time.time() - t)
+    #
+    # survivalList = []
+    # XList = []
+    # for result in results:
+    #     survivalList.append(result[0])
+    #     XList.append(result[1])
+    # survivalArr = np.asarray(survivalList)
+    # XArr = np.asarray(XList)
+    # print(survivalArr)
+    # print(np.max(survivalArr))
+    # print(XArr[np.argmax(survivalArr)])
 if __name__=='__main__':
     main()

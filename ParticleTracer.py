@@ -120,6 +120,7 @@ class ParticleTracer:
             if self.T+self.h>T0:
                 break
             self.time_Step_Verlet()
+            #print(type(self.currentEl))
             if self.particleOutside==True:
                 break
             self.qList.append(self.q)

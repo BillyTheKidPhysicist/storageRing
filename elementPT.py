@@ -37,9 +37,10 @@ class Element:
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
+
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
         qo = self.transform_Element_Coords_Into_Orbit_Frame(q) #then element frame into orbit frame
-        qo[0] = qo[0] + cumulativeLength #orbit frame is in the element's frame, so the preceding length needs to be
+        qo[0] = qo[0] +cumulativeLength #orbit frame is in the element's frame, so the preceding length needs to be
         #accounted for
         return qo
 
@@ -440,6 +441,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                 #bender is not a huge chore. There is almost no chance it would have this shape anyways. Changing this
                 #would affect force, orbit coordinates and isinside at least
                 raise Exception('DIMENSIONS OF BENDER ARE OUTSIDE OF ACCEPTABLE BOUNDS')
+            self.Lo = self.ro * self.ang+2*self.Lcap
 
 
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
@@ -447,15 +449,17 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         angle = np.arctan2(qo[1], qo[0])
         if angle<0: #to use full 2pi with arctan2
             angle+=2*np.pi
-        if angle>self.ang:
-            if q[0]>self.rb: #particle is in the eastward cap
+        if angle>self.ang: #if particle is outside of the bending segment so it could be in the caps, or elsewhere
+            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
+                #the eastward side
                 qo[0] = self.Lcap + self.ang * self.ro + (-q[1])
-                qo[1]=q[0]-self.ro
-            else: #particle is in the westward cap
-                qox=self.RIn_Ang[0,0]*q[0]+self.RIn_Ang[0,1]*q[1]
-                qoy=self.RIn_Ang[1,0]*q[0]+self.RIn_Ang[1,1]*q[1]
-                qo[0]=self.Lcap-qoy
-                qo[1]=qox-self.ro
+                qo[1] = q[0] - self.ro
+            qTest=q.copy()
+            qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+            qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+            if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
+                qo[0]=self.Lcap-qTest[1]
+                qo[1]=qTest[0]-self.ro
         else:
             phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
             # when the particle first enters
@@ -561,7 +565,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.rOffset=self.rOffsetFunc(self.rb)
             self.ro=self.rb+self.rOffset
             self.L=self.ang*self.rb
-            self.Lo=self.ang*self.ro
+            self.Lo=self.ang*self.ro+2*self.Lcap
             self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
     def fill_Force_Func_Cap(self):
         self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
