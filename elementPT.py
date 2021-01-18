@@ -404,10 +404,8 @@ class BenderIdealSegmented(Bender_Ideal):
         revs=int(phi//self.ucAng) #number of revolutions through unit cell
         if revs%2==0: #if even
             theta = phi - self.ucAng * revs
-            pass
         else: #if odd
             theta = self.ucAng-(phi - self.ucAng * revs)
-            pass
         r=np.sqrt(q[0]**2+q[1]**2)
         qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
         qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
@@ -425,6 +423,7 @@ class BenderIdealSegmented(Bender_Ideal):
                 return False
         else:
             return False
+
         return True
 
 class BenderIdealSegmentedWithCap(BenderIdealSegmented):

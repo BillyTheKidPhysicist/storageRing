@@ -5,7 +5,7 @@ import pathos as pa
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
-from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift\
+from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
@@ -25,7 +25,7 @@ class ParticleTracerLattice:
         self.kb = 1.38064852E-23  # boltzman constant, SI
 
         self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
-            #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
+        #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.combinerIndex=None #the index in the lattice where the combiner is
         self.totalLength=None #total length of lattice, m
 
@@ -167,12 +167,12 @@ class ParticleTracerLattice:
         #L: hard edge Length of individual magnet.
         #Bp: Field strength at pole face
         # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
-            #outside this, m
+        #outside this, m
         #rp: Bore radius of element
         #yokeWidth: width of the yoke, but also refers to the width of the magnetic material
         #numMagnet: number of magnets in segmented bender
         #space: extra space from magnet holder in the direction of the length of the magnet. This effectively add length
-            #to the magnet. total length will be changed by TWICE this value, the space is on each end
+        #to the magnet. total length will be changed by TWICE this value, the space is on each end
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp
@@ -582,10 +582,10 @@ class ParticleTracerLattice:
                         el.r0[1]+=-el.nb[1]*el.Lcap
                 elif el.type=='COMBINER':
                     el.theta=2*np.pi-el.ang-(np.pi-prevEl.theta)# Tilt the combiner down by el.ang so y=0 is perpindicular
-                        #to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
-                        #np.pi becaus the combiner's input is not at the origin, but faces 'east'
+                    #to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
+                    #np.pi becaus the combiner's input is not at the origin, but faces 'east'
                     el.theta=el.theta-2*np.pi*(el.theta//(2*np.pi)) #the above logic can cause the element to have to rotate
-                        #more than 360 deg
+                    #more than 360 deg
                     #to find location of output coords use vector that connects input and output in element frame
                     #and rotate it. Input is where nominal trajectory particle enters
                     drx=-(el.Lb+(el.La-el.inputOffset*np.sin(el.ang))*np.cos(el.ang))
@@ -612,9 +612,9 @@ class ParticleTracerLattice:
             else:
                 raise Exception('No correct element name provided')
             el.ROut = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]]) #the rotation matrix for
-                #rotating out of the element reference frame
+            #rotating out of the element reference frame
             el.RIn = np.asarray([[np.cos(-rot), -np.sin(-rot)], [np.sin(-rot), np.cos(-rot)]]) #the rotation matrix for
-                #rotating into the element reference frame
+            #rotating into the element reference frame
             #clean up tiny numbers. There are some numbers like 1e-16 that should be zero
             el.ne=np.round(el.ne,10)
             el.nb=np.round(el.nb,10)
@@ -678,10 +678,39 @@ class ParticleTracerLattice:
         plt.grid()
         plt.gca().set_aspect('equal')
         plt.show()
-
-
-
-
+    def measure_Phase_Space_Survival(self,qMax,vtMax,vlMax,Lt,h=1e-5,num=2,parallel=False):
+        #this method populates and tests initial conditions in 5 deg phase space, there is always one particle at the origin
+        #qMax: maximum distance in position phase space
+        #vMax: maximum distance in velocity phase space
+        #vlMax: maximum distance in velocity space along the longitudinal direction
+        #num: number of point along each dimension in phase space. must be even so point doesn't end up at origin
+        if num<=0:
+            raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
+        qArr=np.linspace(-qMax,qMax,num=num)
+        vtArr=np.linspace(-vtMax,vtMax,num=num)
+        #vlArr=np.linspace(-vlMax,vlMax,num=num)
+        temp = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr)).T.reshape(-1, 4)
+        argList = []
+        for arg in temp:
+            qi = np.asarray([0, arg[0], arg[1]])
+            pi = np.asarray([-200, arg[2], arg[3]]) * self.m
+            argList.append((qi, pi, h, Lt / 200, True))
+        survivalArr = np.zeros(len(argList))
+        particleTracer = ParticleTracer(self)
+        if parallel==True:
+            results=particleTracer.multi_Trace(argList)
+            for i in range(survivalArr.shape[0]):
+                survivalArr[i]=results[i][0]/Lt
+        else:
+            i=0
+            for arg in argList:
+                qi=arg[0]
+                pi=arg[1]
+                Lo,temp=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
+                particleTracer.reset()
+                survivalArr[i]=(Lo/self.totalLength)
+                i+=1
+        return survivalArr
 
 def main():
     lattice = ParticleTracerLattice(200.0)
@@ -722,73 +751,69 @@ def main():
     #lattice.add_Bender_Ideal(None,1.0,1.1,.01)
     lattice.end_Lattice()
     #lattice.show_Lattice()
-
-    particleTracer=ParticleTracer(lattice)
-    q0=np.asarray([-1e-9,1e-3,0e-3])
-    v0=np.asarray([-200.0,0,0])
-    dt=10e-6
-#
-    qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,4.05/200.0)
-    print(particleOutside)
-    plt.plot(qoArr[:,0],1e3*qoArr[:,1])
-    plt.show()
-    lattice.show_Lattice(particleCoords=qArr[-1])
+    print('here')
 
 
-    # def func(X):
-    #     F1, F2 = X
-    #     lattice.elList[2].forceFact = F1
-    #     lattice.elList[4].forceFact = F2
+    #particleTracer=ParticleTracer(lattice)
+    #q0=np.asarray([-1e-9,0e-3,0e-3])
+    #v0=np.asarray([-200.0,0,0])
+    #dt=10e-6
     #
-    #     particleTracer = ParticleTracer(lattice)
-    #
-    #     v0 = np.asarray([-200.0, 0, 0])
-    #     dt = 10e-6
-    #     q0 = np.asarray([-1e-10, 0e-3, 0])
-    #     Lt=250*lattice.totalLength
-    #     q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
-    #     survival = qo[-1, 0] / lattice.totalLength
-    #     #start=-2e-3
-    #     #stop=2e-3
-    #     #num=5
-    #     #qyi=np.linspace(start,stop,num=num)
-    #     #survival=0
-    #     #for qy in qyi:
-    #     #    q0 = np.asarray([-1e-10, qy, 0])
-    #     #    q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
-    #     #    survival += qo[-1, 0] / lattice.totalLength
-    #     #survival=survival/num
-    #
-    #     return survival, X
-    #
-    #
-    #
-    # num = 5
-    # F1Arr = np.linspace(.1, 1, num=num)
-    # F2Arr = np.linspace(.1, 1, num=num)
-    # argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
-    # # argsArr=F1Arr[:,None]
-    #
-    # pool = pa.pools.ProcessPool(nodes=2)#pa.helpers.cpu_count())  # pool object to distribute work load
-    # jobs = []  # list of jobs. jobs are distributed across processors
-    # results = []  # list to hold results of particle tracing.
-    # print('starting')
-    # t = time.time()
-    # for arg in argsArr:
-    #     jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
-    # for job in jobs:
-    #     results.append(job.get())  # get the results. wait for the result in order given
-    # print(time.time() - t)
-    #
-    # survivalList = []
-    # XList = []
-    # for result in results:
-    #     survivalList.append(result[0])
-    #     XList.append(result[1])
-    # survivalArr = np.asarray(survivalList)
-    # XArr = np.asarray(XList)
-    # print(survivalArr)
-    # print(np.max(survivalArr))
-    # print(XArr[np.argmax(survivalArr)])
+    #t=time.time()
+    #qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,50/200.0)
+    #print(time.time()-t)
+    #plt.plot(qoArr[:,0],1e3*qoArr[:,1])
+    #plt.show()
+    #lattice.show_Lattice(particleCoords=qArr[-1])
+
+    def func(X,parallel=False):
+        F1, F2 = X
+        lattice.elList[2].forceFact = F1
+        lattice.elList[4].forceFact = F2
+
+        h = 10e-6
+        Lt = 250 * lattice.totalLength
+        qMax=1e-3
+        vtMax=1
+        vlMax=None
+        # q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
+        # survival = qo[-1, 0] / lattice.totalLength
+        survivalArr=lattice.measure_Phase_Space_Survival(qMax,vtMax,vlMax,Lt,h=h,parallel=parallel)
+        survival=np.mean(survivalArr)
+        return survival, X
+
+    #print('starting')
+    #X=[0.19183673,0.44897959]
+    #func(X,parallel=False)
+
+
+
+    num = 50
+    F1Arr = np.linspace(.1, 1, num=num)
+    F2Arr = np.linspace(.1, 1, num=num)
+    argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
+    # argsArr=F1Arr[:,None]
+
+    pool = pa.pools.ProcessPool(nodes=1)#pa.helpers.cpu_count())  # pool object to distribute work load
+    jobs = []  # list of jobs. jobs are distributed across processors
+    results = []  # list to hold results of particle tracing.
+    print('starting')
+    t = time.time()
+    for arg in argsArr:
+        jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
+    for job in jobs:
+        results.append(job.get())  # get the results. wait for the result in order given
+    print(time.time() - t)
+
+    survivalList = []
+    XList = []
+    for result in results:
+        survivalList.append(result[0])
+        XList.append(result[1])
+    survivalArr = np.asarray(survivalList)
+    XArr = np.asarray(XList)
+    print(survivalArr)
+    print(np.max(survivalArr))
+    print(XArr[np.argmax(survivalArr)][0],XArr[np.argmax(survivalArr)][0])
 if __name__=='__main__':
     main()

@@ -6,6 +6,7 @@ from shapely.geometry import Polygon,Point
 import pathos as pa
 import numpy.linalg as npl
 
+#todo: compute energy
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
     #ucAng=angle/(2*numMagnets)
@@ -55,7 +56,7 @@ class ParticleTracer:
         self.TList=[] #list of kinetic energy
         self.EList=[] #too keep track of total energy. This can tell me if the simulation is behaving
             #This won't always be on
-
+        self.numRevs=0 #tracking numbre of times particle comes back to wear it started
         self.test=[]
 
 
@@ -99,7 +100,7 @@ class ParticleTracer:
         #self.TList.append(temp[1])
         #self.EList.append(sum(temp))
 
-    def trace(self,qi,pi,h,T0):
+    def trace(self,qi,pi,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -120,33 +121,27 @@ class ParticleTracer:
             if self.T+self.h>T0:
                 break
             self.time_Step_Verlet()
-            #print(type(self.currentEl))
             if self.particleOutside==True:
                 break
-            self.qList.append(self.q)
-            self.pList.append(self.p)
-            self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength))
-            #self.poList.append(self.currentEl.transform_Lab_Momentum_Into_Orbit_Frame(self.q, self.p))
-            #self.test.append(npl.norm(self.p))
+            if fastMode==False:
+                self.qList.append(self.q)
+                self.pList.append(self.p)
+                self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q,self.cumulativeLength))
             self.T += self.h
-            #temp=self.get_Energies(self.q,self.p,self.currentEl)
-            #self.VList.append(temp[0])
-            #self.TList.append(temp[1])
-            #self.EList.append(sum(temp))
-        qArr=np.asarray(self.qList)
-        pArr=np.asarray(self.pList)
-        qoArr=np.asarray(self.qoList)
-        poArr=np.asarray(self.poList)
-        return qArr,pArr,qoArr,poArr,self.particleOutside
+        if fastMode==False:
+            qArr=np.asarray(self.qList)
+            pArr=np.asarray(self.pList)
+            qoArr=np.asarray(self.qoList)
+            poArr=np.asarray(self.poList)
+            return qArr,pArr,qoArr,poArr,self.particleOutside
+        else:
+
+            return self.cumulativeLength,self.particleOutside
 
     def handle_Element_Edge(self, el, q, p):
         # This method calculates the correct timestep to put the particle just on the other side of the end of the element
         # using velocity verlet. I had intended this to use the force right at the end of the element, but that didn't
         # work right. For now it simply uses explicit euler more or less
-        #
-
-        import numpy as np #todo: wtf is happening here, why do I need this
-
         r=el.r2-q
 
         rt=np.abs(np.sum(el.ne*r[:2])) #perindicular position  to element's end
@@ -156,9 +151,9 @@ class ParticleTracer:
         q=q+(self.p/self.m)*h
 
         eps=1e-9 #tiny step to put the particle on the other side
-        np=p/npl.norm(p) #normalized vector of particle velocity direction
+        n_p=p/npl.norm(p) #normalized vector of particle velocity direction
 
-        q=q+np*eps
+        q=q+n_p*eps
 
         return q,p
         #TODO: FIX THIS, IT'S BROKEN. DOESN'T WORK WITH FORCE :(
@@ -340,25 +335,23 @@ class ParticleTracer:
         self.p[0]+=deltav*el.nb[0]*self.m
         self.p[1]+=deltav*el.nb[1]*self.m
 
-
     def multi_Trace(self, argsList):
         # trace out multiple trajectories
-        # argsList: list of tuples for each particle, where each tuple is (qi,vi,timestep,totaltime).
+        # argsList: list of tuples for each particle, where each tuple is (qi,vi,timestep,totaltime,fastMode).
         def wrap(args): #helps to use a wrapper function to unpack arguments. this is for a single particle.
             # args is a tuple.
             qi = args[0] #initial position, 3D, m
             vi = args[1] #initial velocity, 3D, m
             h=args[2] #timestep, seconds
             T=args[3] #total time, seconds
-            q, p, qo, po, particleOutside = self.trace(qi, vi, h,T)
-            argsReturn=(qo,particleOutside) #return orbital coords and wether particle clipped an apeture
-            return argsReturn
+            results=(self.trace(qi, vi, h,T,fastMode=args[4])) #return orbital coords and wether particle clipped an apeture
+            return results
 
         pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count()) #pool object to distribute work load
         jobs = [] #list of jobs. jobs are distributed across processors
-        results = [] #list to hold results of particle tracing.
+        resultsList = [] #list to hold results of particle tracing.
         for arg in argsList:
             jobs.append(pool.apipe(wrap, arg)) #create job for each argument in arglist, ie for each particle
         for job in jobs:
-            results.append(job.get()) #get the results. wait for the result in order given
-        return results
+            resultsList.append(job.get()) #get the results. wait for the result in order given
+        return resultsList
