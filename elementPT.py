@@ -376,14 +376,14 @@ class BenderIdealSegmented(Bender_Ideal):
         # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
         # or leaving the element interface as mirror images of each other.
         # F: Force to be rotated out of unit cell frame
-        # q: particle's position in the unit cell where the force is acting
+        # q: particle's position in the element frame where the force is acting
         FNew = F.copy()  # copy input vector to not modify the original
         phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
         # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
         cellNum = int(phi // self.ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
             rotAngle = 2 * (cellNum // 2) * self.ucAng
-        else:
+        else: #otherwise it needs to be reflected. This is the algorithm for reflections
             m = np.tan(self.ucAng)
             M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
             Fx = FNew[0]
@@ -399,6 +399,9 @@ class BenderIdealSegmented(Bender_Ideal):
     def transform_Element_Coords_Into_Unit_Cell_Frame(self,q):
         #As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
         #and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
+        #q: particle coords in element frame
+        # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
+        # used for including unit cell fringe fields
         qNew=q.copy()
         phi=self.ang-np.arctan2(q[1],q[0])
         revs=int(phi//self.ucAng) #number of revolutions through unit cell
@@ -409,6 +412,8 @@ class BenderIdealSegmented(Bender_Ideal):
         r=np.sqrt(q[0]**2+q[1]**2)
         qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
         qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
+        #print(revs)
+
         return qNew
 
     def is_Coord_Inside(self, q):
@@ -520,11 +525,12 @@ class BenderSimSegmented(BenderIdealSegmented):
         sys.exit()
 
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
-    def __init__(self,PTL, fileSeg,fileCap,Lm,numMagnets,rb,extraSpace,yokeWidth,ap):
+    def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap):
         super().__init__(PTL,numMagnets,Lm,None,None,None,rb,yokeWidth,extraSpace,ap,fillParams=False)
         self.PTL=PTL
         self.fileSeg=fileSeg
         self.fileCap=fileCap
+        self.fileInternalFringe=fileInternalFringe
         self.numMagnets=numMagnets
         self.extraSpace=extraSpace
         self.yokeWidth=yokeWidth
@@ -532,12 +538,16 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.ucAng=None
         self.dataSeg=None
         self.dataCap=None
+        self.dataInternalFringe=None
         self.FxFunc_Seg=None
         self.FyFunc_Seg=None
         self.FzFunc_Seg=None
         self.FxFunc_Cap=None
         self.FyFunc_Cap=None
         self.FzFunc_Cap=None
+        self.FxFunc_Internal_Fringe = None
+        self.FyFunc_Internal_Fringe = None
+        self.FzFunc_Internal_Fringe = None
         self.fill_Params()
     def fill_Params(self):
         self.Lseg=self.Lm+self.space*2
@@ -551,12 +561,14 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             elif self.ap>self.rp:
                 raise Exception('APETURE IS LARGER THAN BORE')
             self.K = self.compute_K()
-            rOffsetFact=1.0012 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
+            rOffsetFact=1.0 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
             self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
             # acounts for reduced energy
         if self.dataCap is None:
             self.fill_Force_Func_Cap()
             self.Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
+        if self.dataInternalFringe is None:
+            self.fill_Force_Func_Internal_Fringe()
         if self.numMagnets is not None:
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
@@ -578,6 +590,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         numy = yArr.shape[0]
         numz = zArr.shape[0]
 
+
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
@@ -594,14 +607,48 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.FxFunc_Cap = lambda x, y, z:  tempx((y, -z, x))
         self.FyFunc_Cap = lambda x, y, z: tempz((y, -z, x)) #todo: THIS NEEDS TO BE TESTED MORE!!
         self.FzFunc_Cap = lambda x, y, z: -tempy((y, -z, x))
-        #xPlot=np.linspace(-self.rp/2,self.rp/2)
+
+    def fill_Force_Func_Internal_Fringe(self):
+        self.dataInternalFringe = np.asarray(pd.read_csv(self.fileInternalFringe, delim_whitespace=True, header=None))
+        xArr = np.unique(self.dataInternalFringe[:, 0])
+        yArr = np.unique(self.dataInternalFringe[:, 1])
+        zArr = np.flip(np.unique(self.dataInternalFringe[:, 2]))
+        BGradx = self.dataInternalFringe[:, 3]
+        BGrady = self.dataInternalFringe[:, 4]
+        BGradz = self.dataInternalFringe[:, 5]
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+
+        BGradxMatrix = BGradx.reshape((numz, numy, numx))
+        BGradyMatrix = BGrady.reshape((numz, numy, numx))
+        BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        # plt.imshow(BGradyMatrix[0,:,:])
+        # plt.show()
+
+        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
+        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
+        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        #
+        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        self.FxFunc_Internal_Fringe = lambda x, y, z: tempx((y, -z, x))
+        self.FyFunc_Internal_Fringe = lambda x, y, z: tempz((y, -z, x))  # todo: THIS NEEDS TO BE TESTED MORE!!
+        self.FzFunc_Internal_Fringe = lambda x, y, z: -tempy((y, -z, x))
+
+
+
+        #xPlot=np.linspace(0,.029)
+        #print(xArr.min(),xArr.max())
+        #print(yArr.min(), yArr.max())
+        #print(zArr.min(), zArr.max())
         #temp=[]
         #for x in xPlot:
-        #    temp.append(tempy((-self.rp/20,x,0)))
+        #   temp.append(self.FzFunc_Internal_Fringe(1e-3,x,1e-3))
         #plt.plot(xPlot,temp)
         #plt.show()
         #sys.exit()
-
     def fill_Force_Func_Seg(self):
         self.dataSeg = np.asarray(pd.read_csv(self.fileSeg, delim_whitespace=True, header=None))
         xArr = np.unique(self.dataSeg[:, 0])
@@ -652,13 +699,26 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         phi = np.arctan2(q[1], q[0])
         if phi<0: #constraint to between zero and 2pi
             phi+=2*np.pi
-        if phi<self.ang:
-            quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-            F[0] = self.FxFunc_Seg(*quc)
-            F[1] = self.FyFunc_Seg(*quc)
-            F[2] = self.FzFunc_Seg(*quc)
-            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
-                # element frame
+        if phi<self.ang: #if particle is inside bending angle region
+            revs = int((self.ang-phi) // self.ucAng)  # number of revolutions through unit cell
+            print(revs)
+            if revs == 0 or revs == 1:
+                position='FIRST'
+            elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
+                position='LAST'
+            else:
+                position='INNER'
+            if position == 'INNER':
+                quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
+                F[0] = self.FxFunc_Seg(*quc)
+                F[1] = self.FyFunc_Seg(*quc)
+                F[2] = self.FzFunc_Seg(*quc)
+                F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
+                    # element frame
+            elif position =='FIRST' or position == 'LAST':
+                F=self.force_First_And_Last(q,position)
+            else:
+                raise Exception('UNSOPPORTED PARTICLE POSITION')
         elif phi>self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
                 #westward side
@@ -675,11 +735,9 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 x,y,z=qTest
                 x=x-self.rb
                 y=-y
-
                 F[0]=self.FxFunc_Cap(x,y,z)
                 F[1]=self.FyFunc_Cap(x,y,z)
                 F[2]=self.FzFunc_Cap(x,y,z)
-
                 m = np.tan(self.ang/2)
                 M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
                 Fx = F[0]
@@ -687,6 +745,36 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 F[0] = M[0, 0] * Fx + M[0, 1] * Fy
                 F[1] = M[1, 0] * Fx + M[1, 1] * Fy
                 qTest[0]+=-self.rb
+
+        return F
+    def force_First_And_Last(self,q,position):
+        F = np.zeros(3)
+        qNew=q.copy()
+        if position=='FIRST':
+            m = np.tan(self.ang / 2)
+            M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
+
+            qx = qNew[0]
+            qy = qNew[1]
+            qNew[0] = M[0, 0] * qx + M[0, 1] * qy
+            qNew[1] = M[1, 0] * qx + M[1, 1] * qy
+
+            qNew[0]=qNew[0]-self.rb
+
+            F[0] = self.FxFunc_Internal_Fringe(*qNew)
+            F[1] = self.FyFunc_Internal_Fringe(*qNew)
+            F[2] = self.FzFunc_Internal_Fringe(*qNew)
+
+            Fx = F[0]
+            Fy = F[1]
+            F[0] = M[0, 0] * Fx + M[0, 1] * Fy
+            F[1] = M[1, 0] * Fx + M[1, 1] * Fy
+        if position=='LAST':
+            print('here',q)
+            qNew[0]=qNew[0]-self.rb
+            F[0] = self.FxFunc_Internal_Fringe(*qNew)
+            F[1] = self.FyFunc_Internal_Fringe(*qNew)
+            F[2] = self.FzFunc_Internal_Fringe(*qNew)
 
         return F
 

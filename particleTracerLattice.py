@@ -155,10 +155,10 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,Lm,numMagnets,rb,extraSpace,yokeWidth,ap=None):
+    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
-        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,Lm,numMagnets,rb,extraSpace,yokeWidth,ap)
+        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -225,10 +225,13 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=True):
+    def end_Lattice(self,constrain=True,enforceClosedLattice=True):
         #TODO: document which parameters mean what when using constrain!
         #call various functions to construct the lattice geometry, the shapely objects for visualization and finding particle
         # positions, catch errors, enforce constraints and fill parameter(s)
+        # constrain: wether to constrain the lattice by varying parameters. typically to accomodate the presence of the
+        #combiner magnet
+        # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
 
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
@@ -237,7 +240,7 @@ class ParticleTracerLattice:
         self.catch_Errors()
         if constrain==True:
             self.constrain_Lattice()
-        self.set_Element_Coordinates()
+        self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice)
         self.make_Geometry()
         self.totalLength=0
         for el in self.elList: #total length of particle's orbit in an element
@@ -496,11 +499,12 @@ class ParticleTracerLattice:
                     raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
 
 
-    def set_Element_Coordinates(self):
+    def set_Element_Coordinates(self,enforceClosedLattice=True):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
         #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element 
         # builds upon that. The final element's ending coordinates must match the beginning elements beginning coordinates
+        # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
         i=0 #too keep track of the current element
         rbo=np.asarray([0,0]) #beginning of first element, vector. Always 0,0
         reo=None #end of last element, vector. This is not the geometri beginning but where the orbit enters the element,
@@ -634,9 +638,16 @@ class ParticleTracerLattice:
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
         #print(deltax,deltay)
-        if deltax>smallNum or deltay>smallNum:
+        closed=None #wether the lattice end meets beginning
+        if deltax > smallNum or deltay > smallNum:
+            closed=False
+        else:
+            closed=True
+        if enforceClosedLattice==True and closed==False:
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-
+        else:
+            import warnings
+            warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
         #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
         #for numerical fields. For consistency, this is also used on the analytic hard edge combiner.
@@ -711,12 +722,15 @@ class ParticleTracerLattice:
                 survivalArr[i]=(Lo/self.totalLength)
                 i+=1
         return survivalArr
+    def initialize_Phase_Space(self):
+        pass
 
 def main():
     lattice = ParticleTracerLattice(200.0)
     fileBend1='benderSeg1.txt'
     fileBend2 = 'benderSeg2.txt'
     fileBender1Frige='benderFringeCap.txt'
+    fileBenderInternalFringe='benderFringeInternal.txt'
     file2DLens='lens2D.txt'
     file3DLens='lens3D.txt'
     fileCombiner='combinerData.txt'
@@ -725,52 +739,47 @@ def main():
     extraSpace=1e-3
     Lm=.0254
     rp=.0125
-    rb=lattice.compute_Bending_Radius_For_Segmented_Bender(Lm,rp,yokeWidth,numMagnets,np.pi,extraSpace)
     Llens1=.3
 
     #lattice.add_Lens_Ideal(.5,1.0,.01)
     #lattice.add_Lens_Ideal(.1,1.0,.01)
+
+    lattice.add_Drift(.1)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Frige,fileBenderInternalFringe, Lm, 10, 0.9828434417578436, extraSpace, yokeWidth)
+    lattice.add_Drift(.1)
+    lattice.end_Lattice(enforceClosedLattice=False)
+    #lattice.show_Lattice()
+
+    '''
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    #lattice.add_Drift(Llens1)
-    #lattice.add_Combiner_Ideal()
     lattice.add_Combiner_Sim(fileCombiner)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    #lattice.add_Drift(Llens1)
-    #lattice.add_Lens_Ideal(.1, 1.0, .01)
-    #lattice.add_Lens_Ideal(.5, 1.0, .01)
-    #lattice.add_Bender_Ideal(None,1.0,1.1,.01)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Frige,Lm,None,rb,extraSpace,yokeWidth)
-    #lattice.add_Bender_Ideal_Segmented_With_Cap(75,.02,1e-1,1,.01,1.0,.005,.001)
-    #lattice.add_Bender_Ideal_Segmented(None,.02,1,.01,1,.005,.001)
-    #lattice.add_Lens_Ideal(Llens1, 1.0, .01)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    #lattice.add_Bender_Ideal_Segmented(None, .02, 1, .01,1, .005, .001)
-    #lattice.add_Bender_Ideal_Segmented_With_Cap(98, .02, 1e-1, 1, .01, 1.0, .005, .001)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender1Frige, Lm, None, rb, extraSpace,yokeWidth)
-    #lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    #lattice.add_Bender_Ideal(None,1.0,1.1,.01)
     lattice.end_Lattice()
-    #lattice.show_Lattice()
-    print('here')
+    '''
 
 
-    #particleTracer=ParticleTracer(lattice)
-    #q0=np.asarray([-1e-9,0e-3,0e-3])
-    #v0=np.asarray([-200.0,0,0])
-    #dt=10e-6
-    #
-    #t=time.time()
-    #qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,50/200.0)
-    #print(time.time()-t)
-    #plt.plot(qoArr[:,0],1e3*qoArr[:,1])
-    #plt.show()
+    particleTracer=ParticleTracer(lattice)
+    q0=np.asarray([-1e-9,0e-3,0e-3])
+    v0=np.asarray([-200.0,0,0])
+    dt=10e-6
+
+    qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,50/200.0)
+    print(particleOutside)
+
+    plt.plot(particleTracer.test)
+    #plt.plot(qoArr[:,1])
+    plt.show()
     #lattice.show_Lattice(particleCoords=qArr[-1])
 
+    '''
     def func(X,parallel=False):
         F1, F2 = X
         lattice.elList[2].forceFact = F1
         lattice.elList[4].forceFact = F2
-
+        
         h = 10e-6
         Lt = 250 * lattice.totalLength
         qMax=1e-3
@@ -815,5 +824,6 @@ def main():
     print(survivalArr)
     print(np.max(survivalArr))
     print(XArr[np.argmax(survivalArr)][0],XArr[np.argmax(survivalArr)][0])
+    '''
 if __name__=='__main__':
     main()

@@ -184,7 +184,7 @@ class ParticleTracer:
             F=self.ForceLast
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
-        self.test.append(npl.norm(F))
+        self.test.append(F[1])
 
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
