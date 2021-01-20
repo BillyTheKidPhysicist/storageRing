@@ -6,48 +6,71 @@ import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
 
+#Notes:
+#--begining and ending of elements refer to the geometric sense in the lattice. For example, the beginning of the lens
+#is the part encountered going clockwise, and the end is the part exited going clockwise for a particle being traced
+
 class Element:
     def __init__(self):
         self.theta=None #angle that describes an element's rotation in the xy plane.
-        #-straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
+        #SEE EACH ELEMENT FOR MORE DETAILS
+        #-Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
         #east. for theta=90 the output is pointing up.
-        #-bending elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
-        # at some angle counterclockwise. a 180 degree bender would have the inlet at (-bending radius,0) pointing south
-        #-bending elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
+        #-Bending (unsegmented) elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
+        # at some angle counterclockwise. a 180 degree bender would have the inlet at (-bending radius,0) pointing south.
+        # force is a continuous function of r and theta, ie a revolved cross section of a hexapole
+        #-Bending (unsegmented) elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
         #y=0
-        self.nb=None #normal vector to beginning of element
-        self.ne=None #normal vector to end of element
+        #-Segmented bending elements (with and without caps): very similiar to ideal bender, but force is not a continuous
+        #function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
+        #full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
+        #save memory. Half the time the symetry is exploited by using a simple rotation, the other half of the time the
+        #symmetry requires a reflection, then rotation.
+        # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
+        # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
+        # angle is decided by tracing particles through the combiner and finding the bending angle.
+
+        #- simulated models: There are simulated versions of the above elements that are for the most part the same except
+        #the force function, which calls to a method I got from stack exchange, which is a cython 3d version of scipy's
+        #linear nd interpolater. This method gives the same results (except at the edges, where the logic fails, but scipy
+        #seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
+
+
+        self.nb=None #normal vector to beginning (clockwise sense) of element.
+        self.ne=None #normal vector to end (clockwise sense) of element
         self.r0=None #coordinates of center of bender, minus any caps
         self.ROut=None #2d matrix to rotate a vector out of the element's reference frame
-        self.Rin = None #2d matrix to rotate a vector into the element's reference frame
-        self.r1=None
-        self.r2=None
-        self.SO = None
-        self.ROut=None
-        self.RIn = None
-        self.ang=None
+        self.RIn = None #2d matrix to rotate a vector into the element's reference frame
+        self.r1=None #3D coordinates of beginning (clockwise sense) of element
+        self.r2=None #3D coordinates of ending (clockwise sense) of element
+        self.SO = None #the shapely object for the element. These are used for plotting, and for finding if the coordinates
+        #are inside an element that can't be found with simple geometry
+        self.ang=0 #bending angle of the element. 0 for lenses and drifts
         self.Lm=None #hard edge length of magnet along line through the bore
         self.L=None #length of magnet along line through the bore
-        self.K=None
-        self.rOffset=None
-        self.Lo=None
-        self.ro=None
+        self.K=None #'spring constant' of element. For some this comes from comsol fields.
+        self.rOffset=None #the offset to the bending radius because of centrifugal force. There are two versions, one that
+        #accounts for reduced speed from energy conservation for actual fields, and one that doesn't
+        self.Lo=None #length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
+        #value because for segmented benders the path length is not simple to compute
+        self.ro=None #bending radius of orbit, ie rb + rOffset.
         self.index=None #elements position in lattice
-        self.cap=None
+        self.cap=False #wether there is a cap or not present on the element. Cap simulates fringe fields
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
+        self.apz=None #apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
-
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
         qo = self.transform_Element_Coords_Into_Orbit_Frame(q) #then element frame into orbit frame
         qo[0] = qo[0] +cumulativeLength #orbit frame is in the element's frame, so the preceding length needs to be
         #accounted for
         return qo
-
-    def transform_Lab_Coords_Into_Element_Frame(self, q):
+    def transform_Lab_Coords_Into_Element_Frame(self,q):
+        #this is overwridden by all other elements
         pass
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
-        return q.copy()
+        #for straight elements element and orbit frame are identical
+        return q
     def transform_Lab_Frame_Vector_Into_Element_Frame(self,vec):
         vecNew=vec.copy()
         vecx=vecNew[0];vecy=vecNew[1]
@@ -62,6 +85,10 @@ class Element:
         vecNew[0] = vecx * self.ROut[0, 0] + vecy * self.ROut[0, 1]
         vecNew[1] = vecx * self.ROut[1, 0] + vecy * self.ROut[1, 1]
         return vecNew
+    def set_Length(self,L):
+        #this is used typically for setting constraints.
+        self.L=L
+        self.Lo=L
 
 class Lens_Ideal(Element):
     def __init__(self,PTL,L,Bp,rp,ap,fillParams=True):
@@ -72,7 +99,6 @@ class Lens_Ideal(Element):
         self.L = L
         self.ap = ap
         self.type='STRAIGHT'
-        self.ang=0
         if fillParams==True:
             self.fill_Params()
     def fill_Params(self):
@@ -193,6 +219,7 @@ class Combiner_Ideal(Element):
             self.fill_Params()
     def fill_Params(self):
         inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(self.Lm)
+        self.apz = self.ap / 2
         self.ang = inputAngle
         self.inputOffset = inputOffset
         self.La = self.ap * np.sin(self.ang)
@@ -246,8 +273,6 @@ class Combiner_Ideal(Element):
         #q: particle's position in element frame
         F = np.zeros(3)  # force vector starts out as zero
         if q[0] < self.Lb:
-
-
             B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
             F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
             F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
@@ -288,6 +313,8 @@ class CombinerSim(Combiner_Ideal):
         numy = yArr.shape[0]
         numz = zArr.shape[0]
         self.ap = (yArr.max() - yArr.min() - 2 * self.comsolExtraSpace) / 2.0
+        self.apz = (zArr.max() - zArr.min() - 2 * self.comsolExtraSpace) / 2.0
+
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
@@ -319,6 +346,7 @@ class CombinerSim(Combiner_Ideal):
         F[1] = self.FyFunc(*q)
         F[2] = self.FzFunc(*q)
         return F
+
 class BenderIdealSegmented(Bender_Ideal):
     def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
         super().__init__(PTL,None,Bp,rp,rb,ap,fillParams=False)
@@ -332,6 +360,8 @@ class BenderIdealSegmented(Bender_Ideal):
         self.ap = ap
         self.RIn_Ang = None
         self.Lseg=None
+        self.M_uc=None #matrix for reflection used in exploting segmented symmetry. This is 'inside' a single magnet element
+        self.M_ang=None #matrix for reflection used in exploting segmented symmetry. This is reflecting out from the unit cell
         if fillParams==True:
             self.fill_Params()
 
@@ -343,6 +373,8 @@ class BenderIdealSegmented(Bender_Ideal):
             self.ang = 2 * self.ucAng * self.numMagnets
             self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
             self.Lo = self.ro * self.ang
+            m = np.tan(self.ucAng)
+            self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
@@ -384,12 +416,10 @@ class BenderIdealSegmented(Bender_Ideal):
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
             rotAngle = 2 * (cellNum // 2) * self.ucAng
         else: #otherwise it needs to be reflected. This is the algorithm for reflections
-            m = np.tan(self.ucAng)
-            M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
             Fx = FNew[0]
             Fy = FNew[1]
-            FNew[0] = M[0, 0] * Fx + M[0, 1] * Fy
-            FNew[1] = M[1, 0] * Fx + M[1, 1] * Fy
+            FNew[0] = self.M_uc[0, 0] * Fx + self.M_uc[0, 1] * Fy
+            FNew[1] = self.M_uc[1, 0] * Fx + self.M_uc[1, 1] * Fy
             rotAngle = 2 * ((cellNum - 1) // 2) * self.ucAng
         Fx = FNew[0]
         Fy = FNew[1]
@@ -412,7 +442,6 @@ class BenderIdealSegmented(Bender_Ideal):
         r=np.sqrt(q[0]**2+q[1]**2)
         qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
         qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
-        #print(revs)
 
         return qNew
 
@@ -505,8 +534,8 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
             phi+=2*np.pi
         if phi<self.ang:
             r = np.sqrt(q[0] ** 2 + q[1] ** 2)
-            if r < self.rb - self.ap or r > self.rb + self.ap:
-                return False
+            if self.rb+self.ap>r>self.rb-self.ap:
+                return True
         if phi>self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
                 #the eastward side
@@ -551,8 +580,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fill_Params()
     def fill_Params(self):
         self.Lseg=self.Lm+self.space*2
-
-
         if self.dataSeg is None:
             self.fill_Force_Func_Seg()
             self.rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
@@ -561,7 +588,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             elif self.ap>self.rp:
                 raise Exception('APETURE IS LARGER THAN BORE')
             self.K = self.compute_K()
-            rOffsetFact=1.0 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
+            rOffsetFact=1.00125 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
             self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
             # acounts for reduced energy
         if self.dataCap is None:
@@ -578,6 +605,10 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.L=self.ang*self.rb
             self.Lo=self.ang*self.ro+2*self.Lcap
             self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
+            m = np.tan(self.ucAng)
+            self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2) #reflection matrix
+            m = np.tan(self.ang / 2)
+            self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2) #reflection matrix
     def fill_Force_Func_Cap(self):
         self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
         xArr = np.unique(self.dataCap[:, 0])
@@ -640,9 +671,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
         #xPlot=np.linspace(0,.029)
-        #print(xArr.min(),xArr.max())
-        #print(yArr.min(), yArr.max())
-        #print(zArr.min(), zArr.max())
         #temp=[]
         #for x in xPlot:
         #   temp.append(self.FzFunc_Internal_Fringe(1e-3,x,1e-3))
@@ -701,7 +729,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             phi+=2*np.pi
         if phi<self.ang: #if particle is inside bending angle region
             revs = int((self.ang-phi) // self.ucAng)  # number of revolutions through unit cell
-            print(revs)
             if revs == 0 or revs == 1:
                 position='FIRST'
             elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
@@ -738,12 +765,10 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 F[0]=self.FxFunc_Cap(x,y,z)
                 F[1]=self.FyFunc_Cap(x,y,z)
                 F[2]=self.FzFunc_Cap(x,y,z)
-                m = np.tan(self.ang/2)
-                M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
                 Fx = F[0]
                 Fy = F[1]
-                F[0] = M[0, 0] * Fx + M[0, 1] * Fy
-                F[1] = M[1, 0] * Fx + M[1, 1] * Fy
+                F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
+                F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
                 qTest[0]+=-self.rb
 
         return F
@@ -751,13 +776,10 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         F = np.zeros(3)
         qNew=q.copy()
         if position=='FIRST':
-            m = np.tan(self.ang / 2)
-            M = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
-
             qx = qNew[0]
             qy = qNew[1]
-            qNew[0] = M[0, 0] * qx + M[0, 1] * qy
-            qNew[1] = M[1, 0] * qx + M[1, 1] * qy
+            qNew[0] = self.M_ang[0, 0] * qx + self.M_ang[0, 1] * qy
+            qNew[1] = self.M_ang[1, 0] * qx + self.M_ang[1, 1] * qy
 
             qNew[0]=qNew[0]-self.rb
 
@@ -767,10 +789,9 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
             Fx = F[0]
             Fy = F[1]
-            F[0] = M[0, 0] * Fx + M[0, 1] * Fy
-            F[1] = M[1, 0] * Fx + M[1, 1] * Fy
+            F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
+            F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
         if position=='LAST':
-            print('here',q)
             qNew[0]=qNew[0]-self.rb
             F[0] = self.FxFunc_Internal_Fringe(*qNew)
             F[1] = self.FyFunc_Internal_Fringe(*qNew)

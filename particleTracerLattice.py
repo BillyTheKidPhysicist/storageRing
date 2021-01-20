@@ -9,6 +9,7 @@ from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmente
     ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
+from profilehooks import profile
 from numba import njit
 
 
@@ -76,74 +77,6 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Sim_Transverse(self,file,L):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        # file: string filename of file containing field data. rows contains points and values
-        # L: Hard edge length of segment magnet in a segment
-        # rp: bore radius of segment magnet
-        args=[file,L]
-        el=Element(args,"LENS_SIM_TRANSVERSE",self)
-        self.elList.append(el)
-    def add_Lens_Sim_With_Fringe_Fields(self,fileTransverse,fileFringe,L,apFrac=.9):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #fileTransverse: File containing transverse data for the lens
-        #fileFringe: File containing grid data to model fringe fields
-        # L: Hard edge length of segment magnet in a segment
-        # rp: bore radius of segment magnet
-        #ap: apeture of bore, typically the vacuum tube, fraction of rp
-        #edgeFact: the length of the fringe field simulating cap as a multiple of the boreradius
-        # if L/(2*edgeFact*rp)<1:
-        #     raise Exception('LENS IS TOO SHORT')
-        # apFrac = .9  # apeture fraction
-        # if ap is None:  # set the apeture as fraction of bore radius to account for tube thickness
-        #     ap = apFrac * rp
-        # else:
-        #     if ap > rp:
-        #         raise Exception('Apeture cant be bigger than bore radius')
-        # LInnerLens=L-2*edgeFact*rp #length of inner segment is smaller than total lenght because of fringe field ends
-
-        cap1Args=[fileFringe,apFrac,'INLET']
-        cap2Args = [fileFringe,  apFrac, 'OUTLET']
-        cap1 = Element(cap1Args, 'LENS_SIM_CAP', self)
-        cap2 = Element(cap2Args, 'LENS_SIM_CAP', self)
-        if cap1.L!=cap2.L:
-            raise Exception('LENGTH OF CAPS MUST BE THE SAME')
-        edgeFact=cap1.edgeFact
-        argsTrans=[fileTransverse,L,apFrac,edgeFact]
-        lens = Element(argsTrans, "LENS_SIM_TRANSVERSE", self)
-        if lens.rp!=cap1.rp or lens.rp!=cap1.rp:
-            raise Exception('BORE RADII OF CAPS AND INNER SEGMENTS MUST BE EQUAL')
-        if L is not None:
-            Linterior = L - 2 * cap1.L
-            if Linterior<lens.rp: #inner region must be at least one bore radius long
-                raise Exception('DESIRED LENS LENGTH IS NOT ACCURATELY MODELED, OR INNNER REGION LENGTH IS NEGATIVE'
-                                '. INNER REGION MUST BE LONGER')
-            lens.L=Linterior
-        self.elList.extend([cap1, lens, cap2])
-
-
-    def add_Bender_Sim_Segmented(self,file,L,rp,rb,extraspace,yokeWidth,numMagnets,ap=None):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #file: string filename of file containing field data. MUST BE DATA ON A GRID. Data is organized linearly though.
-        #data must be exported exactly like it is in comsol or it will break. Field data is for 1 unit cell
-        #L: Hard edge length of segment magnet in a segment
-        #rp: bore radius of segment magnet
-        #rb: bending radius
-        #extraSpace: extra space added to each end of segment. Space between two segment will be twice this value
-        #yokeWidth: width of magnets comprising the yoke. Basically, the height of each magnet in each layer
-        #numMagnets: number of magnet
-        #ap: apeture of vacuum. Default is .9*rp
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-        args=[file,L,rp,rb,extraspace,yokeWidth,numMagnets,ap]
-        el=Element(args,'BENDER_SIM_SEGMENTED',self)
-        el.index = len(self.elList)  # where the element is in the lattice
-        self.elList.append(el)
-        self.benderIndices.append(el.index)
     def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,ap=None):
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
@@ -267,10 +200,10 @@ class ParticleTracerLattice:
             lens1Index=4
             #Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
             #L=L3-Lfringe
+
             L=L3-self.bender1.Lcap*2
             self.elList[lens1Index].set_Length(L)
 
-            self.elList[lens1Index].L =L3-self.bender1.Lcap*2
             self.bender1.fill_Params()
             self.bender2.fill_Params()
             self.elList[lens1Index].fill_Params()
@@ -381,12 +314,13 @@ class ParticleTracerLattice:
         #print(sol.x[0],sol.x[1])
         #print(sol.x[0],sol.x[1])
         #roffset 0.0033327012609907503 0.0033327012609907503
-        x=[0.9828434417578437,0.9720987498361284]
+
+        x=[0.9845681497497591,0.988114259813233 ]
         params = cost(x, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         #print(params)
-        #print(params[0],params[1],params)
+        #print(params[0],params[1],params,cost(x))
         #sys.exit()
         #print(cost(x))
         #sys.exit()
@@ -638,15 +572,16 @@ class ParticleTracerLattice:
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
         #print(deltax,deltay)
-        closed=None #wether the lattice end meets beginning
         if deltax > smallNum or deltay > smallNum:
             closed=False
         else:
             closed=True
         if enforceClosedLattice==True and closed==False:
+            print(deltax, deltay)
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-        else:
+        elif enforceClosedLattice==False and closed==False:
             import warnings
+            print(deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
     def compute_Input_Angle_And_Offset(self,el,h=1e-6):
         #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
@@ -689,48 +624,90 @@ class ParticleTracerLattice:
         plt.grid()
         plt.gca().set_aspect('equal')
         plt.show()
-    def measure_Phase_Space_Survival(self,qMax,vtMax,vlMax,Lt,h=1e-5,num=2,parallel=False):
+    def measure_Phase_Space_Survival(self,qMax,vtMax,vlMax,Lt,h=1e-5,parallel=False):
         #this method populates and tests initial conditions in 5 deg phase space, there is always one particle at the origin
         #qMax: maximum distance in position phase space
         #vMax: maximum distance in velocity phase space
         #vlMax: maximum distance in velocity space along the longitudinal direction
         #num: number of point along each dimension in phase space. must be even so point doesn't end up at origin
-        if num<=0:
-            raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
-        qArr=np.linspace(-qMax,qMax,num=num)
-        vtArr=np.linspace(-vtMax,vtMax,num=num)
+        #todo: reuse argslist!!!
+        #if num<=0:
+        #    raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
+        qArr=np.linspace(-qMax,qMax,num=3)
+        vtArr=np.linspace(-vtMax,vtMax,num=3)
         #vlArr=np.linspace(-vlMax,vlMax,num=num)
-        temp = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr)).T.reshape(-1, 4)
+        tempArr = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr)).T.reshape(-1, 4) #qx,qy,vx,vy
         argList = []
-        for arg in temp:
-            qi = np.asarray([0, arg[0], arg[1]])
-            pi = np.asarray([-200, arg[2], arg[3]]) * self.m
-            argList.append((qi, pi, h, Lt / 200, True))
+        for arg in tempArr:
+            if arg[1]>0: #if the particle is in the upper half
+                qi = np.asarray([-1e-10, arg[0], arg[1]])
+                pi = np.asarray([-200, arg[2], arg[3]]) * self.m
+                argList.append((qi, pi, h, Lt / 200, True)) #position, velocity, timestep,total time, fastmode
         survivalArr = np.zeros(len(argList))
-        particleTracer = ParticleTracer(self)
+
         if parallel==True:
+            t = time.time()
+            particleTracer=ParticleTracer(self)
             results=particleTracer.multi_Trace(argList)
             for i in range(survivalArr.shape[0]):
-                survivalArr[i]=results[i][0]/Lt
+                survivalArr[i]=results[i][0]/self.totalLength
         else:
             i=0
             for arg in argList:
                 qi=arg[0]
                 pi=arg[1]
+                particleTracer = ParticleTracer(self)
                 Lo,temp=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
-                particleTracer.reset()
                 survivalArr[i]=(Lo/self.totalLength)
                 i+=1
         return survivalArr
-    def initialize_Phase_Space(self):
+    def inject_Into_Combiner(self,args,qi,pi,h=1e-6):
+        #this models the phenomena of the particles originating at the focus of the big lens and traveling through
+        #a injecting lens, then through the combiner. This is done in two steps. This is all done in the lab frame
         pass
+    def trace_Through_Injector(self,argList,Lo,Li,Bp=.25,rp=.03):
+        #models particles traveling through an injecting element
+        #for now a thin lens
+        #qi: intial particle coords
+        #vi: initial velocity coords
+        #Lo: object distance for injector
+        #f: focal length
+        K=2*self.u0*Bp/(rp**2*self.m*self.v0Nominal**2)
+
+        #now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix
+        CFunc= lambda x : np.cos(np.sqrt(K)*x)
+        SFunc = lambda x: np.sin(np.sqrt(K)*x)/np.sqrt(K)
+        CdFunc= lambda x: -np.sqrt(K)*np.sin(np.sqrt(K)*x)
+        SdFunc=lambda x :np.cos(np.sqrt(K)*x)
+        LiFunc= lambda x: -(CFunc(x)*Lo+SFunc(x))/(CdFunc(x)+SdFunc(x))
+        minFunc=lambda x: (LiFunc(x)-Li)**2
+        sol=spo.minimize_scalar(minFunc,method='bounded',bounds=(1e-3,.25))
+        Lm=sol.x
+
+        MLens=np.asarray([[CFunc(Lm),SFunc(Lm)],[CdFunc(Lm),SdFunc(Lm)]])
+        MLo=np.asarray([[1,Lo],[1,0]])
+        MLi=np.asarray([[1,Li],[1,0]])
+        MTot=MLi@MLens@MLo
+        for arg in argList:
+            q=arg[0]
+            p=arg[1]
+            qNew=q.copy()
+            pNew=p.copy()
+            qNew[0]=MTot[0,0]*q[0]+MTot[0,1]*p[0]
+            pNew[0]=MTot[1,0]*q[0]+MTot[1,1]*p[0]
+
+            pNew[1] = MTot[0, 0] * q[1] + MTot[0, 1] * p[1]
+            qNew[1] = MTot[1, 0] * q[1] + MTot[1, 1] * p[1]
+
 
 def main():
     lattice = ParticleTracerLattice(200.0)
     fileBend1='benderSeg1.txt'
     fileBend2 = 'benderSeg2.txt'
-    fileBender1Frige='benderFringeCap.txt'
-    fileBenderInternalFringe='benderFringeInternal.txt'
+    fileBender1Fringe='benderFringeCap1.txt'
+    fileBenderInternalFringe1='benderFringeInternal1.txt'
+    fileBender2Fringe='benderFringeCap2.txt'
+    fileBenderInternalFringe2='benderFringeInternal2.txt'
     file2DLens='lens2D.txt'
     file3DLens='lens3D.txt'
     fileCombiner='combinerData.txt'
@@ -740,41 +717,52 @@ def main():
     Lm=.0254
     rp=.0125
     Llens1=.3
+    rb=1.0
 
-    #lattice.add_Lens_Ideal(.5,1.0,.01)
-    #lattice.add_Lens_Ideal(.1,1.0,.01)
 
-    lattice.add_Drift(.1)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Frige,fileBenderInternalFringe, Lm, 10, 0.9828434417578436, extraSpace, yokeWidth)
-    lattice.add_Drift(.1)
-    lattice.end_Lattice(enforceClosedLattice=False)
-    #lattice.show_Lattice()
 
-    '''
+
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
     lattice.add_Combiner_Sim(fileCombiner)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Frige,Lm,None,rb,extraSpace,yokeWidth)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Fringe,fileBenderInternalFringe1,Lm,None,rb,extraSpace,yokeWidth)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender1Frige, Lm, None, rb, extraSpace,yokeWidth)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2,fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb, extraSpace,yokeWidth)
     lattice.end_Lattice()
-    '''
+    #lattice.show_Lattice()
 
-
-    particleTracer=ParticleTracer(lattice)
-    q0=np.asarray([-1e-9,0e-3,0e-3])
+    q0=np.asarray([-1e-10,0,0])
     v0=np.asarray([-200.0,0,0])
-    dt=10e-6
+    h=10e-6
+    Lt=100
+    particleTracer = ParticleTracer(lattice)
 
-    qArr,pArr,qoArr,poArr,particleOutside=particleTracer.trace(q0,v0,dt,50/200.0)
-    print(particleOutside)
+    #q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
+    #print(qo[-1]) #[ 3.19866564e+01  0.00000000e+00 -1.64801837e-04]
+    #sys.exit()
 
-    plt.plot(particleTracer.test)
-    #plt.plot(qoArr[:,1])
-    plt.show()
-    #lattice.show_Lattice(particleCoords=qArr[-1])
 
-    '''
+
+    @profile
+    def run():
+        for i in range(5):
+            q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
+    run()
+    sys.exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def func(X,parallel=False):
         F1, F2 = X
         lattice.elList[2].forceFact = F1
@@ -785,11 +773,16 @@ def main():
         qMax=1e-3
         vtMax=1
         vlMax=None
-        # q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, dt, Lt / 200)
-        # survival = qo[-1, 0] / lattice.totalLength
-        survivalArr=lattice.measure_Phase_Space_Survival(qMax,vtMax,vlMax,Lt,h=h,parallel=parallel)
-        survival=np.mean(survivalArr)
+
+        #q0=np.asarray([-1e-10,0,0])
+        #v0=np.asarray([-200.0,0,0])
+        #particleTracer=ParticleTracer(lattice)
+        #q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
+        #survival = qo[-1, 0] / lattice.totalLength
+        tempArr=lattice.measure_Phase_Space_Survival(qMax,vtMax,vlMax,Lt,h=h,parallel=parallel)
+        survival=np.mean(tempArr)
         return survival, X
+
 
     #print('starting')
     #X=[0.19183673,0.44897959]
@@ -797,13 +790,13 @@ def main():
 
 
 
-    num = 50
+    num = 5
     F1Arr = np.linspace(.1, 1, num=num)
     F2Arr = np.linspace(.1, 1, num=num)
     argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
-    # argsArr=F1Arr[:,None]
 
-    pool = pa.pools.ProcessPool(nodes=1)#pa.helpers.cpu_count())  # pool object to distribute work load
+
+    pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count())  # pool object to distribute work load
     jobs = []  # list of jobs. jobs are distributed across processors
     results = []  # list to hold results of particle tracing.
     print('starting')
@@ -824,6 +817,6 @@ def main():
     print(survivalArr)
     print(np.max(survivalArr))
     print(XArr[np.argmax(survivalArr)][0],XArr[np.argmax(survivalArr)][0])
-    '''
+
 if __name__=='__main__':
     main()

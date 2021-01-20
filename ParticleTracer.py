@@ -184,7 +184,7 @@ class ParticleTracer:
             F=self.ForceLast
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
-        self.test.append(F[1])
+        self.test.append(npl.norm(F))
 
         a = F / self.m  # acceleration old or acceleration sub n
         q_n=q+(p/self.m)*self.h+.5*a*self.h**2 #q new or q sub n+1
@@ -261,6 +261,7 @@ class ParticleTracer:
                 return self.currentEl
         else: #if not defintely inside current element, search everywhere and more carefully (and slowly) with shapely
             el = self.which_Element_Slow(q)
+
             if el is None: #if there is no element, then there are also no corresponding coordinates
                 qel=None
             else:
@@ -354,4 +355,5 @@ class ParticleTracer:
             jobs.append(pool.apipe(wrap, arg)) #create job for each argument in arglist, ie for each particle
         for job in jobs:
             resultsList.append(job.get()) #get the results. wait for the result in order given
+        pool.clear()
         return resultsList
