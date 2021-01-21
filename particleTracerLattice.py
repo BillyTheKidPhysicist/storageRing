@@ -5,13 +5,12 @@ import pathos as pa
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
-from elementPT import Lens_Ideal,Bender_Ideal,Combiner_Ideal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
+from elementPT import Lens_Ideal,Bender_Ideal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
 from profilehooks import profile
-from numba import njit
-
+import copy
 
 
 class ParticleTracerLattice:
@@ -151,7 +150,7 @@ class ParticleTracerLattice:
         #if La<minLa:
         #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el=Combiner_Ideal(self,Lm,c1,c2,ap) #create a combiner element object
+        el=CombinerIdeal(self, Lm, c1, c2, ap) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner = el
         self.combinerIndex=el.index
@@ -635,32 +634,33 @@ class ParticleTracerLattice:
         #    raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
         qArr=np.linspace(-qMax,qMax,num=3)
         vtArr=np.linspace(-vtMax,vtMax,num=3)
-        #vlArr=np.linspace(-vlMax,vlMax,num=num)
-        tempArr = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr)).T.reshape(-1, 4) #qx,qy,vx,vy
+        vlArr=np.linspace(-vlMax,vlMax,num=3)
+        tempArr = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr,vlArr)).T.reshape(-1, 5) #qx,qy,vx,vy
         argList = []
         for arg in tempArr:
             if arg[1]>0: #if the particle is in the upper half
                 qi = np.asarray([-1e-10, arg[0], arg[1]])
-                pi = np.asarray([-200, arg[2], arg[3]]) * self.m
+                pi = np.asarray([-200+arg[4], arg[2], arg[3]]) * self.m
                 argList.append((qi, pi, h, Lt / 200, True)) #position, velocity, timestep,total time, fastmode
-        survivalArr = np.zeros(len(argList))
-
+        elIndexArr=np.zeros(len(argList),dtype=int) #array of element indices where the particle was last
+        survivalArr=np.zeros(len(argList))
         if parallel==True:
-            t = time.time()
             particleTracer=ParticleTracer(self)
             results=particleTracer.multi_Trace(argList)
             for i in range(survivalArr.shape[0]):
                 survivalArr[i]=results[i][0]/self.totalLength
+                elIndexArr[i]=results[i][2]
         else:
             i=0
             for arg in argList:
                 qi=arg[0]
                 pi=arg[1]
                 particleTracer = ParticleTracer(self)
-                Lo,temp=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
+                Lo,temp,currentElIndex=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
                 survivalArr[i]=(Lo/self.totalLength)
+                elIndexArr[i]=currentElIndex
                 i+=1
-        return survivalArr
+        return survivalArr,elIndexArr
     def inject_Into_Combiner(self,args,qi,pi,h=1e-6):
         #this models the phenomena of the particles originating at the focus of the big lens and traveling through
         #a injecting lens, then through the combiner. This is done in two steps. This is all done in the lab frame
@@ -731,71 +731,59 @@ def main():
     lattice.end_Lattice()
     #lattice.show_Lattice()
 
-    q0=np.asarray([-1e-10,0,0])
+
+    lattice.elList[2].forceFact = .175
+    lattice.elList[4].forceFact = .175
+
+    q0=np.asarray([-1e-10,0.0,0.0])
     v0=np.asarray([-200.0,0,0])
     h=10e-6
     Lt=100
     particleTracer = ParticleTracer(lattice)
-
     #q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
     #print(qo[-1]) #[ 3.19866564e+01  0.00000000e+00 -1.64801837e-04]
-    #sys.exit()
-
-
-
-    @profile
-    def run():
-        for i in range(5):
-            q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
-    run()
-    sys.exit()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def func(X,parallel=False):
+    #plt.plot(qo[:,1])
+    #plt.show()
+    @profile()
+    def func(arg, parallel=True):
+        X, newLattice = arg
         F1, F2 = X
-        lattice.elList[2].forceFact = F1
-        lattice.elList[4].forceFact = F2
-        
+        newLattice.elList[2].forceFact = F1
+        newLattice.elList[4].forceFact = F2
+
         h = 10e-6
-        Lt = 250 * lattice.totalLength
-        qMax=1e-3
-        vtMax=1
-        vlMax=None
+        Lt = 100 * lattice.totalLength
+        qMax = 1e-3
+        vtMax = 1.0
+        vlMax = 1.0
 
-        #q0=np.asarray([-1e-10,0,0])
-        #v0=np.asarray([-200.0,0,0])
-        #particleTracer=ParticleTracer(lattice)
-        #q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
-        #survival = qo[-1, 0] / lattice.totalLength
-        tempArr=lattice.measure_Phase_Space_Survival(qMax,vtMax,vlMax,Lt,h=h,parallel=parallel)
-        survival=np.mean(tempArr)
-        return survival, X
+        q0=np.asarray([-1e-10,0,0])
+        v0=np.asarray([-200.0,0,0])
+        particleTracer=ParticleTracer(lattice)
+        for i in range(5):
+            particleTracer.trace(q0, v0, h, Lt / 200,fastMode=True)
+        survival = 0#qo[-1, 0] / lattice.totalLength
+        #temp1Arr,temp2Arr = newLattice.measure_Phase_Space_Survival(qMax, vtMax, vlMax, Lt, h=h, parallel=parallel)
+        #survival = np.mean(temp1Arr)
+        return survival#,np.bincount(temp2Arr), X
+    print(func([[.1666,.16666],lattice]))
+    sys.exit()
+    # print('starting')
+    # X=[0.19183673,0.44897959]
+    # func(X,parallel=False)
 
-
-    #print('starting')
-    #X=[0.19183673,0.44897959]
-    #func(X,parallel=False)
-
-
-
-    num = 5
+    num = 4
     F1Arr = np.linspace(.1, 1, num=num)
     F2Arr = np.linspace(.1, 1, num=num)
     argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
+    survivalList = []
 
-
+    #t=time.time()
+    #argsList = []
+    #for arg in argsArr:
+    #    argsList.append([arg, copy.deepcopy(lattice)])
+    #print(time.time()-t)
+    #sys.exit()
     pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count())  # pool object to distribute work load
     jobs = []  # list of jobs. jobs are distributed across processors
     results = []  # list to hold results of particle tracing.
@@ -805,7 +793,7 @@ def main():
         jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
     for job in jobs:
         results.append(job.get())  # get the results. wait for the result in order given
-    print(time.time() - t)
+    print(time.time() - t)  # 795
 
     survivalList = []
     XList = []
@@ -814,9 +802,10 @@ def main():
         XList.append(result[1])
     survivalArr = np.asarray(survivalList)
     XArr = np.asarray(XList)
-    print(survivalArr)
-    print(np.max(survivalArr))
-    print(XArr[np.argmax(survivalArr)][0],XArr[np.argmax(survivalArr)][0])
+    # print(survivalArr)
+    print(np.max(survivalArr))  # 44.42
+    print(XArr[np.argmax(survivalArr)][0], XArr[np.argmax(survivalArr)][0])
+
 
 if __name__=='__main__':
     main()

@@ -2,40 +2,35 @@ import numpy as np
 from interp3d import interp_3d
 import scipy.interpolate as spi
 import pandas as pd
+import time
 import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
 
+#TODO: INCLUDE APETURE IN THE Z DIRECTION
+
 #Notes:
 #--begining and ending of elements refer to the geometric sense in the lattice. For example, the beginning of the lens
 #is the part encountered going clockwise, and the end is the part exited going clockwise for a particle being traced
-
+#--Simulated fields come from COMSOL, and the data must be exported exactly correclty or else the reshaping will not work
+#and it can be a huge pain in the but. I could have simply exported the data and used unstructured interpolation, but that
+# is very very slow to inialize and query. So data must be in grid format. I also do not use the scipy linearNDInterpolater
+#because it is not fast enough, and instead use a function I found in a stack exchange question. Someone made a github
+#repository for it. This method gives the same results (except at the edges, where the logic fails, but scipy
+#seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
 class Element:
     def __init__(self):
         self.theta=None #angle that describes an element's rotation in the xy plane.
         #SEE EACH ELEMENT FOR MORE DETAILS
         #-Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
         #east. for theta=90 the output is pointing up.
-        #-Bending (unsegmented) elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
+        #-Bending elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
         # at some angle counterclockwise. a 180 degree bender would have the inlet at (-bending radius,0) pointing south.
         # force is a continuous function of r and theta, ie a revolved cross section of a hexapole
-        #-Bending (unsegmented) elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
+        #-Bending  elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
         #y=0
-        #-Segmented bending elements (with and without caps): very similiar to ideal bender, but force is not a continuous
-        #function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
-        #full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
-        #save memory. Half the time the symetry is exploited by using a simple rotation, the other half of the time the
-        #symmetry requires a reflection, then rotation.
-        # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
-        # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
-        # angle is decided by tracing particles through the combiner and finding the bending angle.
-
-        #- simulated models: There are simulated versions of the above elements that are for the most part the same except
-        #the force function, which calls to a method I got from stack exchange, which is a cython 3d version of scipy's
-        #linear nd interpolater. This method gives the same results (except at the edges, where the logic fails, but scipy
-        #seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
-
-
+        #combiner: theta=0 has the outlet at the origin and pointing to the west, with the inlet some distance to the right
+        #and pointing in the NE direction
         self.nb=None #normal vector to beginning (clockwise sense) of element.
         self.ne=None #normal vector to end (clockwise sense) of element
         self.r0=None #coordinates of center of bender, minus any caps
@@ -58,6 +53,8 @@ class Element:
         self.cap=False #wether there is a cap or not present on the element. Cap simulates fringe fields
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
         self.apz=None #apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
+        self.type=None #gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
+        #constructed in particleTracerLattice
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -69,10 +66,12 @@ class Element:
         #this is overwridden by all other elements
         pass
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
-        #for straight elements element and orbit frame are identical
-        return q
+        #for straight elements (lens and drift), element and orbit frame are identical
+        #q: 3D coordinates in element frame
+        return q.copy()
     def transform_Lab_Frame_Vector_Into_Element_Frame(self,vec):
-        vecNew=vec.copy()
+        #vec: 3D vector in lab frame to rotate into element frame
+        vecNew=vec.copy() #copying prevents modifying the original value
         vecx=vecNew[0];vecy=vecNew[1]
         vecNew[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
         vecNew[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
@@ -86,19 +85,20 @@ class Element:
         vecNew[1] = vecx * self.ROut[1, 0] + vecy * self.ROut[1, 1]
         return vecNew
     def set_Length(self,L):
-        #this is used typically for setting constraints.
+        #this is used typically for setting the length after satisfying constraints
         self.L=L
         self.Lo=L
-
 class Lens_Ideal(Element):
+    #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
+    #F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
     def __init__(self,PTL,L,Bp,rp,ap,fillParams=True):
         super().__init__()
-        self.PTL=PTL
-        self.Bp = Bp
-        self.rp = rp
-        self.L = L
-        self.ap = ap
-        self.type='STRAIGHT'
+        self.PTL=PTL #particle tracing lattice object
+        self.Bp = Bp #field strength at pole face
+        self.rp = rp #bore radius
+        self.L = L #lenght of magnet
+        self.ap = ap #size of apeture radially
+        self.type='STRAIGHT' #The element's geometry
         if fillParams==True:
             self.fill_Params()
     def fill_Params(self):
@@ -203,7 +203,10 @@ class Bender_Ideal(Element):
             return False
         return True
 
-class Combiner_Ideal(Element):
+class CombinerIdeal(Element):
+    # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
+    # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
+    # angle is decided by tracing particles through the combiner and finding the bending angle.
     def __init__(self,PTL,Lm,c1,c2,ap,fillsParams=True):
         super().__init__()
         self.PTL=PTL
@@ -288,7 +291,7 @@ class Combiner_Ideal(Element):
             # TODO: ADD THIS LOGIc
             return None
 
-class CombinerSim(Combiner_Ideal):
+class CombinerSim(CombinerIdeal):
     def __init__(self,PTL,combinerFile):
         super().__init__(PTL,.18,None,None,None,fillsParams=False)
         self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields
@@ -340,6 +343,7 @@ class CombinerSim(Combiner_Ideal):
         self.La = self.space + np.tan(self.ang) * self.ap
         self.Lo = self.La + self.Lb
         self.L = self.Lo
+        self.data=False #to save memory and pickling time
     def force(self,q):
         F=np.zeros(3)
         F[0] = self.FxFunc(*q)
@@ -348,6 +352,11 @@ class CombinerSim(Combiner_Ideal):
         return F
 
 class BenderIdealSegmented(Bender_Ideal):
+    #-very similiar to ideal bender, but force is not a continuous
+    #function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
+    #full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
+    #save memory. Half the time the symetry is exploited by using a simple rotation, the other half of the time the
+    #symmetry requires a reflection, then rotation.
     def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
         super().__init__(PTL,None,Bp,rp,rb,ap,fillParams=False)
         self.numMagnets = numMagnets
@@ -590,12 +599,14 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.K = self.compute_K()
             rOffsetFact=1.00125 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
             self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
-            # acounts for reduced energy
+            self.dataSeg=False #to save memory and pickling time
         if self.dataCap is None:
             self.fill_Force_Func_Cap()
             self.Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
+            self.dataCap=False #to save memory and pickling time
         if self.dataInternalFringe is None:
             self.fill_Force_Func_Internal_Fringe()
+            self.dataInternalFringe=False #to save memory and pickling time
         if self.numMagnets is not None:
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
@@ -824,12 +835,14 @@ class LensSimWithCaps(Lens_Ideal):
             self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
             self.fill_Force_Func_Cap()
             self.Lcap = self.data3D[:,2].max() - self.data3D[:,2].min() - 2 * self.comsolExtraSpace
+            self.data3D=False
         if self.data2D is None:
             self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
             self.fill_Force_Func_2D()
             self.rp=(self.data2D[:,0].max()-self.data2D[:,0].min()-2*self.comsolExtraSpace)/2
             if self.ap is None:
                 self.ap=.9*self.rp
+            self.data2D=False
         if self.L is not None:
             self.set_Length(self.L)
 
@@ -871,11 +884,23 @@ class LensSimWithCaps(Lens_Ideal):
         #plt.show()
 #
     def fill_Force_Func_2D(self):
-        tempx = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 2] * self.PTL.u0)
-        tempy = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 3] * self.PTL.u0)
+        #tempx = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 2] * self.PTL.u0)
+        #tempy = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 3] * self.PTL.u0)
+        xArr=np.unique(self.data2D[:,0])
+        yArr = np.unique(self.data2D[:, 1])
+        tempx=spi.RectBivariateSpline(xArr,yArr,(-self.data2D[:, 2]* self.PTL.u0).reshape(50, 50,order='F'))
+        tempy = spi.RectBivariateSpline(xArr, yArr,(-self.data2D[:, 3]* self.PTL.u0).reshape(50, 50,order='F'))
+
         self.FxFunc_Inner = lambda x, y, z: 0.0
         self.FyFunc_Inner = lambda x, y, z: tempy(-z, y)
         self.FzFunc_Inner = lambda x, y, z: -tempx(-z, y)
+        #t=time.time()
+        #num=10000
+        #val=None
+        #for i in range(num):
+        #    val=self.FyFunc_Inner(1e-3,1e-3,0)
+        #print(1e6*(time.time()-t)/num,val) #47.28648662567139 -12492.37307561032
+        #sys.exit()
     def force(self,q):
         F=np.zeros(3)
         if q[0]<self.Lcap:

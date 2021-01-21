@@ -133,10 +133,9 @@ class ParticleTracer:
             pArr=np.asarray(self.pList)
             qoArr=np.asarray(self.qoList)
             poArr=np.asarray(self.poList)
-            return qArr,pArr,qoArr,poArr,self.particleOutside
+            return qArr,pArr,qoArr,poArr,self.particleOutside,self.currentEl.index
         else:
-
-            return self.cumulativeLength,self.particleOutside
+            return self.cumulativeLength,self.particleOutside,self.currentEl.index
 
     def handle_Element_Edge(self, el, q, p):
         # This method calculates the correct timestep to put the particle just on the other side of the end of the element
