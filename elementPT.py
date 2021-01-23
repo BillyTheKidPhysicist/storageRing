@@ -6,6 +6,8 @@ import time
 import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
+import numba
+from profilehooks import profile
 
 #TODO: INCLUDE APETURE IN THE Z DIRECTION
 
@@ -18,6 +20,9 @@ import matplotlib.pyplot as plt
 #because it is not fast enough, and instead use a function I found in a stack exchange question. Someone made a github
 #repository for it. This method gives the same results (except at the edges, where the logic fails, but scipy
 #seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
+#--There are at least 3 frames of reference. The first is the lab frame, the second is the element frame, and the third
+# which is only found in segmented bender, is the unit cell frame.
+
 class Element:
     def __init__(self):
         self.theta=None #angle that describes an element's rotation in the xy plane.
@@ -44,11 +49,8 @@ class Element:
         self.Lm=None #hard edge length of magnet along line through the bore
         self.L=None #length of magnet along line through the bore
         self.K=None #'spring constant' of element. For some this comes from comsol fields.
-        self.rOffset=None #the offset to the bending radius because of centrifugal force. There are two versions, one that
-        #accounts for reduced speed from energy conservation for actual fields, and one that doesn't
         self.Lo=None #length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
         #value because for segmented benders the path length is not simple to compute
-        self.ro=None #bending radius of orbit, ie rb + rOffset.
         self.index=None #elements position in lattice
         self.cap=False #wether there is a cap or not present on the element. Cap simulates fringe fields
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
@@ -76,6 +78,15 @@ class Element:
         vecNew[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
         vecNew[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
         return vecNew
+
+    # @staticmethod
+    # @numba.njit(numba.float64[:](numba.float64[:] ,numba.float64[: ,:]))
+    # def transform_Lab_Frame_Vector_Into_Element_Frame_NUMBA(vecNew ,RIn):
+    #    vec x =vecNew[0]
+    #    vec y =vecNew[1]
+    #    vecNew[0] = vecx * RIn[0, 0] + vecy * RIn[0, 1]
+    #    vecNew[1] = vecx * RIn[1, 0] + vecy * RIn[1, 1]
+    #    return vecNew
     def transform_Element_Frame_Vector_To_Lab_Frame(self, vec):
         # rotate vector out of element frame into lab frame
         #vec: vector in
@@ -88,10 +99,11 @@ class Element:
         #this is used typically for setting the length after satisfying constraints
         self.L=L
         self.Lo=L
-class Lens_Ideal(Element):
+class LensIdeal(Element):
     #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
     #F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
     def __init__(self,PTL,L,Bp,rp,ap,fillParams=True):
+        #fillParams is used to avoid filling the parameters in inherited classes
         super().__init__()
         self.PTL=PTL #particle tracing lattice object
         self.Bp = Bp #field strength at pole face
@@ -102,7 +114,7 @@ class Lens_Ideal(Element):
         if fillParams==True:
             self.fill_Params()
     def fill_Params(self):
-        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
+        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2) #'spring' constant
         if self.L is not None:
             self.Lo=self.L
     def transform_Lab_Coords_Into_Element_Frame(self, q):
@@ -117,7 +129,10 @@ class Lens_Ideal(Element):
         F[1] = -self.K * q[1]
         F[2] = -self.K * q[2]
         return F
-
+    def set_Length(self,L):
+        # this is used typically for setting the length after satisfying constraints
+        self.L=L
+        self.Lo = self.L
     def is_Coord_Inside(self, q):
         # check with fast geometric arguments if the particle is inside the element. This won't necesarily work for all
         # elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
@@ -132,31 +147,38 @@ class Lens_Ideal(Element):
         else:
             return True
 
-class Drift(Lens_Ideal):
+class Drift(LensIdeal):
     def __init__(self,PTL,L,ap):
         super().__init__(PTL,L,0,np.inf,ap)
     def force(self,q):
         return np.zeros(3)
 
-class Bender_Ideal(Element):
+class BenderIdeal(Element):
     def __init__(self,PTL,ang,Bp,rp,rb,ap,fillParams=True):
+        #this is the base model for the bending elements, of which there are several kinds. To maintain generality, there
+        #are numerous methods and variables that are not necesary here, but are used in other child classes. For example,
+        #this element has no caps, but a cap length of zero is still used.
         super().__init__()
-        self.PTL=PTL
-        self.ang=ang
-        self.Bp = Bp
-        self.rp = rp
-        self.ap = ap
-        self.rb=rb
+        self.PTL=PTL #particle tracer lattice object
+        self.ang=ang #total bending angle of bender
+        self.Bp = Bp #field strength at pole
+        self.rp = rp #bore radius of magnet
+        self.ap = ap #radial apeture size
+        self.rb=rb #bending radius of magnet. This is tricky because this is the bending radius down the center, but the
+        #actual trajectory of the particles is offset a little out from this
         self.type='BEND'
-        self.rOffsetFunc=None
-        self.segmented=False
-        self.capped=False
-        self.Lcap=0
+        self.rOffset=None #the offset to the bending radius because of centrifugal force. There are two versions, one that
+        #accounts for reduced speed from energy conservation for actual fields, and one that doesn't
+        self.ro=None #bending radius of orbit, ie rb + rOffset.
+        self.rOffsetFunc=None #a function that returns the value of the offset of the trajectory for a given bending radius
+        self.segmented=False #wether the element is made up of discrete segments, or is continuous
+        self.capped=False #wether the element has 'caps' on the inlet and outlet. This is used to model fringe fields
+        self.Lcap=0 #length of caps
 
         if fillParams==True:
             self.fill_Params()
     def fill_Params(self):
-        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)
+        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2) #'spring' constant
         self.rOffsetFunc=lambda rb: np.sqrt(rb ** 2 / 4 + self.PTL.m * self.PTL.v0Nominal ** 2 / self.K) -rb / 2
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro=self.rb+self.rOffset
@@ -172,6 +194,9 @@ class Bender_Ideal(Element):
         return qNew
 
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
+        #q: element coords
+        #returns a 3d vector in the orbit frame. First component is distance along trajectory, second is radial displacemnt
+        #from the nominal orbit computed with centrifugal force, and the third is the z axis displacemnt.
         qo = q.copy()
         phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
@@ -287,9 +312,17 @@ class CombinerIdeal(Element):
         elif q[0] < self.Lb and q[0] > 0:  # particle is in the straight section that passes through the combiner
             if np.abs(q[1]) < self.ap:
                 return True
+        elif q[0]<0:
+            return False
         else:  # particle is in the bent section leading into combiner
-            # TODO: ADD THIS LOGIc
-            return None
+            m=np.tan(self.ang)
+            Y1=m*q[0]+(self.ap-m*self.Lb)
+            Y2 =(-1/m)*q[0]+self.La*np.sin(self.ang)+(self.Lb+self.La*np.cos(self.ang))/m
+            Y3=m * q[0] + (-self.ap - m * self.Lb)
+            if q[1]<Y1 and q[1]<Y2 and q[1]>Y3:
+                return True
+            else:
+                return False
 
 class CombinerSim(CombinerIdeal):
     def __init__(self,PTL,combinerFile):
@@ -351,7 +384,7 @@ class CombinerSim(CombinerIdeal):
         F[2] = self.FzFunc(*q)
         return F
 
-class BenderIdealSegmented(Bender_Ideal):
+class BenderIdealSegmented(BenderIdeal):
     #-very similiar to ideal bender, but force is not a continuous
     #function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
     #full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
@@ -419,17 +452,29 @@ class BenderIdealSegmented(Bender_Ideal):
         # F: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
         FNew = F.copy()  # copy input vector to not modify the original
+        return self.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew,q,self.M_uc,self.ucAng)
+
+
+    @staticmethod
+    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:,:],numba.float64)) 
+    def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q,M_uc,ucAng):
+        # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
+        # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
+        # or leaving the element interface as mirror images of each other.
+        # F: Force to be rotated out of unit cell frame
+        # q: particle's position in the element frame where the force is acting
+
         phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
         # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
-        cellNum = int(phi // self.ucAng) + 1  # cell number that particle is in, starts at one
+        cellNum = int(phi // ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
-            rotAngle = 2 * (cellNum // 2) * self.ucAng
-        else: #otherwise it needs to be reflected. This is the algorithm for reflections
+            rotAngle = 2 * (cellNum // 2) * ucAng
+        else:  # otherwise it needs to be reflected. This is the algorithm for reflections
             Fx = FNew[0]
             Fy = FNew[1]
-            FNew[0] = self.M_uc[0, 0] * Fx + self.M_uc[0, 1] * Fy
-            FNew[1] = self.M_uc[1, 0] * Fx + self.M_uc[1, 1] * Fy
-            rotAngle = 2 * ((cellNum - 1) // 2) * self.ucAng
+            FNew[0] = M_uc[0, 0] * Fx + M_uc[0, 1] * Fy
+            FNew[1] = M_uc[1, 0] * Fx + M_uc[1, 1] * Fy
+            rotAngle = 2 * ((cellNum - 1) // 2) * ucAng
         Fx = FNew[0]
         Fy = FNew[1]
         FNew[0] = Fx * np.cos(rotAngle) - Fy * np.sin(rotAngle)
@@ -442,16 +487,20 @@ class BenderIdealSegmented(Bender_Ideal):
         # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
         # used for including unit cell fringe fields
         qNew=q.copy()
-        phi=self.ang-np.arctan2(q[1],q[0])
-        revs=int(phi//self.ucAng) #number of revolutions through unit cell
+        return self.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew,self.ang,self.ucAng)
+
+    @staticmethod
+    @numba.njit(numba.float64[:](numba.float64[:],numba.float64,numba.float64))
+    def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew,ang,ucAng):
+        phi=ang-np.arctan2(qNew[1],qNew[0])
+        revs=int(phi//ucAng) #number of revolutions through unit cell
         if revs%2==0: #if even
-            theta = phi - self.ucAng * revs
+            theta = phi - ucAng * revs
         else: #if odd
-            theta = self.ucAng-(phi - self.ucAng * revs)
-        r=np.sqrt(q[0]**2+q[1]**2)
+            theta = ucAng-(phi - ucAng * revs)
+        r=np.sqrt(qNew[0]**2+qNew[1]**2)
         qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
         qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
-
         return qNew
 
     def is_Coord_Inside(self, q):
@@ -536,23 +585,28 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         return F
 
     def is_Coord_Inside(self, q):
-        if np.abs(q[2]) > self.ap:  # if clipping in z direction
+        qNew = q.copy()
+        return self.is_Coord_Inside_NUMBA(qNew,self.RIn_Ang,self.ap,self.ang,self.rb,self.Lcap)
+
+    @staticmethod
+    @numba.njit(numba.boolean(numba.float64[:],numba.float64[:,:],numba.float64,numba.float64,numba.float64,numba.float64))
+    def is_Coord_Inside_NUMBA(qNew,RIn_Ang,ap,ang,rb,Lcap):
+        if np.abs(qNew[2]) > ap:  # if clipping in z direction
             return False
-        phi = np.arctan2(q[1], q[0])
+        phi = np.arctan2(qNew[1], qNew[0])
         if phi<0: #constraint to between zero and 2pi
             phi+=2*np.pi
-        if phi<self.ang:
-            r = np.sqrt(q[0] ** 2 + q[1] ** 2)
-            if self.rb+self.ap>r>self.rb-self.ap:
+        if phi<ang:
+            r = np.sqrt(qNew[0] ** 2 + qNew[1] ** 2)
+            if rb+ap>r>rb-ap:
                 return True
-        if phi>self.ang:  # if outside bender's angle range
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
+        if phi>ang:  # if outside bender's angle range
+            if (rb - ap < qNew[0] < rb + ap) and (0 > qNew[1] > -Lcap): #If inside the cap on
                 #the eastward side
                 return True
-            qTest=q.copy()
-            qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-            qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-            if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
+            qNew[0] = RIn_Ang[0, 0] * qNew[0] + RIn_Ang[0, 1] * qNew[1]
+            qNew[1] = RIn_Ang[1, 0] * qNew[0] + RIn_Ang[1, 1] * qNew[1]
+            if (rb - ap < qNew[0] < rb + ap) and (Lcap > qNew[1] > 0):
                 return True
         return False
 
@@ -731,6 +785,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         else:
             raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE BOUND')
         return K
+
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
@@ -810,7 +865,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
         return F
 
-class LensSimWithCaps(Lens_Ideal):
+class LensSimWithCaps(LensIdeal):
     def __init__(self, PTL, file2D, file3D, L, ap):
         super().__init__(PTL, None, None, None, None,fillParams=False)
         self.PTL=PTL

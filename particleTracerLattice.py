@@ -5,7 +5,7 @@ import pathos as pa
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
-from elementPT import Lens_Ideal,Bender_Ideal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
+from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
@@ -65,7 +65,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=Lens_Ideal(self,L,Bp,rp,ap=ap) #create a lens element object
+        el=LensIdeal(self, L, Bp, rp, ap=ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
 
@@ -132,7 +132,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=Bender_Ideal(self,ang,Bp,rp,rb,ap) #create a bender element object
+        el=BenderIdeal(self, ang, Bp, rp, rb, ap) #create a bender element object
         el.index = len(self.elList) #where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -632,9 +632,9 @@ class ParticleTracerLattice:
         #todo: reuse argslist!!!
         #if num<=0:
         #    raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
-        qArr=np.linspace(-qMax,qMax,num=3)
-        vtArr=np.linspace(-vtMax,vtMax,num=3)
-        vlArr=np.linspace(-vlMax,vlMax,num=3)
+        qArr=np.linspace(-qMax,qMax,num=2)
+        vtArr=np.linspace(-vtMax,vtMax,num=2)
+        vlArr=np.linspace(-vlMax,vlMax,num=2)
         tempArr = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr,vlArr)).T.reshape(-1, 5) #qx,qy,vx,vy
         argList = []
         for arg in tempArr:
@@ -659,6 +659,8 @@ class ParticleTracerLattice:
                 Lo,temp,currentElIndex=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
                 survivalArr[i]=(Lo/self.totalLength)
                 elIndexArr[i]=currentElIndex
+                #q, p, qo, po, particleOutside,elIndex = particleTracer.trace(qi, pi, h, Lt / 200)
+                #self.show_Lattice(particleCoords=q[-1])
                 i+=1
         return survivalArr,elIndexArr
     def inject_Into_Combiner(self,args,qi,pi,h=1e-6):
@@ -701,6 +703,7 @@ class ParticleTracerLattice:
 
 
 def main():
+
     lattice = ParticleTracerLattice(200.0)
     fileBend1='benderSeg1.txt'
     fileBend2 = 'benderSeg2.txt'
@@ -735,16 +738,28 @@ def main():
     lattice.elList[2].forceFact = .175
     lattice.elList[4].forceFact = .175
 
-    q0=np.asarray([-1e-10,0.0,0.0])
-    v0=np.asarray([-200.0,0,0])
+    q0=np.asarray([-1e-10,-1e-3,1e-3])
+    v0=np.asarray([-201.0,-1.0,-1.0])
     h=10e-6
     Lt=100
     particleTracer = ParticleTracer(lattice)
-    #q, p, qo, po, particleOutside = particleTracer.trace(q0, v0, h, Lt / 200)
+
+    #q, p, qo, po, particleOutside,elIndex = particleTracer.trace(q0, v0, h, Lt / 200)
     #print(qo[-1]) #[ 3.19866564e+01  0.00000000e+00 -1.64801837e-04]
+    #sys.exit()
+    #lattice.show_Lattice(particleCoords=q[-1])
     #plt.plot(qo[:,1])
     #plt.show()
-    @profile()
+
+
+    particleTracer = ParticleTracer(lattice)
+    t=time.time()
+    particle=particleTracer.trace(q0, v0, 10e-5, Lt / 200)
+    print(particle.cumulativeLength)
+    plt.plot(particle.qoArr[:,0],particle.qoArr[:,1])
+    plt.show()
+    #print(particle.lengthTraveled,particle.clipped) #(23.943571330550235, True, 1)
+    sys.exit()
     def func(arg, parallel=True):
         X, newLattice = arg
         F1, F2 = X
@@ -752,21 +767,22 @@ def main():
         newLattice.elList[4].forceFact = F2
 
         h = 10e-6
-        Lt = 100 * lattice.totalLength
+        Lt = 10 * lattice.totalLength
         qMax = 1e-3
         vtMax = 1.0
         vlMax = 1.0
 
         q0=np.asarray([-1e-10,0,0])
         v0=np.asarray([-200.0,0,0])
-        particleTracer=ParticleTracer(lattice)
+        #particleTracer=ParticleTracer(lattice)
+        temp1=None
         for i in range(5):
-            particleTracer.trace(q0, v0, h, Lt / 200,fastMode=True)
-        survival = 0#qo[-1, 0] / lattice.totalLength
+            temp1,temp2,temp3=particleTracer.trace(q0, v0, h, Lt / 200,fastMode=True)
+        survival = temp1/lattice.totalLength#qo[-1, 0] / lattice.totalLength
         #temp1Arr,temp2Arr = newLattice.measure_Phase_Space_Survival(qMax, vtMax, vlMax, Lt, h=h, parallel=parallel)
         #survival = np.mean(temp1Arr)
         return survival#,np.bincount(temp2Arr), X
-    print(func([[.1666,.16666],lattice]))
+    print(func([[.1666,.23333333],lattice]))# (3.440503668588188, array([0, 5, 9, 0, 0, 2], dtype=int64), [0.1666, 0.16666])
     sys.exit()
     # print('starting')
     # X=[0.19183673,0.44897959]
@@ -804,8 +820,9 @@ def main():
     XArr = np.asarray(XList)
     # print(survivalArr)
     print(np.max(survivalArr))  # 44.42
-    print(XArr[np.argmax(survivalArr)][0], XArr[np.argmax(survivalArr)][0])
+    print(XArr[np.argmax(survivalArr)][0], XArr[np.argmax(survivalArr)][1])
 
 
 if __name__=='__main__':
+    pass
     main()
