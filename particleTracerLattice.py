@@ -20,7 +20,6 @@ class ParticleTracerLattice:
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
         # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
-        self.m=1 #adjusted value of mass. 1 is equal to li7 mass
         self.u0=self.u0_Actual/self.m_Actual #Adjusted value of bohr magneton, about equal to 800
         self.kb = 1.38064852E-23  # boltzman constant, SI
 
@@ -586,20 +585,20 @@ class ParticleTracerLattice:
         #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
         #for numerical fields. For consistency, this is also used on the analytic hard edge combiner.
         q = np.asarray([0, 0, 0])
-        p=self.m*np.asarray([self.v0Nominal,0,0])
+        p=np.asarray([self.v0Nominal,0,0])
         #xList=[]
         #yList=[]
         while True:
             F=el.force(q)
-            a=F/self.m
-            q_n=q+(p/self.m)*h+.5*a*h**2
+            a=F
+            q_n=q+p*h+.5*a*h**2
             F_n=el.force(q_n)
-            a_n = F_n / self.m  # acceleration new or acceleration sub n+1
-            p_n=p+self.m*.5*(a+a_n)*h
+            a_n = F_n  # acceleration new or acceleration sub n+1
+            p_n=p+.5*(a+a_n)*h
             if q_n[0]>el.Lb: #if overshot, go back and walk up to the edge assuming no force
                 dr=el.Lb-q[0]
-                dt=dr/(p[0]/self.m)
-                q=q+(p/self.m)*dt
+                dt=dr/p[0]
+                q=q+p*dt
                 break
             #xList.append(q[0])
             #yList.append(q[1])
@@ -640,7 +639,7 @@ class ParticleTracerLattice:
         for arg in tempArr:
             if arg[1]>0: #if the particle is in the upper half
                 qi = np.asarray([-1e-10, arg[0], arg[1]])
-                pi = np.asarray([-200+arg[4], arg[2], arg[3]]) * self.m
+                pi = np.asarray([-200+arg[4], arg[2], arg[3]])
                 argList.append((qi, pi, h, Lt / 200, True)) #position, velocity, timestep,total time, fastmode
         elIndexArr=np.zeros(len(argList),dtype=int) #array of element indices where the particle was last
         survivalArr=np.zeros(len(argList))
@@ -674,7 +673,7 @@ class ParticleTracerLattice:
         #vi: initial velocity coords
         #Lo: object distance for injector
         #f: focal length
-        K=2*self.u0*Bp/(rp**2*self.m*self.v0Nominal**2)
+        K=2*self.u0*Bp/(rp**2*self.v0Nominal**2)
 
         #now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix
         CFunc= lambda x : np.cos(np.sqrt(K)*x)
@@ -753,11 +752,17 @@ def main():
 
 
     particleTracer = ParticleTracer(lattice)
-    t=time.time()
-    particle=particleTracer.trace(q0, v0, 10e-5, Lt / 200)
-    print(particle.cumulativeLength)
-    plt.plot(particle.qoArr[:,0],particle.qoArr[:,1])
-    plt.show()
+    tList=[]
+    for j in range(25):
+        t=time.time()
+        for i in range(10):
+            particle=particleTracer.trace(q0, v0, 1e-5, Lt / 200,fastMode=True)
+        tList.append((time.time()-t)/10.0)
+    tArr=np.asarray(tList)
+    print(np.mean(tArr),np.std(tArr)) #0.2599016189575195 0.006449517871561657
+    #print(particle.cumulativeLength,particle.p,particle.pi)
+    #plt.plot(particle.qoArr[:,0],particle.qoArr[:,1])
+    #plt.show()
     #print(particle.lengthTraveled,particle.clipped) #(23.943571330550235, True, 1)
     sys.exit()
     def func(arg, parallel=True):

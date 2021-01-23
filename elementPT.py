@@ -179,7 +179,7 @@ class BenderIdeal(Element):
             self.fill_Params()
     def fill_Params(self):
         self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2) #'spring' constant
-        self.rOffsetFunc=lambda rb: np.sqrt(rb ** 2 / 4 + self.PTL.m * self.PTL.v0Nominal ** 2 / self.K) -rb / 2
+        self.rOffsetFunc=lambda rb: np.sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) -rb / 2
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro=self.rb+self.rOffset
         if self.ang is not None: #calculation is being delayed until constraints are solved
@@ -259,20 +259,20 @@ class CombinerIdeal(Element):
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # todo: make proper edge handling
         q = np.asarray([0, 0, 0])
-        p = self.PTL.m * np.asarray([self.PTL.v0Nominal, 0, 0])
+        p = np.asarray([self.PTL.v0Nominal, 0, 0])
         #xList=[]
         #yList=[]
         while True:
             F = self.force(q)
-            a = F / self.PTL.m
-            q_n = q + (p / self.PTL.m) * h + .5 * a * h ** 2
+            a = F
+            q_n = q + p * h + .5 * a * h ** 2
             F_n = self.force(q_n)
-            a_n = F_n / self.PTL.m  # accselferation new or accselferation sub n+1
-            p_n = p + self.PTL.m * .5 * (a + a_n) * h
+            a_n = F_n  # accselferation new or accselferation sub n+1
+            p_n = p + .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
                 dr = limit - q[0]
-                dt = dr / (p[0] / self.PTL.m)
-                q = q + (p / self.PTL.m) * dt
+                dt = dr / p[0]
+                q = q + p * dt
                 break
             #xList.append(q[0])
             #yList.append(F[0])
@@ -652,7 +652,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 raise Exception('APETURE IS LARGER THAN BORE')
             self.K = self.compute_K()
             rOffsetFact=1.00125 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
-            self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.m * self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
+            self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
             self.dataSeg=False #to save memory and pickling time
         if self.dataCap is None:
             self.fill_Force_Func_Cap()

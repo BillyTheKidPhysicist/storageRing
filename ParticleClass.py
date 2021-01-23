@@ -1,10 +1,12 @@
 import numpy.linalg as npl
 import numpy as np
 class Particle():
-    def __init__(self,qi,pi,m):
+    def __init__(self,qi,pi):
         self.q=qi
         self.p=pi
-        self.m=m
+        self.qi=qi#initial coordinates
+        self.pi=pi#initial coordinates
+        self.m=1.0 #mass is equal to 1 kg. This is not used anywhere
         self.T=0 #time of particle in simulation
         self.v0=npl.norm(pi)/self.m #initial speed
 
