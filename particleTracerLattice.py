@@ -434,7 +434,7 @@ class ParticleTracerLattice:
     def set_Element_Coordinates(self,enforceClosedLattice=True):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
-        #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element 
+        #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element
         # builds upon that. The final element's ending coordinates must match the beginning elements beginning coordinates
         # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
         i=0 #too keep track of the current element
@@ -672,7 +672,7 @@ class ParticleTracerLattice:
         #qi: intial particle coords
         #vi: initial velocity coords
         #Lo: object distance for injector
-        #f: focal length
+        #Li: nominal image distance
         K=2*self.u0*Bp/(rp**2*self.v0Nominal**2)
 
         #now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix
@@ -731,7 +731,7 @@ def main():
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2,fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb, extraSpace,yokeWidth)
     lattice.end_Lattice()
-    #lattice.show_Lattice()
+    lattice.show_Lattice()
 
 
     lattice.elList[2].forceFact = .175

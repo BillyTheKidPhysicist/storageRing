@@ -241,50 +241,77 @@ class CombinerIdeal(Element):
         self.La=None
         self.c1=c1
         self.c2=c2
+        self.space=0 #space at the end of the combiner to account for fringe fields
+
         self.type='COMBINER'
-        self.inputOffset=None
+        self.inputOffset=None #offset along y axis of incoming circulating atoms. a particle entering at this offset in
+        #the y, with angle self.ang, will exit at x,y=0,0
+        self.inputOffsetLoad=None #same as inputOffset, but for high field seekers being loaded into the ring
+        self.angLoad=None #bending angle of combiner for particles being loaded into the ring
+        self.LoLoad=None #trajectory length for particles being loaded into the ring in the combiner
         if fillsParams==True:
             self.fill_Params()
     def fill_Params(self):
-        inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(self.Lm)
-        self.apz = self.ap / 2
+        inputAngle, inputOffset,qTracedArr = self.compute_Input_Angle_And_Offset()
+        self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
+
+        inputAngleLoad, inputOffsetLoad, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=False)
+        self.LoLoad = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.angLoad = inputAngleLoad
+        self.inputOffsetLoad = inputOffsetLoad
+
+        self.apz = self.ap / 2
         self.La = self.ap * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb #TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
-        self.Lo = self.L
 
-    def compute_Input_Angle_And_Offset(self, limit,h=1e-6):
+    def compute_Input_Angle_And_Offset(self,h=1e-6,lowField=True):
+        #TODO: CAN i GET RID OF THIS LIMIT STUFF CLEANLY?
+
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
+        #limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
+        #length, but for the simulated magnets, it's that plus twice the length at the ends.
+        #h: timestep
+        #lowField: wether to model low or high field seekers
         # todo: make proper edge handling
         q = np.asarray([0, 0, 0])
         p = np.asarray([self.PTL.v0Nominal, 0, 0])
+        tempList=[] #Array that holds particle coordinates traced through combiner. This is used to find lenght
+        #of orbit.
         #xList=[]
         #yList=[]
+        if lowField==True:
+            force=self.force
+        else:
+            force = lambda x: -self.force(x)
+        limit=self.Lm+2*self.space
         while True:
-            F = self.force(q)
+            F = force(q)
             a = F
             q_n = q + p * h + .5 * a * h ** 2
-            F_n = self.force(q_n)
+            F_n = force(q_n)
             a_n = F_n  # accselferation new or accselferation sub n+1
             p_n = p + .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
                 dr = limit - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
+                tempList.append(q)
                 break
             #xList.append(q[0])
             #yList.append(F[0])
             q = q_n
             p = p_n
+            tempList.append(q)
 
         #plt.plot(xList,yList)
         #plt.show()
 
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
-        return outputAngle, outputOffset
+        return outputAngle, outputOffset,np.asarray(tempList)
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew=q.copy()
         qNew = qNew - self.r2
@@ -326,7 +353,8 @@ class CombinerIdeal(Element):
 
 class CombinerSim(CombinerIdeal):
     def __init__(self,PTL,combinerFile):
-        super().__init__(PTL,.18,None,None,None,fillsParams=False)
+        Lm = .18
+        super().__init__(PTL,Lm,None,None,None,fillsParams=False)
         self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields
         self.data=None
         self.combinerFile=combinerFile
@@ -366,17 +394,27 @@ class CombinerSim(CombinerIdeal):
         self.FxFunc = lambda x, y, z: tempx((z, y, x))
         self.FyFunc = lambda x, y, z: tempy((z, y, x))
         self.FzFunc = lambda x, y, z: tempz((z, y, x))
-        inputAngle, inputOffset = self.compute_Input_Angle_And_Offset(self.Lm+2*self.space)
+
+        #TODO: I'M PRETTU SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
+
+        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+        self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.L = self.Lo #TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
-        self.inputOffset=inputOffset-np.tan(inputAngle) * self.space  # the input offset is measure at the end of the hard
+        self.inputOffset=inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard
         # edge
 
+        inputAngleLoad, inputOffsetLoad, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=False)
+        self.LoLoad = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.angLoad = inputAngleLoad
+        self.inputOffsetLoad = inputOffsetLoad
+
         # the inlet length needs to be long enough to extend past the fringe fields
-        # TODO: MAKE EXACT, now it overshoots
+        # TODO: MAKE EXACT, now it overshoots.
         self.La = self.space + np.tan(self.ang) * self.ap
-        self.Lo = self.La + self.Lb
-        self.L = self.Lo
+        #self.Lo = self.La + self.Lb
         self.data=False #to save memory and pickling time
+
     def force(self,q):
         F=np.zeros(3)
         F[0] = self.FxFunc(*q)

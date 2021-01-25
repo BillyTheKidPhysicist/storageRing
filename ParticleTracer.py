@@ -63,7 +63,7 @@ class ParticleTracer:
         if self.fastMode==False:
             self.particle.log_Params()
             pass
-    def trace(self,qi,vi,h,T0,fastMode=False):
+    def trace(self,particle,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -73,13 +73,10 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         self.fastMode=fastMode
-        self.particle = Particle(qi.astype(float), vi.astype(float))
+        self.particle = particle#Particle(qi.astype(float), vi.astype(float))
         self.h=h
         self.h0=h
         self.initialize()
-
-
-
         while(True):
             if self.T+self.h>T0:
                 break
