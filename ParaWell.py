@@ -1,3 +1,4 @@
+import warnings
 import pathos as pa
 import numpy as np
 '''
@@ -76,6 +77,7 @@ class ParaWell:
         #argsList: a list of arguments
         #returns a list of tuples of the results paired with the arguments as (args,results)
         #workers: processes to work on the problem
+        # returns a list of tuples of the results paired with the arguments as (args,results)
         def wrapper(args):
             result=func(args)
             return args,result
@@ -96,11 +98,10 @@ class ParaWell:
         #4: stitch the results together
 
         #func: the function that is being fed the arguments
-        #argsList: a list of arguments
+        #argsList: a list of arguments to work on
+        # numWorkers: processes to work on the problem
         #returns a list of tuples of the results paired with the arguments as (args,results)
-        # workers: processes to work on the problem
-        if numWorkers>len(argsList):
-            raise Exception('MORE WORKERS THAN ARGUMENTS IN ARGLIST')
+
         argChunkList=[]
         for i in range(numWorkers):
             argChunkList.append([])
@@ -124,10 +125,10 @@ class ParaWell:
             jobs.append(self.pool.apipe(wrapper,chunk))  # create job for each argument in arglist, ie for each particle
         for job in jobs:
             chunkResults.append(job.get())  # get the results. wait for the result in order given
-        results=[]
+        resultsList=[]
         for result in chunkResults:
-            results.extend(result)
-        return results
+            resultsList.extend(result)
+        return resultsList
 
     def manage_Pool(self,numWorkers):
         #keep track of the number of time pool has been called, and make a new pool if the previous one gets changed

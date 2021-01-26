@@ -1,6 +1,30 @@
-import numpy.linalg as npl
 import numpy as np
-class Particle():
+import copy
+class Swarm:
+    #An object that holds a cloud of particles in phase space
+    def __init__(self):
+        self.particles = [] #list of particles in swarm
+
+
+    def add_Particle(self, qi, pi):
+        #add an additional particle to phase space
+        #qi: spatial coordinates
+        #pi: momentum coordinates
+        self.particles.append(Particle(qi, pi))
+    def survival(self, frac=True):
+        #returns fraction of particles that have survived, ie not clipped.
+        #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
+        numSurvived = 0.0
+        for particle in self.particles:
+            numSurvived += float(not particle.clipped) #if it has NOT clipped then turn that into a 1.0
+        if frac == True:
+            return numSurvived / len(self.particles)
+        else:
+            return numSurvived
+    def copy(self):
+        return copy.deepcopy(self)
+
+class Particle:
     def __init__(self,qi,pi):
         self.q=qi
         self.p=pi
@@ -8,7 +32,7 @@ class Particle():
         self.pi=pi#initial coordinates
         self.m=1.0 #mass is equal to 1 kg. This is not used anywhere
         self.T=0 #time of particle in simulation
-        self.v0=npl.norm(pi)/self.m #initial speed
+        self.v0=np.sqrt(np.sum(pi**2))/self.m #initial speed
 
         self.force=None #current force on the particle
         self.currentEl=None #which element the particle is ccurently in
@@ -40,3 +64,5 @@ class Particle():
             self.currentElIndex=self.currentEl.index
             self.currentEl=None # to save memory
         self.force=None
+    def copy(self):
+        return copy.deepcopy(self)
