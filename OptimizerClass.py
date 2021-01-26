@@ -5,7 +5,8 @@ import scipy.optimize as spo
 from elementPT import CombinerSim
 import numpy.linalg as npl
 import time
-import pathos as pa
+from ParaWell import ParaWell
+import copy
 
 
 class Swarm:
@@ -89,7 +90,6 @@ class Optimizer:
         # LOffset: length that the image distance is offset from the combiner output. Positive
         # value corresponds coming to focus before the output (ie, inside the combiner), negative
         # is after the output.
-        print(Li, Lo, LOffset)
         if self.lattice.combiner.Lo * 2 > Li:
             raise Exception("IMAGE LENGTH IS TOO SHORT")
         if LOffset > self.lattice.combiner.Lo / 2:
@@ -194,64 +194,92 @@ class Optimizer:
 
         def func(X):
             Li, Lo = X
-            survival=self.compute_Survival_Through_Injector(Li, Lo, LOffset, qMax, pMax, numPhaseSpace)
+            survival = self.compute_Survival_Through_Injector(Li, Lo, LOffset, qMax, pMax, numPhaseSpace)
             return [survival, X]
 
         x1Arr = np.linspace(LiMin, LiMax, num=num)
         x2Arr = np.linspace(LoMin, LoMax, num=num)
-
-        pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count())  # pool object to distribute work load
-        jobs = []  # list of jobs. jobs are distributed across processors
-        results = []  # list to hold results of particle tracing.
         argsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
 
-        for arg in argsArr:
-            jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
-        for job in jobs:
-            results.append(job.get())  # get the results. wait for the result in order given
-        survivalList = []
-        argList=[]
-        for result in results:
-            survivalList.append(result[0])
-            argList.append(results[1])
-        survivalArr = np.asarray(survivalList)
-        argArr=np.asarray(argList)
-        print(argArr[np.argmax(survivalArr)])
-        print(np.max(survivalArr))
+        # t=time.time()
+        # for arg in argsArr:
+        #    func(arg)
+        # print('time',1e3*(time.time() - t) / argsArr.shape[0],time.time()-t) #334ms
+        helper = ParaWell()
+        helper.parallel_Chunk_Problem(func, argsArr)
 
 
 def main():
     lattice = ParticleTracerLattice(200.0)
-    fileBend1='benderSeg1.txt'
+    fileBend1 = 'benderSeg1.txt'
     fileBend2 = 'benderSeg2.txt'
-    fileBender1Fringe='benderFringeCap1.txt'
-    fileBenderInternalFringe1='benderFringeInternal1.txt'
-    fileBender2Fringe='benderFringeCap2.txt'
-    fileBenderInternalFringe2='benderFringeInternal2.txt'
-    file2DLens='lens2D.txt'
-    file3DLens='lens3D.txt'
-    fileCombiner='combinerData.txt'
-    yokeWidth=.0254*5/8
-    numMagnets=110
-    extraSpace=1e-3
-    Lm=.0254
-    rp=.0125
-    Llens1=.3
-    rb=1.0
-
-
-
+    fileBender1Fringe = 'benderFringeCap1.txt'
+    fileBenderInternalFringe1 = 'benderFringeInternal1.txt'
+    fileBender2Fringe = 'benderFringeCap2.txt'
+    fileBenderInternalFringe2 = 'benderFringeInternal2.txt'
+    file2DLens = 'lens2D.txt'
+    file3DLens = 'lens3D.txt'
+    fileCombiner = 'combinerData.txt'
+    yokeWidth = .0254 * 5 / 8
+    numMagnets = 110
+    extraSpace = 1e-3
+    Lm = .0254
+    rp = .0125
+    Llens1 = .3
+    rb = 1.0
 
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
     lattice.add_Combiner_Sim(fileCombiner)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Fringe,fileBenderInternalFringe1,Lm,None,rb,extraSpace,yokeWidth)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm, None, rb,
+                                                  extraSpace, yokeWidth)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2,fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb, extraSpace,yokeWidth)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb,
+                                                  extraSpace, yokeWidth)
     lattice.end_Lattice()
 
+
+    qMax = 2.5e-1
+    pMax = 3e-1
+    numParticles = 7
+    numParams = 20
+
+
+
+
     optimizer = Optimizer(lattice)
-    optimizer.maximize_Survival_Through_Injector(2.5e-4, 3e1, 5, num=10)
+    t = time.time()
+    optimizer.maximize_Survival_Through_Injector(qMax,pMax,numParticles,num=numParams)
+    print('t2',1e3*(time.time()-t)/numParams**2,time.time()-t)
+
+
+    def func(args):
+        Li, Lo = args
+        return optimizer.compute_Survival_Through_Injector(Li, Lo, 0.0, qMax, pMax, numParticles)
+
+
+    LiMin = 1.0
+    LiMax = 2.0
+    LoMin = .15
+    LoMax = .4
+
+    x1Arr = np.linspace(LiMin, LiMax, num=numParams)
+    x2Arr = np.linspace(LoMin, LoMax, num=numParams)
+    argsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
+    argsList=[]
+    for arg in argsArr:
+        argsList.append(arg)
+
+    #t=time.time()
+    #for args in argsList:
+    #    func(args)
+    #print(1e3 * (time.time() - t) / numParams ** 2, time.time() - t)
+
+    helper = ParaWell()
+
+    t=time.time()
+    helper.parallel_Chunk_Problem(func, argsList)
+    print('t3',1e3*(time.time()-t)/numParams**2,time.time()-t)
 
 
 if __name__ == '__main__':
