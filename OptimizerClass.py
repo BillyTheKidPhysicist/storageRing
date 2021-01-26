@@ -1,3 +1,4 @@
+import sys
 from particleTracerLattice import ParticleTracerLattice
 import numpy as np
 from ParticleClass import Particle
@@ -30,6 +31,7 @@ class Swarm:
 class Optimizer:
     def __init__(self, lattice):
         self.lattice = lattice
+        self.helper=ParaWell() #custom class to help with parallelization
 
     def initialize_Swarm_In_Phase_Space(self, qMax, pMax, num):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -200,13 +202,7 @@ class Optimizer:
         x1Arr = np.linspace(LiMin, LiMax, num=num)
         x2Arr = np.linspace(LoMin, LoMax, num=num)
         argsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-
-        # t=time.time()
-        # for arg in argsArr:
-        #    func(arg)
-        # print('time',1e3*(time.time() - t) / argsArr.shape[0],time.time()-t) #334ms
-        helper = ParaWell()
-        helper.parallel_Chunk_Problem(func, argsArr)
+        self.helper.parallel_Chunk_Problem(func, argsArr)
 
 
 def main():
@@ -242,44 +238,19 @@ def main():
     qMax = 2.5e-1
     pMax = 3e-1
     numParticles = 7
-    numParams = 20
+    numParams = 40
 
-
+    #for i in range(1000):
+    #    optimizer = Optimizer(lattice)
+    #    print(i)
+    #    optimizer.maximize_Survival_Through_Injector(qMax, pMax, numParticles, num=numParams)
 
 
     optimizer = Optimizer(lattice)
-    t = time.time()
+    t=time.time()
     optimizer.maximize_Survival_Through_Injector(qMax,pMax,numParticles,num=numParams)
     print('t2',1e3*(time.time()-t)/numParams**2,time.time()-t)
 
-
-    def func(args):
-        Li, Lo = args
-        return optimizer.compute_Survival_Through_Injector(Li, Lo, 0.0, qMax, pMax, numParticles)
-
-
-    LiMin = 1.0
-    LiMax = 2.0
-    LoMin = .15
-    LoMax = .4
-
-    x1Arr = np.linspace(LiMin, LiMax, num=numParams)
-    x2Arr = np.linspace(LoMin, LoMax, num=numParams)
-    argsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-    argsList=[]
-    for arg in argsArr:
-        argsList.append(arg)
-
-    #t=time.time()
-    #for args in argsList:
-    #    func(args)
-    #print(1e3 * (time.time() - t) / numParams ** 2, time.time() - t)
-
-    helper = ParaWell()
-
-    t=time.time()
-    helper.parallel_Chunk_Problem(func, argsList)
-    print('t3',1e3*(time.time()-t)/numParams**2,time.time()-t)
 
 
 if __name__ == '__main__':
