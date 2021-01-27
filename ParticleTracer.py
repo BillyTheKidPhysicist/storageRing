@@ -1,3 +1,4 @@
+from ParaWell import ParaWell
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -273,24 +274,16 @@ class ParticleTracer:
         else:
             return None
 
-    def multi_Trace(self, argsList):
+    def multi_Trace(self, particleList,h,T,fastMode=True):
         # trace out multiple trajectories
-        # argsList: list of tuples for each particle, where each tuple is (qi,vi,timestep,totaltime,fastMode).
-        def wrap(args): #helps to use a wrapper function to unpack arguments. this is for a single particle.
+        # particleList: list of particles to trace in parallel
+        # h: timestep
+        # T: simulation time
+        def wrap(particle): #helps to use a wrapper function to unpack arguments. this is for a single particle.
             # args is a tuple.
-            qi = args[0] #initial position, 3D, m
-            vi = args[1] #initial velocity, 3D, m
-            h=args[2] #timestep, seconds
-            T=args[3] #total time, seconds
-            results=(self.trace(qi, vi, h,T,fastMode=args[4])) #return orbital coords and wether particle clipped an apeture
+            results=(self.trace(particle,h,T,fastMode=fastMode)) #return orbital coords and wether particle clipped an apeture
             return results
 
-        pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count()) #pool object to distribute work load
-        jobs = [] #list of jobs. jobs are distributed across processors
-        resultsList = [] #list to hold results of particle tracing.
-        for arg in argsList:
-            jobs.append(pool.apipe(wrap, arg)) #create job for each argument in arglist, ie for each particle
-        for job in jobs:
-            resultsList.append(job.get()) #get the results. wait for the result in order given
-        pool.clear()
-        return resultsList
+        helper=ParaWell()
+        resultList=helper.parallel_Problem(wrap,particleList)
+        return resultList

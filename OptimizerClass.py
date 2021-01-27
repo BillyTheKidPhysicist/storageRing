@@ -1,13 +1,15 @@
+from ParticleTracer import ParticleTracer
 import numpy.linalg as npl
 import matplotlib.pyplot as plt
 import sys
+import multiprocess as mp
 from particleTracerLattice import ParticleTracerLattice
 import numpy as np
 from ParticleClass import Swarm
 import scipy.optimize as spo
 import time
 from ParaWell import ParaWell
-
+import black_box as bb
 
 
 
@@ -74,7 +76,7 @@ class Optimizer:
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
 
-    def initialize_Swarm_At_Combiner_Output(self, Li, Lo, LOffset, qMax, pMax, numPhaseSpace):
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax, pMax, numPhaseSpace):
         # this method generates a cloud of particles in phase space at the output of the combiner.
         # Here the output refers to the origin in the combiner's reference frame.
         #Li: image length, ie distance from end of lens to focus
@@ -89,8 +91,15 @@ class Optimizer:
         swarm = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
         swarm = self.send_Swarm_Through_Shaper(swarm, Lo, Li)
         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
+
+        #now I need to trace and position the swarm at the output. This is done by moving the swarm along with combiner to the
+        #combiner's outlet in it's final position
+        r0 = self.lattice.combiner.r2
+        Mrot=self.lattice.combiner.RIn
         for particle in swarm.particles:
             self.step_Particle_Through_Combiner(particle)
+            particle.q[:2]=particle.q[:2]@Mrot+r0[:2]
+
         return swarm
 
     def step_Particle_Through_Combiner(self, particle, h=1e-5):
@@ -177,37 +186,65 @@ class Optimizer:
 
         return swarm
 
-    def compute_Survival_Through_Injector(self, Li, Lo, LOffset, qMax, pMax, numPhaseSpace):
+    def compute_Survival_Through_Injector(self, Lo,Li, LOffset, qMax, pMax, numPhaseSpace):
         swarm = self.initialize_Swarm_At_Combiner_Output(Li, Lo, LOffset, qMax, pMax, numPhaseSpace)
         return swarm.survival()
 
-    def maximize_Survival_Through_Injector(self, LiMin,LiMax,LoMin,LoMax,qMax, pMax, numPhaseSpace, numParams=50):
-        LOffset = 0.0
+    # def maximize_Survival_Through_Injector_Brute(self, LiMin,LiMax,LoMin,LoMax,qMax, pMax, numPhaseSpace, numParams=50):
+    #     LOffset = 0.0
+    #
+    #     swarmInitial = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
+    #     def func(X):
+    #         Li, Lo = X
+    #         self.catch_Injection_Errors(Li, LOffset)
+    #         swarm = self.send_Swarm_Through_Shaper(swarmInitial, Lo, Li)
+    #         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
+    #         for particle in swarm.particles:
+    #             self.step_Particle_Through_Combiner(particle)
+    #         #print(swarm.survival())
+    #         return swarm.survival()
+    #
+    #     x1Arr = np.linspace(LiMin, LiMax, num=numParams)
+    #     x2Arr = np.linspace(LoMin, LoMax, num=numParams)
+    #     inputArgsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
+    #     results=self.helper.parallel_Chunk_Problem(func, inputArgsArr)
+    #     argList=[]
+    #     survivalList=[]
+    #     for result in results:
+    #         argList.append(result[0])
+    #         survivalList.append(result[1])
+    #     argArr=np.asarray(argList)
+    #     survivalArr=np.asarray(survivalList)
+    #     return np.max(survivalArr),argArr[np.argmax(survivalArr)]
 
+    def maximize_Survival_Through_Injector_BB(self, generations,bounds,qMax, pMax, numPhaseSpace):
+        #bounds: a list of tuples of the bounds for Lo,Li,LOffset.
+        #if len(bounds[1])!=len(bounds[0]) or len(bounds[0])!=3:
+        #    raise Exception("BOUNDS ARE NOT IN RIGHT SHAPE")
         swarmInitial = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
+
         def func(X):
-            Li, Lo = X
+            Lo,Li,LOffset = X
             self.catch_Injection_Errors(Li, LOffset)
             swarm = self.send_Swarm_Through_Shaper(swarmInitial, Lo, Li)
             swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
             for particle in swarm.particles:
                 self.step_Particle_Through_Combiner(particle)
-            #print(swarm.survival())
-            return swarm.survival()
-
-        x1Arr = np.linspace(LiMin, LiMax, num=numParams)
-        x2Arr = np.linspace(LoMin, LoMax, num=numParams)
-        inputArgsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-        results=self.helper.parallel_Chunk_Problem(func, inputArgsArr) #286, 114
-        argList=[]
-        survivalList=[]
-        for result in results:
-            argList.append(result[0])
-            survivalList.append(result[1])
-        argArr=np.asarray(argList)
-        survivalArr=np.asarray(survivalList)
-        return np.max(survivalArr),argArr[np.argmax(survivalArr)]
-
+            return 1/(1+swarm.survival())
+        numWorkers=mp.cpu_count()
+        res=bb.search_min(f=func, domain=bounds, budget=generations*numWorkers, batch=numWorkers, resfile='test.csv')
+        print(res,func(res))
+    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=False):
+        #trace a swarm through the lattice
+        swarmNew=swarm.copy()
+        particleTracer = ParticleTracer(self.lattice)
+        if parallel == True:
+            results = particleTracer.multi_Trace(swarmNew.particles,h,T)
+        else:
+            i = 0
+            for particle in swarmNew.particles:
+                particleTracer.trace(particle,h,T)
+        return swarmNew
 
 def main():
     lattice = ParticleTracerLattice(200.0)
@@ -241,23 +278,29 @@ def main():
 
     qMax = 2.5e-3
     pMax = 3e-1
-    numParticles = 7
-    numParams = 20
-
-
-    LiMin=1.0
-    LiMax=2.0
-    LoMin=.15
-    LoMax=.4
-
-
+    numParticles = 5
     optimizer = Optimizer(lattice)
 
-    #optimizer.compute_Survival_Through_Injector(1.0,.15,0.0,qMax,pMax,3)
-    t=time.time()
-    sol=optimizer.maximize_Survival_Through_Injector(LiMin,LiMax,LoMin,LoMax,qMax,pMax,numParticles,numParams=numParams)
-    print(sol)
-    print('t',1e3*(time.time()-t)/numParams**2,time.time()-t)
+
+    optimizer.initialize_Swarm_At_Combiner_Output(0.25375877,1.21043605,0.04970048,qMax,pMax,numParticles)
+    #bounds=[(.15,.3),(1.0,2.0),(-.05,.05)] #Lo,Li,LOffset
+    #optimizer.maximize_Survival_Through_Injector_BB(5,bounds,qMax,pMax,numParticles) [0.25375877 1.21043605 0.04970048] 0.7852086238335301
+
+    #
+    # qMax = 2.5e-3
+    # pMax = 3e-1
+    # numParticles = 7
+    # numParams = 20
+    # LiMin=1.0
+    # LiMax=2.0
+    # LoMin=.15
+    # LoMax=.4
+    # optimizer = Optimizer(lattice)
+    # #optimizer.compute_Survival_Through_Injector(1.0,.15,0.0,qMax,pMax,3)
+    # t=time.time()
+    # sol=optimizer.maximize_Survival_Through_Injector(LiMin,LiMax,LoMin,LoMax,qMax,pMax,numParticles,numParams=numParams)
+    # print(sol)
+    # print('t',1e3*(time.time()-t)/numParams**2,time.time()-t)
 
 
 

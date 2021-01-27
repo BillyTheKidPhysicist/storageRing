@@ -273,35 +273,7 @@ class ParticleTracerLattice:
                 return cost
         ranges=[(.98*r10,1.02*r10),(.98*r20,1.02*r20)]
         x0=np.asarray([r10,r20])
-        ##print(spo.approx_fprime(x0,cost,1e-10))
-        #x=x0
-        #eps0=1e-4
-        #eps=eps0
-        #num=100
-        #epsArr=np.empty(num)
-        #costArr=np.zeros(4)
-        #cost0=cost(x0)
-        #print(cost(x), x)
-        #dxArr = np.asarray([[eps0, eps0], [-eps0, eps0], [eps0, -eps0], [-eps0, -eps0]])
-        #costPrev=0
-        #fact=1.0
-        #i0=10
-        #for i in range(num):
-        #    for j in range(4):
-        #        costArr[j]=cost(x+dxArr[j])
-        #    dxArr = np.asarray([[eps, eps], [-eps, eps], [eps, -eps], [-eps, -eps]])
-        #    x+=dxArr[np.argmin(costArr)]
-        #    eps = fact*eps0 * np.sqrt(cost(x) / cost0)
-        #    epsArr[i] = eps
-        #    print(eps, np.min(costArr))
-        #    if i>i0:
-        #        checkArr=epsArr[i-5:i]
-        #        if np.std(checkArr)<np.mean(checkArr)/100:
-        #            fact=fact*.1
-        #            i0=i0+10
-        #            print('here')
-        #print(cost(x),x)
-        #sys.exit()
+
 
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
         #sol=spo.differential_evolution(cost,ranges)
