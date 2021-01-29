@@ -57,6 +57,7 @@ class Element:
         self.apz=None #apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
         self.type=None #gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         #constructed in particleTracerLattice
+        self.sim=None #wether the field values are from simulations
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -167,6 +168,7 @@ class BenderIdeal(Element):
         #are numerous methods and variables that are not necesary here, but are used in other child classes. For example,
         #this element has no caps, but a cap length of zero is still used.
         super().__init__()
+        self.sim=False
         self.PTL=PTL #particle tracer lattice object
         self.ang=ang #total bending angle of bender
         self.Bp = Bp #field strength at pole
@@ -242,6 +244,7 @@ class CombinerIdeal(Element):
     # angle is decided by tracing particles through the combiner and finding the bending angle.
     def __init__(self,PTL,Lm,c1,c2,ap,fillsParams=True):
         super().__init__()
+        self.sim=False
         self.PTL=PTL
         self.ap = ap
         self.Lm=Lm
@@ -363,6 +366,7 @@ class CombinerSim(CombinerIdeal):
     def __init__(self,PTL,combinerFile):
         Lm = .18
         super().__init__(PTL,Lm,None,None,None,fillsParams=False)
+        self.sim=True
         self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields
         self.data=None
         self.combinerFile=combinerFile
@@ -665,6 +669,7 @@ class BenderSimSegmented(BenderIdealSegmented):
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap):
         super().__init__(PTL,numMagnets,Lm,Lcap,None,rp,rb,yokeWidth,extraSpace,ap,fillParams=False)
+        self.sim=True
         self.PTL=PTL
         self.fileSeg=fileSeg
         self.fileCap=fileCap
@@ -689,6 +694,10 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.FzFunc_Internal_Fringe = None
         self.fill_Params()
     def fill_Params(self):
+        if self.ap is None:
+            self.ap = self.rp * .9
+        elif self.ap > self.rp:
+            raise Exception('APETURE IS LARGER THAN BORE')
         self.Lseg=self.Lm+self.space*2
         rOffsetFact = 1.00125  # emperical factor that reduces amplitude of off orbit oscillations. An approximation.
         self.rOffsetFunc = lambda rb: rOffsetFact * np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4 # this accounts for energy loss
@@ -697,21 +706,17 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
             if np.round(rp,6)!=np.round(self.rp,6):
                 raise Exception('BORE RADIUS FROM FIELD FILE DOES NOT MATCH')
-            if self.ap is None:
-                self.ap=self.rp*.9
-            elif self.ap>self.rp:
-                raise Exception('APETURE IS LARGER THAN BORE')
             self.check_K0()
-            self.dataSeg=False #to save memory and pickling time
+            self.dataSeg=None #to save memory and pickling time
         if self.dataCap is None and self.dataCap is not None:
             self.fill_Force_Func_Cap()
             Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
             if self.Lcap!=Lcap:
                 raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
-            self.dataCap=False #to save memory and pickling time
+            self.dataCap=None #to save memory and pickling time
         if self.dataInternalFringe is None and self.dataInternalFringe is not None:
             self.fill_Force_Func_Internal_Fringe()
-            self.dataInternalFringe=False #to save memory and pickling time
+            self.dataInternalFringe=None #to save memory and pickling time
         if self.numMagnets is not None:
             D = self.rb - self.rp - self.yokeWidth
             self.ucAng = np.arctan(self.Lseg / (2 * D))
@@ -823,7 +828,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.FzFunc_Seg = lambda x, y, z: -tempy((y, -z, x))
 
     def check_K0(self):
-        print('here')
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
         xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.dataSeg[:,0].mean()
         yFit=[]
@@ -836,7 +840,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             pass #k0 is sufficiently close
         else:
             raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE RANGE')
-        print(percDif)
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
