@@ -28,8 +28,6 @@ class ParticleTracer:
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
         # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
-        self.cumulativeLength=0 #cumulative length of previous elements. This accounts for revolutions, it doesn't reset each
-            #time
         self.T=0 #total time elapsed
         self.h=None #current step size. This changes near boundaries
         self.h0=None # initial step size.
@@ -46,14 +44,13 @@ class ParticleTracer:
 
 
 
-    def reset(self):
-        #reset parameters related to the particle to do another simulation.
-        self.particle.clipped=False
-        self.particle.cumulativeLength=0
-        self.T=0
     def initialize(self):
         # prepare for a single particle to be traced
-        self.reset() #reset params
+        self.T=0
+        self.particle.cumulativeLength=0
+        if self.particle.clipped is not None:
+            self.particle.clipped=False
+        self.particle.force=None
         dl=self.particle.v0*self.h #approximate stepsize
         for el in self.lattice:
             if dl*10>el.Lo:
@@ -73,11 +70,14 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        self.particle = particle
+        if self.particle.clipped==True:
+            return self.particle
         self.fastMode=fastMode
-        self.particle = particle#Particle(qi.astype(float), vi.astype(float))
         self.h=h
         self.h0=h
         self.initialize()
+
         while(True):
             if self.T+self.h>T0:
                 break

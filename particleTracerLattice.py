@@ -86,10 +86,10 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap=None):
+    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
-        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap)
+        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -166,11 +166,11 @@ class ParticleTracerLattice:
 
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
-            self.bender2 = self.elList[self.benderIndices[1]] #save to use later
-
-        self.catch_Errors()
+            self.bender2=self.elList[self.benderIndices[1]] #save to use later
+        self.catch_Errors(constrain)
         if constrain==True:
-            self.constrain_Lattice()
+            if self.bender1.numMagnets is None or self.bender1.ang is None: #bender1 and 2 will have same type enorced before
+                self.constrain_Lattice()
         self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice)
         self.make_Geometry()
         self.totalLength=0
@@ -229,8 +229,11 @@ class ParticleTracerLattice:
         for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
             #lattice element list
             L2+=self.elList[i].L
+
         if self.bender1.segmented==True: #both bender1 and bender2 are same type
             params=self.solve_Implicit_Segmented_Triangle_Problem(inputAng,inputOffset, L1, L2)
+            print(params)
+            sys.exit()
         else:
             params=self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, self.bender1.ro, self.bender2.ro)
         return params
@@ -249,8 +252,8 @@ class ParticleTracerLattice:
         yokeWidth = self.bender1.yokeWidth #width of magnets and holding structure radially
         rp = self.bender1.rp #bore radius, same for both benders
         D = rp + yokeWidth
-        r10 = self.bender1.rb #bending radius without including offset, ie center of bender
-        r20 = self.bender2.rb #bending radius without including offset, ie center of bender
+        r10 = self.bender1.rb #nominal bending radius without including offset, ie center of bender
+        r20 = self.bender2.rb #nominal bending radius without including offset, ie center of bender
         def cost(args,returnParams=False):
             r1,r2 = args
             r1Offset=self.bender1.rOffsetFunc(r1) #must include offset in geometry calculation
@@ -276,8 +279,8 @@ class ParticleTracerLattice:
 
 
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
-        #sol=spo.differential_evolution(cost,ranges)
-        #print(sol)
+        sol=spo.differential_evolution(cost,ranges)
+        print(sol)
         #print(sol)
         #print(cost(sol.x,returnParams=True))
         #sys.exit()
@@ -285,8 +288,8 @@ class ParticleTracerLattice:
         #print(sol.x[0],sol.x[1])
         #roffset 0.0033327012609907503 0.0033327012609907503
 
-        x=[0.9845681497497591,0.988114259813233 ]
-        params = cost(x, returnParams=True)
+
+        params = cost(sol.x, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         #print(params)
@@ -382,7 +385,7 @@ class ParticleTracerLattice:
                 el.SO=Polygon(points)
             else:
                 raise Exception('No correct element provided')
-    def catch_Errors(self):
+    def catch_Errors(self,constrain):
         #catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         #kinds. This class is not meant to have tons of error handling, so user must be cautious
         if self.elList[0].type=='BEND': #first element can't be a bending element
@@ -393,16 +396,21 @@ class ParticleTracerLattice:
             #that is not dealth with here
             if type(self.bender1)!=type(self.bender2):
                 raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
-        if self.combinerIndex is not None: #if combiner is present, must be before first bender
-            if len(self.benderIndices)!=2:
-                raise Exception('THERE MUST BE TWO BENDERS WITH THE COMBINER')
+        if constrain==True:
+            if self.combinerIndex is None:
+                raise  Exception('THERE MUST BE A COMBINER')
+            if len(self.benderIndices) != 2:
+                raise Exception('THERE MUST BE TWO BENDERS')
             if self.combinerIndex>self.benderIndices[0]:
                 raise Exception('COMBINER MUST BE BEFORE FIRST BENDER')
-            if self.bender1.segmented==True:
-                if (self.bender1.Lseg!=self.bender2.Lseg) or (self.bender1.yokeWidth!=self.bender2.yokeWidth):
-                    raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
-
-
+            if self.bender1.segmented!=self.bender2.segmented:
+                raise Exception('BENDER MUST BOTH BE SEGMENTED OR BOTH NOT')
+            if (self.bender1.Lseg != self.bender2.Lseg) or (self.bender1.yokeWidth != self.bender2.yokeWidth):
+                raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
+            if type(self.bender1.numMagnets)!=type(self.bender2.numMagnets): #for segmented benders
+                raise Exception('BENDERS BOTH MUST HAVE NUMBER OF MAGNETS SPECIFIED OR BE None')
+            if type(self.bender1.ang)!=type(self.bender2.ang): #for continuous benders
+                raise Exception('BENDERS BOTH MUST HAVE BENDING MAGNET SPECIFIED OR BE None')
     def set_Element_Coordinates(self,enforceClosedLattice=True):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input

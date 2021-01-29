@@ -1,3 +1,4 @@
+from profilehooks import profile
 from ParticleTracer import ParticleTracer
 import numpy.linalg as npl
 import matplotlib.pyplot as plt
@@ -20,12 +21,13 @@ class Optimizer:
         self.lattice = lattice
         self.helper=ParaWell() #custom class to help with parallelization
 
-    def initialize_Swarm_In_Phase_Space(self, qMax, pMax,num):
+    def initialize_Swarm_In_Phase_Space(self, qMax, pMax,num,upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
         # to the west. The transverse plane is the yz plane.
         #qMax: absolute value maximum position in the transverse direction
         #qMax: absolute value maximum position in the transverse momentum
         #num: number of samples along each axis in phase space
+        #upperSymmetry: if this is true, exploit the symmetry between +/-z and ignore coordinates below z=0
         qArr = np.linspace(-qMax, qMax, num=num)
         pArr = np.linspace(-pMax, pMax, num=num)
         argsArr = np.asarray(np.meshgrid(qArr, qArr, pArr, pArr)).T.reshape(-1, 4)
@@ -33,7 +35,16 @@ class Optimizer:
         for arg in argsArr:
             qi = np.asarray([0.0, arg[0], arg[1]])
             pi = np.asarray([-self.lattice.v0Nominal, arg[2], arg[3]])
-            swarm.add_Particle(qi, pi)
+            if upperSymmetry==True:
+                if qi[2]<0:
+                    pass
+                else:
+                    swarm.add_Particle(qi, pi)
+            else:
+                swarm.add_Particle(qi, pi)
+
+
+
         return swarm
 
     def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03):
@@ -71,7 +82,8 @@ class Optimizer:
             particle.p = pNew
         return swarm
     def catch_Injection_Errors(self,Li,LOffset):
-        if self.lattice.combiner.Lo * 2 > Li:
+
+        if Li<self.lattice.combiner.Lo : #image length must be larger than combiner length
             raise Exception("IMAGE LENGTH IS TOO SHORT")
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
@@ -99,7 +111,6 @@ class Optimizer:
         for particle in swarm.particles:
             self.step_Particle_Through_Combiner(particle)
             particle.q[:2]=particle.q[:2]@Mrot+r0[:2]
-
         return swarm
 
     def step_Particle_Through_Combiner(self, particle, h=1e-5):
@@ -113,7 +124,6 @@ class Optimizer:
         force = self.lattice.combiner.force
         ap = self.lattice.combiner.ap
         apz = self.lattice.combiner.apz
-
         def is_Clipped(q):
             if np.abs(q[2]) > apz:
                 return True
@@ -185,9 +195,32 @@ class Optimizer:
             particle.p = p
 
         return swarm
-
-    def compute_Survival_Through_Injector(self, Lo,Li, LOffset, qMax, pMax, numPhaseSpace):
-        swarm = self.initialize_Swarm_At_Combiner_Output(Li, Lo, LOffset, qMax, pMax, numPhaseSpace)
+    def compute_Survival_Through_Injector(self, Lo,Li, LOffset, qMax, pMax, numPhaseSpace,testNextElement=True):
+        """
+        return fraction
+        :param Lo:
+        :param Li:
+        :param LOffset:
+        :param qMax:
+        :param pMax:
+        :param numPhaseSpace:
+        :param testNextElement:
+        :return:
+        """
+        swarm = self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace)
+        particleTracer=ParticleTracer(self.lattice)
+        if testNextElement==True:
+            elNext=self.lattice.elList[self.lattice.combinerIndex+1]
+            #need to scoot particle along
+            h=2.5e-5
+            T=elNext.Lo/self.lattice.v0Nominal
+            pre=0
+            post=0
+            for particle in swarm.particles:
+                particle.q=particle.q+particle.p*1e-10 #scoot particle into next element
+                #pre+=int(particle.clipped)
+                particleTracer.trace(particle,h,T,fastMode=True)
+                #post += int(particle.clipped)
         return swarm.survival()
 
     # def maximize_Survival_Through_Injector_Brute(self, LiMin,LiMax,LoMin,LoMax,qMax, pMax, numPhaseSpace, numParams=50):
@@ -217,20 +250,13 @@ class Optimizer:
     #     survivalArr=np.asarray(survivalList)
     #     return np.max(survivalArr),argArr[np.argmax(survivalArr)]
 
-    def maximize_Survival_Through_Injector_BB(self, generations,bounds,qMax, pMax, numPhaseSpace):
+    def maximize_Survival_Through_Injector_BB(self, generations,bounds,qMax, pMax, numPhaseSpace,upperSymmetry=False):
         #bounds: a list of tuples of the bounds for Lo,Li,LOffset.
         #if len(bounds[1])!=len(bounds[0]) or len(bounds[0])!=3:
         #    raise Exception("BOUNDS ARE NOT IN RIGHT SHAPE")
-        swarmInitial = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
-
         def func(X):
-            Lo,Li,LOffset = X
-            self.catch_Injection_Errors(Li, LOffset)
-            swarm = self.send_Swarm_Through_Shaper(swarmInitial, Lo, Li)
-            swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
-            for particle in swarm.particles:
-                self.step_Particle_Through_Combiner(particle)
-            return 1/(1+swarm.survival())
+            survival=self.compute_Survival_Through_Injector(*X,qMax,pMax,numPhaseSpace)
+            return 1/(1+survival)
         numWorkers=mp.cpu_count()
         res=bb.search_min(f=func, domain=bounds, budget=generations*numWorkers, batch=numWorkers, resfile='test.csv')
         print(res,func(res))
@@ -247,44 +273,17 @@ class Optimizer:
         return swarmNew
 
 def main():
-    lattice = ParticleTracerLattice(200.0)
-    fileBend1 = 'benderSeg1.txt'
-    fileBend2 = 'benderSeg2.txt'
-    fileBender1Fringe = 'benderFringeCap1.txt'
-    fileBenderInternalFringe1 = 'benderFringeInternal1.txt'
-    fileBender2Fringe = 'benderFringeCap2.txt'
-    fileBenderInternalFringe2 = 'benderFringeInternal2.txt'
-    file2DLens = 'lens2D.txt'
-    file3DLens = 'lens3D.txt'
-    fileCombiner = 'combinerData.txt'
-    yokeWidth = .0254 * 5 / 8
-    numMagnets = 110
-    extraSpace = 1e-3
-    Lm = .0254
-    rp = .0125
-    Llens1 = .3
-    rb = 1.0
-
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Combiner_Sim(fileCombiner)
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm, None, rb,
-                                                  extraSpace, yokeWidth)
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb,
-                                                  extraSpace, yokeWidth)
-    lattice.end_Lattice()
-
+    from latticeConfig1 import lattice
 
     qMax = 2.5e-3
-    pMax = 3e-1
+    pMax = 5.0
     numParticles = 5
     optimizer = Optimizer(lattice)
 
 
-    optimizer.initialize_Swarm_At_Combiner_Output(0.25375877,1.21043605,0.04970048,qMax,pMax,numParticles)
-    #bounds=[(.15,.3),(1.0,2.0),(-.05,.05)] #Lo,Li,LOffset
-    #optimizer.maximize_Survival_Through_Injector_BB(5,bounds,qMax,pMax,numParticles) [0.25375877 1.21043605 0.04970048] 0.7852086238335301
+    #optimizer.compute_Survival_Through_Injector(0.25375877,1.21043605,0.04970048,qMax,pMax,numParticles,testNextElement=True)
+    #bounds=[(.15,.3),(.75,2.0),(-.05,.05)] #Lo,Li,LOffset
+    #optimizer.maximize_Survival_Through_Injector_BB(10,bounds,qMax,pMax,numParticles,upperSymmetry=False)
 
     #
     # qMax = 2.5e-3

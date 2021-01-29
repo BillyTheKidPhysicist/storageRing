@@ -23,7 +23,8 @@ class Swarm:
             return numSurvived
     def copy(self):
         return copy.deepcopy(self)
-
+    def num_Particles(self):
+        return len(self.particles)
 class Particle:
     def __init__(self,qi,pi):
         self.q=qi
@@ -63,6 +64,5 @@ class Particle:
         if self.currentEl is not None:
             self.currentElIndex=self.currentEl.index
             self.currentEl=None # to save memory
-        self.force=None
     def copy(self):
         return copy.deepcopy(self)

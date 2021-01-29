@@ -99,6 +99,14 @@ class Element:
         #this is used typically for setting the length after satisfying constraints
         self.L=L
         self.Lo=L
+
+    def is_Coord_Inside(self, q):
+        """
+
+        :param q:
+        :return:
+        """
+        return None
 class LensIdeal(Element):
     #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
     #F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
@@ -655,8 +663,8 @@ class BenderSimSegmented(BenderIdealSegmented):
         sys.exit()
 
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
-    def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,numMagnets,rb,extraSpace,yokeWidth,ap):
-        super().__init__(PTL,numMagnets,Lm,None,None,None,rb,yokeWidth,extraSpace,ap,fillParams=False)
+    def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap):
+        super().__init__(PTL,numMagnets,Lm,Lcap,None,rp,rb,yokeWidth,extraSpace,ap,fillParams=False)
         self.PTL=PTL
         self.fileSeg=fileSeg
         self.fileCap=fileCap
@@ -665,6 +673,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.extraSpace=extraSpace
         self.yokeWidth=yokeWidth
         self.ap=ap
+        self.K0=K0
         self.ucAng=None
         self.dataSeg=None
         self.dataCap=None
@@ -681,22 +690,26 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fill_Params()
     def fill_Params(self):
         self.Lseg=self.Lm+self.space*2
-        if self.dataSeg is None:
+        rOffsetFact = 1.00125  # emperical factor that reduces amplitude of off orbit oscillations. An approximation.
+        self.rOffsetFunc = lambda rb: rOffsetFact * np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4 # this accounts for energy loss
+        if self.dataSeg is None and self.fileSeg is not None:
             self.fill_Force_Func_Seg()
-            self.rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
+            rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
+            if np.round(rp,6)!=np.round(self.rp,6):
+                raise Exception('BORE RADIUS FROM FIELD FILE DOES NOT MATCH')
             if self.ap is None:
                 self.ap=self.rp*.9
             elif self.ap>self.rp:
                 raise Exception('APETURE IS LARGER THAN BORE')
-            self.K = self.compute_K()
-            rOffsetFact=1.00125 #emperical factor that reduces amplitude of off orbit oscillations. An approximation.
-            self.rOffsetFunc = lambda rb:  rOffsetFact*np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this
+            self.check_K0()
             self.dataSeg=False #to save memory and pickling time
-        if self.dataCap is None:
+        if self.dataCap is None and self.dataCap is not None:
             self.fill_Force_Func_Cap()
-            self.Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
+            Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
+            if self.Lcap!=Lcap:
+                raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
             self.dataCap=False #to save memory and pickling time
-        if self.dataInternalFringe is None:
+        if self.dataInternalFringe is None and self.dataInternalFringe is not None:
             self.fill_Force_Func_Internal_Fringe()
             self.dataInternalFringe=False #to save memory and pickling time
         if self.numMagnets is not None:
@@ -809,7 +822,8 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.FyFunc_Seg = lambda x, y, z: tempz((y, -z, x))
         self.FzFunc_Seg = lambda x, y, z: -tempy((y, -z, x))
 
-    def compute_K(self):
+    def check_K0(self):
+        print('here')
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
         xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.dataSeg[:,0].mean()
         yFit=[]
@@ -817,13 +831,12 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             yFit.append(self.FxFunc_Seg(x,0,0))
         xFit=xFit-self.dataSeg[:,0].mean()
         K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
-        K0=12037000
-        if .99*K0<K<1.01*K0:
-            K=K0
+        percDif=100.0*(K-self.K0)/self.K0
+        if np.abs(percDif)<1.0: #must be within roughly 1%
+            pass #k0 is sufficiently close
         else:
-            raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE BOUND')
-        return K
-
+            raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE RANGE')
+        print(percDif)
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
