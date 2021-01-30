@@ -40,10 +40,10 @@ class ParticleTracerLattice:
         ucAng1=np.arctan(((L+2*space)/2)/(rb-rp-yokeWidth))
         return rb
 
-    def add_Combiner_Sim(self,file):
+    def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
 
-        el = CombinerSim(self,file)
+        el = CombinerSim(self,file,sizeScale=sizeScale)
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner=el
         self.combinerIndex=el.index
@@ -135,7 +135,7 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Ideal(self,Lm=.2,c1=1,c2=20,ap=.015):
+    def add_Combiner_Ideal(self,Lm=.2,c1=1,c2=20,ap=.015,sizeScale=1.0):
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #add combiner (stern gerlacht) element to lattice
         #La: input length of combiner. The bent portion outside of combiner
@@ -149,7 +149,7 @@ class ParticleTracerLattice:
         #if La<minLa:
         #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el=CombinerIdeal(self, Lm, c1, c2, ap) #create a combiner element object
+        el=CombinerIdeal(self, Lm, c1, c2, ap,sizeScale) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner = el
         self.combinerIndex=el.index
@@ -266,7 +266,7 @@ class ParticleTracerLattice:
                 cost2=np.round(N2)-N2
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
-        ranges=[(.98*r10,1.02*r10),(.98*r20,1.02*r20)]
+        ranges=[(.99*r10,1.01*r10),(.99*r20,1.01*r20)]
         x0=np.asarray([r10,r20])
 
 
@@ -321,7 +321,8 @@ class ParticleTracerLattice:
         tau = np.arctan((r2 - r1) / L3)
         theta1 = 2 * np.pi - np.pi / 2 - c - alpha - tau
         theta2 = 2 * np.pi - inputAng - theta1
-        return theta1,theta2,L3
+        params=[theta1,theta2,L3]
+        return params
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
@@ -388,6 +389,8 @@ class ParticleTracerLattice:
             if type(self.bender1)!=type(self.bender2):
                 raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
         if constrain==True:
+            if type(self.bender1)!=type(self.bender2): #for continuous benders
+                raise Exception('BENDERS BOTH MUST BE SAME TYPE')
             if self.combinerIndex is None:
                 raise  Exception('THERE MUST BE A COMBINER')
             if len(self.benderIndices) != 2:
@@ -395,11 +398,9 @@ class ParticleTracerLattice:
             if self.combinerIndex>self.benderIndices[0]:
                 raise Exception('COMBINER MUST BE BEFORE FIRST BENDER')
 
-            if type(self.bender1.ang)!=type(self.bender2.ang): #for continuous benders
-                raise Exception('BENDERS BOTH MUST HAVE BENDING MAGNET SPECIFIED OR BE None')
-
-            if (self.bender1.Lseg != self.bender2.Lseg) or (self.bender1.yokeWidth != self.bender2.yokeWidth):
-                raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
+            if self.bender1.segmented==True:
+                if (self.bender1.Lseg != self.bender2.Lseg) or (self.bender1.yokeWidth != self.bender2.yokeWidth):
+                    raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
             if self.bender1.segmented != self.bender2.segmented:
                 raise Exception('BENDER MUST BOTH BE SEGMENTED OR BOTH NOT')
         if builLattice==True and constrain==False:

@@ -271,39 +271,26 @@ class Optimizer:
             for particle in swarmNew.particles:
                 particleTracer.trace(particle,h,T)
         return swarmNew
-
-def main():
-    from latticeConfig1 import lattice
-
-    qMax = 2.5e-3
-    pMax = 5.0
-    numParticles = 5
-    optimizer = Optimizer(lattice)
-
-
-    #optimizer.compute_Survival_Through_Injector(0.25375877,1.21043605,0.04970048,qMax,pMax,numParticles,testNextElement=True)
-    #bounds=[(.15,.3),(.75,2.0),(-.05,.05)] #Lo,Li,LOffset
-    #optimizer.maximize_Survival_Through_Injector_BB(10,bounds,qMax,pMax,numParticles,upperSymmetry=False)
-
-    #
-    # qMax = 2.5e-3
-    # pMax = 3e-1
-    # numParticles = 7
-    # numParams = 20
-    # LiMin=1.0
-    # LiMax=2.0
-    # LoMin=.15
-    # LoMax=.4
-    # optimizer = Optimizer(lattice)
-    # #optimizer.compute_Survival_Through_Injector(1.0,.15,0.0,qMax,pMax,3)
-    # t=time.time()
-    # sol=optimizer.maximize_Survival_Through_Injector(LiMin,LiMax,LoMin,LoMax,qMax,pMax,numParticles,numParams=numParams)
-    # print(sol)
-    # print('t',1e3*(time.time()-t)/numParams**2,time.time()-t)
-
-
-
-if __name__ == '__main__':
-    main()
-
-
+    def maximize_Suvival_Through_Lattice(self):
+        qMax=2.5e-4
+        pMax=3e-1
+        numPhaseSpace=3
+        particleTracer = ParticleTracer(self.lattice)
+        T0=100*self.lattice.totalLength/200.0
+        def func1(X):
+            F1,F2=X
+            print('here')
+            Lo=.25
+            Li=1.0
+            LOffset=0.0
+            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace)#
+            self.lattice.elList[3].forceFact=F1
+            self.lattice.elList[5].forceFact=F2
+            for particle in swarm.particles:
+                particleTracer.trace(particle,1e-5,T0)
+            print('done')
+            return 1/(1+swarm.survival())
+        bounds=[[.1,.5],[.1,.5]]
+        res = bb.search_min(f=func1, domain=bounds, budget=32*5, batch=32,
+                            resfile='test.csv')
+        print(res,func1(*res))

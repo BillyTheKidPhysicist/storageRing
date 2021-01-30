@@ -26,6 +26,8 @@ rb = 1.0
 Lcap=0.01875
 K0 = 12037000
 
+raise Exception('BROKEN')
+
 
 lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
 lattice.add_Combiner_Sim(fileCombiner)

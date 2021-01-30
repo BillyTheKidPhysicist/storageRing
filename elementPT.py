@@ -242,16 +242,18 @@ class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
-    def __init__(self,PTL,Lm,c1,c2,ap,fillsParams=True):
+    def __init__(self,PTL,Lm,c1,c2,ap,sizeScale,fillsParams=True):
         super().__init__()
         self.sim=False
         self.PTL=PTL
         self.ap = ap
         self.Lm=Lm
-        self.Lb=self.Lm
-        self.La=None
+        self.La=None #length of segment between inlet and straight section inside the combiner. This length goes from
+        #the center of the inlet to the center of the kink
+        self.Lb=None #length of straight section after the kink after the inlet
         self.c1=c1
         self.c2=c2
+        self.sizeScale=sizeScale
         self.space=0 #space at the end of the combiner to account for fringe fields
 
         self.type='COMBINER'
@@ -263,6 +265,12 @@ class CombinerIdeal(Element):
         if fillsParams==True:
             self.fill_Params()
     def fill_Params(self):
+        self.Lm=self.Lm*self.sizeScale
+        self.Lb=self.Lm #length of segment after kink after the inlet
+        self.ap=self.ap*self.sizeScale
+        self.c1=self.c1/self.sizeScale
+        self.c2=self.c2/self.sizeScale
+
         inputAngle, inputOffset,qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
@@ -363,9 +371,9 @@ class CombinerIdeal(Element):
                 return False
 
 class CombinerSim(CombinerIdeal):
-    def __init__(self,PTL,combinerFile):
+    def __init__(self,PTL,combinerFile,sizeScale=1.0):
         Lm = .18
-        super().__init__(PTL,Lm,None,None,None,fillsParams=False)
+        super().__init__(PTL,Lm,None,None,None,sizeScale,fillsParams=False)
         self.sim=True
         self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields
         self.data=None
@@ -375,16 +383,17 @@ class CombinerSim(CombinerIdeal):
         self.FzFunc=None
         self.fill_Params()
     def fill_Params(self):
-
+        self.Lm=self.sizeScale*self.Lm
+        self.space=self.sizeScale*self.space
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        xArr = np.unique(self.data[:, 0])
-        yArr = np.unique(self.data[:, 1])
-        zArr = np.unique(self.data[:, 2])
-        BGradx = self.data[:, 3]
-        BGrady = self.data[:, 4]
-        BGradz = self.data[:, 5]
+        xArr = self.sizeScale*np.unique(self.data[:, 0])
+        yArr = self.sizeScale*np.unique(self.data[:, 1])
+        zArr = self.sizeScale*np.unique(self.data[:, 2])
+        BGradx = self.data[:, 3]/self.sizeScale
+        BGrady = self.data[:, 4]/self.sizeScale
+        BGradz = self.data[:, 5]/self.sizeScale
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
@@ -407,9 +416,9 @@ class CombinerSim(CombinerIdeal):
         self.FyFunc = lambda x, y, z: tempy((z, y, x))
         self.FzFunc = lambda x, y, z: tempz((z, y, x))
 
-        #TODO: I'M PRETTU SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
-
+        #TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo #TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
@@ -708,13 +717,13 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 raise Exception('BORE RADIUS FROM FIELD FILE DOES NOT MATCH')
             self.check_K0()
             self.dataSeg=None #to save memory and pickling time
-        if self.dataCap is None and self.dataCap is not None:
+        if self.dataCap is None and self.fileCap is not None:
             self.fill_Force_Func_Cap()
             Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
             if self.Lcap!=Lcap:
                 raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
             self.dataCap=None #to save memory and pickling time
-        if self.dataInternalFringe is None and self.dataInternalFringe is not None:
+        if self.dataInternalFringe is None and self.fileInternalFringe is not None:
             self.fill_Force_Func_Internal_Fringe()
             self.dataInternalFringe=None #to save memory and pickling time
         if self.numMagnets is not None:
