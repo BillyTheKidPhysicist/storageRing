@@ -22,6 +22,7 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 #this class does the work of tracing the particles through the lattice with timestepping algorithms
 class ParticleTracer:
     def __init__(self,latticeObject):
+        self.LO=latticeObject
         self.lattice = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.test=latticeObject
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
@@ -53,11 +54,11 @@ class ParticleTracer:
         self.particle.force=None
         dl=self.particle.v0*self.h #approximate stepsize
         for el in self.lattice:
-            if dl*10>el.Lo:
+            if dl>el.Lo/10.0:
                 raise Exception('STEP SIZE TOO LARGE')
         self.particle.currentEl = self.which_Element_Slow(self.particle.q)
         if self.particle.currentEl is None:
-            raise Exception('Particle\'s initial position is outside vacuum' )
+            self.particle.clipped=True
         if self.fastMode==False:
             self.particle.log_Params()
             pass
@@ -71,12 +72,15 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         self.particle = particle
-        if self.particle.clipped==True:
+        if self.particle.clipped==True: #some particles may come in clipped so ignore them
             return self.particle
         self.fastMode=fastMode
         self.h=h
         self.h0=h
         self.initialize()
+        if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
+            # to become clipped
+            return particle
 
         while(True):
             if self.T+self.h>T0:

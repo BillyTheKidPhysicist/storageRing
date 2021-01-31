@@ -16,6 +16,8 @@ class Swarm:
         #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
         numSurvived = 0.0
         for particle in self.particles:
+            if particle.clipped is None:
+                raise Exception('PARTICLE HAS NOT BEEN TRACED')
             numSurvived += float(not particle.clipped) #if it has NOT clipped then turn that into a 1.0
         if frac == True:
             return numSurvived / len(self.particles)

@@ -11,7 +11,7 @@ def main():
 
     lattice = ParticleTracerLattice(200.0)
 
-    directory='latticeConfig2_Files\\'
+    directory='latticeConfig2_Files/'
     fileBend1 = directory+'benderSeg1.txt'
     fileBend2 = directory+'benderSeg2.txt'
     fileBender1Fringe = directory+'benderFringeCap1.txt'

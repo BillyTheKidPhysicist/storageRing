@@ -90,7 +90,7 @@ class Optimizer:
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
 
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax, pMax, numPhaseSpace):
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=False):
         # this method generates a cloud of particles in phase space at the output of the combiner.
         # Here the output refers to the origin in the combiner's reference frame.
         #Li: image length, ie distance from end of lens to focus
@@ -107,18 +107,28 @@ class Optimizer:
         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
 
         #now I need to trace and position the swarm at the output. This is done by moving the swarm along with combiner to the
-        #combiner's outlet in it's final position
+        #combiner's outlet in it's final position.
         r0 = self.lattice.combiner.r2
         Mrot=self.lattice.combiner.RIn
-        for particle in swarm.particles:
-            self.step_Particle_Through_Combiner(particle)
-            particle.q[:2]=particle.q[:2]@Mrot+r0[:2]
+        def func(particle):
+            particle=self.step_Particle_Through_Combiner(particle)
+            particle.q[:2] = particle.q[:2] @ Mrot + r0[:2]
+            return particle
+        if parallel==False:
+            for i in range(len(swarm.particles)):
+                swarm.particles[i]=func(swarm.particles[i])
+        elif parallel==True:
+            results=self.helper.parallel_Chunk_Problem(func,swarm.particles)
+            for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
+                #is not important
+                swarm.particles[i]=results[i][1]
         return swarm
 
     def step_Particle_Through_Combiner(self, particle, h=1e-5):
+        particle=particle.copy()
         q = particle.q.copy()
         p = particle.p.copy()
-        particle.log_Params()
+        #particle.log_Params()
         dx = (self.lattice.combiner.space * 2 + self.lattice.combiner.Lm) - q[0]
         dt = dx / p[0]
         q += dt * p
@@ -135,7 +145,7 @@ class Optimizer:
         if is_Clipped(q) == True:
             particle.finished()
             particle.clipped = True
-            return
+            return particle
         while (True):
             if particle.force is not None:
                 F = particle.force
@@ -161,9 +171,10 @@ class Optimizer:
             if is_Clipped(q) == True:
                 particle.finished()
                 particle.clipped = True
-                return
+                return particle
         particle.finished()
         particle.clipped = False
+        return particle
 
         #print(particle.qi,particle.pi)
         #plt.plot(particle.qArr[:,0],particle.qArr[:,2])
@@ -276,17 +287,26 @@ class Optimizer:
         return swarmNew
 
     def maximize_Suvival_Through_Lattice(self):
-        qMax=2.5e-4
-        pMax=3e-1
-        numPhaseSpace=3
-        T0=10*self.lattice.totalLength/200.0
-        h=1e-5
+        from poap.controller import BasicWorkerThread, ThreadController
+
+        from pySOT.experimental_design import SymmetricLatinHypercube
+        from pySOT.optimization_problems import Ackley
+        from pySOT.strategy import SRBFStrategy
+        from pySOT.surrogate import CubicKernel, LinearTail, RBFInterpolant
+        
+        qMax=2.5e-3
+        pMax=3e1
+        numPhaseSpace=9
+        T0=100*self.lattice.totalLength/200.0
+        h=2.5e-5
         def func(X):
-            F1,F2=X
-            Lo=.25
-            Li=1.0
-            LOffset=0.0
-            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace)#
+            Lo,Li,LOffset,F1,F2=X
+            #F1=.2
+            #F2=.2
+            #Lo=.25
+            #Li=1.0
+            #LOffset=0.0
+            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=True)
             self.lattice.elList[3].forceFact=F1
             self.lattice.elList[5].forceFact=F2
             swarm=self.trace_Swarm_Through_Lattice(swarm,h,T0,parallel=True)
@@ -294,29 +314,80 @@ class Optimizer:
         class problem(ps.optimization_problems.OptimizationProblem):
             def __init__(self,function):
                 self.func=function
-                self.lb = np.asarray([.1,.1])
-                self.ub = np.asarray([.5,.5])
-                self.dim = 2
+                self.lb = np.asarray([.15,.75,-.1,.1,.1])
+                self.ub = np.asarray([.4,2.0,.1,.5,.5])
+                self.dim = len(self.lb)
                 self.int_var = []
-                self.cont_var = np.asarray([0,1])
+                self.cont_var = np.asarray([0,1,2,3,4])
                 self.helper = ParaWell()
+                self.funcEval=0
             def eval(self, args):
-                print('here')
-                return self.func(args)
+                self.funcEval+=1
+                print('eval num',self.funcEval,'args',args)
+                val=self.func(args)
+                print('eval num',self.funcEval,'is done')
+                return val
 
-        prob=problem(func)
-        rbf = ps.surrogate.RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub)
-        init = ps.experimental_design.LatinHypercube(dim=prob.dim, num_pts=5*(prob.dim+1))
-        controller = pc.ThreadController()
-        controller.strategy = ps.strategy.SRBFStrategy(max_evals=25, opt_prob=prob, exp_design=init, surrogate=rbf)
-        for i in range(4):
-            worker = pc.BasicWorkerThread(controller, prob.eval)
-            # worker=pc.ProcessWorkerThread(controller,prob.eval)
+
+
+
+
+
+        num_threads = 4
+        max_evals = 50
+        prob =problem(func)#Ackley(dim=1)
+        #X=[0.37727273 ,0.08181818 ,1.02272727 ,0.20909091, 0.5       ]
+        #prob.eval(X)
+        rbf = RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub, kernel=CubicKernel(),
+                             tail=LinearTail(prob.dim))
+        slhd = SymmetricLatinHypercube(dim=prob.dim, num_pts=2 * (prob.dim + 1))
+
+        # Create a strategy and a controller
+        controller = ThreadController()
+        controller.strategy = SRBFStrategy(
+            max_evals=max_evals, opt_prob=prob, exp_design=slhd, surrogate=rbf, asynchronous=True
+        )
+
+        print("Number of threads: {}".format(num_threads))
+        print("Maximum number of evaluations: {}".format(max_evals))
+        print("Strategy: {}".format(controller.strategy.__class__.__name__))
+        print("Experimental design: {}".format(slhd.__class__.__name__))
+        print("Surrogate: {}".format(rbf.__class__.__name__))
+
+        # Launch the threads and give them access to the objective function
+        t=time.time()
+        for _ in range(num_threads):
+            worker = BasicWorkerThread(controller, prob.eval)
             controller.launch_worker(worker)
-        print('threads started')
+
+        # Run the optimization strategy
         result = controller.run()
-        print(result.value)
-        print(result.params)
+        print(time.time()-t)  #time to beat, 312
+        print("Best value found: {0}".format(1/result.value - 1.0))
+        print(
+            "Best solution found: {0}\n".format(
+                np.array_str(result.params[0], max_line_width=np.inf, precision=5, suppress_small=True)
+            )
+        )
+
+
+
+        #
+        #
+        #
+        # prob=problem(func)
+        # rbf = ps.surrogate.RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub)
+        # init = ps.experimental_design.LatinHypercube(dim=prob.dim, num_pts=(prob.dim+1))
+        # controller = pc.ThreadController()
+        # controller.strategy = ps.strategy.SRBFStrategy(max_evals=6, opt_prob=prob, exp_design=init, surrogate=rbf)
+        # for i in range(1):
+        #     worker = pc.BasicWorkerThread(controller, prob.eval)
+        #     controller.launch_worker(worker)
+        # print('threads started')
+        # result = controller.run()
+        # print(result.value,1.0-1/result.value)
+        # print(result.params)
+
 
 
         #bounds=[[.1,.5],[.1,.5]]

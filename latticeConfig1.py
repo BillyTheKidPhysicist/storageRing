@@ -39,3 +39,5 @@ lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, file
                                              extraSpace, yokeWidth)
 lattice.end_Lattice()
 lattice.show_Lattice()
+optimizer = Optimizer(lattice)
+optimizer.maximize_Suvival_Through_Lattice()

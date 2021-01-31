@@ -11,7 +11,7 @@ def main():
 
     lattice = ParticleTracerLattice(200.0)
 
-    directory='latticeConfig2_Files\\'
+    directory='latticeConfig3_Files/'
     fileBend1 = directory+'benderSeg1.txt'
     fileBend2 = directory+'benderSeg2.txt'
     fileBender1Fringe = directory+'benderFringeCap1.txt'
@@ -66,7 +66,7 @@ def main():
     plt.show()
     #lattice.show_Lattice(particleCoords=particle.q)
 
-    #optimizer=Optimizer(lattice)
-    #optimizer.maximize_Suvival_Through_Lattice()
+    # optimizer=Optimizer(lattice)
+    # optimizer.maximize_Suvival_Through_Lattice()
 if __name__=='__main__':
     main()

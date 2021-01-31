@@ -64,6 +64,7 @@ class ParaWell:
         #maxPoolUses: maximum number of times to reuse the cached pool before clearing it
         self.pool=None
         self.poolUse=0 #pool use starts at 0
+        self.test=0
         if saveMemory==False:
             self.maxPoolUses=99999999999 #set to a huge number
         else:
@@ -100,8 +101,8 @@ class ParaWell:
         #func: the function that is being fed the arguments
         #argsList: a list of arguments to work on
         # numWorkers: processes to work on the problem
-        #returns a list of tuples of the results paired with the arguments as (args,results)
-
+        #returns a list of tuples of the arguments paired with the results as (args,results)
+        self.test+=1
         argChunkList=[]
         for i in range(numWorkers):
             argChunkList.append([])
@@ -145,4 +146,6 @@ class ParaWell:
                 pa.helpers.shutdown()
                 self.pool = pa.pools.ProcessPool(nodes=numWorkers)
                 self.poolUse=0
-        self.poolUse+=1
+            self.poolUse+=1
+
+
