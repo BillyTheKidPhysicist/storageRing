@@ -1,0 +1,67 @@
+Results from config 2
+------------------------------------
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1278.0857429504395
+Best value found: 0.2993989481592787
+Best solution found: [0.2793  1.57571 0.09746 0.14335 0.20284]
+
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1427.0810718536377
+Best value found: 0.2991485098923117
+Best solution found: [0.24251 1.4554  0.09822 0.43211 0.17695]
+
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1619.7706882953644
+Best value found: 0.2992737290257952
+Best solution found: [0.37727 1.43182 0.08182 0.31818 0.24545]
+
+
+Process finished with exit code 0
+
+------------------------------------
+
+reults from config 3
+------------------------------------
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1705.0204045772552
+Best value found: 0.5096418732782371
+Best solution found: [0.39487 1.68603 0.09803 0.44786 0.14676]
+
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1675.7532658576965
+Best value found: 0.5179063360881542
+Best solution found: [0.15044 1.20405 0.09365 0.25984 0.35227]
+
+Number of threads: 4
+Maximum number of evaluations: 50
+Strategy: SRBFStrategy
+Experimental design: SymmetricLatinHypercube
+Surrogate: RBFInterpolant
+1464.6378858089447
+Best value found: 0.5088905584773353
+Best solution found: [ 0.28636  1.77273 -0.00909  0.20909  0.17273]
+
+
+Process finished with exit code 0
+
+------------------------------------

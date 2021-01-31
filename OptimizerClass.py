@@ -90,7 +90,7 @@ class Optimizer:
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
 
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=False):
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=False,upperSymmetry=False):
         # this method generates a cloud of particles in phase space at the output of the combiner.
         # Here the output refers to the origin in the combiner's reference frame.
         #Li: image length, ie distance from end of lens to focus
@@ -102,7 +102,7 @@ class Optimizer:
         #pMax: absolute vale of maximum value in momentum dimensions
         #num: number of particles along each axis, total number is axis**n where n is dimensions
         self.catch_Injection_Errors(Li,LOffset)
-        swarm = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
+        swarm = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace,upperSymmetry=upperSymmetry)
         swarm = self.send_Swarm_Through_Shaper(swarm, Lo, Li)
         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
 
@@ -290,13 +290,12 @@ class Optimizer:
         from poap.controller import BasicWorkerThread, ThreadController
 
         from pySOT.experimental_design import SymmetricLatinHypercube
-        from pySOT.optimization_problems import Ackley
         from pySOT.strategy import SRBFStrategy
         from pySOT.surrogate import CubicKernel, LinearTail, RBFInterpolant
         
         qMax=2.5e-3
         pMax=3e1
-        numPhaseSpace=9
+        numPhaseSpace=11
         T0=100*self.lattice.totalLength/200.0
         h=2.5e-5
         def func(X):
@@ -306,7 +305,7 @@ class Optimizer:
             #Lo=.25
             #Li=1.0
             #LOffset=0.0
-            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=True)
+            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=True,upperSymmetry=True)
             self.lattice.elList[3].forceFact=F1
             self.lattice.elList[5].forceFact=F2
             swarm=self.trace_Swarm_Through_Lattice(swarm,h,T0,parallel=True)
@@ -323,75 +322,60 @@ class Optimizer:
                 self.funcEval=0
             def eval(self, args):
                 self.funcEval+=1
-                print('eval num',self.funcEval,'args',args)
+                #print('eval num',self.funcEval,'args',args)
                 val=self.func(args)
-                print('eval num',self.funcEval,'is done')
+                #print('eval num',self.funcEval,'is done')
                 return val
 
 
+        def run_Model():
+            num_threads = 4
+            max_evals = 50
+            prob =problem(func)#Ackley(dim=1)
+            #X=[0.37727273 ,0.08181818 ,1.02272727 ,0.20909091, 0.5       ]
+            #prob.eval(X)
+            rbf = RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub, kernel=CubicKernel(),
+                                 tail=LinearTail(prob.dim))
+            slhd = SymmetricLatinHypercube(dim=prob.dim, num_pts=2 * (prob.dim + 1))
 
-
-
-
-        num_threads = 4
-        max_evals = 50
-        prob =problem(func)#Ackley(dim=1)
-        #X=[0.37727273 ,0.08181818 ,1.02272727 ,0.20909091, 0.5       ]
-        #prob.eval(X)
-        rbf = RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub, kernel=CubicKernel(),
-                             tail=LinearTail(prob.dim))
-        slhd = SymmetricLatinHypercube(dim=prob.dim, num_pts=2 * (prob.dim + 1))
-
-        # Create a strategy and a controller
-        controller = ThreadController()
-        controller.strategy = SRBFStrategy(
-            max_evals=max_evals, opt_prob=prob, exp_design=slhd, surrogate=rbf, asynchronous=True
-        )
-
-        print("Number of threads: {}".format(num_threads))
-        print("Maximum number of evaluations: {}".format(max_evals))
-        print("Strategy: {}".format(controller.strategy.__class__.__name__))
-        print("Experimental design: {}".format(slhd.__class__.__name__))
-        print("Surrogate: {}".format(rbf.__class__.__name__))
-
-        # Launch the threads and give them access to the objective function
-        t=time.time()
-        for _ in range(num_threads):
-            worker = BasicWorkerThread(controller, prob.eval)
-            controller.launch_worker(worker)
-
-        # Run the optimization strategy
-        result = controller.run()
-        print(time.time()-t)  #time to beat, 312
-        print("Best value found: {0}".format(1/result.value - 1.0))
-        print(
-            "Best solution found: {0}\n".format(
-                np.array_str(result.params[0], max_line_width=np.inf, precision=5, suppress_small=True)
+            # Create a strategy and a controller
+            controller = ThreadController()
+            controller.strategy = SRBFStrategy(
+                max_evals=max_evals, opt_prob=prob, exp_design=slhd, surrogate=rbf, asynchronous=True
             )
-        )
+
+            print("Number of threads: {}".format(num_threads))
+            print("Maximum number of evaluations: {}".format(max_evals))
+            print("Strategy: {}".format(controller.strategy.__class__.__name__))
+            print("Experimental design: {}".format(slhd.__class__.__name__))
+            print("Surrogate: {}".format(rbf.__class__.__name__))
+
+            # Launch the threads and give them access to the objective function
+            t=time.time()
+            for _ in range(num_threads):
+                worker = BasicWorkerThread(controller, prob.eval)
+                controller.launch_worker(worker)
+
+            # Run the optimization strategy
+            result = controller.run()
+            print(time.time()-t)  #time to beat, 312
+            print("Best value found: {0}".format(1/result.value - 1.0))
+            print(
+                "Best solution found: {0}\n".format(
+                    np.array_str(result.params[0], max_line_width=np.inf, precision=5, suppress_small=True)
+                )
+            )
+        run_Model()
+        run_Model()
+        run_Model()
 
 
 
-        #
-        #
-        #
-        # prob=problem(func)
-        # rbf = ps.surrogate.RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub)
-        # init = ps.experimental_design.LatinHypercube(dim=prob.dim, num_pts=(prob.dim+1))
-        # controller = pc.ThreadController()
-        # controller.strategy = ps.strategy.SRBFStrategy(max_evals=6, opt_prob=prob, exp_design=init, surrogate=rbf)
-        # for i in range(1):
-        #     worker = pc.BasicWorkerThread(controller, prob.eval)
-        #     controller.launch_worker(worker)
-        # print('threads started')
-        # result = controller.run()
-        # print(result.value,1.0-1/result.value)
-        # print(result.params)
 
-
-
-        #bounds=[[.1,.5],[.1,.5]]
-        #num=2
-        #t=time.time()
-        #spo.brute(func1,bounds,Ns=num)
-        #print((time.time()-t)/num**2)
+        #config2
+        #Best
+        #value
+        #found: 0.269166285627191
+        #Best
+        #solution
+        #found: [0.30332 1.74953 0.09113 0.23182 0.20247]

@@ -52,21 +52,21 @@ def main():
     #print(lattice.solve_Combiner_Constraints())
     #sys.exit()
 
-    particleTracer=ParticleTracer(lattice)
-    qi=np.asarray([-1e-10,1e-3,0.0])
-    pi=np.asarray([-200.0,0,0])
-    particle=Particle(qi,pi)
-    h=1e-6
-    T=50.0/200
-    particleTracer.trace(particle,h,T)
-    print(particle.clipped)
-    qoArr=particle.qoArr
-    #plt.plot(qoArr[:,0],qoArr[:,1])
-    plt.plot(particleTracer.test)
-    plt.show()
-    #lattice.show_Lattice(particleCoords=particle.q)
+    # particleTracer=ParticleTracer(lattice)
+    # qi=np.asarray([-1e-10,1e-3,0.0])
+    # pi=np.asarray([-200.0,0,0])
+    # particle=Particle(qi,pi)
+    # h=1e-6
+    # T=50.0/200
+    # particleTracer.trace(particle,h,T)
+    # print(particle.clipped)
+    # qoArr=particle.qoArr
+    # #plt.plot(qoArr[:,0],qoArr[:,1])
+    # plt.plot(particleTracer.test)
+    # plt.show()
+    # #lattice.show_Lattice(particleCoords=particle.q)
 
-    # optimizer=Optimizer(lattice)
-    # optimizer.maximize_Suvival_Through_Lattice()
+    optimizer=Optimizer(lattice)
+    optimizer.maximize_Suvival_Through_Lattice()
 if __name__=='__main__':
     main()
