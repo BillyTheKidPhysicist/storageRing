@@ -453,7 +453,7 @@ class BenderIdealSegmented(BenderIdeal):
     #full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
     #save memory. Half the time the symetry is exploited by using a simple rotation, the other half of the time the
     #symmetry requires a reflection, then rotation.
-    def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
+    def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, rOffsetFact,ap,fillParams=True):
         super().__init__(PTL,None,Bp,rp,rb,ap,fillParams=False)
         self.numMagnets = numMagnets
         self.Lm = Lm
@@ -463,6 +463,7 @@ class BenderIdealSegmented(BenderIdeal):
         self.segmented = True
         self.cap = False
         self.ap = ap
+        self.rOffsetFact=rOffsetFact
         self.RIn_Ang = None
         self.Lseg=None
         self.M_uc=None #matrix for reflection used in exploting segmented symmetry. This is 'inside' a single magnet element
@@ -472,6 +473,8 @@ class BenderIdealSegmented(BenderIdeal):
 
     def fill_Params(self):
         super().fill_Params()
+        self.rOffsetFunc=lambda rb:self.rOffsetFact* np.sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) -rb / 2
+        self.rOffset = self.rOffsetFunc(self.rb)
         self.Lseg=self.Lm+2*self.space
         if self.numMagnets is not None:
             self.ucAng = np.arctan((self.Lm / 2 + self.space) / (self.rb - self.yokeWidth - self.rp))
@@ -519,7 +522,7 @@ class BenderIdealSegmented(BenderIdeal):
 
 
     @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:,:],numba.float64)) 
+    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:,:],numba.float64))
     def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q,M_uc,ucAng):
         # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
         # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
@@ -582,8 +585,8 @@ class BenderIdealSegmented(BenderIdeal):
         return True
 
 class BenderIdealSegmentedWithCap(BenderIdealSegmented):
-    def __init__(self,PTL,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,ap,fillParams=True):
-        super().__init__(PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=False)
+    def __init__(self,PTL,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetfact,ap,fillParams=True):
+        super().__init__(PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space,rOffsetfact, ap,fillParams=False)
         self.Lcap = Lcap
         self.cap=True
         if fillParams==True:
@@ -680,8 +683,8 @@ class BenderSimSegmented(BenderIdealSegmented):
         sys.exit()
 
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
-    def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap):
-        super().__init__(PTL,numMagnets,Lm,Lcap,None,rp,rb,yokeWidth,extraSpace,ap,fillParams=False)
+    def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,rOffsetFact,ap):
+        super().__init__(PTL,numMagnets,Lm,Lcap,None,rp,rb,yokeWidth,extraSpace,rOffsetFact,ap,fillParams=False)
         self.sim=True
         self.PTL=PTL
         self.fileSeg=fileSeg
@@ -712,8 +715,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         elif self.ap > self.rp:
             raise Exception('APETURE IS LARGER THAN BORE')
         self.Lseg=self.Lm+self.space*2
-        rOffsetFact = 1.00125  # emperical factor that reduces amplitude of off orbit oscillations. An approximation.
-        self.rOffsetFunc = lambda rb: rOffsetFact * np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4 # this accounts for energy loss
+        self.rOffsetFunc = lambda rb: self.rOffsetFact * np.sqrt(rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4 # this accounts for energy loss
         if self.dataSeg is None and self.fileSeg is not None:
             self.fill_Force_Func_Seg()
             rp=(self.dataSeg[:,0].max()-self.dataSeg[:,0].min()-2*self.comsolExtraSpace)/2
@@ -724,7 +726,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         if self.dataCap is None and self.fileCap is not None:
             self.fill_Force_Func_Cap()
             Lcap=self.dataCap[:,2].max()-self.dataCap[:,2].min()-self.comsolExtraSpace*2
-            if self.Lcap!=Lcap:
+            if np.round(self.Lcap,6)!=np.round(Lcap,6):
                 raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
             self.dataCap=None #to save memory and pickling time
         if self.dataInternalFringe is None and self.fileInternalFringe is not None:

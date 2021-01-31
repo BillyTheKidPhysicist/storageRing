@@ -11,7 +11,7 @@ def main():
 
     lattice = ParticleTracerLattice(200.0)
 
-    directory='latticeConfig2_Files/'
+    directory='latticeConfig2_Files\\'
     fileBend1 = directory+'benderSeg1.txt'
     fileBend2 = directory+'benderSeg2.txt'
     fileBender1Fringe = directory+'benderFringeCap1.txt'
@@ -34,20 +34,23 @@ def main():
     rb2=1.0072957153331232
     numMagnets1=108
     numMagnets2=112
+    rOffsetFact = 1.00125
 
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    #lattice.add_Drift(LDrift,ap=.015)
-    #lattice.add_Combiner_Ideal(sizeScale=2.0)
-    lattice.add_Combiner_Sim(fileCombiner)
+    # lattice.add_Drift(LDrift,ap=.015)
+    # lattice.add_Combiner_Ideal(sizeScale=2.0)
+    lattice.add_Combiner_Sim(fileCombiner, sizeScale=1.0)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens2)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm,Lcap,rp,K0,
-                                                  numMagnets1, rb1,extraSpace, yokeWidth)
-    #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm, Lcap, rp,
+                                                  K0,
+                                                  numMagnets1, rb1, extraSpace, yokeWidth, rOffsetFact)
+    # lattice.add_Bender_Ideal(None,1.0,1.0,rp)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens3)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
-                                                  numMagnets2, rb2,extraSpace, yokeWidth)
-    #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice()
+    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
+                                                  K0,
+                                                  numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
+    # lattice.add_Bender_Ideal(None,1.0,1.0,rp)
+    lattice.end_Lattice(buildLattice=True)
     #lattice.show_Lattice()
     #print(lattice.solve_Combiner_Constraints())
 

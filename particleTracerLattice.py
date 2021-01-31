@@ -75,7 +75,7 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,ap=None):
+    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap=None):
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp
@@ -86,14 +86,16 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap=None):
+    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb
+                                              ,extraSpace,yokeWidth,rOffsetFact,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
-        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,ap)
+        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,
+                                       yokeWidth,rOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,ap=None):
+    def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: hard edge Length of individual magnet.
         #Bp: Field strength at pole face
@@ -111,7 +113,7 @@ class ParticleTracerLattice:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
 
-        el=BenderIdealSegmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,ap)
+        el=BenderIdealSegmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -267,7 +269,7 @@ class ParticleTracerLattice:
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
 
-        difFrac=5e-3  # fractional difference in bending radii from target radii
+        difFrac=1e-3  # fractional difference in bending radii from target radii
         up=1+difFrac
         low=1-difFrac
         ranges=[(low*r10,up*r10),(low*r20,up*r20)]
