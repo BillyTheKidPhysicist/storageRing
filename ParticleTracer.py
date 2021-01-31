@@ -274,16 +274,3 @@ class ParticleTracer:
         else:
             return None
 
-    def multi_Trace(self, particleList,h,T,fastMode=True):
-        # trace out multiple trajectories
-        # particleList: list of particles to trace in parallel
-        # h: timestep
-        # T: simulation time
-        def wrap(particle): #helps to use a wrapper function to unpack arguments. this is for a single particle.
-            # args is a tuple.
-            results=(self.trace(particle,h,T,fastMode=fastMode)) #return orbital coords and wether particle clipped an apeture
-            return results
-
-        helper=ParaWell()
-        resultList=helper.parallel_Problem(wrap,particleList)
-        return resultList

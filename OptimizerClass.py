@@ -9,8 +9,10 @@ import numpy as np
 from ParticleClass import Swarm
 import scipy.optimize as spo
 import time
+
+import pySOT as ps
 from ParaWell import ParaWell
-import black_box as bb
+import poap.controller as pc
 
 
 
@@ -264,33 +266,61 @@ class Optimizer:
         #trace a swarm through the lattice
         swarmNew=swarm.copy()
         particleTracer = ParticleTracer(self.lattice)
-        if parallel == True:
-            results = particleTracer.multi_Trace(swarmNew.particles,h,T)
+        if parallel==True:
+            def func(particle):
+                particleTracer.trace(particle, h, T)
+            self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
         else:
-            i = 0
             for particle in swarmNew.particles:
                 particleTracer.trace(particle,h,T)
         return swarmNew
+
     def maximize_Suvival_Through_Lattice(self):
         qMax=2.5e-4
         pMax=3e-1
         numPhaseSpace=3
-        particleTracer = ParticleTracer(self.lattice)
-        T0=100*self.lattice.totalLength/200.0
-        def func1(X):
+        T0=10*self.lattice.totalLength/200.0
+        h=1e-5
+        def func(X):
             F1,F2=X
-            print('here')
             Lo=.25
             Li=1.0
             LOffset=0.0
             swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace)#
             self.lattice.elList[3].forceFact=F1
             self.lattice.elList[5].forceFact=F2
-            for particle in swarm.particles:
-                particleTracer.trace(particle,1e-5,T0)
-            print('done')
+            swarm=self.trace_Swarm_Through_Lattice(swarm,h,T0,parallel=True)
             return 1/(1+swarm.survival())
-        bounds=[[.1,.5],[.1,.5]]
-        res = bb.search_min(f=func1, domain=bounds, budget=32*5, batch=32,
-                            resfile='test.csv')
-        print(res,func1(*res))
+        class problem(ps.optimization_problems.OptimizationProblem):
+            def __init__(self,function):
+                self.func=function
+                self.lb = np.asarray([.1,.1])
+                self.ub = np.asarray([.5,.5])
+                self.dim = 2
+                self.int_var = []
+                self.cont_var = np.asarray([0,1])
+                self.helper = ParaWell()
+            def eval(self, args):
+                print('here')
+                return self.func(args)
+
+        prob=problem(func)
+        rbf = ps.surrogate.RBFInterpolant(dim=prob.dim, lb=prob.lb, ub=prob.ub)
+        init = ps.experimental_design.LatinHypercube(dim=prob.dim, num_pts=5*(prob.dim+1))
+        controller = pc.ThreadController()
+        controller.strategy = ps.strategy.SRBFStrategy(max_evals=25, opt_prob=prob, exp_design=init, surrogate=rbf)
+        for i in range(4):
+            worker = pc.BasicWorkerThread(controller, prob.eval)
+            # worker=pc.ProcessWorkerThread(controller,prob.eval)
+            controller.launch_worker(worker)
+        print('threads started')
+        result = controller.run()
+        print(result.value)
+        print(result.params)
+
+
+        #bounds=[[.1,.5],[.1,.5]]
+        #num=2
+        #t=time.time()
+        #spo.brute(func1,bounds,Ns=num)
+        #print((time.time()-t)/num**2)

@@ -285,7 +285,7 @@ class CombinerIdeal(Element):
         self.La = self.ap * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb #TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
 
-    def compute_Input_Angle_And_Offset(self,h=1e-6,lowField=True):
+    def compute_Input_Angle_And_Offset(self,h=1e-5,lowField=True):
         #TODO: CAN i GET RID OF THIS LIMIT STUFF CLEANLY?
 
         # this computes the output angle and offset for a combiner magnet.
@@ -301,13 +301,16 @@ class CombinerIdeal(Element):
         #of orbit.
         #xList=[]
         #yList=[]
+        test=[]
         if lowField==True:
             force=self.force
         else:
             force = lambda x: -self.force(x)
         limit=self.Lm+2*self.space
+        #print(limit)
         while True:
             F = force(q)
+
             a = F
             q_n = q + p * h + .5 * a * h ** 2
             F_n = force(q_n)
@@ -319,13 +322,14 @@ class CombinerIdeal(Element):
                 q = q + p * dt
                 tempList.append(q)
                 break
+            #test.append(npl.norm(F))
             #xList.append(q[0])
             #yList.append(F[0])
             q = q_n
             p = p_n
             tempList.append(q)
 
-        #plt.plot(xList,yList)
+        #plt.plot(xList,test)
         #plt.show()
 
         outputAngle = np.arctan2(p[1], p[0])
@@ -372,7 +376,7 @@ class CombinerIdeal(Element):
 
 class CombinerSim(CombinerIdeal):
     def __init__(self,PTL,combinerFile,sizeScale=1.0):
-        Lm = .18
+        Lm = .187
         super().__init__(PTL,Lm,None,None,None,sizeScale,fillsParams=False)
         self.sim=True
         self.space = 4 * 1.1E-2  # extra space past the hard edge on either end to account for fringe fields

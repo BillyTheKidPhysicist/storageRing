@@ -20,26 +20,23 @@ def main():
     fileBenderInternalFringe2 = directory+'benderFringeInternal2.txt'
     file2DLens = directory+'lens2D.txt'
     file3DLens = directory+'lens3D.txt'
-    fileCombiner = directory+'combinerData.txt'
+    fileCombiner = directory+'combiner.txt'
     yokeWidth = .0254 * 5 / 8
-    numMagnets = 110
     extraSpace = 1e-3 #extra space on each ender between bender segments
     Lm = .0254 #hard edge length of segmented bender
     rp = .0125
-    Llens1 = .1 #lens length before drift before combiner inlet
+    Llens1 = .15 #lens length before drift before combiner inlet
     Llens2 = .3
-    Llens3=0.7914282478122986
-    LDrift=.2 #drift length before inlet to combiner
-    rb = 1.0
+    Llens3=0.6447075630948967
     Lcap=0.01875
     K0 = 12000000 #'spring' constant of field within 1%
-    rb1=1.0031021892674534
-    rb2=0.9960427403939787
-    numMagnets1=111
-    numMagnets2=109
+    rb1=0.992877733644296
+    rb2=1.0072957153331232
+    numMagnets1=108
+    numMagnets2=112
 
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Drift(LDrift,ap=.015)
+    #lattice.add_Drift(LDrift,ap=.015)
     #lattice.add_Combiner_Ideal(sizeScale=2.0)
     lattice.add_Combiner_Sim(fileCombiner)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens2)
@@ -53,20 +50,20 @@ def main():
     lattice.end_Lattice()
     #lattice.show_Lattice()
     #print(lattice.solve_Combiner_Constraints())
-    #
-    # particleTracer=ParticleTracer(lattice)
-    # qi=np.asarray([-1e-10,0.0,0.0])
-    # pi=np.asarray([-200.0,0,0])
-    # particle=Particle(qi,pi)
-    # h=1e-6
-    # T=1.0/200
-    # particleTracer.trace(particle,h,T)
-    # print(particle.clipped)
-    # qoArr=particle.qoArr
-    # #plt.plot(qoArr[:,0],qoArr[:,1])
-    # plt.plot(particleTracer.test)
-    # plt.show()
-    # lattice.show_Lattice(particleCoords=particle.q)
+
+    #particleTracer=ParticleTracer(lattice)
+    #qi=np.asarray([-1e-10,1e-10,0.0])
+    #pi=np.asarray([-200.0,0,0])
+    #particle=Particle(qi,pi)
+    #h=1e-6
+    #T=50.0/200
+    #particleTracer.trace(particle,h,T)
+    #print(particle.clipped)
+    #qoArr=particle.qoArr
+    ##plt.plot(qoArr[:,0],qoArr[:,1])
+    #plt.plot(particleTracer.test)
+    #plt.show()
+    ##lattice.show_Lattice(particleCoords=particle.q)
 
     optimizer=Optimizer(lattice)
     optimizer.maximize_Suvival_Through_Lattice()

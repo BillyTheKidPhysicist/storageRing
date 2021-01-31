@@ -224,7 +224,7 @@ class ParticleTracerLattice:
         params[-1]-=(self.bender1.Lcap+self.bender2.Lcap)
         return params
 
-    def solve_Implicit_Segmented_Triangle_Problem( self, inputAng, inputOffset, L1, L2,tol=1e-9):
+    def solve_Implicit_Segmented_Triangle_Problem( self, inputAng, inputOffset, L1, L2,tol=1e-12):
         #this method solves the solve_Triangle_Problem subject to the constraint that the benders are made of segments
         #of magnets rather than one continuous extrusion. This confines the solution to a limited number of configurations.
         # This is done by creating a cost function that goes to zero when for a given configuration the integer number
@@ -266,12 +266,15 @@ class ParticleTracerLattice:
                 cost2=np.round(N2)-N2
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
-        ranges=[(.99*r10,1.01*r10),(.99*r20,1.01*r20)]
-        x0=np.asarray([r10,r20])
+
+        difFrac=5e-3  # fractional difference in bending radii from target radii
+        up=1+difFrac
+        low=1-difFrac
+        ranges=[(low*r10,up*r10),(low*r20,up*r20)]
 
 
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
-        sol=spo.differential_evolution(cost,ranges)
+        sol=spo.differential_evolution(cost,ranges,mutation=1.5,popsize=50)
         print(sol)
         #print(sol)
         #print(cost(sol.x,returnParams=True))
@@ -289,8 +292,8 @@ class ParticleTracerLattice:
         #sys.exit()
         #print(cost(x))
         #sys.exit()
-        #if cost(params[:2])>tol:
-        #    raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
+        if cost(params[:2])>tol:
+            raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
     @staticmethod
     def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
