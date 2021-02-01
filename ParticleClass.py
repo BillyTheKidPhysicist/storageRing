@@ -12,6 +12,7 @@ class Swarm:
         #pi: momentum coordinates
         self.particles.append(Particle(qi, pi))
     def survival(self, frac=True):
+        #TODO: WEIGHT BY REVOLUTION TIME
         #returns fraction of particles that have survived, ie not clipped.
         #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
         numSurvived = 0.0

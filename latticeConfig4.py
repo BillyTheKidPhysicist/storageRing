@@ -1,4 +1,4 @@
-#config with bigger magnets (1/4), and big combiner. Lens before combiner is a reasonable distance from the combiner
+#config with smaller magnets (1/8), and big combiner. Lens before combiner is a reasonable distance from the combiner
 
 import matplotlib.pyplot as plt
 import numpy as np
