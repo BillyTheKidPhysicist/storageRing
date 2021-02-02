@@ -22,8 +22,9 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 #this class does the work of tracing the particles through the lattice with timestepping algorithms
 class ParticleTracer:
     def __init__(self,latticeObject):
-        self.LO=latticeObject
+        self.LO=latticeObject #TODO: get rid of?
         self.lattice = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
+
         self.test=latticeObject
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
@@ -78,6 +79,7 @@ class ParticleTracer:
         self.h=h
         self.h0=h
         self.initialize()
+
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             return particle
@@ -92,7 +94,8 @@ class ParticleTracer:
                 self.particle.log_Params()
             self.T += self.h
             self.particle.T=self.T
-        self.particle.finished()
+
+        self.particle.finished(totalLatticeLength=self.LO.totalLength)
         return self.particle
 
     def handle_Element_Edge(self):

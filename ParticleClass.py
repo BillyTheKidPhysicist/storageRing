@@ -11,8 +11,18 @@ class Swarm:
         #qi: spatial coordinates
         #pi: momentum coordinates
         self.particles.append(Particle(qi, pi))
-    def survival(self, frac=True):
-        #TODO: WEIGHT BY REVOLUTION TIME
+    def survival_Rev(self):
+        #return average number of revolutions of particles
+        revs=0
+        for particle in self.particles:
+            if particle.clipped is None:
+                raise Exception('PARTICLE HAS NOT BEEN TRACED')
+            else:
+                revs+=particle.revolutions
+        meanRevs=revs/self.num_Particles()
+        return meanRevs
+
+    def survival_Bool(self, frac=True):
         #returns fraction of particles that have survived, ie not clipped.
         #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
         numSurvived = 0.0
@@ -41,9 +51,9 @@ class Particle:
         self.force=None #current force on the particle
         self.currentEl=None #which element the particle is ccurently in
         self.currentElIndex=None
-        self.cumulativeLength=None
+        self.cumulativeLength=0
+        self.revolutions=None #revolutions particle makes around lattice
         self.clipped=None #wether particle clipped an apeture
-        self.el=None #current element that the particle is in
         self.pList=[] #List of momentum vectors
         self.qList=[] #List of position vector
         self.qoList=[] #List of position in orbit frame vectors
@@ -56,16 +66,22 @@ class Particle:
         self.pList.append(self.p.copy())
         if self.currentEl is not None:
             self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
-    def finished(self):
+    def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
+        #totalLaticeLength: total length of periodic lattice
         self.qArr=np.asarray(self.qList)
         self.qList = []  # save memory
         self.pArr = np.asarray(self.pList)
         self.pList = []  # save memory
         self.qoArr = np.asarray(self.qoList)
         self.qoList = []  # save memory
-        if self.currentEl is not None:
+        if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
+            if totalLatticeLength is not None:
+                qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength)
+                self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
+
+
     def copy(self):
         return copy.deepcopy(self)

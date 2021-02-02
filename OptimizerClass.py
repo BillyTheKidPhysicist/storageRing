@@ -44,9 +44,6 @@ class Optimizer:
                     swarm.add_Particle(qi, pi)
             else:
                 swarm.add_Particle(qi, pi)
-
-
-
         return swarm
 
     def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03):
@@ -57,7 +54,7 @@ class Optimizer:
         # Lo: object distance for injector
         # Li: nominal image distance
 
-        swarm=swarm.copy()
+        swarmNew=swarm.copy()
         K = 2 * self.lattice.u0 * Bp / (rp ** 2 * self.lattice.v0Nominal ** 2)
         # now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix.
         # The transfer matrix is for angles, not velocity
@@ -72,7 +69,7 @@ class Optimizer:
         MLens = np.asarray([[CFunc(Lm), SFunc(Lm)], [CdFunc(Lm), SdFunc(Lm)]])
         MLo = np.asarray([[1, Lo], [0, 1]])
         MTot = MLens @ MLo
-        for particle in swarm.particles:
+        for particle in swarmNew.particles:
             qNew = particle.q.copy()
             pNew = particle.p.copy()
             # the v0Nominal is present because the matrix is for angles, not velocities
@@ -82,7 +79,7 @@ class Optimizer:
             pNew[2] = MTot[1, 0] * particle.q[2] * self.lattice.v0Nominal + MTot[1, 1] * particle.p[2]
             particle.q = qNew
             particle.p = pNew
-        return swarm
+        return swarmNew
     def catch_Injection_Errors(self,Li,LOffset):
 
         if Li<self.lattice.combiner.Lo : #image length must be larger than combiner length
@@ -102,6 +99,7 @@ class Optimizer:
         #pMax: absolute vale of maximum value in momentum dimensions
         #num: number of particles along each axis, total number is axis**n where n is dimensions
         self.catch_Injection_Errors(Li,LOffset)
+
         swarm = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace,upperSymmetry=upperSymmetry)
         swarm = self.send_Swarm_Through_Shaper(swarm, Lo, Li)
         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
@@ -115,8 +113,38 @@ class Optimizer:
             particle.q[:2] = particle.q[:2] @ Mrot + r0[:2]
             return particle
         if parallel==False:
-            for i in range(len(swarm.particles)):
+            for i in range(swarm.num_Particles()):
                 swarm.particles[i]=func(swarm.particles[i])
+                # print(npl.norm(swarm.particles[i].p))
+                #
+                #
+                # #print(swarm.particles[i].qi,swarm.particles[i].pi)
+                # fig, axs = plt.subplots(2)
+                # #plot z
+                # L=self.lattice.combiner.Lm+self.lattice.combiner.space
+                # apz=self.lattice.combiner.apz
+                # x=[0,L,L,0]
+                # y=[apz,apz,-apz,-apz]
+                # axs[0].plot(x,y)
+                # axs[0].plot(swarm.particles[i].qArr[:,0],swarm.particles[i].qArr[:,2])
+                # axs[0].scatter(swarm.particles[i].qArr[:, 0], swarm.particles[i].qArr[:, 2],c='r')
+                # axs[0].grid()
+                # # plot y
+                # ap = self.lattice.combiner.ap
+                # x = [0, L, L, 0]
+                # y = [ap, ap, -ap, -ap]
+                # axs[1].plot(x, y)
+                # axs[1].plot(swarm.particles[i].qArr[:, 0], swarm.particles[i].qArr[:, 1])
+                # axs[1].scatter(swarm.particles[i].qArr[:, 0], swarm.particles[i].qArr[:, 1],c='r')
+                # axs[1].grid()
+                #
+                # plt.show()
+                #
+                # p=swarm.particles[i].pArr
+                # x=swarm.particles[i].qArr[:,0]
+                # y=npl.norm(p,axis=1)
+                # plt.plot(x,y)
+                # plt.show()
         elif parallel==True:
             results=self.helper.parallel_Chunk_Problem(func,swarm.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
@@ -125,6 +153,7 @@ class Optimizer:
         return swarm
 
     def step_Particle_Through_Combiner(self, particle, h=1e-5):
+        particle.currentEl=self.lattice.combiner
         particle=particle.copy()
         q = particle.q.copy()
         p = particle.p.copy()
@@ -132,17 +161,21 @@ class Optimizer:
         dx = (self.lattice.combiner.space * 2 + self.lattice.combiner.Lm) - q[0]
         dt = dx / p[0]
         q += dt * p
+        particle.q=q
 
         force = self.lattice.combiner.force
         ap = self.lattice.combiner.ap
         apz = self.lattice.combiner.apz
         def is_Clipped(q):
-            if np.abs(q[2]) > apz:
+            if np.abs(q[2]) > apz: #if clipping in z direction
                 return True
-            elif q[0] < self.lattice.combiner.space + self.lattice.combiner.Lm and np.abs(q[1]) > ap:
+            elif q[0] < self.lattice.combiner.space + self.lattice.combiner.Lm and np.abs(q[1]) > ap: #Only consider
+                #clipping in the y direction if the particle is insides the straight segment of the combiner
                 return True
-
+            else:
+                return False
         if is_Clipped(q) == True:
+            #particle.log_Params()
             particle.finished()
             particle.clipped = True
             return particle
@@ -165,21 +198,14 @@ class Optimizer:
             q = q_n
             p = p_n
             particle.force = F_n
-            #particle.q = q
-            #particle.p = p
+            particle.q = q
+            particle.p = p
             #particle.log_Params()
             if is_Clipped(q) == True:
-                particle.finished()
-                particle.clipped = True
-                return particle
+                break
         particle.finished()
         particle.clipped = False
         return particle
-
-        #print(particle.qi,particle.pi)
-        #plt.plot(particle.qArr[:,0],particle.qArr[:,2])
-        #plt.grid()
-        #plt.show()
 
     def aim_Swarm_At_Combiner(self, swarm, Li, LOffset):
         # This method takes a swarm in phase space, located at the origin, and moves it in phase space
@@ -187,7 +213,7 @@ class Optimizer:
         # swarm: swarm of particles in phase space. must be centered at the origin in space
         # Li: the image length, only makes sense for hard edge model
         # LiOffset: image offset in combiner. see initialize_Swarm_At_Combiner_Output
-        swarm=swarm.copy() #don't change the original swarm
+        swarmNew=swarm.copy() #don't change the original swarm
         inputOffset = self.lattice.combiner.inputOffsetLoad
         inputAngle = self.lattice.combiner.angLoad
         dL = Li - self.lattice.combiner.Lo + LOffset  # TODO: SHITTY ALGORITHM THAT NEEDS TO CHANGE. doesn't account
@@ -199,15 +225,14 @@ class Optimizer:
         dR = np.asarray([dx, dy])
         rotAng = -inputAngle
         rotMat = np.asarray([[np.cos(rotAng), np.sin(rotAng)], [-np.sin(rotAng), np.cos(rotAng)]])
-        for particle in swarm.particles:
+        for particle in swarmNew.particles:
             q = particle.q
             p = particle.p
             q[:2] += dR
             p[:2] = rotMat @ p[:2]
             particle.q = q
             particle.p = p
-
-        return swarm
+        return swarmNew
     def compute_Survival_Through_Injector(self, Lo,Li, LOffset, qMax, pMax, numPhaseSpace,testNextElement=True):
         """
         return fraction
@@ -227,89 +252,52 @@ class Optimizer:
             #need to scoot particle along
             h=2.5e-5
             T=elNext.Lo/self.lattice.v0Nominal
-            pre=0
-            post=0
-            for particle in swarm.particles:
+            for i in range(swarm.num_Particles()):
+                particle=swarm.particles[i]
                 particle.q=particle.q+particle.p*1e-10 #scoot particle into next element
                 #pre+=int(particle.clipped)
-                particleTracer.trace(particle,h,T,fastMode=True)
+                swarm.particles[i]=particleTracer.trace(particle,h,T,fastMode=True)
                 #post += int(particle.clipped)
-        return swarm.survival()
+        return swarm.survival_Rev()
 
-    # def maximize_Survival_Through_Injector_Brute(self, LiMin,LiMax,LoMin,LoMax,qMax, pMax, numPhaseSpace, numParams=50):
-    #     LOffset = 0.0
-    #
-    #     swarmInitial = self.initialize_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace)
-    #     def func(X):
-    #         Li, Lo = X
-    #         self.catch_Injection_Errors(Li, LOffset)
-    #         swarm = self.send_Swarm_Through_Shaper(swarmInitial, Lo, Li)
-    #         swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
-    #         for particle in swarm.particles:
-    #             self.step_Particle_Through_Combiner(particle)
-    #         #print(swarm.survival())
-    #         return swarm.survival()
-    #
-    #     x1Arr = np.linspace(LiMin, LiMax, num=numParams)
-    #     x2Arr = np.linspace(LoMin, LoMax, num=numParams)
-    #     inputArgsArr = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-    #     results=self.helper.parallel_Chunk_Problem(func, inputArgsArr)
-    #     argList=[]
-    #     survivalList=[]
-    #     for result in results:
-    #         argList.append(result[0])
-    #         survivalList.append(result[1])
-    #     argArr=np.asarray(argList)
-    #     survivalArr=np.asarray(survivalList)
-    #     return np.max(survivalArr),argArr[np.argmax(survivalArr)]
 
-    def maximize_Survival_Through_Injector_BB(self, generations,bounds,qMax, pMax, numPhaseSpace,upperSymmetry=False):
-        #bounds: a list of tuples of the bounds for Lo,Li,LOffset.
-        #if len(bounds[1])!=len(bounds[0]) or len(bounds[0])!=3:
-        #    raise Exception("BOUNDS ARE NOT IN RIGHT SHAPE")
-        def func(X):
-            survival=self.compute_Survival_Through_Injector(*X,qMax,pMax,numPhaseSpace)
-            return 1/(1+survival)
-        numWorkers=mp.cpu_count()
-        res=bb.search_min(f=func, domain=bounds, budget=generations*numWorkers, batch=numWorkers, resfile='test.csv')
-        print(res,func(res))
     def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=False):
         #trace a swarm through the lattice
         swarmNew=swarm.copy()
         particleTracer = ParticleTracer(self.lattice)
         if parallel==True:
             def func(particle):
-                particleTracer.trace(particle, h, T)
-            self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
+                return particleTracer.trace(particle, h, T)
+            results=self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
+            for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
+                #is not important
+                swarmNew.particles[i]=results[i][1]
         else:
-            for particle in swarmNew.particles:
-                particleTracer.trace(particle,h,T)
+            for i in range(swarmNew.num_Particles()):
+                swarmNew.particles[i]=particleTracer.trace(swarmNew.particles[i],h,T,fastMode=True)
         return swarmNew
-
+    def compute_Survival_Through_Lattice(self,Lo,Li,LOffset,F1,F2,h,T,parallel=True):
+        qMax=2.5e-4
+        pMax=3e-1
+        numPhaseSpace=5
+        swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=parallel,upperSymmetry=True)
+        self.lattice.elList[3].forceFact=F1
+        self.lattice.elList[5].forceFact=F2
+        swarm=self.trace_Swarm_Through_Lattice(swarm,h,T,parallel=parallel)
+        return swarm.survival_Rev()
     def maximize_Suvival_Through_Lattice(self):
         from poap.controller import BasicWorkerThread, ThreadController
-
         from pySOT.experimental_design import SymmetricLatinHypercube
         from pySOT.strategy import SRBFStrategy
         from pySOT.surrogate import CubicKernel, LinearTail, RBFInterpolant
-        
-        qMax=2.5e-3
-        pMax=3e1
-        numPhaseSpace=11
-        T0=100*self.lattice.totalLength/200.0
+
+
+        T=100*self.lattice.totalLength/200.0
         h=2.5e-5
         def func(X):
             Lo,Li,LOffset,F1,F2=X
-            #F1=.2
-            #F2=.2
-            #Lo=.25
-            #Li=1.0
-            #LOffset=0.0
-            swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=True,upperSymmetry=True)
-            self.lattice.elList[3].forceFact=F1
-            self.lattice.elList[5].forceFact=F2
-            swarm=self.trace_Swarm_Through_Lattice(swarm,h,T0,parallel=True)
-            return 1/(1+swarm.survival())
+            survival=self.compute_Survival_Through_Lattice(Lo,Li,LOffset,F1,F2,h,T)
+            return 1/(1+survival)
         class problem(ps.optimization_problems.OptimizationProblem):
             def __init__(self,function):
                 self.func=function
@@ -322,15 +310,11 @@ class Optimizer:
                 self.funcEval=0
             def eval(self, args):
                 self.funcEval+=1
-                #print('eval num',self.funcEval,'args',args)
                 val=self.func(args)
-                #print('eval num',self.funcEval,'is done')
                 return val
-
-
         def run_Model():
             num_threads = 4
-            max_evals = 50
+            max_evals = 10
             prob =problem(func)#Ackley(dim=1)
             #X=[0.37727273 ,0.08181818 ,1.02272727 ,0.20909091, 0.5       ]
             #prob.eval(X)

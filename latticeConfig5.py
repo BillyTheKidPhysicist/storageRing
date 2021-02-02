@@ -67,8 +67,11 @@ def main():
     # #plt.plot(particleTracer.test)
     # plt.show()
     # lattice.show_Lattice(particleCoords=particle.q)
+    T = 100 * lattice.totalLength / 200.0
 
+    X=[0.3696  ,1.93282 ,0.09977 ,0.11088, 0.15343,1e-5,T]
     optimizer=Optimizer(lattice)
+    #print(optimizer.compute_Survival_Through_Lattice(*X))
     optimizer.maximize_Suvival_Through_Lattice()
 if __name__=='__main__':
     main()
