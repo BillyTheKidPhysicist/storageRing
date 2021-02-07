@@ -1,3 +1,4 @@
+import numba
 from ParaWell import ParaWell
 import time
 import numpy as np
@@ -5,8 +6,8 @@ import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
 import pathos as pa
-from ParticleClass import Particle
-from profilehooks import profile
+#from ParticleClass import Particle
+#from profilehooks import profile,coverage
 
 #todo: compute energy
 
@@ -63,6 +64,7 @@ class ParticleTracer:
         if self.fastMode==False:
             self.particle.log_Params()
             pass
+
     def trace(self,particle,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
@@ -74,6 +76,7 @@ class ParticleTracer:
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         self.particle = particle
         if self.particle.clipped==True: #some particles may come in clipped so ignore them
+            self.particle.finished(totalLatticeLength=0)
             return self.particle
         self.fastMode=fastMode
         self.h=h
@@ -82,10 +85,12 @@ class ParticleTracer:
 
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
+            self.particle.finished(totalLatticeLength=0)
             return particle
 
         while(True):
-            if self.T+self.h>T0:
+            if self.T>T0:
+                self.particle.clipped=False
                 break
             self.time_Step_Verlet()
             if self.particle.clipped==True:
@@ -96,6 +101,8 @@ class ParticleTracer:
             self.particle.T=self.T
 
         self.particle.finished(totalLatticeLength=self.LO.totalLength)
+
+
         return self.particle
 
     def handle_Element_Edge(self):
@@ -134,6 +141,17 @@ class ParticleTracer:
         #np=p/npl.norm(p) #normalized vector of particle direction
         #q=q+np*eps
         #return q,p
+
+    @staticmethod
+    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
+    def fast_qNew(q,F,p,h):
+        return q+p*h+.5*F*h**2
+
+    @staticmethod
+    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
+    def fast_pNew(p,F,F_n,h):
+        return p+.5*(F+F_n)*h
+
     def time_Step_Verlet(self):
         #the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
         #possible
@@ -146,10 +164,10 @@ class ParticleTracer:
             F=self.particle.force
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
-        self.test.append(np.sqrt(np.sum(F**2)))
+        #self.test.append(np.sqrt(np.sum(F**2)))
 
         #a = F # acceleration old or acceleration sub n
-        q_n=q+p*self.h+.5*F*self.h**2 #q new or q sub n+1
+        q_n=self.fast_qNew(q,F,p,self.h)#q new or q sub n+1
         el, qel = self.which_Element(q_n)
         exitLoop=self.check_Element_And_Handle_Edge_Event(el)
         if exitLoop==True:
@@ -158,7 +176,7 @@ class ParticleTracer:
         F_n=self.force(q_n,el=el,qel=qel)
 
         #a_n = F_n  # acceleration new or acceleration sub n+1
-        p_n=p+.5*(F+F_n)*self.h
+        p_n=self.fast_pNew(p,F,F_n,self.h)
         self.particle.force=F_n
         self.particle.q=q_n
         self.particle.p=p_n
@@ -193,6 +211,7 @@ class ParticleTracer:
         KE =np.sqrt(p**2)**2/2
         return  PE,KE
 
+    #@profile
     def force(self,q,qel=None,el=None):
         #calculate force. The force from the element is in the element coordinates, and the particle's coordinates
         #must be in the element frame
@@ -203,11 +222,11 @@ class ParticleTracer:
                 return None
         if qel is None:
             qel = el.transform_Lab_Coords_Into_Element_Frame(q)
-
         Fel=el.force(qel) #force in element frame
         FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
         return FLab
 
+    #@profile
     def which_Element(self,q,return_qel=True):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later

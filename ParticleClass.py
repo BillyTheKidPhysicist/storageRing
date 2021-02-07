@@ -17,8 +17,9 @@ class Swarm:
         for particle in self.particles:
             if particle.clipped is None:
                 raise Exception('PARTICLE HAS NOT BEEN TRACED')
-            else:
+            elif particle.revolutions is not None:
                 revs+=particle.revolutions
+
         meanRevs=revs/self.num_Particles()
         return meanRevs
 

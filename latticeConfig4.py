@@ -53,21 +53,37 @@ def main():
     #lattice.show_Lattice()
     #print(lattice.solve_Combiner_Constraints())
     #sys.exit()
-
-    # particleTracer=ParticleTracer(lattice)
-    # qi=np.asarray([-1e-10,0e-3,0.0])
-    # pi=np.asarray([-200.0,0,0])
-    # particle=Particle(qi,pi)
-    # h=1e-6
-    # T=7.0/200
-    # particleTracer.trace(particle,h,T)
-    # print(particle.clipped)
-    # qoArr=particle.qoArr
-    # plt.plot(qoArr[:,0],1e6*qoArr[:,1])
-    # #plt.plot(particleTracer.test)
-    # plt.show()
-    # lattice.show_Lattice(particleCoords=particle.q)
-
+    #6.085455943247294 0.1586206896551724 0.4379310344827586
+    #lattice.show_Lattice()
+#     X=[0.1586206896551724, 0.4379310344827586]
+#     lattice.elList[2].forceFact = X[0]
+#     lattice.elList[4].forceFact = X[1]
+#
+#     particleTracer=ParticleTracer(lattice)
+#     qi=np.asarray([-1e-10,0e-3,0.0])
+#     pi=np.asarray([-200.0,0,0])
+#     particle=Particle(qi,pi)
+#     h=5e-6
+#     T=100.0/200
+#     particleTracer.trace(particle,h,T)
+#     print(particle.revolutions,particle.clipped)
+#     qoArr=particle.qoArr
+#     plt.plot(qoArr[:,0],1e6*qoArr[:,1])
+#     plt.show()
+#     plt.plot(qoArr[:, 0], 1e6 * qoArr[:, 2])
+#     plt.show()
+#     plt.plot(particleTracer.test)
+#     plt.show()
+#     pArr=particle.pArr
+#     vs=np.sqrt(np.sum(pArr**2,axis=1))
+#     plt.plot(vs)
+#     plt.show()
+#
+#     lattice.show_Lattice(particleCoords=particle.q)
+#
+#     optimizer = Optimizer(lattice)
+#     optimizer.optimize_Swarm_Survival_Through_Lattice_Brute([(0.05, .5), (0.05, .5)], 30, (2 * 3.14 + 2) * 200 / 200.0,h=5e-6)
+# # #
     optimizer=Optimizer(lattice)
     optimizer.maximize_Suvival_Through_Lattice()
 if __name__=='__main__':

@@ -49,29 +49,40 @@ def main():
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice(buildLattice=True)
+    lattice.end_Lattice(buildLattice=False)
     #lattice.show_Lattice()
-    #print(lattice.solve_Combiner_Constraints())
-    #sys.exit()
+    print(lattice.solve_Combiner_Constraints())
+    sys.exit()
+    X=[0.21842105,0.79157895]
+    lattice.elList[2].forceFact = X[0]
+    lattice.elList[4].forceFact = X[1]
 
-    # particleTracer=ParticleTracer(lattice)
-    # qi=np.asarray([-1e-10,0e-3,0.0])
-    # pi=np.asarray([-200.0,0,0])
-    # particle=Particle(qi,pi)
-    # h=1e-6
-    # T=7.0/200
-    # particleTracer.trace(particle,h,T)
-    # print(particle.clipped)
-    # qoArr=particle.qoArr
-    # plt.plot(qoArr[:,0],1e6*qoArr[:,1])
-    # #plt.plot(particleTracer.test)
-    # plt.show()
-    # lattice.show_Lattice(particleCoords=particle.q)
+    particleTracer=ParticleTracer(lattice)
+    qi=np.asarray([-1e-10,0e-3,0.0])
+    pi=np.asarray([-200.0,0,0])
+    particle=Particle(qi,pi)
+    h=1e-5
+    T=100.0/200
+    particle=particleTracer.trace(particle,h,T)
+    print(particle.revolutions)
+    qoArr=particle.qoArr
+    plt.plot(qoArr[:,0],1e6*qoArr[:,1])
+    plt.show()
+    plt.plot(qoArr[:, 0], 1e6 * qoArr[:, 2])
+    plt.show()
+    plt.plot(particleTracer.test)
+    plt.show()
+    pArr=particle.pArr
+    vs=np.sqrt(np.sum(pArr**2,axis=1))
+    plt.plot(vs)
+    plt.show()
+
+    lattice.show_Lattice(particleCoords=particle.q)
     T = 100 * lattice.totalLength / 200.0
 
-    X=[0.3696  ,1.93282 ,0.09977 ,0.11088, 0.15343,1e-5,T]
-    optimizer=Optimizer(lattice)
+    #X=[0.3696  ,1.93282 ,0.09977 ,0.11088, 0.15343,1e-5,T]
     #print(optimizer.compute_Survival_Through_Lattice(*X))
-    optimizer.maximize_Suvival_Through_Lattice()
+    #optimizer = Optimizer(lattice)
+    #optimizer.optimize_Swarm_Survival_Through_Lattice_Brute([(.01, 1.0), (.01, 1.0)], 20, (2 * 3.14 + 2) * 100 / 200.0)
 if __name__=='__main__':
     main()

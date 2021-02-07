@@ -1,3 +1,4 @@
+import time
 import warnings
 import pathos as pa
 import numpy as np
@@ -102,6 +103,7 @@ class ParaWell:
         #argsList: a list of arguments to work on
         # numWorkers: processes to work on the problem
         #returns a list of tuples of the arguments paired with the results as (args,results)
+        t=time.time()
         self.test+=1
         argChunkList=[]
         for i in range(numWorkers):

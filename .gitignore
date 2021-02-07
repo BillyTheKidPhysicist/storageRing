@@ -32,3 +32,9 @@ latticeConfig4_Files
 latticeConfig5_Files
 logfiles
 test2.py
+setup.py
+cythonFunc.c
+cythonFunc.html
+latticeConfig2.py.lprof
+latticeConfig2.py.prof
+helloWOrldTest.pyx

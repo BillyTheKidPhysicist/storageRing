@@ -1,4 +1,7 @@
 import numpy as np
+import pyximport; pyximport.install(language_level=3,setup_args={'include_dirs':np.get_include()})
+import cythonFunc
+import warnings
 from interp3d import interp_3d
 import scipy.interpolate as spi
 import pandas as pd
@@ -7,7 +10,7 @@ import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
 import numba
-from profilehooks import profile
+#from profilehooks import profile
 
 #TODO: INCLUDE APETURE IN THE Z DIRECTION
 
@@ -22,6 +25,23 @@ from profilehooks import profile
 #seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
 #--There are at least 3 frames of reference. The first is the lab frame, the second is the element frame, and the third
 # which is only found in segmented bender, is the unit cell frame.
+
+@numba.njit(numba.float64(numba.float64[:]))
+def fast_Arctan2(q):
+    phi=np.arctan2(q[1], q[0])
+    if phi < 0:  # confine phi to be between 0 and 2pi
+        phi += 2 * np.pi
+    return phi
+
+# @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:,:],numba.float64[:]))
+# def transform_Lab_Coords_Into_Element_Frame_NUMBA_1(q,RIn,r0):
+#     qNew = q - r0
+#     qx=qNew[0]
+#     qy=qNew[1]
+#     qNew[0] = qx * RIn[0, 0] + qy * RIn[0, 1]
+#     qNew[1] = qx * RIn[1, 0] + qy * RIn[1, 1]
+#     return qNew
+
 
 class Element:
     def __init__(self):
@@ -58,6 +78,7 @@ class Element:
         self.type=None #gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         #constructed in particleTracerLattice
         self.sim=None #wether the field values are from simulations
+        self.F=np.zeros(3) #object to hold the force to prevent constantly making new force vectors
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -72,6 +93,7 @@ class Element:
         #for straight elements (lens and drift), element and orbit frame are identical
         #q: 3D coordinates in element frame
         return q.copy()
+
     def transform_Lab_Frame_Vector_Into_Element_Frame(self,vec):
         #vec: 3D vector in lab frame to rotate into element frame
         vecNew=vec.copy() #copying prevents modifying the original value
@@ -133,11 +155,10 @@ class LensIdeal(Element):
         qNew=self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
     def force(self,q):
-        F = np.zeros(3)  # force vector starts out as zero
-        # note: for the perfect lens, in it's frame, there is never force in the x direction
-        F[1] = -self.K * q[1]
-        F[2] = -self.K * q[2]
-        return F
+        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
+        self.F[1] = -self.K * q[1]
+        self.F[2] = -self.K * q[2]
+        return self.F.copy()
     def set_Length(self,L):
         # this is used typically for setting the length after satisfying constraints
         self.L=L
@@ -147,9 +168,7 @@ class LensIdeal(Element):
         # elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
         # returned, it is unknown
         # q: coordinates to test
-        if np.abs(q[2]) > self.ap:
-            return False
-        elif np.abs(q[1]) > self.ap:
+        if not -self.ap<q[1]<self.ap or not -self.ap<q[2]<self.ap:
             return False
         elif q[0] < 0 or q[0] > self.L:
             return False
@@ -219,14 +238,18 @@ class BenderIdeal(Element):
     def force(self, q):
         # force at point q in element frame
         #q: particle's position in element frame
-        F = np.zeros(3)  # force vector starts out as zero
-        r = np.sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
-        F0 = -self.K * (r - self.rb)  # force in x y plane
-        phi = np.arctan2(q[1], q[0])
-        F[0] = np.cos(phi) * F0
-        F[1] = np.sin(phi) * F0
-        F[2] = -self.K * q[2]
-        return F
+        
+        phi = fast_Arctan2(q)
+        if phi<self.ang:
+            r = np.sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
+            F0 = -self.K * (r - self.rb)  # force in x y plane
+            self.F[0] = np.cos(phi) * F0
+            self.F[1] = np.sin(phi) * F0
+            self.F[2] = -self.K * q[2]
+        else:
+            warnings.warn("PARTICLE IS OUTSIDE ELEMENT")
+            self.F=np.zeros(3)
+        return self.F.copy()
     def is_Coord_Inside(self,q):
         if np.abs(q[2]) > self.ap:  # if clipping in z direction
             return False
@@ -307,13 +330,13 @@ class CombinerIdeal(Element):
         else:
             force = lambda x: -self.force(x)
         limit=self.Lm+2*self.space
-        #print(limit)
         while True:
             F = force(q)
-
+            #print('F',F,'q',q)
             a = F
             q_n = q + p * h + .5 * a * h ** 2
             F_n = force(q_n)
+            #print('F_n', F_n, 'q_n', q_n)
             a_n = F_n  # accselferation new or accselferation sub n+1
             p_n = p + .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
@@ -328,9 +351,6 @@ class CombinerIdeal(Element):
             q = q_n
             p = p_n
             tempList.append(q)
-
-        #plt.plot(xList,test)
-        #plt.show()
 
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
@@ -354,13 +374,13 @@ class CombinerIdeal(Element):
             B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
             F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
             F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
-
         return F
+
     def is_Coord_Inside(self,q):
-        if np.abs(q[2]) > self.ap:
+        if not -self.apz<q[2]<self.apz: #if outside the z apeture
             return False
         elif q[0] < self.Lb and q[0] > 0:  # particle is in the straight section that passes through the combiner
-            if np.abs(q[1]) < self.ap:
+            if -self.ap<q[1]<self.ap: #if inside the y (width) apeture
                 return True
         elif q[0]<0:
             return False
@@ -441,12 +461,10 @@ class CombinerSim(CombinerIdeal):
         self.data=False #to save memory and pickling time
 
     def force(self,q):
-        F=np.zeros(3)
-        F[0] = self.FxFunc(*q)
-        F[1] = self.FyFunc(*q)
-        F[2] = self.FzFunc(*q)
-        return F
-
+        self.F[0] = self.FxFunc(*q)
+        self.F[1] = self.FyFunc(*q)
+        self.F[2] = self.FzFunc(*q)
+        return self.F.copy()
 class BenderIdealSegmented(BenderIdeal):
     #-very similiar to ideal bender, but force is not a continuous
     #function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
@@ -485,8 +503,19 @@ class BenderIdealSegmented(BenderIdeal):
             self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
-        qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
+        qx=qNew[0]
+        qy=qNew[1]
+        qNew[0] = qx * self.RIn[0, 0] + qy * self.RIn[0, 1]
+        qNew[1] = qx * self.RIn[1, 0] + qy * self.RIn[1, 1]
         return qNew
+
+    def transform_Lab_Frame_Vector_Into_Element_Frame(self,vec):
+        #vec: 3D vector in lab frame to rotate into element frame
+        vecx=vec[0];vecy=vec[1]
+        vec[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
+        vec[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
+        return vec
+
 
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
         qo = q.copy()
@@ -502,15 +531,17 @@ class BenderIdealSegmented(BenderIdeal):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        F = np.zeros(3)  # force vector starts out as zero
+
         quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
         if quc[1] < self.Lm / 2:  # if particle is inside the magnet region
-            F[0] = -self.K * (quc[0] - self.rb)
-            F[2] = -self.K * quc[2]
-            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
+            self.F[0] = -self.K * (quc[0] - self.rb)
+            self.F[2] = -self.K * quc[2]
+            self.F = self.transform_Unit_Cell_Force_Into_Element_Frame(self.F, q)  # transform unit cell coordinates into
             # element frame
-        return F
-
+        else:
+            self.F=np.zeros(3)
+        return self.F.copy()
+    #@profile() #.497
     def transform_Unit_Cell_Force_Into_Element_Frame(self, F, q):
         # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
         # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
@@ -518,8 +549,7 @@ class BenderIdealSegmented(BenderIdeal):
         # F: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
         FNew = F.copy()  # copy input vector to not modify the original
-        return self.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew,q,self.M_uc,self.ucAng)
-
+        return cythonFunc.transform_Unit_Cell_Force_Into_Element_Frame(FNew,q,self.M_uc,self.ucAng)
 
     @staticmethod
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:,:],numba.float64))
@@ -527,11 +557,12 @@ class BenderIdealSegmented(BenderIdeal):
         # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
         # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
         # or leaving the element interface as mirror images of each other.
-        # F: Force to be rotated out of unit cell frame
+        # FNew: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
 
         phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
         # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
+        print(phi)
         cellNum = int(phi // ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
             rotAngle = 2 * (cellNum // 2) * ucAng
@@ -546,6 +577,7 @@ class BenderIdealSegmented(BenderIdeal):
         FNew[0] = Fx * np.cos(rotAngle) - Fy * np.sin(rotAngle)
         FNew[1] = Fx * np.sin(rotAngle) + Fy * np.cos(rotAngle)
         return FNew
+    #@profile()
     def transform_Element_Coords_Into_Unit_Cell_Frame(self,q):
         #As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
         #and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
@@ -553,7 +585,9 @@ class BenderIdealSegmented(BenderIdeal):
         # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
         # used for including unit cell fringe fields
         qNew=q.copy()
-        return self.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew,self.ang,self.ucAng)
+        return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTHON(qNew,self.ang,self.ucAng)
+        #return self.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew,self.ang,self.ucAng)
+
 
     @staticmethod
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64,numba.float64))
@@ -630,49 +664,49 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        F = np.zeros(3)  # force vector starts out as zero
-        phi = np.arctan2(q[1], q[0])
-        if phi<0: #constraint to between zero and 2pi
-            phi+=2*np.pi
-        if phi<self.ang:
+        phi = fast_Arctan2(q)
+        if phi<self.ang: #if inside the bbending segment
             return super().force(q)
         elif phi>self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
                 #the eastward side
-                F[0]=-self.K*(q[0]-self.rb)
-            qTest=q.copy()
-            qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-            qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-
-            if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
-                forcex = -self.K * (qTest[0] - self.rb)
-                F[0]=self.RIn_Ang[0,0]*forcex
-                F[1]=-self.RIn_Ang[1,0]*forcex
-        return F
-
+                self.F[0]=-self.K*(q[0]-self.rb)
+            else: #if in the westward segment maybe
+                qTest=q.copy()
+                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0): #definitely in the 
+                    #westard segment
+                    forcex = -self.K * (qTest[0] - self.rb)
+                    self.F[0]=self.RIn_Ang[0,0]*forcex
+                    self.F[1]=-self.RIn_Ang[1,0]*forcex
+                else:
+                    self.F=np.zeros(3)
+                    warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
+        return self.F.copy()
+    #@profile()
     def is_Coord_Inside(self, q):
-        qNew = q.copy()
-        return self.is_Coord_Inside_NUMBA(qNew,self.RIn_Ang,self.ap,self.ang,self.rb,self.Lcap)
+        #return self.is_Coord_Inside_NUMBA(q,self.RIn_Ang,self.ap,self.ang,self.rb,self.Lcap)
+        return cythonFunc.is_Coord_Inside_CYTHON_BenderIdealSegmentedWithCap(q,self.RIn_Ang,self.ap,self.ang,self.rb,self.Lcap)
 
     @staticmethod
     @numba.njit(numba.boolean(numba.float64[:],numba.float64[:,:],numba.float64,numba.float64,numba.float64,numba.float64))
     def is_Coord_Inside_NUMBA(qNew,RIn_Ang,ap,ang,rb,Lcap):
-        if np.abs(qNew[2]) > ap:  # if clipping in z direction
+        qx,qy,qz=qNew
+        if not -ap<qz<ap:  # if clipping in z direction
             return False
-        phi = np.arctan2(qNew[1], qNew[0])
-        if phi<0: #constraint to between zero and 2pi
-            phi+=2*np.pi
-        if phi<ang:
-            r = np.sqrt(qNew[0] ** 2 + qNew[1] ** 2)
-            if rb+ap>r>rb-ap:
+        phi = fast_Arctan2(qNew)
+        if phi<ang: #if inside the bending region
+            r = np.sqrt(qx ** 2 + qy ** 2)
+            if rb-ap<r<rb+ap:
                 return True
         if phi>ang:  # if outside bender's angle range
-            if (rb - ap < qNew[0] < rb + ap) and (0 > qNew[1] > -Lcap): #If inside the cap on
+            if (rb - ap < qx < rb + ap) and (0 > qy > -Lcap): #If inside the cap on
                 #the eastward side
                 return True
-            qNew[0] = RIn_Ang[0, 0] * qNew[0] + RIn_Ang[0, 1] * qNew[1]
-            qNew[1] = RIn_Ang[1, 0] * qNew[0] + RIn_Ang[1, 1] * qNew[1]
-            if (rb - ap < qNew[0] < rb + ap) and (Lcap > qNew[1] > 0):
+            qxTest = RIn_Ang[0, 0] * qx + RIn_Ang[0, 1] * qy
+            qyTest = RIn_Ang[1, 0] * qx + RIn_Ang[1, 1] * qy
+            if (rb - ap < qxTest < rb + ap) and (Lcap > qyTest > 0): #if inside on the westward side
                 return True
         return False
 
@@ -772,7 +806,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
         tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
         self.FxFunc_Cap = lambda x, y, z:  tempx((y, -z, x))
-        self.FyFunc_Cap = lambda x, y, z: tempz((y, -z, x)) #todo: THIS NEEDS TO BE TESTED MORE!!
+        self.FyFunc_Cap = lambda x, y, z: tempz((y, -z, x))
         self.FzFunc_Cap = lambda x, y, z: -tempy((y, -z, x))
 
     def fill_Force_Func_Internal_Fringe(self):
@@ -824,7 +858,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
-
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
@@ -855,13 +888,11 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             pass #k0 is sufficiently close
         else:
             raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE RANGE')
+
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        F = np.zeros(3)  # force vector starts out as zero
-        phi = np.arctan2(q[1], q[0])
-        if phi<0: #constraint to between zero and 2pi
-            phi+=2*np.pi
+        phi = fast_Arctan2(q)#calling a fast numba version that is global
         if phi<self.ang: #if particle is inside bending angle region
             revs = int((self.ang-phi) // self.ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
@@ -872,43 +903,45 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 position='INNER'
             if position == 'INNER':
                 quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-                F[0] = self.FxFunc_Seg(*quc)
-                F[1] = self.FyFunc_Seg(*quc)
-                F[2] = self.FzFunc_Seg(*quc)
-                F = self.transform_Unit_Cell_Force_Into_Element_Frame(F, q)  # transform unit cell coordinates into
+                self.F[0] = self.FxFunc_Seg(*quc)
+                self.F[1] = self.FyFunc_Seg(*quc)
+                self.F[2] = self.FzFunc_Seg(*quc)
+                self.F = self.transform_Unit_Cell_Force_Into_Element_Frame(self.F, q)  # transform unit cell coordinates into
                     # element frame
             elif position =='FIRST' or position == 'LAST':
-                F=self.force_First_And_Last(q,position)
+                self.F=self.force_First_And_Last(q,position)
             else:
-                raise Exception('UNSOPPORTED PARTICLE POSITION')
+                warnings.warn('PARTICLE IS OUTSIDE LATTICE')
+                self.F=np.zeros(3)
         elif phi>self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
-                #westward side
-                x,y,z=q.copy()
+                #eastward side
+                x,y,z=q
                 x=x-self.rb
-                F[0] = self.FxFunc_Cap(x,y,z)
-                F[1] = self.FyFunc_Cap(x,y,z)
-                F[2] = self.FzFunc_Cap(x,y,z)
-
-            qTest=q.copy()
-            qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-            qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-            if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
-                x,y,z=qTest
-                x=x-self.rb
-                y=-y
-                F[0]=self.FxFunc_Cap(x,y,z)
-                F[1]=self.FyFunc_Cap(x,y,z)
-                F[2]=self.FzFunc_Cap(x,y,z)
-                Fx = F[0]
-                Fy = F[1]
-                F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
-                F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
-                qTest[0]+=-self.rb
-
-        return F
+                self.F[0] = self.FxFunc_Cap(x,y,z)
+                self.F[1] = self.FyFunc_Cap(x,y,z)
+                self.F[2] = self.FzFunc_Cap(x,y,z)
+            else:
+                qTest=q.copy()
+                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):#if on the westwards side
+                    x,y,z=qTest
+                    x=x-self.rb
+                    y=-y
+                    self.F[0]=self.FxFunc_Cap(x,y,z)
+                    self.F[1]=self.FyFunc_Cap(x,y,z)
+                    self.F[2]=self.FzFunc_Cap(x,y,z)
+                    Fx = self.F[0]
+                    Fy = self.F[1]
+                    self.F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
+                    self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
+                    qTest[0]+=-self.rb
+                else: #if not in either cap
+                    warnings.warn('PARTICLE IS OUTSIDE LATTICE')
+                    self.F = np.zeros(3)
+        return self.F.copy()
     def force_First_And_Last(self,q,position):
-        F = np.zeros(3)
         qNew=q.copy()
         if position=='FIRST':
             qx = qNew[0]
@@ -918,21 +951,22 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
             qNew[0]=qNew[0]-self.rb
 
-            F[0] = self.FxFunc_Internal_Fringe(*qNew)
-            F[1] = self.FyFunc_Internal_Fringe(*qNew)
-            F[2] = self.FzFunc_Internal_Fringe(*qNew)
+            self.F[0] = self.FxFunc_Internal_Fringe(*qNew)
+            self.F[1] = self.FyFunc_Internal_Fringe(*qNew)
+            self.F[2] = self.FzFunc_Internal_Fringe(*qNew)
 
-            Fx = F[0]
-            Fy = F[1]
-            F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
-            F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
-        if position=='LAST':
+            Fx = self.F[0]
+            Fy = self.F[1]
+            self.F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
+            self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
+        elif position=='LAST':
             qNew[0]=qNew[0]-self.rb
-            F[0] = self.FxFunc_Internal_Fringe(*qNew)
-            F[1] = self.FyFunc_Internal_Fringe(*qNew)
-            F[2] = self.FzFunc_Internal_Fringe(*qNew)
-
-        return F
+            self.F[0] = self.FxFunc_Internal_Fringe(*qNew)
+            self.F[1] = self.FyFunc_Internal_Fringe(*qNew)
+            self.F[2] = self.FzFunc_Internal_Fringe(*qNew)
+        else:
+            raise Exception('INVALID POSITION SUPPLIED')
+        return self.F.copy()
 
 class LensSimWithCaps(LensIdeal):
     def __init__(self, PTL, file2D, file3D, L, ap):
@@ -1026,21 +1060,24 @@ class LensSimWithCaps(LensIdeal):
         #print(1e6*(time.time()-t)/num,val) #47.28648662567139 -12492.37307561032
         #sys.exit()
     def force(self,q):
-        F=np.zeros(3)
         if q[0]<self.Lcap:
             x,y,z=q
             x=self.Lcap-x
-            F[0]= -self.forceFact * self.FxFunc_Cap(x, y, z)
-            F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
-            F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
+            self.F[0]= -self.forceFact * self.FxFunc_Cap(x, y, z)
+            self.F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
+            self.F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
         elif self.Lcap<q[0]<self.L-self.Lcap:
-            F[0]= self.forceFact * self.FxFunc_Inner(*q)
-            F[1]= self.forceFact * self.FyFunc_Inner(*q)
-            F[2]= self.forceFact * self.FzFunc_Inner(*q)
+            self.F[0]= 0.0
+            self.F[1]= self.forceFact * self.FyFunc_Inner(*q)
+            self.F[2]= self.forceFact * self.FzFunc_Inner(*q)
         elif self.L-self.Lcap<q[0]<self.L:
             x,y,z=q
             x=x-(self.Linner+self.Lcap)
-            F[0]= self.forceFact * self.FxFunc_Cap(x, y, z)
-            F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
-            F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
-        return F
+            self.F[0]= self.forceFact * self.FxFunc_Cap(x, y, z)
+            self.F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
+            self.F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
+        else:
+            warnings.warn('PARTICLE IS OUTSIDE ELEMENTS')
+            self.F=np.zeros(3)
+        
+        return self.F.copy()
