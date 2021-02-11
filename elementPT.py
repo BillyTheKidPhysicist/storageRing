@@ -33,14 +33,7 @@ def fast_Arctan2(q):
         phi += 2 * np.pi
     return phi
 
-# @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:,:],numba.float64[:]))
-# def transform_Lab_Coords_Into_Element_Frame_NUMBA_1(q,RIn,r0):
-#     qNew = q - r0
-#     qx=qNew[0]
-#     qy=qNew[1]
-#     qNew[0] = qx * RIn[0, 0] + qy * RIn[0, 1]
-#     qNew[1] = qx * RIn[1, 0] + qy * RIn[1, 1]
-#     return qNew
+
 
 
 class Element:
@@ -332,11 +325,9 @@ class CombinerIdeal(Element):
         limit=self.Lm+2*self.space
         while True:
             F = force(q)
-            #print('F',F,'q',q)
             a = F
             q_n = q + p * h + .5 * a * h ** 2
             F_n = force(q_n)
-            #print('F_n', F_n, 'q_n', q_n)
             a_n = F_n  # accselferation new or accselferation sub n+1
             p_n = p + .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
@@ -562,7 +553,6 @@ class BenderIdealSegmented(BenderIdeal):
 
         phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
         # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
-        print(phi)
         cellNum = int(phi // ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
             rotAngle = 2 * (cellNum // 2) * ucAng
@@ -1059,6 +1049,7 @@ class LensSimWithCaps(LensIdeal):
         #    val=self.FyFunc_Inner(1e-3,1e-3,0)
         #print(1e6*(time.time()-t)/num,val) #47.28648662567139 -12492.37307561032
         #sys.exit()
+
     def force(self,q):
         if q[0]<self.Lcap:
             x,y,z=q
@@ -1078,6 +1069,7 @@ class LensSimWithCaps(LensIdeal):
             self.F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
         else:
             warnings.warn('PARTICLE IS OUTSIDE ELEMENTS')
+            print(q)
             self.F=np.zeros(3)
         
         return self.F.copy()

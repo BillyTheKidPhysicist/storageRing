@@ -8,6 +8,7 @@ from ParticleClass import Particle
 from ParticleTracer import ParticleTracer
 from OptimizerClass import Optimizer
 import time
+import sys
 
 def main():
 
@@ -54,50 +55,12 @@ def main():
     # lattice.add_Bender_Ideal(None,1.0,1.0,rp)
     lattice.end_Lattice(buildLattice=True)
 
-    #lattice.show_Lattice()
-    #print(lattice.solve_Combiner_Constraints())
-
-    X=[0.11666667,0.21666667]
-    lattice.elList[2].forceFact = X[0]
-    lattice.elList[4].forceFact = X[1]
-    particleTracer=ParticleTracer(lattice)
-    qi=np.asarray([-1e-10,1e-10,0.0])
-    pi=np.asarray([-200.0,0,0])
-    particle=Particle(qi,pi)
-    h=5e-6
-    T=25.0*lattice.totalLength/200 #25
-    #partricle = particleTracer.trace(particle, h, .5*lattice.totalLength/200.0, fastMode=True)
-    #@profile()
-    def func():
-        partricle=particleTracer.trace(particle,h,T,fastMode=True) #8.36, 4.617
-        #T1:
-        #t2:
-        #t3:
-
-        print(particle.q,particle.clipped,particle.revolutions) #[ 6.41003729e-01  2.14272318e-01 -7.68673173e-08] False: for 25 revs
-    func()
-    #t=time.time()
-    #for i in range(5):
-    #    func()
-    #print((time.time()-t)/5) #4.0177, 4.19,4.15
+    h = 1e-5
+    T = 100 * lattice.totalLength / lattice.v0Nominal
 
 
-    #particleTracer.trace(particle, h, T, fastMode=False)
-    #qoArr=particle.qoArr
-    ##plt.plot(qoArr[:,0],qoArr[:,1])
-    #plt.plot(particleTracer.test)
-    #plt.show()
-    ##lattice.show_Lattice(particleCoords=particle.q)
+    #TODO: PARTICLE IS OUTSIDE ELELMENT WARNING
 
-    #optimizer = Optimizer(lattice)
-    #optimizer.optimize_Swarm_Survival_Through_Lattice_Brute([(.1,.5),(.1,.5)],25,T,5e-6)
-    #optimizer.maximize_Suvival_Through_Lattice()
-    #t=time.time()
-    #@profile()
-    #def func():
-    #    optimizer.initialize_Swarm_At_Combiner_Output(.2,.5,0.0,1e-4,1e-1,9)
-    #func()
-    #print(time.time() - t)
 
 if __name__=='__main__':
     main()

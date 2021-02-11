@@ -38,3 +38,8 @@ cythonFunc.html
 latticeConfig2.py.lprof
 latticeConfig2.py.prof
 helloWOrldTest.pyx
+bigMagnetBigCombiner.ipynb
+bigMagnetBigCombiner_1D.ipynb
+BigMagnetsSmallCombiner.ipynb
+output.csv
+makeSwarmFile.ipynb

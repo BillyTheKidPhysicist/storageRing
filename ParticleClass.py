@@ -4,8 +4,6 @@ class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
         self.particles = [] #list of particles in swarm
-
-
     def add_Particle(self, qi, pi):
         #add an additional particle to phase space
         #qi: spatial coordinates
@@ -22,6 +20,11 @@ class Swarm:
 
         meanRevs=revs/self.num_Particles()
         return meanRevs
+    def longest_Particle_Life(self):
+        maxList=[]
+        for particle in self.particles:
+            maxList.append(particle.revolutions)
+        return max(maxList)
 
     def survival_Bool(self, frac=True):
         #returns fraction of particles that have survived, ie not clipped.
@@ -43,8 +46,8 @@ class Particle:
     def __init__(self,qi,pi):
         self.q=qi
         self.p=pi
-        self.qi=qi#initial coordinates
-        self.pi=pi#initial coordinates
+        self.qi=qi.copy()#initial coordinates
+        self.pi=pi.copy()#initial coordinates
         self.m=1.0 #mass is equal to 1 kg. This is not used anywhere
         self.T=0 #time of particle in simulation
         self.v0=np.sqrt(np.sum(pi**2))/self.m #initial speed

@@ -2,6 +2,7 @@ import numba
 from ParaWell import ParaWell
 import time
 import numpy as np
+from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
@@ -21,6 +22,7 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 
 
 #this class does the work of tracing the particles through the lattice with timestepping algorithms
+
 class ParticleTracer:
     def __init__(self,latticeObject):
         self.LO=latticeObject #TODO: get rid of?
@@ -82,7 +84,6 @@ class ParticleTracer:
         self.h=h
         self.h0=h
         self.initialize()
-
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
@@ -102,7 +103,6 @@ class ParticleTracer:
 
         self.particle.finished(totalLatticeLength=self.LO.totalLength)
 
-
         return self.particle
 
     def handle_Element_Edge(self):
@@ -117,9 +117,8 @@ class ParticleTracer:
         h=rt/pt
         self.T += h-self.h #to account for the smaller step size here
         q=q+p*h
-
         eps=1e-9 #tiny step to put the particle on the other side
-        n_p=p/np.sqrt(p**2) #normalized vector of particle velocity direction
+        n_p=p/np.sum(np.sqrt(p**2)) #normalized vector of particle velocity direction
 
         q=q+n_p*eps
         self.particle.q=q
@@ -226,7 +225,7 @@ class ParticleTracer:
         FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
         return FLab
 
-    #@profile
+
     def which_Element(self,q,return_qel=True):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later

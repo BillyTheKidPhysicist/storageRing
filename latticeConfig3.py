@@ -6,6 +6,7 @@ from particleTracerLattice import ParticleTracerLattice
 from ParticleClass import Particle
 from ParticleTracer import ParticleTracer
 from OptimizerClass import Optimizer
+import time
 
 def main():
 
@@ -49,36 +50,18 @@ def main():
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
     lattice.end_Lattice(buildLattice=True)
-    # #
-    # #lattice.show_Lattice()
-    # X=[0.09615384615384616 ,0.24615384615384617]
-    # lattice.elList[2].forceFact = X[0]
-    # lattice.elList[4].forceFact = X[1]
-    #
-    # particleTracer=ParticleTracer(lattice)
-    # qi=np.asarray([-1e-10,0e-3,0.0])
-    # pi=np.asarray([-200.0,0,0])
-    # particle=Particle(qi,pi)
-    # h=1e-6
-    # T=(2 * 3.14 + 2) * 500 / 200.0
-    # particleTracer.trace(particle,h,T)
-    # print(particle.revolutions,particle.clipped)
-    # qoArr=particle.qoArr
-    # plt.plot(qoArr[:,0],1e6*qoArr[:,1])
-    # plt.show()
-    # plt.plot(qoArr[:, 0], 1e6 * qoArr[:, 2])
-    # plt.show()
-    # plt.plot(particleTracer.test)
-    # plt.show()
-    # pArr=particle.pArr
-    # vs=np.sqrt(np.sum(pArr**2,axis=1))
-    # plt.plot(vs)
-    # plt.show()
-    #
-    # lattice.show_Lattice(particleCoords=particle.q)
 
+    h = 5e-6
+    T = 100 * lattice.totalLength / lattice.v0Nominal
     optimizer = Optimizer(lattice)
-    optimizer.maximize_Suvival_Through_Lattice()
-    #optimizer.optimize_Swarm_Survival_Through_Lattice_Brute([(0.05, .5), (0.05, .5)], 40, (2 * 3.14 + 2) * 250 / 200.0,h=5e-6)
+    t = time.time()
+    sol = optimizer.maximize_Suvival_Through_Lattice(h, T, numParticles=500, qMax=3e-3, pMax=5.0, returnBestSwarm=True,
+                                                     maxEvals=500)
+    print(time.time() - t)  # 94
+    print(sol)
+    print(sol[1][0], sol[1][1])
+    #(7.579945305938145, array([0.15809508, 0.1527832]), < ParticleClass.Swarm object at 0x7f2715ccdfd0 >)
+    #0.15809507948483545 0.15278320000328438
+    # TODO: PARTICLE IS OUTSIDE ELELMENT WARNING
 if __name__=='__main__':
     main()
