@@ -2,9 +2,9 @@ import skopt
 import numba
 from profilehooks import profile
 from ParticleTracer import ParticleTracer
-import black_box as bb
+#import black_box as bb
 import numpy.linalg as npl
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import sys
 import multiprocess as mp
 from particleTracerLattice import ParticleTracerLattice
@@ -360,19 +360,21 @@ class Optimizer:
         if bounds is None:
             bounds=[(0.0, .5), (0.0, .5)]
         swarm = self.initialize_Random_Swarm_At_Combiner_Output(qMax,pMax,numParticles)
-        #@profile()
+        self.i=0
         def min_Func(X):
             self.lattice.elList[2].forceFact=X[0]
             self.lattice.elList[4].forceFact = X[1]
             swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
-            print(X,swarmNew.survival_Rev(),swarmNew.longest_Particle_Life())
+            self.i+=1
+            print(self.i,X,swarmNew.survival_Rev(),swarmNew.longest_Particle_Life())
             return -swarmNew.survival_Rev()
 
 
         t=time.time()
-        numInit=int(maxEvals*.5) #50% is just random
-        sol=skopt.gp_minimize(min_Func,bounds,n_calls=maxEvals,n_initial_points=numInit,initial_point_generator='halton'
-                              ,noise=1e-10,xi=.2,kappa=2)
+        numInit=int(maxEvals*.5) #50% is just random\
+        print('starting')
+        sol=skopt.gp_minimize(min_Func,bounds,n_calls=maxEvals,n_initial_points=numInit,initial_point_generator='lhs'
+                              ,noise=.25)
         print(time.time()-t)
         return sol
         time.sleep(10.0)

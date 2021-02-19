@@ -31,34 +31,10 @@ IT IS RECOMENDED TO NOT CREATE MULTIPLE INSTANCES OF ParaWell TO PRESERVE PERFOR
 It is also not recomendded to change number of workers.
 '''
 
-
-def test_Function(runs):
-    # function to show the performance benefits of using ParaWell. Simple function that tracks a particle
-    # in a harmonic potential in 2D with a mass of 1
-
-    for i in range(int(runs)):
-        loops = 10000
-        K = 1e6
-        h = 1e-5
-        q = np.asarray([1.0, 1.5])
-        p = np.asarray([0.0, 0.0])
-        force = lambda x: -K * x
-        qList = []
-        pList = []
-        for i in range(loops):
-            F = force(q)
-            q_n = q + p * h + .5 * F * h ** 2
-            F_n = force(q_n)
-            p_n = p + .5 * (F + F_n) * h
-            p = p_n
-            q = q_n
-            pList.append(p)
-            qList.append(q)
-    return runs
-
+tempFunc=None
 
 class ParaWell:
-    def __init__(self,saveMemory=True,maxPoolUses=100):
+    def __init__(self,saveMemory=True,maxPoolUses=50):
         #saveMemory: calling pathos.ProcessPool over and over wihtout clearing after each calls will slowly eat up
         # memory, though it is far faster. I think this is a bug, but maybe it is a necessity with how it works.
         #regardless, clearing the pool after so many runs will maintain performance benefits and save memory. a hundred
@@ -71,18 +47,22 @@ class ParaWell:
             self.maxPoolUses=99999999999 #set to a huge number
         else:
             self.maxPoolUses= maxPoolUses# number of times to use pool before cleraing it
-
-        #if there are any existing pools caches, clear them to prevent memory leak
-        if len(pa.multiprocessing._ProcessPool__STATE)!=0:
-            pa.helpers.shutdown()
+    def __del__(self):
+        #properly close the processpool so there aren't a bunch of processes hanging around
+        print("SHUTTING DOWN")
+        self.pool.close()
+        pa.helpers.shutdown()
     def parallel_Problem(self,func,argsList,numWorkers=pa.helpers.cpu_count()):
         #func: the function that is being fed the arguments
         #argsList: a list of arguments
         #returns a list of tuples of the results paired with the arguments as (args,results)
         #workers: processes to work on the problem
         # returns a list of tuples of the results paired with the arguments as (args,results)
+        global tempFunc
+        tempFunc=func
         def wrapper(args):
-            result=func(args)
+            global tempFunc
+            result=tempFunc(args)
             return args,result
 
         self.manage_Pool(numWorkers)
@@ -136,15 +116,19 @@ class ParaWell:
     def manage_Pool(self,numWorkers):
         #keep track of the number of time pool has been called, and make a new pool if the previous one gets changed
         #with a new selection of workers
+
         if self.pool is None:
             self.pool=pa.pools.ProcessPool(nodes=numWorkers)
             self.poolUse=0
         else:
             if self.pool.ncpus!=numWorkers: #if the requested worker is different the pool changes
+                self.pool.close()
                 pa.helpers.shutdown()
                 self.pool = pa.pools.ProcessPool(nodes=numWorkers)
                 self.poolUse=0
             elif self.poolUse>=self.maxPoolUses:
+                print('Pool restarted to save memory, maximum pool uses limited to '+str(self.maxPoolUses))
+                self.pool.close()
                 pa.helpers.shutdown()
                 self.pool = pa.pools.ProcessPool(nodes=numWorkers)
                 self.poolUse=0

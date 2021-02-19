@@ -1,7 +1,9 @@
 import numpy as np
 import pyximport; pyximport.install(language_level=3,setup_args={'include_dirs':np.get_include()})
 import cythonFunc
+import numpy.linalg as npl
 import warnings
+import scipy.ndimage as spimg
 from interp3d import interp_3d
 import scipy.interpolate as spi
 import pandas as pd
@@ -13,6 +15,7 @@ import numba
 #from profilehooks import profile
 
 #TODO: INCLUDE APETURE IN THE Z DIRECTION
+#todo: remove spurious copys
 
 #Notes:
 #--begining and ending of elements refer to the geometric sense in the lattice. For example, the beginning of the lens
@@ -67,11 +70,15 @@ class Element:
         self.index=None #elements position in lattice
         self.cap=False #wether there is a cap or not present on the element. Cap simulates fringe fields
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
+        self.ap=None #apeture of element. most elements apetures are assumed to be square
         self.apz=None #apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
         self.type=None #gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         #constructed in particleTracerLattice
         self.sim=None #wether the field values are from simulations
         self.F=np.zeros(3) #object to hold the force to prevent constantly making new force vectors
+    def magnetic_Potential(self,q):
+        # Function that returns the magnetic potential in the element's frame
+        return 0.0
     def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
         #Change the lab coordinates into the particle's orbit frame.
         q = self.transform_Lab_Coords_Into_Element_Frame(q) #first change lab coords into element frame
@@ -117,11 +124,6 @@ class Element:
         self.Lo=L
 
     def is_Coord_Inside(self, q):
-        """
-
-        :param q:
-        :return:
-        """
         return None
 class LensIdeal(Element):
     #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
@@ -141,6 +143,14 @@ class LensIdeal(Element):
         self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2) #'spring' constant
         if self.L is not None:
             self.Lo=self.L
+    def magnetic_Potential(self,q):
+        #potential energy at provided coordinates
+        #q coords in element frame
+        r=np.sqrt(q[1]**2++q[2]**2)
+        if r<self.ap:
+            return self.Bp*self.PTL.u0*r**2/self.rp**2
+        else:
+            return 0.0
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
         qNew[0] = qNew[0] - self.r1[0]
@@ -208,7 +218,15 @@ class BenderIdeal(Element):
             self.L  = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
-
+    def magnetic_Potential(self,q):
+        #potential energy at provided coordinates
+        #q coords in element frame
+        r=np.sqrt(q[0]**2++q[1]**2)
+        if self.rb+self.rp>r>self.rb-self.rp and np.abs(q[2])<self.ap:
+            rNew=np.sqrt((r-self.rb)**2+q[2]**2)
+            return self.Bp*self.PTL.u0*rNew**2/self.rp**2
+        else:
+            return 0.0
 
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew=q-self.r0
@@ -426,7 +444,6 @@ class CombinerSim(CombinerIdeal):
         tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
         tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
         tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-
         self.FxFunc = lambda x, y, z: tempx((z, y, x))
         self.FyFunc = lambda x, y, z: tempy((z, y, x))
         self.FzFunc = lambda x, y, z: tempz((z, y, x))
@@ -704,7 +721,7 @@ class BenderSimSegmented(BenderIdealSegmented):
     def __init__(self, PTL, fileName,numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=True):
         super().__init__( PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap,fillParams=False)
         self.fileName=fileName
-        sys.exit()
+        raise Exception('NOT IMPLEMENTED')
 
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,rOffsetFact,ap):
@@ -723,15 +740,18 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.dataSeg=None
         self.dataCap=None
         self.dataInternalFringe=None
-        self.FxFunc_Seg=None
-        self.FyFunc_Seg=None
-        self.FzFunc_Seg=None
-        self.FxFunc_Cap=None
-        self.FyFunc_Cap=None
-        self.FzFunc_Cap=None
-        self.FxFunc_Internal_Fringe = None
-        self.FyFunc_Internal_Fringe = None
-        self.FzFunc_Internal_Fringe = None
+        self.Fx_Func_Seg=None
+        self.Fy_Func_Seg=None
+        self.Fz_Func_Seg=None
+        self.magnetic_Potential_Func_Seg =None
+        self.Fx_Func_Cap=None
+        self.Fy_Func_Cap=None
+        self.Fz_Func_Cap=None
+        self.magnetic_Potential_Func_Cap = None
+        self.Fx_Func_Internal_Fringe = None
+        self.Fy_Func_Internal_Fringe = None
+        self.Fz_Func_Internal_Fringe = None
+        self.magnetic_Potential_Func_Fringe = None
         self.fill_Params()
     def fill_Params(self):
         if self.ap is None:
@@ -777,6 +797,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BGradx = self.dataCap[:, 3]
         BGrady = self.dataCap[:, 4]
         BGradz = self.dataCap[:, 5]
+        B0=self.dataCap[:,6]
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
@@ -785,19 +806,38 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        B0Matrix = B0.reshape((numz, numy, numx))
         # plt.imshow(BGradyMatrix[0,:,:])
         # plt.show()
 
         BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
         BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
         BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        B0Matrix = np.ascontiguousarray(B0Matrix)
         #
-        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        self.FxFunc_Cap = lambda x, y, z:  tempx((y, -z, x))
-        self.FyFunc_Cap = lambda x, y, z: tempz((y, -z, x))
-        self.FzFunc_Cap = lambda x, y, z: -tempy((y, -z, x))
+        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        interpB0 = interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+        self.Fx_Func_Cap = lambda x, y, z:  interpFx((y, -z, x))
+        self.Fy_Func_Cap = lambda x, y, z: interpFz((y, -z, x))
+        self.Fz_Func_Cap = lambda x, y, z: -interpFy((y, -z, x))
+        self.magnetic_Potential_Func_Cap=lambda x, y, z: interpB0((y, -z, x))
+        #plot image
+        # num=500
+        # print(xArr.min())
+        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
+        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
+        # image=np.zeros((num,num))
+        # i=0
+        # for x1 in x1ImPlotArr:
+        #     j=0
+        #     for x2 in np.flip(x2ImPLotArr):
+        #         image[j,i]=interpB0((-1.5*self.rp,x2,x1))
+        #         j+=1
+        #     i+=1
+        # plt.imshow(image)
+        # plt.show()
 
     def fill_Force_Func_Internal_Fringe(self):
         self.dataInternalFringe = np.asarray(pd.read_csv(self.fileInternalFringe, delim_whitespace=True, header=None))
@@ -807,6 +847,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BGradx = self.dataInternalFringe[:, 3]
         BGrady = self.dataInternalFringe[:, 4]
         BGradz = self.dataInternalFringe[:, 5]
+        B0 = self.dataInternalFringe[:, 6]
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
@@ -814,19 +855,38 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        B0Matrix=B0.reshape((numz, numy, numx))
         # plt.imshow(BGradyMatrix[0,:,:])
         # plt.show()
 
         BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
         BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
         BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        B0Matrix = np.ascontiguousarray(B0Matrix)
         #
-        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        self.FxFunc_Internal_Fringe = lambda x, y, z: tempx((y, -z, x))
-        self.FyFunc_Internal_Fringe = lambda x, y, z: tempz((y, -z, x))  # todo: THIS NEEDS TO BE TESTED MORE!!
-        self.FzFunc_Internal_Fringe = lambda x, y, z: -tempy((y, -z, x))
+        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        interpB0=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+        self.Fx_Func_Internal_Fringe = lambda x, y, z: interpFx((y, -z, x))
+        self.Fy_Func_Internal_Fringe = lambda x, y, z: interpFz((y, -z, x))  # todo: THIS NEEDS TO BE TESTED MORE!!
+        self.Fz_Func_Internal_Fringe = lambda x, y, z: -interpFy((y, -z, x))
+        self.magnetic_Potential_Func_Fringe=lambda x,y,z:interpB0((y,-z,x))
+
+        # num=500
+        # print(xArr.min())
+        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
+        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
+        # image=np.zeros((num,num))
+        # i=0
+        # for x1 in x1ImPlotArr:
+        #     j=0
+        #     for x2 in np.flip(x2ImPLotArr):
+        #         image[j,i]=interpFx((0.0,x2,x1))
+        #         j+=1
+        #     i+=1
+        # plt.imshow(image,cmap=plt.get_cmap('plasma'))
+        # plt.show()
 
 
 
@@ -845,38 +905,47 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BGradx = self.dataSeg[:, 3]
         BGrady = self.dataSeg[:, 4]
         BGradz = self.dataSeg[:, 5]
+        B0 = self.dataSeg[:, 6]
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
+
+
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        B0Matrix=B0.reshape((numz, numy, numx))
         # plt.imshow(BGradyMatrix[0,:,:])
         # plt.show()
 
         BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
         BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
         BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
+        B0Matrix = np.ascontiguousarray(B0Matrix)
         #
-        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        self.FxFunc_Seg = lambda x, y, z: tempx((y, -z, x))
-        self.FyFunc_Seg = lambda x, y, z: tempz((y, -z, x))
-        self.FzFunc_Seg = lambda x, y, z: -tempy((y, -z, x))
+        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        interpB0=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+
+        self.Fx_Func_Seg = lambda x, y, z: interpFx((y, -z, x))
+        self.Fy_Func_Seg = lambda x, y, z: interpFz((y, -z, x))
+        self.Fz_Func_Seg = lambda x, y, z: -interpFy((y, -z, x))
+        self.magnetic_Potential_Func_Seg= lambda x, y, z: interpB0((y, -z, x))
 
     def check_K0(self):
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
         xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.dataSeg[:,0].mean()
         yFit=[]
         for x in xFit:
-            yFit.append(self.FxFunc_Seg(x,0,0))
+            yFit.append(self.Fx_Func_Seg(x, 0, 0))
         xFit=xFit-self.dataSeg[:,0].mean()
         K = -np.polyfit(xFit, yFit, 1)[0] #fit to a line y=m*x+b, and only use the m component
         percDif=100.0*(K-self.K0)/self.K0
         if np.abs(percDif)<1.0: #must be within roughly 1%
             pass #k0 is sufficiently close
         else:
+            print('K current',np.round(K),' K target', self.K0)
             raise Exception('K VALUE FALLS OUTSIDE ACCEPTABLE RANGE')
 
     def force(self, q):
@@ -893,9 +962,9 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 position='INNER'
             if position == 'INNER':
                 quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-                self.F[0] = self.FxFunc_Seg(*quc)
-                self.F[1] = self.FyFunc_Seg(*quc)
-                self.F[2] = self.FzFunc_Seg(*quc)
+                self.F[0] = self.Fx_Func_Seg(*quc)
+                self.F[1] = self.Fy_Func_Seg(*quc)
+                self.F[2] = self.Fz_Func_Seg(*quc)
                 self.F = self.transform_Unit_Cell_Force_Into_Element_Frame(self.F, q)  # transform unit cell coordinates into
                     # element frame
             elif position =='FIRST' or position == 'LAST':
@@ -908,25 +977,23 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 #eastward side
                 x,y,z=q
                 x=x-self.rb
-                self.F[0] = self.FxFunc_Cap(x,y,z)
-                self.F[1] = self.FyFunc_Cap(x,y,z)
-                self.F[2] = self.FzFunc_Cap(x,y,z)
+                self.F[0] = self.Fx_Func_Cap(x, y, z)
+                self.F[1] = self.Fy_Func_Cap(x, y, z)
+                self.F[2] = self.Fz_Func_Cap(x, y, z)
             else:
-                qTest=q.copy()
-                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):#if on the westwards side
-                    x,y,z=qTest
+                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (self.rb - self.ap < qTestx < self.rb + self.ap) and (self.Lcap > qTesty > 0):#if on the westwards side
+                    x,y,z=qTestx,qTesty,q[2]
                     x=x-self.rb
                     y=-y
-                    self.F[0]=self.FxFunc_Cap(x,y,z)
-                    self.F[1]=self.FyFunc_Cap(x,y,z)
-                    self.F[2]=self.FzFunc_Cap(x,y,z)
+                    self.F[0]=self.Fx_Func_Cap(x, y, z)
+                    self.F[1]=self.Fy_Func_Cap(x, y, z)
+                    self.F[2]=self.Fz_Func_Cap(x, y, z)
                     Fx = self.F[0]
                     Fy = self.F[1]
                     self.F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
                     self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
-                    qTest[0]+=-self.rb
                 else: #if not in either cap
                     warnings.warn('PARTICLE IS OUTSIDE LATTICE')
                     self.F = np.zeros(3)
@@ -941,9 +1008,9 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
             qNew[0]=qNew[0]-self.rb
 
-            self.F[0] = self.FxFunc_Internal_Fringe(*qNew)
-            self.F[1] = self.FyFunc_Internal_Fringe(*qNew)
-            self.F[2] = self.FzFunc_Internal_Fringe(*qNew)
+            self.F[0] = self.Fx_Func_Internal_Fringe(*qNew)
+            self.F[1] = self.Fy_Func_Internal_Fringe(*qNew)
+            self.F[2] = self.Fz_Func_Internal_Fringe(*qNew)
 
             Fx = self.F[0]
             Fy = self.F[1]
@@ -951,12 +1018,67 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
         elif position=='LAST':
             qNew[0]=qNew[0]-self.rb
-            self.F[0] = self.FxFunc_Internal_Fringe(*qNew)
-            self.F[1] = self.FyFunc_Internal_Fringe(*qNew)
-            self.F[2] = self.FzFunc_Internal_Fringe(*qNew)
+            self.F[0] = self.Fx_Func_Internal_Fringe(*qNew)
+            self.F[1] = self.Fy_Func_Internal_Fringe(*qNew)
+            self.F[2] = self.Fz_Func_Internal_Fringe(*qNew)
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return self.F.copy()
+    def magnetic_Potential(self,q):
+        # magnetic potential at point q in element frame
+        # q: particle's position in element frame
+        phi = fast_Arctan2(q)#calling a fast numba version that is global
+        V0=0.0
+        if phi<self.ang: #if particle is inside bending angle region
+            revs = int((self.ang-phi) // self.ucAng)  # number of revolutions through unit cell
+            if revs == 0 or revs == 1:
+                position='FIRST'
+            elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
+                position='LAST'
+            else:
+                position='INNER'
+            if position == 'INNER':
+                quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
+                V0=self.magnetic_Potential_Func_Seg(*quc)
+            elif position =='FIRST' or position == 'LAST':
+                V0=self.magnetic_Potential_First_And_Last(q,position)
+            else:
+                warnings.warn('PARTICLE IS OUTSIDE LATTICE')
+                self.F=np.zeros(3)
+        elif phi>self.ang:  # if outside bender's angle range
+            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap): #If inside the cap on
+                #eastward side
+                x,y,z=q
+                x=x-self.rb
+                V0=self.magnetic_Potential_Func_Cap(x,y,z)
+            else:
+                qTest=q.copy()
+                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):#if on the westwards side
+                    x,y,z=qTest
+                    x=x-self.rb
+                    y=-y
+                    V0=self.magnetic_Potential_Func_Cap(x,y,z)
+                else: #if not in either cap
+                    warnings.warn('PARTICLE IS OUTSIDE LATTICE')
+                    self.F = np.zeros(3)
+        return V0
+    def magnetic_Potential_First_And_Last(self,q,position):
+        qNew=q.copy()
+        if position=='FIRST':
+            qx = qNew[0]
+            qy = qNew[1]
+            qNew[0] = self.M_ang[0, 0] * qx + self.M_ang[0, 1] * qy
+            qNew[1] = self.M_ang[1, 0] * qx + self.M_ang[1, 1] * qy
+            qNew[0]=qNew[0]-self.rb
+            V0=self.magnetic_Potential_Func_Fringe(*qNew)
+        elif position=='LAST':
+            qNew[0]=qNew[0]-self.rb
+            V0=self.magnetic_Potential_Func_Fringe(*qNew)
+        else:
+            raise Exception('INVALID POSITION SUPPLIED')
+        return V0
 
 class LensSimWithCaps(LensIdeal):
     def __init__(self, PTL, file2D, file3D, L, ap):
@@ -970,28 +1092,30 @@ class LensSimWithCaps(LensIdeal):
         self.Linner=None
         self.data2D=None
         self.data3D=None
-        self.FxFunc_Cap=None
-        self.FyFunc_Cap = None
-        self.FzFunc_Cap = None
-        self.FxFunc_Inner=None
-        self.FyFunc_Inner = None
-        self.FzFunc_Inner = None
+        self.Fx_Func_Fringe=None
+        self.Fy_Func_Fringe = None
+        self.Fz_Func_Fringe = None
+        self.magnetic_Potential_Func_Fringe= None
+        self.Fx_Func_Inner=None
+        self.Fy_Func_Inner = None
+        self.Fz_Func_Inner = None
+        self.magnetic_Potential_Func_Inner = None
         self.forceFact=1.0
         self.fill_Params()
     def fill_Params(self):
-        if self.data3D is None:
+        if self.data3D is None and self.file3D is not None: #if data has not been loaded yet
             self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
             self.fill_Force_Func_Cap()
             self.Lcap = self.data3D[:,2].max() - self.data3D[:,2].min() - 2 * self.comsolExtraSpace
             self.data3D=False
-        if self.data2D is None:
+        if self.data2D is None and self.file2D is not None: #if data has not been loaded yet
             self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
             self.fill_Force_Func_2D()
             self.rp=(self.data2D[:,0].max()-self.data2D[:,0].min()-2*self.comsolExtraSpace)/2
             if self.ap is None:
                 self.ap=.9*self.rp
             self.data2D=False
-        if self.L is not None:
+        if self.L is not None and self.Lcap is not None:
             self.set_Length(self.L)
 
     def set_Length(self,L):
@@ -1007,69 +1131,139 @@ class LensSimWithCaps(LensIdeal):
         BGradx = self.data3D[:, 3]
         BGrady = self.data3D[:, 4]
         BGradz = self.data3D[:, 5]
+        B0=self.data3D[:,6]
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
+        B0Matrix = B0.reshape((numz, numy, numx))
+
+
+
         BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
         BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
         BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        #
-        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        self.FxFunc_Cap = lambda x, y, z: tempz((x,y ,-z))
-        self.FyFunc_Cap = lambda x, y, z: tempy((x,y ,-z))
-        self.FzFunc_Cap = lambda x, y, z: -tempx((x,y ,-z))
+        B0Matrix = np.ascontiguousarray(B0Matrix)
 
-        #xPlot=np.linspace(0,L)
-        #yPlot=[]
-        #for x in xPlot:
-        #    yPlot.append(self.FxFunc_Cap(x,.003,.003))#tempy((x,.003,.003)))
-        #plt.plot(xPlot,yPlot)
-        #plt.show()
+        #interpolate with fast cython func
+        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
+        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
+        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
+        interpV = interp_3d.Interp3D(self.PTL.u0 *B0Matrix, zArr, yArr, xArr)
+        #wrap the function in a more convenietly accesed function
+        self.Fx_Func_Fringe = lambda x, y, z: interpFz((x, y , -z))
+        self.Fy_Func_Fringe = lambda x, y, z: interpFy((x, y , -z))
+        self.Fz_Func_Fringe = lambda x, y, z: -interpFx((x, y , -z))
+        self.magnetic_Potential_Func_Fringe= lambda x,y,z: interpV((x, y , -z))
+
+
+
+
+        #plot image
+        # num=500
+        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
+        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
+        # image=np.zeros((num,num))
+        # i=0
+        # for x1 in x1ImPlotArr:
+        #     j=0
+        #     for x2 in np.flip(x2ImPLotArr):
+        #         image[j,i]=interpFx((0.0,x2,x1))
+        #         j+=1
+        #     i+=1
+        # plt.imshow(image)
+        # plt.show()
+        # #inspect line plots in element frame
+        # L = self.data3D[:,2].max() - self.data3D[:,2].min() - 2 * self.comsolExtraSpace
+        # print(L)
+        # xPlot=np.linspace(0,L,num=1000)
+        # yPlot=[]
+        # for x in xPlot:
+        #    yPlot.append(self.magnetic_Potential_Func_Fringe(x,-.005,.005))
+        #    #yPlot.append(self.FyFunc_Fringe(x, -.001, .001))
+        # plt.plot(xPlot,yPlot)
+        # plt.show()
+        # sys.exit()
 #
     def fill_Force_Func_2D(self):
         #tempx = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 2] * self.PTL.u0)
         #tempy = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 3] * self.PTL.u0)
         xArr=np.unique(self.data2D[:,0])
         yArr = np.unique(self.data2D[:, 1])
-        tempx=spi.RectBivariateSpline(xArr,yArr,(-self.data2D[:, 2]* self.PTL.u0).reshape(50, 50,order='F'))
-        tempy = spi.RectBivariateSpline(xArr, yArr,(-self.data2D[:, 3]* self.PTL.u0).reshape(50, 50,order='F'))
+        numx=xArr.shape[0]
+        numy=yArr.shape[0]
+        interpX=spi.RectBivariateSpline(xArr,yArr,(-self.data2D[:, 2]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
+        interpY = spi.RectBivariateSpline(xArr, yArr,(-self.data2D[:, 3]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
+        interpV= spi.RectBivariateSpline(xArr, yArr,(self.data2D[:, 4]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
 
-        self.FxFunc_Inner = lambda x, y, z: 0.0
-        self.FyFunc_Inner = lambda x, y, z: tempy(-z, y)
-        self.FzFunc_Inner = lambda x, y, z: -tempx(-z, y)
-        #t=time.time()
-        #num=10000
-        #val=None
-        #for i in range(num):
-        #    val=self.FyFunc_Inner(1e-3,1e-3,0)
-        #print(1e6*(time.time()-t)/num,val) #47.28648662567139 -12492.37307561032
-        #sys.exit()
+        self.Fx_Func_Inner = lambda x, y, z: 0.0
+        self.Fy_Func_Inner = lambda x, y, z: interpY(-z, y)[0][0]
+        self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
+        self.magnetic_Potential_Func_Inner=lambda x,y,z: interpV(-z,y)[0][0]
 
-    def force(self,q):
-        if q[0]<self.Lcap:
+
+        # num=500
+        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
+        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
+        # image=np.zeros((num,num))
+        # i=0
+        # t=time.time()
+        # for x1 in x1ImPlotArr:
+        #     j=0
+        #     for x2 in np.flip(x2ImPLotArr):
+        #         image[j,i]=interpX(x1,x2)
+        #         j+=1
+        #     i+=1
+        # print(1e6*(time.time()-t)/num**2)
+        # plt.imshow(image)
+        # plt.show()
+
+
+        # xPlot=np.linspace(yArr.min()*.75,yArr.max()*.75,num=1000)
+        # yPlot=[]
+        # for x1 in xPlot:
+        #     Fy=self.FyFunc_Inner(0.0,x1,0.001)
+        #     Fz=self.FzFunc_Inner(0.0,x1,0.001)
+        #     yPlot.append(np.sqrt(Fy**2+Fz**2))
+        # plt.plot(xPlot,yPlot)
+        # plt.show()
+    def magnetic_Potential(self,q):
+        if q[0]<=self.Lcap:
             x,y,z=q
             x=self.Lcap-x
-            self.F[0]= -self.forceFact * self.FxFunc_Cap(x, y, z)
-            self.F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
-            self.F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
+            V0=self.magnetic_Potential_Func_Fringe(x,y,z)
+        elif self.Lcap<q[0]<self.L-self.Lcap:
+            V0=self.magnetic_Potential_Func_Inner(*q)
+        elif self.L-self.Lcap<=q[0]<self.L:
+            x,y,z=q
+            x=x-(self.L-self.Lcap)
+            V0=self.magnetic_Potential_Func_Fringe(x,y,z)
+        else:
+            warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
+            print(q)
+            V0=0
+        return V0
+    def force(self,q):
+        if q[0]<=self.Lcap:
+            x,y,z=q
+            x=self.Lcap-x
+            self.F[0]= -self.forceFact * self.Fx_Func_Fringe(x, y, z)
+            self.F[1]= self.forceFact * self.Fy_Func_Fringe(x, y, z)
+            self.F[2]= self.forceFact * self.Fz_Func_Fringe(x, y, z)
         elif self.Lcap<q[0]<self.L-self.Lcap:
             self.F[0]= 0.0
-            self.F[1]= self.forceFact * self.FyFunc_Inner(*q)
-            self.F[2]= self.forceFact * self.FzFunc_Inner(*q)
-        elif self.L-self.Lcap<q[0]<self.L:
+            self.F[1]= self.forceFact * self.Fy_Func_Inner(*q)
+            self.F[2]= self.forceFact * self.Fz_Func_Inner(*q)
+        elif self.L-self.Lcap<=q[0]<self.L:
             x,y,z=q
             x=x-(self.Linner+self.Lcap)
-            self.F[0]= self.forceFact * self.FxFunc_Cap(x, y, z)
-            self.F[1]= self.forceFact * self.FyFunc_Cap(x, y, z)
-            self.F[2]= self.forceFact * self.FzFunc_Cap(x, y, z)
+            self.F[0]= self.forceFact * self.Fx_Func_Fringe(x, y, z)
+            self.F[1]= self.forceFact * self.Fy_Func_Fringe(x, y, z)
+            self.F[2]= self.forceFact * self.Fz_Func_Fringe(x, y, z)
         else:
-            warnings.warn('PARTICLE IS OUTSIDE ELEMENTS')
+            warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
             print(q)
             self.F=np.zeros(3)
-        
         return self.F.copy()

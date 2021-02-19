@@ -158,7 +158,8 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=True,enforceClosedLattice=True,buildLattice=True):
+    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False):
+        #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
         #TODO: document which parameters mean what when using constrain!
         #TODO: THIS ALL NEEDS TO MAKE MORE SENSE
@@ -167,20 +168,24 @@ class ParticleTracerLattice:
         # constrain: wether to constrain the lattice by varying parameters. typically to accomodate the presence of the
         #combiner magnet
         # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
+        #track potential. Wether to have enable the element function that returns magnetic pontential at a given point.
+        #there is a cost to keeping this enabled because of pickling time
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
-        self.catch_Errors(constrain,buildLattice)
+        #self.catch_Errors(constrain,buildLattice)
         if constrain==True:
             if self.bender1.sim==False: #bender1 and 2 will have same type enorced before
                 self.constrain_Lattice()
-
         if buildLattice==True:
             self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice)
             self.make_Geometry()
             self.totalLength=0
             for el in self.elList: #total length of particle's orbit in an element
                 self.totalLength+=el.Lo
+        if trackPotential==False:
+            for el in self.elList:
+                el.magnetic_Potential=lambda x: 0.0
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
@@ -269,7 +274,7 @@ class ParticleTracerLattice:
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
 
-        difFrac=1e-3  # fractional difference in bending radii from target radii
+        difFrac=5e-3  # fractional difference in bending radii from target radii
         up=1+difFrac
         low=1-difFrac
         ranges=[(low*r10,up*r10),(low*r20,up*r20)]
@@ -277,7 +282,7 @@ class ParticleTracerLattice:
 
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
         sol=spo.differential_evolution(cost,ranges,mutation=1.5,popsize=50)
-        print(sol)
+
         #print(sol)
         #print(cost(sol.x,returnParams=True))
         #sys.exit()
@@ -297,6 +302,7 @@ class ParticleTracerLattice:
         if cost(params[:2])>tol:
             raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
+
     @staticmethod
     def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation

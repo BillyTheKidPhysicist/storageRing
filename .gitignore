@@ -23,7 +23,6 @@ benderFringeInternal1.txt
 benderFringeCap2.txt
 benderFringeInternal2.txt
 debug.log
-test.py
 test.csv
 latticeConfig1_Files
 latticeConfig2_Files
@@ -43,3 +42,8 @@ bigMagnetBigCombiner_1D.ipynb
 BigMagnetsSmallCombiner.ipynb
 output.csv
 makeSwarmFile.ipynb
+bigCombinerBigMagnets_Files
+smallCombinerBigMagnets_Files
+smallCombinerSmallMagnets_Files
+bigCombinerSmallMagnets_Files
+venv

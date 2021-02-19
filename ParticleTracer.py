@@ -94,6 +94,7 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
+            self.test.append(self.particle.force[2])#np.sqrt(np.sum(self.particle.force ** 2)))
             if self.particle.clipped==True:
                 break
             if fastMode==False:
@@ -124,22 +125,6 @@ class ParticleTracer:
         self.particle.q=q
         self.particle.p=p
         #TODO: FIX THIS, IT'S BROKEN. DOESN'T WORK WITH FORCE :(
-        ##precision loss is killing me here! Usually Force in the direction of the input to the next element is basically
-        ##zero, thus if that is the case, I need to substitute a really small (but not hyper-super small) number for force
-        ##to get the correct answer
-        #if 2*Ft*self.m*rt <1e-6*pt**2:
-        #    h=rt/(pt/self.m) #assuming no force
-        #else:
-        #    import numpy as np
-        #    h = (np.sqrt(2 * Ft * self.m * rt + pt ** 2) - pt) / Ft #assuming force
-        #h = rt / (pt / self.m)
-        #q=q+h*p/self.m+.5*(F1/self.m)*h**2
-        #F2=self.force(q,el=el)
-        #p=p+.5*(F1+F2)*h
-        #eps=1e-9 #tiny step to put the particle on the other side
-        #np=p/npl.norm(p) #normalized vector of particle direction
-        #q=q+np*eps
-        #return q,p
 
     @staticmethod
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
@@ -163,7 +148,6 @@ class ParticleTracer:
             F=self.particle.force
         else: #the last force is invalid because the particle is at a new position
             F=self.force(q)
-        #self.test.append(np.sqrt(np.sum(F**2)))
 
         #a = F # acceleration old or acceleration sub n
         q_n=self.fast_qNew(q,F,p,self.h)#q new or q sub n+1
@@ -204,11 +188,6 @@ class ParticleTracer:
             exitLoop=True
         return exitLoop
 
-    def get_Energies(self,q,p,el):
-        #get the energy of the particle at the given point and momentum
-        PE =el.get_Potential_Energy(q)
-        KE =np.sqrt(p**2)**2/2
-        return  PE,KE
 
     #@profile
     def force(self,q,qel=None,el=None):
@@ -265,17 +244,19 @@ class ParticleTracer:
         #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
         #or between two element. So try scooting the particle on a tiny bit and try again.
         el=self.which_Element_Shapely(q)
-        if el is not None: #if particle is definitely inside an element.
-            #now test for the z clipping
-            if np.abs(q[2])>el.ap:
-                return None
-            else:
-                return el
+        if el is not None:
+            # now test for the z clipping
+            if el.apz is not None:
+                if el.apz>q[2]>-el.apz:
+                    return el  #found it!
+                else:
+                    pass #maybe the particle is right on the edge so we try scooting it along now
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
         #add up all the beginnings and end of elements and average them
         center=np.zeros(2)
-        for el in self.lattice:
+        for el in self.lattice: #find the geometric center of the lattice. This won't be it exactly, but should be
+            #qualitatively correct
             center+=el.r1[:-1]+el.r2[:-1]
         center=center/(2*len(self.lattice))
 
@@ -283,19 +264,23 @@ class ParticleTracer:
         r=center-q[:-1]
 
         #now rotate this and add the difference to our original vector. rotate by a small amount
-        dphi=-1e-9 #need a clock wise rotation. 1 nanooradian
+        dphi=-1e-9 #need a clock wise rotation. 1 nanoradian
         R=np.array([[np.cos(dphi),-np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
         dr=R@(q[:-1]-r)-(q[:-1]-r)
         #add that to the position and try once more
         qNew=q.copy()
         qNew[:-1]=qNew[:-1]+dr
         el=self.which_Element_Shapely(qNew)
+
         if el is not None:
             # now test for the z clipping
-            if np.abs(q[2]) > el.ap:
-                return None
+            if el.apz is not None:
+                if el.apz>q[2]>-el.apz:
+                    return el
+                else:
+                    return None
             else:
-                return el
+                return el #no z apeture to check
         else:
             return None
 

@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import copy
 class Swarm:
@@ -23,7 +24,8 @@ class Swarm:
     def longest_Particle_Life(self):
         maxList=[]
         for particle in self.particles:
-            maxList.append(particle.revolutions)
+            if particle.revolutions is not None:
+                maxList.append(particle.revolutions)
         return max(maxList)
 
     def survival_Bool(self, frac=True):
@@ -43,7 +45,7 @@ class Swarm:
     def num_Particles(self):
         return len(self.particles)
 class Particle:
-    def __init__(self,qi,pi):
+    def __init__(self,qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
         self.q=qi
         self.p=pi
         self.qi=qi.copy()#initial coordinates
@@ -61,31 +63,47 @@ class Particle:
         self.pList=[] #List of momentum vectors
         self.qList=[] #List of position vector
         self.qoList=[] #List of position in orbit frame vectors
+        self.TList=[] #kinetic energy list
+        self.VList=[] #potential energy list
         self.pArr=None #array version
-        self.qArr=None #array version
-        self.qoArr=None #array version
+        self.qArr=None 
+        self.qoArr=None 
+        self.TArr=None 
+        self.VArr=None 
+        self.EArr=None #total energy
     def log_Params(self):
         #this records value like position and momentum
         self.qList.append(self.q.copy())
         self.pList.append(self.p.copy())
+        self.TList.append(np.sum(self.p**2)/2.0)
         if self.currentEl is not None:
+            qel=self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
             self.qoList.append(self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
+            self.VList.append(self.currentEl.magnetic_Potential(qel))
+
     def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
+
         self.qArr=np.asarray(self.qList)
         self.qList = []  # save memory
         self.pArr = np.asarray(self.pList)
-        self.pList = []  # save memory
+        self.pList = []  
         self.qoArr = np.asarray(self.qoList)
-        self.qoList = []  # save memory
+        self.qoList = []
+
+
+        self.TArr = np.asarray(self.TList)
+        self.TList = []
+        self.VArr = np.asarray(self.VList)
+        self.VList = []
+        self.EArr=self.TArr+self.VArr
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
                 qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength)
                 self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
-
 
     def copy(self):
         return copy.deepcopy(self)
