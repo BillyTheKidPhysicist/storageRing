@@ -138,8 +138,8 @@ class InteractivePlot:
         print(eps)
 
         M=np.eye(2)
-        tempList=self.PLS.lattice[1:]
-        tempList.append(self.PLS.lattice[0])
+        tempList= self.PLS.latticeElementList[1:]
+        tempList.append(self.PLS.latticeElementList[0])
         for el in tempList:
             print('-----',el.elType,'-----')
             M=el.M_Func(*self.q)[:2,:2]@M
@@ -227,9 +227,9 @@ class InteractivePlot:
 
 
             #create and place names of elements above the element
-            textx=self.axBeta[0].text(xEnd-self.lengthList[i]/2,self.envBetaXMax+1.5*self.betaEnvXBorder,self.PLS.lattice[i].elType,rotation=90)
+            textx=self.axBeta[0].text(xEnd - self.lengthList[i] / 2, self.envBetaXMax + 1.5 * self.betaEnvXBorder, self.PLS.latticeElementList[i].elType, rotation=90)
             self.elNameTextListx.append(textx) #store text object to manipulate later
-            texty=self.axBeta[1].text(xEnd-self.lengthList[i]/2,self.envBetaYMax+1.5*self.betaEnvyBorder,self.PLS.lattice[i].elType,rotation=90)
+            texty=self.axBeta[1].text(xEnd - self.lengthList[i] / 2, self.envBetaYMax + 1.5 * self.betaEnvyBorder, self.PLS.latticeElementList[i].elType, rotation=90)
             self.elNameTextListy.append(texty) #store text object to manipulate later
 
         plt.show(block=False)

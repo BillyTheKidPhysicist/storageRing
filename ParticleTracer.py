@@ -1,5 +1,4 @@
 import numba
-from ParaWell import ParaWell
 import time
 import numpy as np
 from numba.experimental import jitclass
@@ -25,17 +24,16 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 
 class ParticleTracer:
     def __init__(self,latticeObject):
-        self.LO=latticeObject #TODO: get rid of?
-        self.lattice = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.latticeElementList = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.totalLatticeLength=latticeObject.totalLength
 
-        self.test=latticeObject
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
         #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
         # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
-        self.T=0 #total time elapsed
-        self.h=None #current step size. This changes near boundaries
-        self.h0=None # initial step size.
+        self.T=None #total time elapsed
+        self.h=None #step size
+
 
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step
@@ -43,9 +41,9 @@ class ParticleTracer:
 
 
         self.numRevs=0 #tracking numbre of times particle comes back to wear it started
-        self.test=[]
+
         self.particle=None #particle object being traced
-        self.fastMode=None #wether to use the fast and memory light version that doesn't record parameters
+        self.fastMode=None #wether to use the fast and memory light version that doesn't record parameters of the particle
 
 
 
@@ -57,7 +55,7 @@ class ParticleTracer:
             self.particle.clipped=False
         self.particle.force=None
         dl=self.particle.v0*self.h #approximate stepsize
-        for el in self.lattice:
+        for el in self.latticeElementList:
             if dl>el.Lo/10.0:
                 raise Exception('STEP SIZE TOO LARGE')
         self.particle.currentEl = self.which_Element_Slow(self.particle.q)
@@ -65,7 +63,6 @@ class ParticleTracer:
             self.particle.clipped=True
         if self.fastMode==False:
             self.particle.log_Params()
-            pass
 
     def trace(self,particle,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
@@ -82,7 +79,7 @@ class ParticleTracer:
             return self.particle
         self.fastMode=fastMode
         self.h=h
-        self.h0=h
+
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
@@ -94,7 +91,6 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
-            self.test.append(self.particle.force[2])#np.sqrt(np.sum(self.particle.force ** 2)))
             if self.particle.clipped==True:
                 break
             if fastMode==False:
@@ -102,7 +98,7 @@ class ParticleTracer:
             self.T += self.h
             self.particle.T=self.T
 
-        self.particle.finished(totalLatticeLength=self.LO.totalLength)
+        self.particle.finished(totalLatticeLength=self.totalLatticeLength)
 
         return self.particle
 
@@ -141,7 +137,7 @@ class ParticleTracer:
         #possible
         q=self.particle.q #q old or q sub n
         p=self.particle.p #p old or p sub n
-
+        poop=self.particle
         if self.elHasChanged==False and self.particle.force is not None: #if the particle is inside the lement it was in
             #last time step, and it's not the first time step, then recycle the force. The particle is starting at the
             #same position it stopped at last time, thus same force
@@ -151,8 +147,10 @@ class ParticleTracer:
 
         #a = F # acceleration old or acceleration sub n
         q_n=self.fast_qNew(q,F,p,self.h)#q new or q sub n+1
-        el, qel = self.which_Element(q_n)
-        exitLoop=self.check_Element_And_Handle_Edge_Event(el)
+        el, qel = self.which_Element(q_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
+        #not always checking if the particle is inside the element by looking at how far away it is from and edge and
+        #calculating when I should check again the soonest
+        exitLoop=self.check_Element_And_Handle_Edge_Event(el)  #check if element has changed.
         if exitLoop==True:
             self.elHasChanged = True
             return
@@ -160,13 +158,13 @@ class ParticleTracer:
 
         #a_n = F_n  # acceleration new or acceleration sub n+1
         p_n=self.fast_pNew(p,F,F_n,self.h)
-        self.particle.force=F_n
         self.particle.q=q_n
         self.particle.p=p_n
         self.particle.force=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
     def check_Element_And_Handle_Edge_Event(self,el):
+        #todo: change this to something that makes more sense
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
@@ -230,15 +228,11 @@ class ParticleTracer:
 
     def which_Element_Shapely(self,q):
         # Use shapely to find where the element is. If the object is exaclty on the edge, this will return None. This
-        #is slower than using simple geometry and should be avoided
+        #is slower than using simple geometry and should be avoided. It does not account for vertical (z) apetures
         point = Point([q[0], q[1]])
-        for el in self.lattice:
+        for el in self.latticeElementList:
             if el.SO.contains(point) == True:
-                if np.abs(q[2]) > el.ap:  # element clips in the z direction
-                    return None
-                else:
-                    # now check to make sure the particle isn't exactly on and edge
-                    return el  # return the element the particle is in
+                return el  # return the element the particle is in
         return None #if no element found, or particle exactly on an edge
     def which_Element_Slow(self,q):
         #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
@@ -249,16 +243,18 @@ class ParticleTracer:
             if el.apz is not None:
                 if el.apz>q[2]>-el.apz:
                     return el  #found it!
-                else:
-                    pass #maybe the particle is right on the edge so we try scooting it along now
+            else:
+                if el.ap>q[2]>-el.ap:
+                    return el  #found it!
+
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
         #add up all the beginnings and end of elements and average them
         center=np.zeros(2)
-        for el in self.lattice: #find the geometric center of the lattice. This won't be it exactly, but should be
+        for el in self.latticeElementList: #find the geometric center of the lattice. This won't be it exactly, but should be
             #qualitatively correct
             center+=el.r1[:-1]+el.r2[:-1]
-        center=center/(2*len(self.lattice))
+        center=center/(2 * len(self.latticeElementList))
 
         #relative position vector
         r=center-q[:-1]

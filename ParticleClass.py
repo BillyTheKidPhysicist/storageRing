@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import time
 import numpy as np
 import copy
@@ -21,13 +22,13 @@ class Swarm:
 
         meanRevs=revs/self.num_Particles()
         return meanRevs
-    def longest_Particle_Life(self):
+    def longest_Particle_Life_Revolutions(self):
+        #return number of revolutions of longest lived particle
         maxList=[]
         for particle in self.particles:
             if particle.revolutions is not None:
                 maxList.append(particle.revolutions)
         return max(maxList)
-
     def survival_Bool(self, frac=True):
         #returns fraction of particles that have survived, ie not clipped.
         #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
@@ -40,32 +41,42 @@ class Swarm:
             return numSurvived / len(self.particles)
         else:
             return numSurvived
+    def __iter__(self):
+        return (particle for particle in self.particles)
     def copy(self):
         return copy.deepcopy(self)
     def num_Particles(self):
         return len(self.particles)
 class Particle:
+    #This object represents a single particle with unit mass. It can track parameters such as position, momentum, and
+    #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
+    # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
+    # interest.
     def __init__(self,qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
         self.q=qi
         self.p=pi
         self.qi=qi.copy()#initial coordinates
         self.pi=pi.copy()#initial coordinates
-        self.m=1.0 #mass is equal to 1 kg. This is not used anywhere
         self.T=0 #time of particle in simulation
-        self.v0=np.sqrt(np.sum(pi**2))/self.m #initial speed
+        self.v0=np.sqrt(np.sum(pi**2)) #initial speed
 
         self.force=None #current force on the particle
         self.currentEl=None #which element the particle is ccurently in
-        self.currentElIndex=None
-        self.cumulativeLength=0
-        self.revolutions=None #revolutions particle makes around lattice
+        self.currentElIndex=None #Index of the elmenent that the particle is curently in. THis remains unchanged even
+        #after the particle leaves the tracing algorithm and such can be used to record where it clipped
+        self.cumulativeLength=0 #total length traveled by the particle IN TERMS of lattice elements. It updates after
+        #the particle leaves an element by adding that elements length (particle trajectory length that is)
+        self.revolutions=None #revolutions particle makd around lattice
         self.clipped=None #wether particle clipped an apeture
+        #these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
+        #they are converted into arrays
         self.pList=[] #List of momentum vectors
         self.qList=[] #List of position vector
         self.qoList=[] #List of position in orbit frame vectors
         self.TList=[] #kinetic energy list
         self.VList=[] #potential energy list
-        self.pArr=None #array version
+        #array versions
+        self.pArr=None
         self.qArr=None 
         self.qoArr=None 
         self.TArr=None 
@@ -104,6 +115,20 @@ class Particle:
                 qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength)
                 self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
+    def plot_Position(self,plotYAxis='y'):
+        if plotYAxis!='y' and plotYAxis!='z':
+            raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
+        if self.qoArr.shape[0]==0:
+            raise Exception('PARTICLE HAS NO LOGGED POSITION')
+        qoArr=self.qoArr
+        if plotYAxis=='y':
+            yPlot=qoArr[:,1]
+        else:
+            yPlot = qoArr[:, 2]
+        plt.plot(qoArr[:,0],yPlot)
+        plt.ylabel('Trajectory offset, m')
+        plt.xlabel('Trajectory length, m')
+        plt.show()
 
     def copy(self):
         return copy.deepcopy(self)

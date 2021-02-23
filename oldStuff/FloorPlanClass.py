@@ -13,11 +13,11 @@ class FloorPlan:
     def __init__(self, PLS, parametersOnly=False):
         self.PLS = PLS
         self.objects = None
-        self.combinerLength = self.PLS.lattice[self.PLS.combinerIndex].Length
+        self.combinerLength = self.PLS.latticeElementList[self.PLS.combinerIndex].Length
         self.parameters = None  # to hold the parameters used in the last build
 
         self.combinerWidth = .3
-        rCombiner = self.PLS.lattice[self.PLS.combinerIndex].r0
+        rCombiner = self.PLS.latticeElementList[self.PLS.combinerIndex].r0
         self.combinerInputAngle = np.arcsin(self.combinerLength / rCombiner) * 180 / np.pi #Half angle seperation
             #between 2 incoming beams, deg
         self.combinerInputSep = 2 * self.combinerLength ** 2 / (2 * rCombiner)
@@ -78,31 +78,31 @@ class FloorPlan:
         if parametersOnly == False:
             if self.PLS.combinerIndex != None:
                 temp = []
-                temp.append(self.PLS.trackLength - (self.PLS.lattice[self.PLS.combinerIndex].S + self.PLS.lattice[
+                temp.append(self.PLS.trackLength - (self.PLS.latticeElementList[self.PLS.combinerIndex].S + self.PLS.latticeElementList[
                     self.PLS.combinerIndex].Length / 2))  #
                 # tracklength 1
-                temp.append(self.PLS.lattice[self.PLS.combinerIndex].S + self.PLS.lattice[
+                temp.append(self.PLS.latticeElementList[self.PLS.combinerIndex].S + self.PLS.latticeElementList[
                     self.PLS.combinerIndex].Length / 2)  # tracklength 2
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].Length)  # lens lengths
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].Length)  # lens lengths
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].Length)  # lens lengths
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].Length)  # lens lengths
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[3]].Length)  # lens lengths
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[0]].Length)  # lens lengths
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[1]].Length)  # lens lengths
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[2]].Length)  # lens lengths
 
-                temp.append(self.PLS.lattice[self.PLS.benderIndices[0]].r0)  # bender radius, same for both as of now
-                temp.append(self.PLS.lattice[self.PLS.combinerIndex].Length)  # length of combiner
+                temp.append(self.PLS.latticeElementList[self.PLS.benderIndices[0]].r0)  # bender radius, same for both as of now
+                temp.append(self.PLS.latticeElementList[self.PLS.combinerIndex].Length)  # length of combiner
                 temp.append(self.PLS.injector.Lo)
                 temp.append(self.PLS.injector.Lm)
                 temp.append(self.PLS.injector.Li)
 
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].rp * self.rOuterRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].rp * self.rOuterRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].rp * self.rOuterRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].rp * self.rOuterRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[1]].rp * self.rOuterRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[2]].rp * self.rOuterRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[3]].rp * self.rOuterRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[0]].rp * self.rOuterRatio)
 
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[3]].rp * self.coilGapRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[0]].rp * self.coilGapRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[1]].rp * self.coilGapRatio)
-                temp.append(self.PLS.lattice[self.PLS.lensIndices[2]].rp * self.coilGapRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[3]].rp * self.coilGapRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[0]].rp * self.coilGapRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[1]].rp * self.coilGapRatio)
+                temp.append(self.PLS.latticeElementList[self.PLS.lensIndices[2]].rp * self.coilGapRatio)
 
 
                 args = self.PLS.sympyVarList.copy()

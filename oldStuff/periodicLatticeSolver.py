@@ -387,10 +387,10 @@ class PeriodicLatticeSolver:
                 raise Exception('SOMETHING DOESN\'T MAKE SENSE HERE, L3 ISN\'T USED')
                 angle1=sym.pi*1.5-sym.atan(L1/r1)-sym.acos((L3**2+L1**2-L2**2)/(2*L3*sym.sqrt(L1**2+r1**2)))
                 angle2=sym.pi*1.5-sym.atan(L2/r2)-sym.acos((L3**2+L2**2-L1**2)/(2*L3*sym.sqrt(L2**2+r2**2)))
-                self.lattice[self.benderIndices[0]].angle=angle1
-                self.lattice[self.benderIndices[1]].angle=angle2
-                self.lattice[self.benderIndices[0]].Length =r1*angle1
-                self.lattice[self.benderIndices[1]].Length =r2*angle2
+                self.latticeElementList[self.benderIndices[0]].angle=angle1
+                self.latticeElementList[self.benderIndices[1]].angle=angle2
+                self.latticeElementList[self.benderIndices[0]].Length = r1 * angle1
+                self.latticeElementList[self.benderIndices[1]].Length = r2 * angle2
             else:
                 raise Exception('INCORRECT NUMBER OF BENDERS. IF COMBINER IS PRESENT THERE SHOULD BE ONLY 2 BENDERS!')
 

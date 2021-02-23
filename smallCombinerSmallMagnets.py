@@ -9,7 +9,7 @@ from OptimizerClass import Optimizer
 
 
 
-def get_Lattice():
+def get_Lattice(trackPotential=True):
     lattice = ParticleTracerLattice(200.0)
     directory='smallCombinerSmallMagnets_Files/'
     fileBend1 = directory+'benderSeg1.txt'
@@ -49,7 +49,7 @@ def get_Lattice():
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice(buildLattice=True,trackPotential=True)
+    lattice.end_Lattice(buildLattice=True,trackPotential=trackPotential)
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
@@ -58,13 +58,11 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     optimizer=Optimizer(lattice)
     sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
     return sol
-    particle=Particle()
-    particleTracer=ParticleTracer(lattice)
-
-
-    particle=particleTracer.trace(particle,h,T,fastMode=False)
-    qoArr=particle.qoArr
-    EArr=particle.EArr
-    #lattice.show_Lattice(particleCoords=particle.qArr[-1])
-    plt.plot(lattice.test)
-    plt.show()
+    # particle=Particle()
+    # particleTracer=ParticleTracer(lattice)
+    #
+    #
+    # particle=particleTracer.trace(particle,h,T,fastMode=False)
+    # qoArr=particle.qoArr
+    # EArr=particle.EArr
+    # #lattice.show_Lattice(particleCoords=particle.qArr[-1])

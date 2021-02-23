@@ -12,7 +12,8 @@ import numpy as np
 from ParticleClass import Swarm
 import scipy.optimize as spo
 import time
-
+import scipy.interpolate as spi
+import matplotlib.pyplot as plt
 import pySOT as ps
 from ParaWell import ParaWell
 import poap.controller as pc
@@ -26,6 +27,7 @@ class Optimizer:
     def __init__(self, lattice):
         self.lattice = lattice
         self.helper=ParaWell() #custom class to help with parallelization
+        self.i=0 #simple variable to track solution status
 
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -335,13 +337,19 @@ class Optimizer:
         if parallel==True:
             def func(particle):
                 return particleTracer.trace(particle, h, T,fastMode=fastMode)
-            results=self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
+
+            #TODO: IT'S NOT CLEAR ANYMORE WHICH IS BETTER TO USE WITH GLOBAL
+            if swarmNew.num_Particles()<100: #reliabely faster in this situation
+                results = self.helper.parallel_Problem(func, swarmNew.particles)
+            else:
+                results=self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]
         else:
             for i in range(swarmNew.num_Particles()):
                 swarmNew.particles[i]=particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
+
         return swarmNew
     def compute_Survival_Through_Lattice(self,Lo,Li,LOffset,F1,F2,h,T,parallel=False):
         qMax=2.5e-3
@@ -354,74 +362,132 @@ class Optimizer:
         swarm=self.trace_Swarm_Through_Lattice(swarm,h,T,parallel=parallel)
         print('done, survival is: ',np.round(swarm.survival_Rev(),3))
         return swarm.survival_Rev()
+    def compute_Definitely_Unstable_Regions_Func(self,bounds=None,qMax=1e-3,numParticlesPerDim=1,gridPoints=40,cutoff=8.0,
+                                                 h=5e-6):
+        #this method searches for regions that are definitely unstable. This is defined as none of the test particles surviving
+        #more than cutoff revolutions. Lattice paramters are varied according to bounds
+        #bounds: region to search over for instability
+        #qMax: maximum dimension in transverse directions for initialized particles
+        #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2
+        #gridPoints: number of points per axis to test stability. Total is gridPoints**2
+        #cutoff: Maximum revolutions below this value are considered unstable
+        #returns: a function that evaluates to zero or one where one is possibly stable and zero is definitely unstable
+
+
+        T=(cutoff+.5)*self.lattice.totalLength/self.lattice.v0Nominal #number of revolutions can be a bit fuzzy so I add
+        # a little extra to compensate
+        if bounds is None:
+            bounds=[(0.0,.5),(0.0,.5)]
+        if numParticlesPerDim==1:
+            qInitialArr=np.asarray([np.asarray([-1e-10,0.0,0.0])])
+        else:
+            qTempArr=np.linspace(-qMax,qMax,numParticlesPerDim)
+            qInitialArr_yz=np.asarray(np.meshgrid(qTempArr,qTempArr)).T.reshape(-1,2)
+            qInitialArr=np.column_stack((np.zeros(qInitialArr_yz.shape[0])-1e-10,qInitialArr_yz))
+        print(qInitialArr)
+        pi=np.asarray([-self.lattice.v0Nominal,0.0,0.0])
+        swarm=Swarm()
+        for qi in qInitialArr:
+            swarm.add_Particle(qi,pi)
+
+        def compute_Stability(X):
+            #returns 1.0 for possibly stable, 0.0 for definitely unstable
+            self.lattice.elList[2].forceFact=X[0]
+            self.lattice.elList[4].forceFact = X[1]
+            swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=False, fastMode=False)
+            maxRevs=swarmNew.longest_Particle_Life_Revolutions()
+            if maxRevs<cutoff: #definitely unstable
+                return 0.0
+            else: #possibly stable
+                return 1.0
+        boundAxis1Arr=np.linspace(bounds[0][0],bounds[0][1],num=gridPoints)
+        boundAxis2Arr = np.linspace(bounds[0][0], bounds[0][1], num=gridPoints)
+        testPointsArr=np.asarray(np.meshgrid(boundAxis1Arr,boundAxis2Arr)).T.reshape(-1,2)
+        results=self.helper.parallel_Problem(compute_Stability,testPointsArr)
+        coordList=[]
+        valList=[]
+        for result in results:
+            coordList.append(result[0])
+            valList.append(result[1])
+        stabilityFunc=spi.NearestNDInterpolator(coordList,valList)
+        return stabilityFunc
+
+
+    def plot_Unstable_Regions(self,bounds=None,qMax=1e-3,numParticlesPerDim=3,gridPoints=40,savePlot=False,
+                              plotName='stabilityPlot',cutoff=5.0,h=5e-6,showPlot=True):
+
+        if bounds is None:
+            bounds = [(0.0, .5), (0.0, .5)]
+        stabilityFunc=self.compute_Definitely_Unstable_Regions_Func(bounds=bounds,qMax=qMax,
+            numParticlesPerDim=numParticlesPerDim, gridPoints=gridPoints,cutoff=cutoff,h=h)
+        plotArr=np.linspace(0,.5,num=250)
+        image=np.empty((plotArr.shape[0],plotArr.shape[0]))
+        for i in range(plotArr.shape[0]):
+            for j in range(plotArr.shape[0]):
+                image[j,i]=stabilityFunc(plotArr[i],plotArr[j])
+        image=np.flip(image,axis=0)
+        extent=[bounds[0][0],bounds[0][1],bounds[1][0],bounds[1][1]]
+        plt.imshow(image,extent=extent)
+        plt.suptitle('Stability regions')
+        plt.title('Yellow indicates possible stability, purple indicates unstable')
+        plt.xlabel('Field strength multiplier')
+        plt.ylabel('Field strength multiplier')
+        if savePlot==True:
+            plt.savefig(plotName)
+        if showPlot==True:
+            plt.show()
+
     def maximize_Suvival_Through_Lattice(self,h,T,numParticles=1000,qMax=3e-3,pMax=5e0,returnBestSwarm=False,parallel=False,
                                          maxEvals=100,bounds=None):
+        #TODO: use the ask/tell format
+        class Solution:
+            #because I renormalize bounds and function values, I used this solution class to easily access the more
+            #familiar values that I am interested in
+            def __init__(self):
+                self.skoptSol=None #to hold the skopt solutiob object
+                self.x=None #list for real paremters values
+                self.fun=None #for real solution value
 
         if bounds is None:
             bounds=[(0.0, .5), (0.0, .5)]
+
         swarm = self.initialize_Random_Swarm_At_Combiner_Output(qMax,pMax,numParticles)
-        self.i=0
+        boundsNorm = [(0.0, 1.0), (0.0, 1.0)]
+        stabilityFunc=self.compute_Definitely_Unstable_Regions_Func(bounds=bounds)
+        self.i = 0
         def min_Func(X):
-            self.lattice.elList[2].forceFact=X[0]
-            self.lattice.elList[4].forceFact = X[1]
-            swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
-            self.i+=1
-            print(self.i,X,swarmNew.survival_Rev(),swarmNew.longest_Particle_Life())
-            return -swarmNew.survival_Rev()
-
-
+            XNew = X.copy()
+            for i in range(len(X)): #change normalized bounds to actual
+                XNew[i] = (bounds[i][1] - bounds[i][0]) * X[i] + bounds[i][0]
+            if stabilityFunc(*XNew)==1.0: #possibly stable solution
+                self.lattice.elList[2].forceFact = XNew[0]
+                self.lattice.elList[4].forceFact = XNew[1]
+                swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
+                self.i += 1
+                survival = swarmNew.survival_Rev()
+                print(self.i, X, survival, swarmNew.longest_Particle_Life())
+            else:
+                print('unstable',self.i)
+                survival=1.0 #in unstable region average survival is typically 1.0
+            Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
+            cost = -Tsurvival / T  # cost scales from 0 to -1.0
+            return cost
         t=time.time()
         numInit=int(maxEvals*.5) #50% is just random\
         print('starting')
-        sol=skopt.gp_minimize(min_Func,bounds,n_calls=maxEvals,n_initial_points=numInit,initial_point_generator='lhs'
-                              ,noise=.25)
+        xiRevs=.25 #search for the next points that returns an imporvement of .25 average revolutions
+        xi=(xiRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
+        noiseRevs=.1
+        noise=(noiseRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
+        print(xi,noise)
+        sol=skopt.gp_minimize(min_Func,boundsNorm,n_calls=maxEvals,n_initial_points=numInit,initial_point_generator='lhs'
+                              ,acq_func='EI',noise=noise,xi=xi)
         print(time.time()-t)
-        return sol
-        time.sleep(10.0)
-        func=sol.models
-        valBest=sol.fun
-        argBest=sol.x
-        # argBest,func = bb.search_min(min_Func,bounds,maxEvals,1,'output.csv')  # text file where results will be saved
-        # X=argBest
-        # self.lattice.elList[2].forceFact = X[0]
-        # self.lattice.elList[4].forceFact = X[1]
-        # swarmBest = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
-        # valBest=swarmBest.survival_Rev()
-        #
-
-
-
-        #
-        #
-        # FArr=np.linspace(0.05,.5,num=20)
-        # argsArr=np.asarray(np.meshgrid(FArr,FArr)).T.reshape(-1,2)
-        # if parallel==True:
-        #     sol=self.helper.parallel_Chunk_Problem(min_Func,argsArr)
-        #     valArr = np.zeros(len(sol))
-        #     argArr = np.zeros((len(sol), 2))
-        #     for i in range(len(sol)):
-        #         argArr[i] = sol[i][0]
-        #         valArr[i] = sol[i][1]
-        #     valBest = 1 / np.min(valArr) - 1
-        #     argBest = argArr[np.argmin(valArr)]
-        # else:
-        #     valList=[]
-        #     for arg in argsArr:
-        #         valList.append(min_Func(arg))
-        #         print('done',arg,1/valList[-1]-1)
-        #     valArr=np.asarray(valList)
-        #     valBest = 1 / np.min(valArr) - 1
-        #     argBest = argsArr[np.argmin(valArr)]
-
-        # bounds=[(0.0,.5),(0.0,.5)]
-        # sol=spo.differential_evolution(min_Func,bounds,workers=32,disp=True,popsize=32,polish=False,maxiter=4)
-        # argBest=sol.x
-        # valBest=1/sol.fun-1.0
-
-        if returnBestSwarm==True:
-            self.lattice.elList[2].forceFact=argBest[0]
-            self.lattice.elList[4].forceFact=argBest[1]
-            swarmBest = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
-            return valBest,argBest,func,swarmBest
-        else:
-            return valBest,argBest,func
+        solution=Solution()
+        solution.skoptSol=sol
+        x=[0,0]
+        for i in range(len(bounds)):
+            x[i]=(bounds[i][1] - bounds[i][0]) * sol.x[i] + bounds[i][0]
+        solution.x=x
+        solution.fun=-sol.fun*T*self.lattice.v0Nominal/self.lattice.totalLength
+        return solution

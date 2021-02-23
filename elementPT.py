@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 import numba
 #from profilehooks import profile
 
-#TODO: INCLUDE APETURE IN THE Z DIRECTION
-#todo: remove spurious copys
+
+
 
 #Notes:
 #--begining and ending of elements refer to the geometric sense in the lattice. For example, the beginning of the lens

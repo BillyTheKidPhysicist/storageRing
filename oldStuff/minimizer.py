@@ -303,8 +303,8 @@ class Minimizer():
             particle.clippedx=[False,False] #need to initialize to false because they may been set to true before
             particle.clippedy=False #need to initialize to false because they may been set to true before
             delta=particle.delta
-            for j in range(len(self.PLS.lattice)):
-                el = self.PLS.lattice[j]
+            for j in range(len(self.PLS.latticeElementList)):
+                el = self.PLS.latticeElementList[j]
                 if j == 0:
                     ind1 = 0  # z array index of beginning of element. Only if it's the first element in the ring
                 else:

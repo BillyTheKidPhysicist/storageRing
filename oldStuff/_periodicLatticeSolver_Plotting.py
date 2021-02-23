@@ -94,7 +94,7 @@ def _1D_Plot_Helper(self, plotType, *args,
         else:
             center = (totalLengthArray[i - 1] + totalLengthArray[i]) / 2
         plt.axvline(totalLengthArray[i], c='black', linestyle=':')
-        ax1.text(center, np.max(y1) * .9, self.lattice[i].magType, rotation=45)
+        ax1.text(center, np.max(y1) * .9, self.latticeElementList[i].magType, rotation=45)
     plt.title(titleString)
     plt.draw()
     plt.show(block=False)

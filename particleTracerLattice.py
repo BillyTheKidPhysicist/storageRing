@@ -598,10 +598,18 @@ class ParticleTracerLattice:
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
         return outputAngle,outputOffset
-    def show_Lattice(self,particleCoords=None):
-        #plot the lattice using shapely
+    def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True):
+        #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
+        #or swarm then plot the last position of the particle/particles
         #particleCoords: Array or list holding particle coordinate such as [x,y]
+        #particle: particle object
+        #swarm: swarm of particles to plot.
+        #showRelativeSurvival: when plotting swarm indicate relative particle survival by varying size of marker
         plt.close('all')
+        def plot_Particle(particle,xMarkerSize=1000):
+            plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c='r')
+            plt.scatter(*particle.q[:2], marker='o', s=10, c='r')
+
         for el in self.elList:
             plt.plot(*el.SO.exterior.xy,c='black')
         if particleCoords is not None:
@@ -610,6 +618,17 @@ class ParticleTracerLattice:
             #plot the particle as both a dot and a X
             plt.scatter(*particleCoords,marker='x',s=1000,c='r')
             plt.scatter(*particleCoords, marker='o', s=50, c='r')
+        if particle is not None: #plot from provided particle
+            plot_Particle(particle)
+        if swarm is not None:
+            maxRevs=swarm.longest_Particle_Life_Revolutions()
+            for particle in swarm:
+                revs=particle.revolutions
+                if showRelativeSurvival==True:
+                    plot_Particle(particle,xMarkerSize=1000*revs/maxRevs)
+                else:
+                    plot_Particle(particle)
+
         plt.grid()
         plt.gca().set_aspect('equal')
         plt.show()

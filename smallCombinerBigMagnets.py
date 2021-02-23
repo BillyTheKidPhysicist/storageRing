@@ -6,7 +6,7 @@ from particleTracerLattice import ParticleTracerLattice
 from ParticleTracer import ParticleTracer
 from ParticleClass import Particle
 
-def get_Lattice():
+def get_Lattice(trackPotential=False):
     lattice = ParticleTracerLattice(200.0)
     directory = 'smallCombinerBigMagnets_Files/'
     fileBend1 = directory + 'benderSeg1.txt'
@@ -41,16 +41,27 @@ def get_Lattice():
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
                                                   K0,
                                                   numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
-    lattice.end_Lattice(buildLattice=True, trackPotential=False)
+    lattice.end_Lattice(trackPotential=trackPotential)
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice=get_Lattice()
     #lattice.show_Lattice()
-    T=Revs*lattice.totalLength/lattice.v0Nominal
+    #T=Revs*lattice.totalLength/lattice.v0Nominal
     optimizer=Optimizer(lattice)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
-    return sol
+    h=5e-6
+    cutoff=8.0
+
+
+
+    particlePerDimList=[5]
+    for particlePerDim in particlePerDimList:
+        name='stabilityAnalysisOptimizationPlots/ParticlesPerDim_'+str(particlePerDim)+'_Cutoff_8_h_5us'
+        optimizer.plot_Unstable_Regions(gridPoints=40,savePlot=True,h=h,cutoff=cutoff,plotName=name,showPlot=False
+                                        ,numParticlesPerDim=particlePerDim)
+        print('finished',particlePerDim)
+    #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    #return sol
     # particle=Particle()
     # particleTracer=ParticleTracer(lattice)
     #
@@ -62,3 +73,5 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     # plt.show()
 #if __name__=='__main__':
 #    main()
+compute_Sol(1,1,1,1)
+

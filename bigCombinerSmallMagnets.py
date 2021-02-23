@@ -80,4 +80,3 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     # plt.show()
     # plt.plot(qoArr[:,0][:-1],particleTracer.test)
     # plt.show()
-

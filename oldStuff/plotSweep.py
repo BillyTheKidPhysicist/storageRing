@@ -151,7 +151,7 @@ class PlotSweep():
 
 
             #draw lines at at apetures. Only draws the apeture if it fits to prevent wasting resources
-            el=self.PLS.lattice[i]
+            el=self.PLS.latticeElementList[i]
             apx = el.apxFunc(*sol.args) #x apeture
             apy = el.apyFunc(*sol.args) #y apeture
             if apx<axBeta[0].get_ylim()[1] or apy<axBeta[0].get_ylim()[1]: #if any apeture fits on the graph
@@ -228,8 +228,8 @@ class PlotSweep():
         temp=[]
         for sol in self.solList:
             clipped=False
-            for i in range(len(self.PLS.lattice)):
-                el=self.PLS.lattice[i]
+            for i in range(len(self.PLS.latticeElementList)):
+                el=self.PLS.latticeElementList[i]
                 if i==0:
                     ind1=0
                 else:

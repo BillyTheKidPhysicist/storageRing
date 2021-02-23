@@ -16,7 +16,7 @@ class ParticleTrace:
         self.m = 1.1650341e-26
         self.u0 = 9.274009994E-24
         self.u0Sim = self.u0 / self.m
-        self.lattice=LLS.lattice #list of lattive elements
+        self.lattice=LLS.latticeElementList #list of lattive elements
         self.v0=v0
         self.T=T
         self.lengthArray = np.asarray([LLS.totalLengthArrayFunc()]) #array of element lengths

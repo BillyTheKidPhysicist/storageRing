@@ -47,3 +47,4 @@ smallCombinerBigMagnets_Files
 smallCombinerSmallMagnets_Files
 bigCombinerSmallMagnets_Files
 venv
+test.py

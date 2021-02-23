@@ -109,7 +109,7 @@ class Plotter:
 
 
             #draw lines at at apetures. Only draws the apeture if it fits to prevent wasting resources
-            el=self.PLS.lattice[i]
+            el=self.PLS.latticeElementList[i]
             apx = el.apxFuncL(*args) #x apeture
             apy = el.apyFunc(*args) #y apeture
             if 1000*apx<axBeta[0].get_ylim()[1]/1000 or 1000*apy<axBeta[0].get_ylim()[1]: #if any apeture fits on the graph. convert to mm
