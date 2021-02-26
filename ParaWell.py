@@ -85,7 +85,6 @@ class ParaWell:
         #test when having many particles that take short/medium time, compare chunk to standard
         if self.useGlobal==True: #more investigation needed
             global globalFuncDict
-
             # if a new function is used then the old pool needs to be cleared else the old function
             # will still superseded the new one because of how global functions and multiprocessing work.
             if globalFuncDict[self.id] is not None:  #if the same parawell instance is being used again

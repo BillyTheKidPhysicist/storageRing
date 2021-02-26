@@ -6,9 +6,9 @@ import numpy as np
 from particleTracerLattice import ParticleTracerLattice
 from ParticleClass import Particle
 from ParticleTracer import ParticleTracer
-from OptimizerClass import Optimizer
+from OptimizerClass import LatticeOptimizer
 
-def get_Lattice():
+def get_Lattice(trackPotential=False):
 
     lattice = ParticleTracerLattice(200.0)
     directory='bigCombinerSmallMagnets_Files/'
@@ -49,34 +49,28 @@ def get_Lattice():
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice(buildLattice=True,trackPotential=True)
+    lattice.end_Lattice(trackPotential=trackPotential)
     return lattice
 
-def compute_Sol(h,Revs,numParticles,maxEvals):
+def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
     lattice=get_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=Optimizer(lattice)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    optimizer=LatticeOptimizer(lattice)
+
+
+    #name='smallCombinerSmallMagnets_sub'
+    #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals,bounds=bounds)
     return sol
 
-    # X=[0.02950183925689996, 0.2072297960385517]
-    # lattice.elList[2].forceFact = X[0]
-    # lattice.elList[4].forceFact = X[1]
-    # qi=np.asarray([-7.01734763e-01,  2.21383423e-02,  6.09057113e-04])
-    # pi=np.asarray([-199.40535839 ,  15.42621043  ,  2.35891041])
-    # particle=Particle(qi=qi,pi=pi)
+
+    #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    #return sol
+    # particle=Particle()
     # particleTracer=ParticleTracer(lattice)
     #
     #
     # particle=particleTracer.trace(particle,h,T,fastMode=False)
     # qoArr=particle.qoArr
-    # qArr=particle.qArr
-    # pArr=particle.pArr
-    # print('done')
-    # lattice.show_Lattice(particleCoords=particle.qArr[-1])
-    # # EArr=particle.EArr
-    # plt.plot(qoArr[:,0],qoArr[:,2])
-    # plt.grid()
-    # plt.show()
-    # plt.plot(qoArr[:,0][:-1],particleTracer.test)
-    # plt.show()
+    # EArr=particle.EArr
+    # #lattice.show_Lattice(particleCoords=particle.qArr[-1])

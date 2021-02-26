@@ -5,10 +5,10 @@ import numpy as np
 from particleTracerLattice import ParticleTracerLattice
 from ParticleClass import Particle
 from ParticleTracer import ParticleTracer
-from OptimizerClass import Optimizer
+from OptimizerClass import LatticeOptimizer
 import time
 
-def compute_Sol(h,Revs,numParticles,maxEvals):
+def get_Lattice(trackPotential=False):
 
     lattice = ParticleTracerLattice(200.0)
 
@@ -51,18 +51,26 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice(trackPotential=True,buildLattice=True)
-    # TODO: PARTICLE IS OUTSIDE ELELMENT WARNIN
+    lattice.end_Lattice(trackPotential=trackPotential)
+    return lattice
+def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
+    lattice=get_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=Optimizer(lattice)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    optimizer=LatticeOptimizer(lattice)
+
+
+    #name='smallCombinerSmallMagnets_sub'
+    #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals,bounds=bounds)
     return sol
+
+    #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    #return sol
     # particle=Particle()
     # particleTracer=ParticleTracer(lattice)
     #
     #
     # particle=particleTracer.trace(particle,h,T,fastMode=False)
     # qoArr=particle.qoArr
-    # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
-    # plt.plot(particleTracer.test)
-    # plt.show()
+    # EArr=particle.EArr
+

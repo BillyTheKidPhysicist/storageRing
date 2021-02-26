@@ -19,15 +19,19 @@ from ParaWell import ParaWell
 import poap.controller as pc
 
 
+class skoptOptimizer:
+    def __init__(self):
+        pass
 
 
 
-
-class Optimizer:
+class LatticeOptimizer:
     def __init__(self, lattice):
         self.lattice = lattice
         self.helper=ParaWell() #custom class to help with parallelization
         self.i=0 #simple variable to track solution status
+        self.particleTracer = ParticleTracer(lattice)
+        self.swarmStability=None #particle swarm used to test for lattice stability
 
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -196,6 +200,8 @@ class Optimizer:
     def fast_pNew(p,F,F_n,h):
         return p+.5*(F+F_n)*h
     def step_Particle_Through_Combiner(self, particle, h=1e-5):
+        raise Exception('NEED TO BETTER DEAL WITH PARTICLES BEING TRACED MULTIPLE TIMES. how to handle particle.force? '
+                        'maybe dont use it')
         particle.currentEl=self.lattice.combiner
         q = particle.q.copy()
         p = particle.p.copy()
@@ -338,11 +344,8 @@ class Optimizer:
             def func(particle):
                 return particleTracer.trace(particle, h, T,fastMode=fastMode)
 
-            #TODO: IT'S NOT CLEAR ANYMORE WHICH IS BETTER TO USE WITH GLOBAL
-            if swarmNew.num_Particles()<100: #reliabely faster in this situation
-                results = self.helper.parallel_Problem(func, swarmNew.particles)
-            else:
-                results=self.helper.parallel_Chunk_Problem(func,swarmNew.particles)
+
+            results = self.helper.parallel_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]
@@ -362,74 +365,108 @@ class Optimizer:
         swarm=self.trace_Swarm_Through_Lattice(swarm,h,T,parallel=parallel)
         print('done, survival is: ',np.round(swarm.survival_Rev(),3))
         return swarm.survival_Rev()
-    def compute_Definitely_Unstable_Regions_Func(self,bounds=None,qMax=1e-3,numParticlesPerDim=1,gridPoints=40,cutoff=8.0,
-                                                 h=5e-6):
-        #this method searches for regions that are definitely unstable. This is defined as none of the test particles surviving
-        #more than cutoff revolutions. Lattice paramters are varied according to bounds
-        #bounds: region to search over for instability
-        #qMax: maximum dimension in transverse directions for initialized particles
-        #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2
-        #gridPoints: number of points per axis to test stability. Total is gridPoints**2
-        #cutoff: Maximum revolutions below this value are considered unstable
-        #returns: a function that evaluates to zero or one where one is possibly stable and zero is definitely unstable
 
-
-        T=(cutoff+.5)*self.lattice.totalLength/self.lattice.v0Nominal #number of revolutions can be a bit fuzzy so I add
+    def compute_Max_Revs(self,X,h=5e-6,cutoff=8.0):
+        # for the given configuraiton X and particle(s) return the maximum number of revolutions
+        T=(cutoff+.25)*self.lattice.totalLength/self.lattice.v0Nominal #number of revolutions can be a bit fuzzy so I add
         # a little extra to compensate
-        if bounds is None:
-            bounds=[(0.0,.5),(0.0,.5)]
+        self.lattice.elList[2].forceFact = X[0]
+        self.lattice.elList[4].forceFact = X[1]
+        revolutionsList = []
+        for particle in self.swarmStability:
+            particle = self.particleTracer.trace(particle.copy(), h, T)
+            revolutionsList.append(particle.revolutions)
+            if revolutionsList[-1] > cutoff:
+                break
+        return max(revolutionsList)
+    def get_Stability_Function(self,qMax=250e-6,numParticlesPerDim=2,h=5e-6,cutoff=8.0,funcType='bool'):
+        #TODO:Make this parallel! FREE LUNCH! BUT TEST IT
+        T=(cutoff+.25)*self.lattice.totalLength/self.lattice.v0Nominal #number of revolutions can be a bit fuzzy so I add
+        # a little extra to compensate
         if numParticlesPerDim==1:
             qInitialArr=np.asarray([np.asarray([-1e-10,0.0,0.0])])
         else:
             qTempArr=np.linspace(-qMax,qMax,numParticlesPerDim)
             qInitialArr_yz=np.asarray(np.meshgrid(qTempArr,qTempArr)).T.reshape(-1,2)
             qInitialArr=np.column_stack((np.zeros(qInitialArr_yz.shape[0])-1e-10,qInitialArr_yz))
-        print(qInitialArr)
         pi=np.asarray([-self.lattice.v0Nominal,0.0,0.0])
         swarm=Swarm()
         for qi in qInitialArr:
             swarm.add_Particle(qi,pi)
-
+        if numParticlesPerDim%2==0: #if even number then add one more particle at the center
+            swarm.add_Particle()
         def compute_Stability(X):
-            #returns 1.0 for possibly stable, 0.0 for definitely unstable
+            #X lattice arguments
+            #for the given configuraiton X and particle(s) return the maximum number of revolutions, or True for stable
+            #or False for unstable
             self.lattice.elList[2].forceFact=X[0]
             self.lattice.elList[4].forceFact = X[1]
-            swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=False, fastMode=False)
-            maxRevs=swarmNew.longest_Particle_Life_Revolutions()
-            if maxRevs<cutoff: #definitely unstable
-                return 0.0
-            else: #possibly stable
-                return 1.0
+            revolutionsList=[]
+            for particle in swarm:
+                particle=self.particleTracer.trace(particle.copy(),h,T)
+                revolutionsList.append(particle.revolutions)
+                if revolutionsList[-1]>cutoff:
+                    if funcType=='bool':
+                        return True #stable
+                    elif funcType=='rev':
+                        break
+            if funcType=='bool':
+                return False #unstable
+            elif funcType=='rev':
+                return max(revolutionsList)
+        return compute_Stability
+    def compute_Revolution_Func_Over_Grid(self,bounds=None,qMax=1e-4,numParticlesPerDim=2,gridPoints=40,h=5e-6,cutoff=8.0):
+        #this method loops over a grid and logs the numbre of revolutions up to cutoff for the particle with the
+        #maximum number of revolutions
+        #bounds: region to search over for instability
+        #qMax: maximum dimension in transverse directions for initialized particles
+        #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2. when 1 a single
+        #particle is initialized at [1e-10,0,0]
+        #gridPoints: number of points per axis to test stability. Total is gridPoints**2
+        #cutoff: Maximum revolution number
+        #returns: a function that evaluates to the maximum number of revolutions of the particles
+
+        revFunc=self.get_Stability_Function(qMax=qMax,numParticlesPerDim=numParticlesPerDim,h=h,cutoff=cutoff,funcType='rev')
         boundAxis1Arr=np.linspace(bounds[0][0],bounds[0][1],num=gridPoints)
-        boundAxis2Arr = np.linspace(bounds[0][0], bounds[0][1], num=gridPoints)
+        boundAxis2Arr = np.linspace(bounds[1][0], bounds[1][1], num=gridPoints)
         testPointsArr=np.asarray(np.meshgrid(boundAxis1Arr,boundAxis2Arr)).T.reshape(-1,2)
-        results=self.helper.parallel_Problem(compute_Stability,testPointsArr)
+        results=self.helper.parallel_Problem(revFunc,testPointsArr)
         coordList=[]
         valList=[]
         for result in results:
             coordList.append(result[0])
             valList.append(result[1])
-        stabilityFunc=spi.NearestNDInterpolator(coordList,valList)
-        return stabilityFunc
+        revolutionFunc=spi.LinearNDInterpolator(coordList,valList)
+        return revolutionFunc
 
 
-    def plot_Unstable_Regions(self,bounds=None,qMax=1e-3,numParticlesPerDim=3,gridPoints=40,savePlot=False,
-                              plotName='stabilityPlot',cutoff=5.0,h=5e-6,showPlot=True):
+
+    def plot_Stability(self,bounds=None,qMax=1e-4,numParticlesPerDim=2,gridPoints=40,savePlot=False,
+                              plotName='stabilityPlot',cutoff=8.0,h=5e-6,showPlot=True):
+        #bounds: region to search over for instability
+        #qMax: maximum dimension in transverse directions for initialized particles
+        #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2.
+        #gridPoints: number of points per axis to test stability. Total is gridPoints**2
+        #cutoff: Maximum revolutions below this value are considered unstable
 
         if bounds is None:
             bounds = [(0.0, .5), (0.0, .5)]
-        stabilityFunc=self.compute_Definitely_Unstable_Regions_Func(bounds=bounds,qMax=qMax,
+
+        stabilityFunc=self.compute_Revolution_Func_Over_Grid(bounds=bounds,qMax=qMax,
             numParticlesPerDim=numParticlesPerDim, gridPoints=gridPoints,cutoff=cutoff,h=h)
-        plotArr=np.linspace(0,.5,num=250)
-        image=np.empty((plotArr.shape[0],plotArr.shape[0]))
-        for i in range(plotArr.shape[0]):
-            for j in range(plotArr.shape[0]):
-                image[j,i]=stabilityFunc(plotArr[i],plotArr[j])
+        plotxArr=np.linspace(bounds[0][0],bounds[0][1],num=250)
+        plotyArr = np.linspace(bounds[1][0], bounds[1][1], num=250)
+        image=np.empty((plotxArr.shape[0],plotyArr.shape[0]))
+        for i in range(plotxArr.shape[0]):
+            for j in range(plotyArr.shape[0]):
+                image[j,i]=stabilityFunc(plotxArr[i],plotyArr[j])
+
         image=np.flip(image,axis=0)
         extent=[bounds[0][0],bounds[0][1],bounds[1][0],bounds[1][1]]
         plt.imshow(image,extent=extent)
+
         plt.suptitle('Stability regions')
-        plt.title('Yellow indicates possible stability, purple indicates unstable')
+        plt.title('Yellow indicates more stability, purple indicates more unstable')
         plt.xlabel('Field strength multiplier')
         plt.ylabel('Field strength multiplier')
         if savePlot==True:
@@ -438,8 +475,10 @@ class Optimizer:
             plt.show()
 
     def maximize_Suvival_Through_Lattice(self,h,T,numParticles=1000,qMax=3e-3,pMax=5e0,returnBestSwarm=False,parallel=False,
-                                         maxEvals=100,bounds=None):
-        #TODO: use the ask/tell format
+                                         maxEvals=100,bounds=None,precision=5e-3):
+        #todo: THis is very poorly organized! needs to be changed into its own class
+        if bounds is None:
+            bounds=[(0.0, .5), (0.0, .5)]
         class Solution:
             #because I renormalize bounds and function values, I used this solution class to easily access the more
             #familiar values that I am interested in
@@ -447,47 +486,183 @@ class Optimizer:
                 self.skoptSol=None #to hold the skopt solutiob object
                 self.x=None #list for real paremters values
                 self.fun=None #for real solution value
+        swarm = self.initialize_Random_Swarm_At_Combiner_Output(qMax, pMax, numParticles)
 
-        if bounds is None:
-            bounds=[(0.0, .5), (0.0, .5)]
 
-        swarm = self.initialize_Random_Swarm_At_Combiner_Output(qMax,pMax,numParticles)
-        boundsNorm = [(0.0, 1.0), (0.0, 1.0)]
-        stabilityFunc=self.compute_Definitely_Unstable_Regions_Func(bounds=bounds)
-        self.i = 0
+        stepsX=int((bounds[0][1]-bounds[0][0])/precision)
+        stepsY = int((bounds[1][1] - bounds[1][0]) / precision)
+        if stepsX+stepsY<=1:
+            raise Exception('THERE ARE NOT ENOUGH POINTS IN SPACE TO EXPLORE, MUST BE MORE THAN 1')
+        boundsNorm = [(0, stepsX), (0, stepsY)]
+        print(boundsNorm)
+
         def min_Func(X):
             XNew = X.copy()
-            for i in range(len(X)): #change normalized bounds to actual
-                XNew[i] = (bounds[i][1] - bounds[i][0]) * X[i] + bounds[i][0]
-            if stabilityFunc(*XNew)==1.0: #possibly stable solution
-                self.lattice.elList[2].forceFact = XNew[0]
-                self.lattice.elList[4].forceFact = XNew[1]
-                swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
-                self.i += 1
-                survival = swarmNew.survival_Rev()
-                print(self.i, X, survival, swarmNew.longest_Particle_Life())
-            else:
-                print('unstable',self.i)
-                survival=1.0 #in unstable region average survival is typically 1.0
+            for i in range(len(X)):  # change normalized bounds to actual
+                XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
+            self.lattice.elList[2].forceFact = XNew[0]
+            self.lattice.elList[4].forceFact = XNew[1]
+            swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
+            self.i += 1
+            survival = swarmNew.survival_Rev()
+            print(XNew,X, survival, swarmNew.longest_Particle_Life_Revolutions())
             Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
             cost = -Tsurvival / T  # cost scales from 0 to -1.0
             return cost
-        t=time.time()
-        numInit=int(maxEvals*.5) #50% is just random\
+
+        stabilityFunc = self.get_Stability_Function(numParticlesPerDim=1, cutoff=8.0,h=5e-6)
+
+        def stability_Func_Wrapper(X):
+            XNew = X.copy()
+            for i in range(len(X)):  # change normalized bounds to actual
+                XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
+            return stabilityFunc(XNew)
+
+        unstableCost = -1.5 * (self.lattice.totalLength / self.lattice.v0Nominal) / T  # typically unstable regions return an average
+        # of 1-2 revolution
+        numInit = int(maxEvals * .5)  # 50% is just random
+        xiRevs = .25  # search for the next points that returns an imporvement of at least this many revs
+        xi = (xiRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
+        noiseRevs =1e-2 #small amount of noise to account for variability of results and encourage a smooth fit
+        noise = (noiseRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
+
+
+        model = skopt.Optimizer(boundsNorm, n_initial_points=numInit, acq_func='EI', acq_optimizer='sampling',
+                                acq_func_kwargs={"xi": xi, 'noise': noise}, n_jobs=-1)
+        self.resetXiCounts=0
+        self.countXi=False
+        def generate_Next_Point():
+            if evals <= numInit-1:  # if still initializing the model
+                x1 = int(np.random.rand() * stepsX)
+                x2 = int(np.random.rand() * stepsY)
+                XSample = [x1, x2]
+            else:
+                XSample = model.ask()
+            if len(model.Xi) > 1 and evals > numInit-1:  # if the optimizer is suggesting duplicate points
+                loops = 0
+                while (loops < 10):  # try to force the optimizer to pick another point
+                    if np.any(np.sum((np.asarray(model.Xi) - np.asarray(XSample)) ** 2, axis=1) == 0):
+                        print('DUPLICATE POINTS',XSample)
+                        model.acq_func_kwargs['xi'] = model.acq_func_kwargs['xi'] * 2
+                        model.update_next()
+                        XSample = model.ask()
+                        self.countXi=True
+                    else:
+                        break
+                    loops += 1
+                if loops == -9:
+                    raise Exception('COULD NOT STEER MODEL TO A NEW POINT')
+                if self.countXi==True:
+                    self.resetXiCounts+=1
+                    if self.resetXiCounts==5:
+                        model.acq_func_kwargs['xi']=xi
+                        self.countXi=False
+                        self.resetXiCounts=0
+                        print('search reset!')
+            return XSample
+
+
+
+        evals = 0
+        t = time.time()
+
         print('starting')
-        xiRevs=.25 #search for the next points that returns an imporvement of .25 average revolutions
-        xi=(xiRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
-        noiseRevs=.1
-        noise=(noiseRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
-        print(xi,noise)
-        sol=skopt.gp_minimize(min_Func,boundsNorm,n_calls=maxEvals,n_initial_points=numInit,initial_point_generator='lhs'
-                              ,acq_func='EI',noise=noise,xi=xi)
-        print(time.time()-t)
-        solution=Solution()
-        solution.skoptSol=sol
-        x=[0,0]
-        for i in range(len(bounds)):
-            x[i]=(bounds[i][1] - bounds[i][0]) * sol.x[i] + bounds[i][0]
-        solution.x=x
-        solution.fun=-sol.fun*T*self.lattice.v0Nominal/self.lattice.totalLength
+        while (evals < maxEvals): #TODO: REMOVE DUPLICATE CODE
+            print(evals)
+
+            XSample=generate_Next_Point()
+            print(XSample)
+            if stability_Func_Wrapper(XSample) == True:  # possible solution
+                cost = min_Func(XSample)
+                model.tell(XSample, cost)
+                evals += 1
+
+            else:  # not possible solution
+                model.tell(XSample, unstableCost+np.random.rand()*1e-10) #add a little random noise to help
+                #with stability. Doesn't work well when all the points are the same sometimes
+
+
+        print(time.time() - t)
+        sol = model.get_result()
+        solution = Solution()
+        solution.skoptSol = sol
+        x = [0, 0]
+        for i in range(len(sol.x)):  # change normalized bounds to actual
+            x[i] = ((bounds[i][1] - bounds[i][0]) * float(sol.x[i]) / float(boundsNorm[i][1] - boundsNorm[i][0]) +
+                       bounds[i][0])
+        solution.x = x
+        solution.fun = -sol.fun * T * self.lattice.v0Nominal / self.lattice.totalLength
         return solution
+
+        # swarm = self.initialize_Random_Swarm_At_Combiner_Output(qMax,pMax,numParticles)
+        # boundsNorm = [(0.0, 1.0), (0.0, 1.0)]
+        # self.i = 0
+        # def min_Func(X):
+        #     XNew = X.copy()
+        #     for i in range(len(X)): #change normalized bounds to actual
+        #         XNew[i] = (bounds[i][1] - bounds[i][0]) * X[i] + bounds[i][0]
+        #
+        #     self.lattice.elList[2].forceFact = XNew[0]
+        #     self.lattice.elList[4].forceFact = XNew[1]
+        #     swarmNew = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=True, fastMode=True)
+        #     self.i += 1
+        #     survival = swarmNew.survival_Rev()
+        #     print(self.i, X, survival, swarmNew.longest_Particle_Life_Revolutions())
+        #     Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
+        #     cost = -Tsurvival / T  # cost scales from 0 to -1.0
+        #     return cost
+        #
+        # stabilityFunc = self.get_Stability_Function(numParticlesPerDim=1,cutoff=5.0)
+        # def stability_Func_Wrapper(X):
+        #     XNew = X.copy()
+        #     for i in range(len(X)):  # change normalized bounds to actual
+        #         XNew[i] = (bounds[i][1] - bounds[i][0]) * X[i] + bounds[i][0]
+        #     return stabilityFunc(XNew)
+        #
+        #
+        # unstableCost=-1.5*(self.lattice.totalLength / self.lattice.v0Nominal)/T  #typically unstable regions return an average
+        # #of 1-2 revolution
+        # numInit=int(maxEvals*.5) #50% is just random
+        # xiRevs=.5 #search for the next points that returns an imporvement of at least this many revs
+        # xi=(xiRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
+        # noiseRevs=.1
+        # noise=(noiseRevs*(self.lattice.totalLength/self.lattice.v0Nominal))/T
+        # print(xi)
+        #
+        # model = skopt.Optimizer(boundsNorm, n_initial_points=numInit, acq_func='EI', acq_optimizer='sampling',
+        #                         acq_func_kwargs={"xi":xi,'noise':noise},n_jobs=-1)
+        # evals=0
+        # t=time.time()
+        # print('starting')
+        # while(evals<maxEvals):
+        #     print(evals)
+        #     if evals<numInit: #if still initializing the model
+        #         x1=np.random.rand()
+        #         x2=np.random.rand()
+        #         XSample=[x1,x2]
+        #         if stability_Func_Wrapper(XSample)==True: #possible solution
+        #             cost=min_Func(XSample)
+        #             model.tell(XSample,cost)
+        #             evals+=1
+        #         else: #not possible solution
+        #             model.tell(XSample,unstableCost)
+        #
+        #     else: #search for minimum now
+        #
+        #         XSample=model.ask()
+        #         if stability_Func_Wrapper(XSample)==True: #possible solution
+        #             cost=min_Func(XSample)
+        #             model.tell(XSample,cost)
+        #             evals+=1
+        #         else: #not possible solution
+        #             model.tell(XSample, unstableCost)
+        # print(time.time() - t)
+        # sol=model.get_result()
+        # solution=Solution()
+        # solution.skoptSol=sol
+        # x=[0,0]
+        # for i in range(len(bounds)):
+        #     x[i]=(bounds[i][1] - bounds[i][0]) * sol.x[i] + bounds[i][0]
+        # solution.x=x
+        # solution.fun=-sol.fun*T*self.lattice.v0Nominal/self.lattice.totalLength
+        # return solution

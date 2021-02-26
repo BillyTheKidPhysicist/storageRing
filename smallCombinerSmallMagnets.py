@@ -5,11 +5,11 @@ import numpy as np
 from particleTracerLattice import ParticleTracerLattice
 from ParticleClass import Particle
 from ParticleTracer import ParticleTracer
-from OptimizerClass import Optimizer
+from OptimizerClass import LatticeOptimizer
 
 
 
-def get_Lattice(trackPotential=True):
+def get_Lattice(trackPotential=False):
     lattice = ParticleTracerLattice(200.0)
     directory='smallCombinerSmallMagnets_Files/'
     fileBend1 = directory+'benderSeg1.txt'
@@ -52,17 +52,42 @@ def get_Lattice(trackPotential=True):
     lattice.end_Lattice(buildLattice=True,trackPotential=trackPotential)
     return lattice
 
-def compute_Sol(h,Revs,numParticles,maxEvals):
+def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
     lattice=get_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=Optimizer(lattice)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    optimizer=LatticeOptimizer(lattice)
+
+
+    #name='smallCombinerSmallMagnets_sub'
+    #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals,bounds=bounds)
     return sol
-    # particle=Particle()
+
+    #name='smallCombinerSmallMagnets_Plot_Reduced'
+    #optimizer.plot_Stability(bounds=[(0.0, 0.5/4), (0.0, 0.5/4)], gridPoints=100, savePlot=True, plotName=name)
+#
+    #name = 'smallCombinerSmallMagnets_Plot_Reduced'
+    #optimizer.plot_Unstable_Regions(gridPoints=100, bounds=[(0.0, .5 / 4.0), (0.0, .5 / 4.0)], cutoff=8.0,
+                                    #savePlot=True, h=5e-6, plotName=name, showPlot=False,)
+
+
+
+    #results indicate that the cutoff does not affects the outcome
+
+
+
+    # #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    # #return sol
+    # X=[.025,.065]
+    # #lattice.elList[2].forceFact = X[0]
+    # #lattice.elList[4].forceFact = X[1]
+    #
     # particleTracer=ParticleTracer(lattice)
-    #
-    #
+    # T = .2 * lattice.totalLength / lattice.v0Nominal
+    # h=1e-6
+    # qi = np.asarray([1e-10, 5e-4, 0.0])
+    # particle = Particle(qi=qi)
     # particle=particleTracer.trace(particle,h,T,fastMode=False)
-    # qoArr=particle.qoArr
-    # EArr=particle.EArr
+    # particle.plot_Energies()
+    # particle.plot_Position()
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])

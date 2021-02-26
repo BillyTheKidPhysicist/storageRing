@@ -6,7 +6,7 @@ class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
         self.particles = [] #list of particles in swarm
-    def add_Particle(self, qi, pi):
+    def add_Particle(self, qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
         #add an additional particle to phase space
         #qi: spatial coordinates
         #pi: momentum coordinates
@@ -58,6 +58,7 @@ class Particle:
         self.qi=qi.copy()#initial coordinates
         self.pi=pi.copy()#initial coordinates
         self.T=0 #time of particle in simulation
+        self.traced=False #recored wether the particle has already been sent throught the particle tracer
         self.v0=np.sqrt(np.sum(pi**2)) #initial speed
 
         self.force=None #current force on the particle
@@ -95,7 +96,7 @@ class Particle:
     def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
-
+        self.traced=True
         self.qArr=np.asarray(self.qList)
         self.qList = []  # save memory
         self.pArr = np.asarray(self.pList)
@@ -115,6 +116,20 @@ class Particle:
                 qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength)
                 self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
+    def plot_Energies(self):
+        if self.EArr.shape[0]==0:
+            raise Exception('PARTICLE HAS NO LOGGED POSITION')
+        EArr = self.EArr
+        TArr=self.TArr
+        VArr=self.VArr
+        qoArr=self.qoArr
+        plt.close('all')
+        plt.plot(qoArr[:,0],EArr-EArr[0],label='E')
+        plt.plot(qoArr[:, 0], TArr - TArr[0],label='T')
+        plt.plot(qoArr[:, 0], VArr - VArr[0],label='V')
+        plt.legend()
+        plt.grid()
+        plt.show()
     def plot_Position(self,plotYAxis='y'):
         if plotYAxis!='y' and plotYAxis!='z':
             raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
@@ -125,6 +140,7 @@ class Particle:
             yPlot=qoArr[:,1]
         else:
             yPlot = qoArr[:, 2]
+        plt.close('all')
         plt.plot(qoArr[:,0],yPlot)
         plt.ylabel('Trajectory offset, m')
         plt.xlabel('Trajectory length, m')

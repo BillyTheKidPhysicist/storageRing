@@ -1,7 +1,7 @@
 #config with bigger magnets (1/4), and small combiner. Lens before combiner is a reasonable distance from the combiner
 import numpy as np
 import matplotlib.pyplot as plt
-from OptimizerClass import Optimizer
+from OptimizerClass import LatticeOptimizer
 from particleTracerLattice import ParticleTracerLattice
 from ParticleTracer import ParticleTracer
 from ParticleClass import Particle
@@ -47,31 +47,34 @@ def get_Lattice(trackPotential=False):
 def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice=get_Lattice()
     #lattice.show_Lattice()
-    #T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=Optimizer(lattice)
-    h=5e-6
-    cutoff=8.0
+    T=Revs*lattice.totalLength/lattice.v0Nominal
+    optimizer=LatticeOptimizer(lattice)
 
+    #name='smallCombinerBigMagnets_Plot_100Grid'
+    #optimizer.plot_Unstable_Regions(gridPoints=100,savePlot=True,plotName=name)
 
-
-    particlePerDimList=[5]
-    for particlePerDim in particlePerDimList:
-        name='stabilityAnalysisOptimizationPlots/ParticlesPerDim_'+str(particlePerDim)+'_Cutoff_8_h_5us'
-        optimizer.plot_Unstable_Regions(gridPoints=40,savePlot=True,h=h,cutoff=cutoff,plotName=name,showPlot=False
-                                        ,numParticlesPerDim=particlePerDim)
-        print('finished',particlePerDim)
-    #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    #name='smallCombinerBigMagnets'
+    #optimizer.plot_Stability(bounds=[(0.0,0.5),(0.0,0.5)],gridPoints=100,savePlot=True,plotName=name)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    return sol
     #return sol
+    # X=[.1,.28]
+    # lattice.elList[2].forceFact = X[0]
+    # lattice.elList[4].forceFact = X[1]
     # particle=Particle()
     # particleTracer=ParticleTracer(lattice)
+    # T = lattice.totalLength * 10 / lattice.v0Nominal
     #
-    #
+    # particle=Particle()
+    # particleTracer=ParticleTracer(lattice)
+    # T = .9 * lattice.totalLength / lattice.v0Nominal
+    # h=1e-6
+    # particle = Particle()
     # particle=particleTracer.trace(particle,h,T,fastMode=False)
-    # qoArr=particle.qoArr
+    # #particle.plot_Energies()
+    # particle.plot_Position()
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
-    # plt.plot(particleTracer.test)
-    # plt.show()
 #if __name__=='__main__':
 #    main()
-compute_Sol(1,1,1,1)
+#sol=compute_Sol(1e-5,50,100,40)
 

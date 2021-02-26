@@ -65,6 +65,7 @@ class ParticleTracer:
             self.particle.log_Params()
 
     def trace(self,particle,h,T0,fastMode=False):
+        #TODO: HOW TO DEAL WITH PARTICLE BEING TRACED MULTIPLE TIMES. IS THAT SOMETHING I EVEN WANT TO DO EVER?
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -73,6 +74,8 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        if particle.traced==True:
+            raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
         if self.particle.clipped==True: #some particles may come in clipped so ignore them
             self.particle.finished(totalLatticeLength=0)
@@ -85,7 +88,6 @@ class ParticleTracer:
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
             return particle
-
         while(True):
             if self.T>T0:
                 self.particle.clipped=False
