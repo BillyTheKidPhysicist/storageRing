@@ -46,6 +46,12 @@ def get_Lattice(trackPotential=False):
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice=get_Lattice()
+    from SwarmTracer import SwarmTracer
+    swarmTracer = SwarmTracer(lattice)
+    swarmNew = swarmTracer.initialize_Swarm_At_Combiner_Output(.15, 1.0, 0.0,numPhaseSpace=100)
+
+
+
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
     optimizer=LatticeOptimizer(lattice)
@@ -55,8 +61,8 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
 
     #name='smallCombinerBigMagnets'
     #optimizer.plot_Stability(bounds=[(0.0,0.5),(0.0,0.5)],gridPoints=100,savePlot=True,plotName=name)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
-    return sol
+    #func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    #return func,lattice
     #return sol
     # X=[.1,.28]
     # lattice.elList[2].forceFact = X[0]
@@ -76,5 +82,5 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
 #if __name__=='__main__':
 #    main()
-#sol=compute_Sol(1e-5,50,100,40)
+compute_Sol(1e-5,50,100,50)
 

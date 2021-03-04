@@ -74,3 +74,4 @@ def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
     # qoArr=particle.qoArr
     # EArr=particle.EArr
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
+compute_Sol(5e-6,50,2000,50)

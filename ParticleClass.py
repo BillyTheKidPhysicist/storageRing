@@ -97,6 +97,7 @@ class Particle:
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
         self.traced=True
+        self.force=None
         self.qArr=np.asarray(self.qList)
         self.qList = []  # save memory
         self.pArr = np.asarray(self.pList)
