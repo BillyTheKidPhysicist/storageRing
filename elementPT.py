@@ -40,7 +40,7 @@ def fast_Arctan2(q):
 
 
 class Element:
-    def __init__(self):
+    def __init__(self,PTL):
         self.theta=None #angle that describes an element's rotation in the xy plane.
         #SEE EACH ELEMENT FOR MORE DETAILS
         #-Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -52,6 +52,7 @@ class Element:
         #y=0
         #combiner: theta=0 has the outlet at the origin and pointing to the west, with the inlet some distance to the right
         #and pointing in the NE direction
+        self.PTL=PTL #particle tracer lattice object. Used for various constants
         self.nb=None #normal vector to beginning (clockwise sense) of element.
         self.ne=None #normal vector to end (clockwise sense) of element
         self.r0=None #coordinates of center of bender, minus any caps
@@ -127,13 +128,35 @@ class Element:
 
     def is_Coord_Inside(self, q):
         return None
+    def make_Interp_Functions(self,data):
+        xArr = np.unique(data[:, 0])
+        yArr = np.unique(data[:, 1])
+        zArr = np.unique(data[:, 2])
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        numz = zArr.shape[0]
+        B0Matrix = np.zeros((numx, numy, numz))
+        BGradxMatrix = np.zeros((numx, numy, numz))
+        BGradyMatrix = np.zeros((numx, numy, numz))
+        BGradzMatrix = np.zeros((numx, numy, numz))
+        xIndices = np.argwhere(data[:, 0][:, None] == xArr)[:, 1]
+        yIndices = np.argwhere(data[:, 1][:, None] == yArr)[:, 1]
+        zIndices = np.argwhere(data[:, 2][:, None] == zArr)[:, 1]
+        B0Matrix[xIndices, yIndices, zIndices] = data[:, 3]
+        BGradxMatrix[xIndices, yIndices, zIndices] = data[:, 3]
+        BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
+        BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
+        interpV=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
+        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
+        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
+        return interpFx,interpFy,interpFz,interpV
 class LensIdeal(Element):
     #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
     #F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
     def __init__(self,PTL,L,Bp,rp,ap,fillParams=True):
         #fillParams is used to avoid filling the parameters in inherited classes
-        super().__init__()
-        self.PTL=PTL #particle tracing lattice object
+        super().__init__(PTL)
         self.Bp = Bp #field strength at pole face
         self.rp = rp #bore radius
         self.L = L #lenght of magnet
@@ -191,9 +214,8 @@ class BenderIdeal(Element):
         #this is the base model for the bending elements, of which there are several kinds. To maintain generality, there
         #are numerous methods and variables that are not necesary here, but are used in other child classes. For example,
         #this element has no caps, but a cap length of zero is still used.
-        super().__init__()
+        super().__init__(PTL)
         self.sim=False
-        self.PTL=PTL #particle tracer lattice object
         self.ang=ang #total bending angle of bender
         self.Bp = Bp #field strength at pole
         self.rp = rp #bore radius of magnet
@@ -279,9 +301,8 @@ class CombinerIdeal(Element):
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
     def __init__(self,PTL,Lm,c1,c2,ap,sizeScale,fillsParams=True):
-        super().__init__()
+        super().__init__(PTL)
         self.sim=False
-        self.PTL=PTL
         self.ap = ap
         self.Lm=Lm
         self.La=None #length of segment between inlet and straight section inside the combiner. This length goes from
@@ -423,37 +444,46 @@ class CombinerSim(CombinerIdeal):
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        xArr = self.sizeScale*np.unique(self.data[:, 0])
-        yArr = self.sizeScale*np.unique(self.data[:, 1])
-        zArr = self.sizeScale*np.unique(self.data[:, 2])
-        BGradx = self.data[:, 3]/self.sizeScale
-        BGrady = self.data[:, 4]/self.sizeScale
-        BGradz = self.data[:, 5]/self.sizeScale
+
+        #TODO: COMBINE THIS WITH A FUNCTION FOR ALL ELEMENTS
+        xArr = np.unique(self.data[:, 0])
+        yArr = np.unique(self.data[:, 1])
+        zArr = np.unique(self.data[:, 2])
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
+        #B0Matrix = np.zeros((numx, numy, numz))
+        BGradxMatrix = np.zeros((numx,numy,numz))
+        BGradyMatrix = np.zeros((numx,numy,numz))
+        BGradzMatrix = np.zeros((numx,numy,numz))
+        xIndices = np.argwhere(self.data[:, 0][:, None] == xArr)[:, 1]
+        yIndices = np.argwhere(self.data[:, 1][:, None] == yArr)[:, 1]
+        zIndices = np.argwhere(self.data[:, 2][:, None] == zArr)[:, 1]
+        #B0Matrix[xIndices, yIndices, zIndices] = self.data[:, 3]
+        BGradxMatrix[xIndices, yIndices, zIndices] = self.data[:, 3]
+        BGradyMatrix[xIndices, yIndices, zIndices] = self.data[:, 4]
+        BGradzMatrix[xIndices, yIndices, zIndices] = self.data[:, 5]
+        #funcB0=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+        funcGradx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
+        funcGrady = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
+        funcGradz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
+
+        
+        #self.magnetic_Potential=lambda x, y, z: funcGradx((x, y, z))
+        self.FxFunc = lambda x, y, z: funcGradx((x, y, z))
+        self.FyFunc = lambda x, y, z: funcGrady((x, y, z))
+        self.FzFunc = lambda x, y, z: funcGradz((x, y, z))
+
+        # sys.exit()
         self.ap = (yArr.max() - yArr.min() - 2 * self.comsolExtraSpace) / 2.0 #TODO: FIX THIS CORRECTLY
         #the combiner is assymetric and has two different apeture sizes for left and right
         self.apL=yArr.min()+self.comsolExtraSpace
         self.apR=yArr.max()-self.comsolExtraSpace
         self.apz = (zArr.max() - zArr.min() - 2 * self.comsolExtraSpace) / 2.0
-        BGradxMatrix = BGradx.reshape((numz, numy, numx))
-        BGradyMatrix = BGrady.reshape((numz, numy, numx))
-        BGradzMatrix = BGradz.reshape((numz, numy, numx))
-
-        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
-        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
-        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        #
-        tempx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        tempy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        tempz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        self.FxFunc = lambda x, y, z: tempx((z, y, x))
-        self.FyFunc = lambda x, y, z: tempy((z, y, x))
-        self.FzFunc = lambda x, y, z: tempz((z, y, x))
 
         #TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+
 
 
         #to find the length
@@ -744,7 +774,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def __init__(self,PTL, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,yokeWidth,rOffsetFact,ap):
         super().__init__(PTL,numMagnets,Lm,Lcap,None,rp,rb,yokeWidth,extraSpace,rOffsetFact,ap,fillParams=False)
         self.sim=True
-        self.PTL=PTL
+
         self.fileSeg=fileSeg
         self.fileCap=fileCap
         self.fileInternalFringe=fileInternalFringe
@@ -808,148 +838,25 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2) #reflection matrix
     def fill_Force_Func_Cap(self):
         self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
-        xArr = np.unique(self.dataCap[:, 0])
-        yArr = np.unique(self.dataCap[:, 1])
-        zArr = np.flip(np.unique(self.dataCap[:, 2]))
-        BGradx = self.dataCap[:, 3]
-        BGrady = self.dataCap[:, 4]
-        BGradz = self.dataCap[:, 5]
-        B0=self.dataCap[:,6]
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-
-
-        BGradxMatrix = BGradx.reshape((numz, numy, numx))
-        BGradyMatrix = BGrady.reshape((numz, numy, numx))
-        BGradzMatrix = BGradz.reshape((numz, numy, numx))
-        B0Matrix = B0.reshape((numz, numy, numx))
-        # plt.imshow(BGradyMatrix[0,:,:])
-        # plt.show()
-
-        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
-        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
-        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        B0Matrix = np.ascontiguousarray(B0Matrix)
-        #
-        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        interpB0 = interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
-        self.Fx_Func_Cap = lambda x, y, z:  interpFx((y, -z, x))
-        self.Fy_Func_Cap = lambda x, y, z: interpFz((y, -z, x))
-        self.Fz_Func_Cap = lambda x, y, z: -interpFy((y, -z, x))
-        self.magnetic_Potential_Func_Cap=lambda x, y, z: interpB0((y, -z, x))
-        #plot image
-        # num=500
-        # print(xArr.min())
-        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
-        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
-        # image=np.zeros((num,num))
-        # i=0
-        # for x1 in x1ImPlotArr:
-        #     j=0
-        #     for x2 in np.flip(x2ImPLotArr):
-        #         image[j,i]=interpB0((-1.5*self.rp,x2,x1))
-        #         j+=1
-        #     i+=1
-        # plt.imshow(image)
-        # plt.show()
-
+        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.dataCap)
+        self.Fx_Func_Cap = lambda x, y, z:  interpFx((x, -z, y))
+        self.Fy_Func_Cap = lambda x, y, z: interpFz((x, -z, y))
+        self.Fz_Func_Cap = lambda x, y, z: -interpFy((x, -z, y))
+        self.magnetic_Potential_Func_Cap=lambda x, y, z: interpV((x, -z, y))
     def fill_Force_Func_Internal_Fringe(self):
         self.dataInternalFringe = np.asarray(pd.read_csv(self.fileInternalFringe, delim_whitespace=True, header=None))
-        xArr = np.unique(self.dataInternalFringe[:, 0])
-        yArr = np.unique(self.dataInternalFringe[:, 1])
-        zArr = np.flip(np.unique(self.dataInternalFringe[:, 2]))
-        BGradx = self.dataInternalFringe[:, 3]
-        BGrady = self.dataInternalFringe[:, 4]
-        BGradz = self.dataInternalFringe[:, 5]
-        B0 = self.dataInternalFringe[:, 6]
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-
-        BGradxMatrix = BGradx.reshape((numz, numy, numx))
-        BGradyMatrix = BGrady.reshape((numz, numy, numx))
-        BGradzMatrix = BGradz.reshape((numz, numy, numx))
-        B0Matrix=B0.reshape((numz, numy, numx))
-        # plt.imshow(BGradyMatrix[0,:,:])
-        # plt.show()
-
-        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
-        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
-        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        B0Matrix = np.ascontiguousarray(B0Matrix)
-        #
-        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        interpB0=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
-        self.Fx_Func_Internal_Fringe = lambda x, y, z: interpFx((y, -z, x))
-        self.Fy_Func_Internal_Fringe = lambda x, y, z: interpFz((y, -z, x))  # todo: THIS NEEDS TO BE TESTED MORE!!
-        self.Fz_Func_Internal_Fringe = lambda x, y, z: -interpFy((y, -z, x))
-        self.magnetic_Potential_Func_Fringe=lambda x,y,z:interpB0((y,-z,x))
-
-        # num=500
-        # print(xArr.min())
-        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
-        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
-        # image=np.zeros((num,num))
-        # i=0
-        # for x1 in x1ImPlotArr:
-        #     j=0
-        #     for x2 in np.flip(x2ImPLotArr):
-        #         image[j,i]=interpFx((0.0,x2,x1))
-        #         j+=1
-        #     i+=1
-        # plt.imshow(image,cmap=plt.get_cmap('plasma'))
-        # plt.show()
-
-
-
-        #xPlot=np.linspace(0,.029)
-        #temp=[]
-        #for x in xPlot:
-        #   temp.append(self.FzFunc_Internal_Fringe(1e-3,x,1e-3))
-        #plt.plot(xPlot,temp)
-        #plt.show()
-        #sys.exit()
+        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.dataInternalFringe)
+        self.Fx_Func_Internal_Fringe = lambda x, y, z: interpFx((x, -z, y))
+        self.Fy_Func_Internal_Fringe = lambda x, y, z: interpFz((x, -z, y))
+        self.Fz_Func_Internal_Fringe = lambda x, y, z: -interpFy((x, -z, y))
+        self.magnetic_Potential_Func_Fringe=lambda x,y,z:interpV((x,-z,y))
     def fill_Force_Func_Seg(self):
         self.dataSeg = np.asarray(pd.read_csv(self.fileSeg, delim_whitespace=True, header=None))
-        xArr = np.unique(self.dataSeg[:, 0])
-        yArr = np.unique(self.dataSeg[:, 1])
-        zArr = np.unique(self.dataSeg[:, 2])
-        BGradx = self.dataSeg[:, 3]
-        BGrady = self.dataSeg[:, 4]
-        BGradz = self.dataSeg[:, 5]
-        B0 = self.dataSeg[:, 6]
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-
-
-        BGradxMatrix = BGradx.reshape((numz, numy, numx))
-        BGradyMatrix = BGrady.reshape((numz, numy, numx))
-        BGradzMatrix = BGradz.reshape((numz, numy, numx))
-        B0Matrix=B0.reshape((numz, numy, numx))
-        # plt.imshow(BGradyMatrix[0,:,:])
-        # plt.show()
-
-        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
-        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
-        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        B0Matrix = np.ascontiguousarray(B0Matrix)
-        #
-        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        interpB0=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
-
-        self.Fx_Func_Seg = lambda x, y, z: interpFx((y, -z, x))
-        self.Fy_Func_Seg = lambda x, y, z: interpFz((y, -z, x))
-        self.Fz_Func_Seg = lambda x, y, z: -interpFy((y, -z, x))
-        self.magnetic_Potential_Func_Seg= lambda x, y, z: interpB0((y, -z, x))
-
+        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.dataSeg)
+        self.Fx_Func_Seg = lambda x, y, z: interpFx((x, -z, y))
+        self.Fy_Func_Seg = lambda x, y, z: interpFz((x, -z, y))
+        self.Fz_Func_Seg = lambda x, y, z: -interpFy((x, -z, y))
+        self.magnetic_Potential_Func_Seg= lambda x, y, z: interpV((x, -z, y))
     def check_K0(self):
         #use the fit to the gradient of the magnetic field to find the k value in F=-k*x
         xFit=np.linspace(-self.rp/2,self.rp/2,num=10000)+self.dataSeg[:,0].mean()
@@ -1100,7 +1007,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 class LensSimWithCaps(LensIdeal):
     def __init__(self, PTL, file2D, file3D, L, ap):
         super().__init__(PTL, None, None, None, None,fillParams=False)
-        self.PTL=PTL
         self.file2D=file2D
         self.file3D=file3D
         self.L=L
@@ -1142,71 +1048,16 @@ class LensSimWithCaps(LensIdeal):
             raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
         self.Lo = self.L
     def fill_Force_Func_Cap(self):
-        xArr = np.unique(self.data3D[:, 0])
-        yArr = np.unique(self.data3D[:, 1])
-        zArr = np.unique(self.data3D[:, 2])
-        BGradx = self.data3D[:, 3]
-        BGrady = self.data3D[:, 4]
-        BGradz = self.data3D[:, 5]
-        B0=self.data3D[:,6]
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-        BGradxMatrix = BGradx.reshape((numz, numy, numx))
-        BGradyMatrix = BGrady.reshape((numz, numy, numx))
-        BGradzMatrix = BGradz.reshape((numz, numy, numx))
-        B0Matrix = B0.reshape((numz, numy, numx))
-
-
-
-        BGradxMatrix = np.ascontiguousarray(BGradxMatrix)
-        BGradyMatrix = np.ascontiguousarray(BGradyMatrix)
-        BGradzMatrix = np.ascontiguousarray(BGradzMatrix)
-        B0Matrix = np.ascontiguousarray(B0Matrix)
-
-        #interpolate with fast cython func
-        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, zArr, yArr, xArr)
-        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, zArr, yArr, xArr)
-        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, zArr, yArr, xArr)
-        interpV = interp_3d.Interp3D(self.PTL.u0 *B0Matrix, zArr, yArr, xArr)
+        interpFx,interpFy,interpFz,interpV=self.make_Interp_Functions(self.data3D)
         #wrap the function in a more convenietly accesed function
-        self.Fx_Func_Fringe = lambda x, y, z: interpFz((x, y , -z))
-        self.Fy_Func_Fringe = lambda x, y, z: interpFy((x, y , -z))
-        self.Fz_Func_Fringe = lambda x, y, z: -interpFx((x, y , -z))
-        self.magnetic_Potential_Func_Fringe= lambda x,y,z: interpV((x, y , -z))
+        self.Fx_Func_Fringe = lambda x, y, z: interpFz((-z, y , x))
+        self.Fy_Func_Fringe = lambda x, y, z: interpFy((-z, y , x))
+        self.Fz_Func_Fringe = lambda x, y, z: -interpFx((-z, y , x))
+        self.magnetic_Potential_Func_Fringe= lambda x,y,z: interpV((-z, y , x))
 
 
-
-
-        #plot image
-        # num=500
-        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
-        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
-        # image=np.zeros((num,num))
-        # i=0
-        # for x1 in x1ImPlotArr:
-        #     j=0
-        #     for x2 in np.flip(x2ImPLotArr):
-        #         image[j,i]=interpFx((0.0,x2,x1))
-        #         j+=1
-        #     i+=1
-        # plt.imshow(image)
-        # plt.show()
-        # #inspect line plots in element frame
-        # L = self.data3D[:,2].max() - self.data3D[:,2].min() - 2 * self.comsolExtraSpace
-        # print(L)
-        # xPlot=np.linspace(0,L,num=1000)
-        # yPlot=[]
-        # for x in xPlot:
-        #    yPlot.append(self.magnetic_Potential_Func_Fringe(x,-.005,.005))
-        #    #yPlot.append(self.FyFunc_Fringe(x, -.001, .001))
-        # plt.plot(xPlot,yPlot)
-        # plt.show()
-        # sys.exit()
 #
     def fill_Force_Func_2D(self):
-        #tempx = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 2] * self.PTL.u0)
-        #tempy = spi.LinearNDInterpolator(self.data2D[:, :2], -self.data2D[:, 3] * self.PTL.u0)
         xArr=np.unique(self.data2D[:,0])
         yArr = np.unique(self.data2D[:, 1])
         numx=xArr.shape[0]
@@ -1214,38 +1065,12 @@ class LensSimWithCaps(LensIdeal):
         interpX=spi.RectBivariateSpline(xArr,yArr,(-self.data2D[:, 2]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
         interpY = spi.RectBivariateSpline(xArr, yArr,(-self.data2D[:, 3]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
         interpV= spi.RectBivariateSpline(xArr, yArr,(self.data2D[:, 4]* self.PTL.u0).reshape(numy, numx,order='F'),kx=1,ky=1)
-
         self.Fx_Func_Inner = lambda x, y, z: 0.0
         self.Fy_Func_Inner = lambda x, y, z: interpY(-z, y)[0][0]
         self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
         self.magnetic_Potential_Func_Inner=lambda x,y,z: interpV(-z,y)[0][0]
 
 
-        # num=500
-        # x1ImPlotArr=np.linspace(xArr.min(),xArr.max(),num=num)
-        # x2ImPLotArr=np.linspace(yArr.min(),yArr.max(),num=num)
-        # image=np.zeros((num,num))
-        # i=0
-        # t=time.time()
-        # for x1 in x1ImPlotArr:
-        #     j=0
-        #     for x2 in np.flip(x2ImPLotArr):
-        #         image[j,i]=interpX(x1,x2)
-        #         j+=1
-        #     i+=1
-        # print(1e6*(time.time()-t)/num**2)
-        # plt.imshow(image)
-        # plt.show()
-
-
-        # xPlot=np.linspace(yArr.min()*.75,yArr.max()*.75,num=1000)
-        # yPlot=[]
-        # for x1 in xPlot:
-        #     Fy=self.FyFunc_Inner(0.0,x1,0.001)
-        #     Fz=self.FzFunc_Inner(0.0,x1,0.001)
-        #     yPlot.append(np.sqrt(Fy**2+Fz**2))
-        # plt.plot(xPlot,yPlot)
-        # plt.show()
     def magnetic_Potential(self,q):
         if q[0]<=self.Lcap:
             x,y,z=q
