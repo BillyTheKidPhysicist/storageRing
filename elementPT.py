@@ -72,6 +72,8 @@ class Element:
         self.comsolExtraSpace=.1e-3 #extra space in comsol files to exported grids. this can be used to find dimensions
         self.ap=None #apeture of element. most elements apetures are assumed to be square
         self.apz=None #apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
+        self.apL=None #apeture on the 'left' as seen going clockwise. This is for the combiner
+        self.apR=None #apeture on the'right'.
         self.type=None #gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         #constructed in particleTracerLattice
         self.sim=None #wether the field values are from simulations
@@ -430,9 +432,11 @@ class CombinerSim(CombinerIdeal):
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
-        self.ap = (yArr.max() - yArr.min() - 2 * self.comsolExtraSpace) / 2.0
+        self.ap = (yArr.max() - yArr.min() - 2 * self.comsolExtraSpace) / 2.0 #TODO: FIX THIS CORRECTLY
+        #the combiner is assymetric and has two different apeture sizes for left and right
+        self.apL=yArr.min()+self.comsolExtraSpace
+        self.apR=yArr.max()-self.comsolExtraSpace
         self.apz = (zArr.max() - zArr.min() - 2 * self.comsolExtraSpace) / 2.0
-
         BGradxMatrix = BGradx.reshape((numz, numy, numx))
         BGradyMatrix = BGrady.reshape((numz, numy, numx))
         BGradzMatrix = BGradz.reshape((numz, numy, numx))
@@ -451,14 +455,16 @@ class CombinerSim(CombinerIdeal):
         #TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
 
-        self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+
+        #to find the length
+        self.Lo = self.compute_Trajectory_Length(qTracedArr)#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo #TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
         self.inputOffset=inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard
         # edge
 
-        inputAngleLoad, inputOffsetLoad, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=False)
-        self.LoLoad = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
+        self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
         self.angLoad = inputAngleLoad
         self.inputOffsetLoad = inputOffsetLoad
 
@@ -467,7 +473,18 @@ class CombinerSim(CombinerIdeal):
         self.La = self.space + np.tan(self.ang) * self.ap
         #self.Lo = self.La + self.Lb
         self.data=False #to save memory and pickling time
-
+    def compute_Trajectory_Length(self, qTracedArr):
+        #TODO: CHANGE THAT X DOESN'T START AT ZERO
+        #to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
+        #length
+        x = qTracedArr[:, 0]
+        y = qTracedArr[:, 1]
+        xDelta=np.append(x[0], x[1:] - x[:-1]) #have to add the first value to the length of difference because it starts
+        #at zero
+        yDelta = np.append(y[0], y[1:] - y[:-1])
+        dLArr=np.sqrt(xDelta**2+yDelta**2)
+        Lo=np.sum(dLArr)
+        return Lo
     def force(self,q):
         self.F[0] = self.FxFunc(*q)
         self.F[1] = self.FyFunc(*q)

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import pySOT as ps
 from ParaWell import ParaWell
 import poap.controller as pc
+#IMPLEMENT OPTIONAL COPIES
 class SwarmTracer:
     def __init__(self,lattice):
         self.lattice=lattice
@@ -70,7 +71,7 @@ class SwarmTracer:
             if pxMax is None:
                 px = -self.lattice.v0Nominal  # Swarm is initialized heading in the negative x direction,
             else:
-                px=-self.lattice.v0Nominal+pMax * 2*(np.random.rand() - .5)
+                px=-self.lattice.v0Nominal+pxMax * 2*(np.random.rand() - .5)
             py = pMax * 2*(np.random.rand() - .5)
             pz = pMax * 2*(np.random.rand() - .5)
             if upperSymmetry == True:  # if only using particles in the upper plane
@@ -100,7 +101,6 @@ class SwarmTracer:
         #upperSymmetry: wether to exploit lattice symmetry by only using particles in upper half plane
         #sameSeed: wether to use the same seed eveythime in the nump random generator, the number 42, or a new one
         #return: a swarm object
-
         swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax, pMax, num, upperSymmetry=upperSymmetry,
                                                            sameSeed=sameSeed)
         R = self.lattice.combiner.RIn
@@ -109,19 +109,19 @@ class SwarmTracer:
             particle.q[:2] = particle.q[:2] @ R
             particle.q += r2
             particle.p[:2] = particle.p[:2] @ R
-            particle.q = particle.q + particle.p * 1e-10  # scoot particle into lens
+            particle.q = particle.q + particle.p * 1e-12  # scoot particle into next element
         return swarm
     def move_Swarm_To_Combiner_Output(self,swarm):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
         #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed
+        swarmNew=swarm.copy()
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
-        for particle in swarm.particles:
+        for particle in swarmNew.particles:
             particle.q[:2] = particle.q[:2] @ R
             particle.q += r2
             particle.p[:2] = particle.p[:2] @ R
-            particle.q = particle.q + particle.p * 1e-10  # scoot particle into next element so it's not right at the edge
-        return swarm
+        return swarmNew
     def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03, copySwarm=True):
         # models particles traveling through an injecting element, which is a simple ideal magnet. This model
         # has the object at the origin and the lens at y=0 and x>0. Particles end up on the output of the lens
@@ -167,9 +167,10 @@ class SwarmTracer:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
 
     def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0, numPhaseSpace=1000, parallel=False,
-                                            upperSymmetry=False):
+                                            upperSymmetry=False,labFrame=True):
         # this method generates a cloud of particles in phase space at the output of the combiner. The cloud is traced
-        #throguh the combiner assuming it is a cloud being loaded, not already circulating
+        #throguh the combiner assuming it is a cloud being loaded, not already circulating. The returned particles are in
+        #the lab or combiner frame
         # Here the output refers to the origin in the combiner's reference frame.
         # Li: image length, ie distance from end of lens to focus
         # Lo: object distance
@@ -178,7 +179,9 @@ class SwarmTracer:
         # is after the output.
         # qMax: absolute vale of maximum value in space dimensions
         # pMax: absolute vale of maximum value in momentum dimensions
-        # num: number of particles along each axis, total number is axis**n where n is dimensions
+        # numPhaseSpace: number of particles along each axis, total number is axis**n where n is dimensions
+        # upperSymmetry: wether to exploit the upper symmetry of the lattice and ignore particles with z<0
+        # labFrame: wether to return particles in the labframe, or in the element frame. True for lab, False for element
         self.catch_Injection_Errors(Li, LOffset)
 
         swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax,pMax,numPhaseSpace)#)self.initialize_HyperCube_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace, upperSymmetry=upperSymmetry)
@@ -187,11 +190,12 @@ class SwarmTracer:
         # now I need to trace and position the swarm at the output. This is done by moving the swarm along with combiner to the
         # combiner's outlet in it's final position.
         r0 = self.lattice.combiner.r2
-        Mrot = self.lattice.combiner.RIn
-
+        R = self.lattice.combiner.ROut
         def func(particle):
-            particle = self.step_Particle_Through_Combiner(particle)
-            particle.q[:2] = particle.q[:2] @ Mrot + r0[:2]
+            particle = self.step_Particle_Through_Combiner(particle) #particle has now been traced
+            if labFrame==True:
+                particle.q[:2] = R@particle.q[:2] + r0[:2] #now transform the lab frame
+                particle.p[:2]=R@particle.p[:2]
             return particle
 
         if parallel == False:
@@ -202,6 +206,9 @@ class SwarmTracer:
             for i in range(len(results)):  # replaced the particles in the swarm with the new traced particles. Order
                 # is not important
                 swarm.particles[i] = results[i][1]
+        for particle in swarm:
+            if particle.clipped==False:
+                pass#print(npl.norm(particle.pi),npl.norm(particle.p),particle.q)
         return swarm
 
     @staticmethod
@@ -218,26 +225,30 @@ class SwarmTracer:
         particle.currentEl = self.lattice.combiner
         q = particle.q.copy()
         p = particle.p.copy()
-        # particle.log_Params()
+        #particle.log_Params()
         dx = (self.lattice.combiner.space * 2 + self.lattice.combiner.Lm) - q[0]
         dt = dx / p[0]
         q += dt * p
         particle.q = q
 
         force = self.lattice.combiner.force
-        ap = self.lattice.combiner.ap
+        apL = self.lattice.combiner.apL
+        apR = self.lattice.combiner.apR
         apz = self.lattice.combiner.apz
-
+        #TODO: INCLUDE ONLY LOOKING AT CLIPPING IF INSIDE THE COMBINER
         def is_Clipped(q):
             if apz < q[2] or  q[2]<-apz:  # if clipping in z direction
                 return True
-            elif q[0] < self.lattice.combiner.space + self.lattice.combiner.Lm and (ap<q[1] or q[1]<-ap):  # Only consider
-                # clipping in the y direction if the particle is insides the straight segment of the combiner
+            elif q[1]<apL or q[1]>apR:
                 return True
+            #elif q[0] < self.lattice.combiner.space + self.lattice.combiner.Lm and (ap<q[1] or q[1]<-ap):  # Only consider
+            #    # clipping in the y direction if the particle is insides the straight segment of the combiner
+            #    return True
             else:
                 return False
 
         if is_Clipped(q) == True:
+            particle.traced=True
             particle.clipped = True
             return particle
         forcePrev=None
@@ -247,25 +258,31 @@ class SwarmTracer:
             else:
                 F = -force(q)  # force is negative for high field seeking
             q_n = self.fast_qNew(q, F, p, h)  # q + p * h + .5 * F * h ** 2
-            if q_n[0] < 0:  # if overshot, go back and walk up to the edge assuming no force
+            if q_n[0] < -1e-3:  # if overshot, go back and walk up to the edge assuming no force
                 dr = - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
                 particle.q = q
                 particle.p = p
+                break
             F_n = -force(q_n)  # force is negative for high field seeking
+
             p_n = self.fast_pNew(p, F, F_n, h)  # p + .5 * (F + F_n) * h
             q = q_n
             p = p_n
             forcePrev = F_n
             particle.q = q
             particle.p = p
+            #particle.log_Params()
 
             if is_Clipped(q) == True:
                 particle.clipped = True
                 break
+            # if npl.norm(F_n)==0:
+            #     print(q,apL,apR,apz)
         if particle.clipped is None:
             particle.clipped = False
+        particle.traced = True
         return particle
 
     def aim_Swarm_At_Combiner(self, swarm, Li, LOffset):
@@ -275,23 +292,19 @@ class SwarmTracer:
         # Li: the image length, only makes sense for hard edge model
         # LiOffset: image offset in combiner. see initialize_Swarm_At_Combiner_Output
         swarmNew = swarm.copy()  # don't change the original swarm
-        inputOffset = self.lattice.combiner.inputOffsetLoad
-        inputAngle = self.lattice.combiner.angLoad
-        dL = Li - self.lattice.combiner.Lo + LOffset  # TODO: SHITTY ALGORITHM THAT NEEDS TO CHANGE. doesn't account
-        # for curvature of trajectory. This is the length outside of the combiner
+        inputOffsetLoad = self.lattice.combiner.inputOffsetLoad
+        inputAngleLoad = self.lattice.combiner.angLoad
+        dL = Li - self.lattice.combiner.Lo + LOffset
         dx = self.lattice.combiner.space * 2 + self.lattice.combiner.Lm
-        dy = inputOffset
-        dx += dL * np.cos(inputAngle)
-        dy += dL * np.sin(inputAngle)
+        dy = inputOffsetLoad
+        dx += dL * np.cos(inputAngleLoad)
+        dy += dL * np.sin(inputAngleLoad)
         dR = np.asarray([dx, dy])
-        rotAng = -inputAngle
-        rotMat = np.asarray([[np.cos(rotAng), np.sin(rotAng)], [-np.sin(rotAng), np.cos(rotAng)]])
+        rotMat = np.asarray([[np.cos(inputAngleLoad), -np.sin(inputAngleLoad)], [np.sin(inputAngleLoad), np.cos(inputAngleLoad)]])
         for particle in swarmNew.particles:
-            print('here')
             q = particle.q
             p = particle.p
-            print(q)
-            q[:2] += dR
+            q[:2] = rotMat @ q[:2]+dR
             p[:2] = rotMat @ p[:2]
             particle.q = q
             particle.p = p
@@ -305,7 +318,6 @@ class SwarmTracer:
         self.lattice.elList[4].forceFact=F2
 
         swarm=self.trace_Swarm_Through_Lattice(swarm,h,T,parallel=parallel)
-        print('done, survival is: ',np.round(swarm.survival_Rev(),3))
         return swarm.survival_Rev()
     def optimize_Swarm_Survival_Through_Lattice_Brute(self,bounds,numPoints,T,h=1e-5):
         #bounds: list of tuples for bounds on F1 and F2

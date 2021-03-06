@@ -37,7 +37,12 @@ class PhaseSpaceInterpolater:
         argsNew=[]
         i=0
         for arg in args:
-            argsNew.append((arg-self.xBounds[i][0])/(self.xBounds[i][1]-self.xBounds[i][0]))
+            argNorm=(arg-self.xBounds[i][0])/(self.xBounds[i][1]-self.xBounds[i][0])
+            if argNorm>1 or argNorm<0:
+                print('input',args)
+                print('bounds',self.xBounds)
+                raise Exception('OUT OF BOUNDS')
+            argsNew.append(argNorm)
             i+=1
         return argsNew
     def __call__(self,*args):
@@ -59,7 +64,9 @@ class LatticeOptimizer:
         self.lattice.elList[2].forceFact = X[0]
         self.lattice.elList[4].forceFact = X[1]
     def compute_Phase_Space_Map_Function(self,X,swarmInitial):
-        #return a function that returns a value for mnumber of revolutions at a given point in phase space.
+        #return a function that returns a value for mnumber of revolutions at a given point in phase space. The phase
+        #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
+        #so the could is centered at the origin in the combiner
         #X: arguments to parametarize lattice
         #swarmInitial: swarm to trace through lattice that is initialized in phase space and centered at (0,0,0)
         self.update_Lattice(X) 
@@ -68,11 +75,16 @@ class LatticeOptimizer:
 
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
         swarmTraced=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,parallel=True)
+        R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
+        r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
         for i in range(swarmInitial.num_Particles()):
-            q = swarmCombiner.particles[i].q[1:]
-            p = swarmCombiner.particles[i].p[:]
-            Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum
-            print(Xi)
+            q = swarmInitial.particles[i].q.copy()[1:]
+            #q[:2]=R@(q-r2)[:2] #move to the combiner frame
+            #q=q[1:] #drop the x component that is zero (or very small) for all of them anyways
+            p = swarmInitial.particles[i].p[:].copy()
+            #p[:2]=R@p[:2]
+            #print(p)
+            Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum0
             phaseSpacePoints.append(Xi)
             revolutions.append(swarmTraced.particles[i].revolutions)
         fitFunc = PhaseSpaceInterpolater(np.asarray(phaseSpacePoints), revolutions)
@@ -177,11 +189,12 @@ class LatticeOptimizer:
         if showPlot==True:
             plt.show()
 
-    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=1000,qMax=3e-3,pMax=5e0,returnBestSwarm=False,parallel=False,
+    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=1000,qMax=12e-3,pMax=5e0,returnBestSwarm=False,parallel=False,
                                          maxEvals=100,bounds=None,precision=5e-3):
         self.h=h
         self.T=T
-        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qMax, pMax, numParticles)
+        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qMax, pMax, numParticles,pxMax=1.0)
+
         func=self.compute_Phase_Space_Map_Function([.2,.33],swarmInitial)
         return func
 

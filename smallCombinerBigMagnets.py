@@ -46,16 +46,12 @@ def get_Lattice(trackPotential=False):
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice=get_Lattice()
-    from SwarmTracer import SwarmTracer
-    swarmTracer = SwarmTracer(lattice)
-    swarmNew = swarmTracer.initialize_Swarm_At_Combiner_Output(.15, 1.0, 0.0,numPhaseSpace=100)
-
-
-
     #lattice.show_Lattice()
-    T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=LatticeOptimizer(lattice)
-
+    #T=Revs*lattice.totalLength/lattice.v0Nominal
+    #optimizer=LatticeOptimizer(lattice)
+    # from SwarmTracer import SwarmTracer
+    # swarmTracer = SwarmTracer(lattice)
+    # swarmNew = swarmTracer.initialize_Swarm_At_Combiner_Output(.15, 1.0, 0.0, labFrame=False,numPhaseSpace=10)
     #name='smallCombinerBigMagnets_Plot_100Grid'
     #optimizer.plot_Unstable_Regions(gridPoints=100,savePlot=True,plotName=name)
 
@@ -64,23 +60,22 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     #func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
     #return func,lattice
     #return sol
-    # X=[.1,.28]
-    # lattice.elList[2].forceFact = X[0]
-    # lattice.elList[4].forceFact = X[1]
-    # particle=Particle()
-    # particleTracer=ParticleTracer(lattice)
-    # T = lattice.totalLength * 10 / lattice.v0Nominal
-    #
-    # particle=Particle()
-    # particleTracer=ParticleTracer(lattice)
-    # T = .9 * lattice.totalLength / lattice.v0Nominal
-    # h=1e-6
-    # particle = Particle()
-    # particle=particleTracer.trace(particle,h,T,fastMode=False)
-    # #particle.plot_Energies()
-    # particle.plot_Position()
-    # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
+    X=[.1,.28]
+    lattice.elList[2].forceFact = X[0]
+    lattice.elList[4].forceFact = X[1]
+
+    particle=Particle(qi=np.asarray([1e-10,1e-4,1e-4]))
+    particleTracer=ParticleTracer(lattice)
+    T = 5.0 * lattice.totalLength / lattice.v0Nominal
+    h=1e-6
+    particle=particleTracer.trace(particle,h,T,fastMode=False)
+    #np.savetxt('poopaids',particle.q)
+    qTest=np.loadtxt('poopaids')
+    print(particle.q-qTest)
+    #particle.plot_Energies()
+    #particle.plot_Position()
+    #lattice.show_Lattice(particleCoords=particle.qArr[-1])
 #if __name__=='__main__':
 #    main()
-compute_Sol(1e-5,50,100,50)
+compute_Sol(1e-5,20,500,50)
 
