@@ -17,7 +17,7 @@ def get_Lattice(trackPotential=False):
     fileBenderInternalFringe2 = directory + 'benderFringeInternal2.txt'
     file2DLens = directory + 'lens2D.txt'
     file3DLens = directory + 'lens3D.txt'
-    fileCombiner = directory + 'combiner.txt'
+    fileCombiner = directory + 'combinerData.txt'
     yokeWidth = .0254 * 5 / 8
     extraSpace = 1e-3  # extra space on each ender between bender segments
     Lm = .0254  # hard edge length of segmented bender
@@ -41,7 +41,8 @@ def get_Lattice(trackPotential=False):
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
                                                   K0,
                                                   numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
-    lattice.end_Lattice(trackPotential=trackPotential)
+    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=False)
+    lattice.show_Lattice()
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
@@ -66,11 +67,12 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
 
     particle=Particle(qi=np.asarray([1e-10,1e-4,1e-4]))
     particleTracer=ParticleTracer(lattice)
-    T = 5.0 * lattice.totalLength / lattice.v0Nominal
+    T = .9 * lattice.totalLength / lattice.v0Nominal
     h=1e-6
     particle=particleTracer.trace(particle,h,T,fastMode=False)
     #np.savetxt('poopaids',particle.q)
     qTest=np.loadtxt('poopaids')
+    #print(particle.q)
     print((particle.q-qTest)[0])
     print((particle.q - qTest)[1])
     print((particle.q - qTest)[2])

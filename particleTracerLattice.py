@@ -185,7 +185,7 @@ class ParticleTracerLattice:
                 self.totalLength+=el.Lo
         if trackPotential==False:
             for el in self.elList:
-                el.magnetic_Potential=lambda x: 0.0
+                el.magnetic_Potential=None
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
