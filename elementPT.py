@@ -153,7 +153,7 @@ class Element:
         interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
         interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
         interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
-        interpV=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, zArr, yArr, xArr)
+        interpV=interp_3d.Interp3D(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
         return interpFx,interpFy,interpFz,interpV
 class LensIdeal(Element):
     #ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
@@ -307,16 +307,17 @@ class CombinerIdeal(Element):
     def __init__(self,PTL,Lm,c1,c2,ap,sizeScale,fillsParams=True):
         super().__init__(PTL)
         self.sim=False
-        self.ap = ap
-        self.apR=self.ap
-        self.apL=self.ap
-        self.Lm=Lm
+        self.sizeScale=sizeScale #the fraction that the combiner is scaled up or down to. A combiner twice the size would
+        #use sizeScale=2.0
+        self.ap = ap*self.sizeScale
+        self.apR=self.ap*self.sizeScale
+        self.apL=self.ap*self.sizeScale
+        self.Lm=Lm*self.sizeScale
         self.La=None #length of segment between inlet and straight section inside the combiner. This length goes from
         #the center of the inlet to the center of the kink
         self.Lb=None #length of straight section after the kink after the inlet
-        self.c1=c1
-        self.c2=c2
-        self.sizeScale=sizeScale
+        self.c1=c1/self.sizeScale
+        self.c2=c2/self.sizeScale
         self.space=0 #space at the end of the combiner to account for fringe fields
 
         self.type='COMBINER'
@@ -328,11 +329,7 @@ class CombinerIdeal(Element):
         if fillsParams==True:
             self.fill_Params()
     def fill_Params(self):
-        self.Lm=self.Lm*self.sizeScale
         self.Lb=self.Lm #length of segment after kink after the inlet
-        self.ap=self.ap*self.sizeScale
-        self.c1=self.c1/self.sizeScale
-        self.c2=self.c2/self.sizeScale
 
         inputAngle, inputOffset,qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -358,13 +355,13 @@ class CombinerIdeal(Element):
         #h: timestep
         #lowField: wether to model low or high field seekers
         # todo: make proper edge handling
-        q = np.asarray([0.0, 0.0, 0.0])
+        q = np.asarray([0.0, 0.0, 1e-3])
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         tempList=[] #Array that holds particle coordinates traced through combiner. This is used to find lenght
         # #of orbit.
-        #xList=[]
-        #yList=[]
-        #test=[]
+        xList=[]
+        yList=[]
+        test=[]
         if lowField==True:
             force=self.force
         else:
@@ -383,7 +380,7 @@ class CombinerIdeal(Element):
                 q = q + p * dt
                 tempList.append(q)
                 break
-            #test.append(F[2])#self.magnetic_Potential(q))
+            #test.append(self.magnetic_Potential(q))
             #xList.append(q[0])
             #yList.append(q[1])
             q = q_n
@@ -417,18 +414,20 @@ class CombinerIdeal(Element):
         return F
 
     def is_Coord_Inside(self,q):
+        #q: coordinate to test in element's frame
         if not -self.apz<q[2]<self.apz: #if outside the z apeture
             return False
-        elif q[0] < self.Lb and q[0] > 0:  # particle is in the straight section that passes through the combiner
-            if -self.ap<q[1]<self.ap: #if inside the y (width) apeture
+        elif 0<=q[0]<=self.Lb:  # particle is in the horizontal section (in element frame) that passes
+            # through the combiner
+            if -self.apL<q[1]<self.apR: #if inside the y (width) apeture
                 return True
         elif q[0]<0:
             return False
         else:  # particle is in the bent section leading into combiner
             m=np.tan(self.ang)
-            Y1=m*q[0]+(self.ap-m*self.Lb)
+            Y1=m*q[0]+(self.apR-m*self.Lb) #upper limit
             Y2 =(-1/m)*q[0]+self.La*np.sin(self.ang)+(self.Lb+self.La*np.cos(self.ang))/m
-            Y3=m * q[0] + (-self.ap - m * self.Lb)
+            Y3=m * q[0] + (-self.apL - m * self.Lb)
             if q[1]<Y1 and q[1]<Y2 and q[1]>Y3:
                 return True
             else:
@@ -443,16 +442,16 @@ class CombinerSim(CombinerIdeal):
         #sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         #doubling dimensions halves the gradient
         Lm = .187
-        apL=-.015
+        apL=.015
         apR=.025
         fringeSpace=4*1.1e-2
         apz=6e-3
-        super().__init__(PTL,Lm,None,None,None,sizeScale,fillsParams=False)
+        super().__init__(PTL,Lm,np.nan,np.nan,np.nan,sizeScale,fillsParams=False) #TODO: replace all the Nones with np.nan
         self.sim=True
-        self.space = fringeSpace  # extra space past the hard edge on either end to account for fringe fields
-        self.apL=apL
-        self.apR=apR
-        self.apz=apz
+        self.space = fringeSpace*self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
+        self.apL=apL*self.sizeScale
+        self.apR=apR*self.sizeScale
+        self.apz=apz*self.sizeScale
 
 
         self.data=None
@@ -463,36 +462,16 @@ class CombinerSim(CombinerIdeal):
         self.magnetic_Potential_Func=None
         self.fill_Params()
     def fill_Params(self):
-        self.Lm=self.sizeScale*self.Lm
-        self.space=self.sizeScale*self.space
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
+        #use the new size scaling to adjust the provided data
+        self.data[:,:3]=self.data[:,:3]*self.sizeScale #scale the dimensions
+        self.data[:,3:6]=self.data[:,3:6]/self.sizeScale #scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        #TODO: COMBINE THIS WITH A FUNCTION FOR ALL ELEMENTS
-        xArr = np.unique(self.data[:, 0])
-        yArr = np.unique(self.data[:, 1])
-        zArr = np.unique(self.data[:, 2])
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-        B0Matrix =     np.zeros((numx, numy, numz))
-        BGradxMatrix = np.zeros((numx,numy,numz))
-        BGradyMatrix = np.zeros((numx,numy,numz))
-        BGradzMatrix = np.zeros((numx,numy,numz))
-        xIndices = np.argwhere(self.data[:, 0][:, None] == xArr)[:, 1]
-        yIndices = np.argwhere(self.data[:, 1][:, None] == yArr)[:, 1]
-        zIndices = np.argwhere(self.data[:, 2][:, None] == zArr)[:, 1]
-        BGradxMatrix[xIndices, yIndices, zIndices] = self.data[:, 3]
-        BGradyMatrix[xIndices, yIndices, zIndices] = self.data[:, 4]
-        BGradzMatrix[xIndices, yIndices, zIndices] = self.data[:, 5]
-        B0Matrix[xIndices, yIndices, zIndices] = self.data[:, 6]
-        funcV=interp_3d.Interp3D(B0Matrix, xArr, yArr, zArr)
-        funcGradx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
-        funcGrady = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
-        funcGradz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
+
 
         data = np.asarray(pd.read_csv('smallCombinerBigMagnets_Files/combinerData.txt', delim_whitespace=True, header=None))
-        funcGradx,funcGrady,funcGradz,funcB0=self.make_Interp_Functions(data)
+        funcGradx,funcGrady,funcGradz,funcV=self.make_Interp_Functions(data)
 
 
 
@@ -506,7 +485,6 @@ class CombinerSim(CombinerIdeal):
 
         #TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset() #0.07891892567413786
-        print(inputAngle)
 
         #to find the length
         self.Lo = self.compute_Trajectory_Length(qTracedArr)#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -1074,7 +1052,7 @@ class LensSimWithCaps(LensIdeal):
         self.Fy_Func_Inner = None
         self.Fz_Func_Inner = None
         self.magnetic_Potential_Func_Inner = None
-        self.forceFact=1.0
+        self.fieldFact=1.0
         self.fill_Params()
     def fill_Params(self):
         if self.data3D is None and self.file3D is not None: #if data has not been loaded yet
@@ -1106,8 +1084,7 @@ class LensSimWithCaps(LensIdeal):
         self.Fz_Func_Fringe = lambda x, y, z: -interpFx((-z, y , x))
         self.magnetic_Potential_Func_Fringe= lambda x,y,z: interpV((-z, y , x))
 
-
-#
+    #
     def fill_Force_Func_2D(self):
         xArr=np.unique(self.data2D[:,0])
         yArr = np.unique(self.data2D[:, 1])
@@ -1121,7 +1098,6 @@ class LensSimWithCaps(LensIdeal):
         self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
         self.magnetic_Potential_Func_Inner=lambda x,y,z: interpV(-z,y)[0][0]
 
-
     def magnetic_Potential(self,q):
         if q[0]<=self.Lcap:
             x,y,z=q
@@ -1129,7 +1105,7 @@ class LensSimWithCaps(LensIdeal):
             V0=self.magnetic_Potential_Func_Fringe(x,y,z)
         elif self.Lcap<q[0]<self.L-self.Lcap:
             V0=self.magnetic_Potential_Func_Inner(*q)
-        elif self.L-self.Lcap<=q[0]<self.L:
+        elif q[0]<self.L:
             x,y,z=q
             x=x-(self.L-self.Lcap)
             V0=self.magnetic_Potential_Func_Fringe(x,y,z)
@@ -1137,26 +1113,27 @@ class LensSimWithCaps(LensIdeal):
             warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
             print(q)
             V0=0
+        V0=self.fieldFact*V0 #modify the magnetic field depending on how the magnet is tuend
         return V0
     def force(self,q):
         if q[0]<=self.Lcap:
             x,y,z=q
             x=self.Lcap-x
-            self.F[0]= -self.forceFact * self.Fx_Func_Fringe(x, y, z)
-            self.F[1]= self.forceFact * self.Fy_Func_Fringe(x, y, z)
-            self.F[2]= self.forceFact * self.Fz_Func_Fringe(x, y, z)
+            self.F[0]= -self.Fx_Func_Fringe(x, y, z)
+            self.F[1]= self.Fy_Func_Fringe(x, y, z)
+            self.F[2]= self.Fz_Func_Fringe(x, y, z)
         elif self.Lcap<q[0]<self.L-self.Lcap:
             self.F[0]= 0.0
-            self.F[1]= self.forceFact * self.Fy_Func_Inner(*q)
-            self.F[2]= self.forceFact * self.Fz_Func_Inner(*q)
+            self.F[1]= self.Fy_Func_Inner(*q)
+            self.F[2]= self.Fz_Func_Inner(*q)
         elif self.L-self.Lcap<=q[0]<self.L:
             x,y,z=q
             x=x-(self.Linner+self.Lcap)
-            self.F[0]= self.forceFact * self.Fx_Func_Fringe(x, y, z)
-            self.F[1]= self.forceFact * self.Fy_Func_Fringe(x, y, z)
-            self.F[2]= self.forceFact * self.Fz_Func_Fringe(x, y, z)
+            self.F[0]= self.Fx_Func_Fringe(x, y, z)
+            self.F[1]= self.Fy_Func_Fringe(x, y, z)
+            self.F[2]= self.Fz_Func_Fringe(x, y, z)
         else:
             warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
-            print(q)
             self.F=np.zeros(3)
+        self.F=self.fieldFact*self.F #modify the forces depending on how much the magnet is tuned
         return self.F.copy()

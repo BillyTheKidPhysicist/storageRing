@@ -61,8 +61,8 @@ class LatticeOptimizer:
 
     def update_Lattice(self,X):
         #Update the various paremters in the lattice and injections that are variable
-        self.lattice.elList[2].forceFact = X[0]
-        self.lattice.elList[4].forceFact = X[1]
+        self.lattice.elList[2].fieldFact = X[0]
+        self.lattice.elList[4].fieldFact = X[1]
     def compute_Phase_Space_Map_Function(self,X,swarmInitial):
         #return a function that returns a value for mnumber of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
@@ -114,8 +114,8 @@ class LatticeOptimizer:
             #X lattice arguments
             #for the given configuraiton X and particle(s) return the maximum number of revolutions, or True for stable
             #or False for unstable
-            self.lattice.elList[2].forceFact=X[0]
-            self.lattice.elList[4].forceFact = X[1]
+            self.lattice.elList[2].fieldFact=X[0]
+            self.lattice.elList[4].fieldFact = X[1]
             revolutionsList=[]
             for particle in swarm:
                 particle=self.particleTracer.trace(particle.copy(),h,T)
@@ -153,8 +153,6 @@ class LatticeOptimizer:
             valList.append(result[1])
         revolutionFunc=spi.LinearNDInterpolator(coordList,valList)
         return revolutionFunc
-
-
 
     def plot_Stability(self,bounds=None,qMax=1e-4,numParticlesPerDim=2,gridPoints=40,savePlot=False,
                               plotName='stabilityPlot',cutoff=8.0,h=5e-6,showPlot=True):

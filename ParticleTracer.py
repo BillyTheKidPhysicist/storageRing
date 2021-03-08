@@ -1,3 +1,4 @@
+import numpy.linalg as npl
 import numba
 import time
 import numpy as np
@@ -44,7 +45,7 @@ class ParticleTracer:
 
         self.particle=None #particle object being traced
         self.fastMode=None #wether to use the fast and memory light version that doesn't record parameters of the particle
-
+        self.test=[]
 
 
     def initialize(self):
@@ -93,6 +94,7 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
+            self.test.append(npl.norm(self.particle.force))
             if self.particle.clipped==True:
                 break
             if fastMode==False:
@@ -139,7 +141,6 @@ class ParticleTracer:
         #possible
         q=self.particle.q #q old or q sub n
         p=self.particle.p #p old or p sub n
-        poop=self.particle
         if self.elHasChanged==False and self.particle.force is not None: #if the particle is inside the lement it was in
             #last time step, and it's not the first time step, then recycle the force. The particle is starting at the
             #same position it stopped at last time, thus same force
@@ -243,7 +244,7 @@ class ParticleTracer:
         if el is not None:
             # now test for the z clipping
             if el.apz is not None:
-                if el.apz>q[2]>-el.apz:
+                if -el.apz<q[2]<el.apz:
                     return el  #found it!
             else:
                 if el.ap>q[2]>-el.ap:
@@ -273,7 +274,7 @@ class ParticleTracer:
         if el is not None:
             # now test for the z clipping
             if el.apz is not None:
-                if el.apz>q[2]>-el.apz:
+                if -el.apz<q[2]<el.apz:
                     return el
                 else:
                     return None

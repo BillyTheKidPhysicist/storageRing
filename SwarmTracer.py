@@ -237,9 +237,9 @@ class SwarmTracer:
         apz = self.lattice.combiner.apz
         #TODO: INCLUDE ONLY LOOKING AT CLIPPING IF INSIDE THE COMBINER
         def is_Clipped(q):
-            if apz < q[2] or  q[2]<-apz:  # if clipping in z direction
+            if not -apz<q[2]<apz:  # if clipping in z direction
                 return True
-            elif q[1]<apL or q[1]>apR:
+            elif not -apL<q[1]<apR:
                 return True
             #elif q[0] < self.lattice.combiner.space + self.lattice.combiner.Lm and (ap<q[1] or q[1]<-ap):  # Only consider
             #    # clipping in the y direction if the particle is insides the straight segment of the combiner
@@ -314,8 +314,8 @@ class SwarmTracer:
         pMax=3e1
         numPhaseSpace=9
         swarm=self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numPhaseSpace,parallel=parallel,upperSymmetry=True)
-        self.lattice.elList[2].forceFact=F1
-        self.lattice.elList[4].forceFact=F2
+        self.lattice.elList[2].fieldFact=F1
+        self.lattice.elList[4].fieldFact=F2
 
         swarm=self.trace_Swarm_Through_Lattice(swarm,h,T,parallel=parallel)
         return swarm.survival_Rev()
@@ -327,8 +327,8 @@ class SwarmTracer:
             qi = np.asarray([-1e-10, 0.0, 0.0])
             pi = np.asarray([-200.0, 0, 0])
             swarm.add_Particle(qi, pi)
-            self.lattice.elList[2].forceFact = F1
-            self.lattice.elList[4].forceFact = F2
+            self.lattice.elList[2].fieldFact = F1
+            self.lattice.elList[4].fieldFact = F2
             swarm = self.trace_Swarm_Through_Lattice(swarm, h, T, parallel=False)
             swarm.survival_Rev()
             return swarm.survival_Rev()#1/(1+swarm.survival_Rev())

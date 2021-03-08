@@ -337,7 +337,8 @@ class ParticleTracerLattice:
 
     def make_Geometry(self):
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
-        #Ideally I would never need to use this to find which particle the elment is in because it's slower
+        #Ideally I would never need to use this to find which particle the elment is in because it's slower.
+        #This is all done in the xy plane.
         #----------
         #all of these take some thinking to visualize what's happening.
         benderPoints=250 #how many points to represent the bender with along each curve
@@ -376,12 +377,15 @@ class ParticleTracerLattice:
 
                 el.SO=Polygon(np.column_stack((x,y))) #shape the coordinates and make the object
             elif el.type=='COMBINER':
-                q1=np.asarray([0,ap]) #top left when theta=0
-                q2=np.asarray([el.Lb,ap]) #top middle when theta=0
-                q3=np.asarray([el.Lb+(el.La-el.ap*np.sin(el.ang))*np.cos(el.ang),ap+(el.La-el.ap*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
-                q4=np.asarray([el.Lb+(el.La+el.ap*np.sin(el.ang))*np.cos(el.ang),-ap+(el.La+el.ap*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
-                q5=np.asarray([el.Lb,-ap]) #bottom middle when theta=0
-                q6 = np.asarray([0, -ap])  # bottom left when theta=0
+                apR=el.apR #the 'right' apeture. here this confusingly means when looking in the yz plane, ie the place
+                #that the particle would look into as it revolves in the lattice
+                apL=el.apL
+                q1=np.asarray([0,apR]) #top left ( in standard xy plane) when theta=0
+                q2=np.asarray([el.Lb,apR]) #top middle when theta=0
+                q3=np.asarray([el.Lb+(el.La-el.apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-el.apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
+                q4=np.asarray([el.Lb+(el.La+el.apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+el.apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
+                q5=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
+                q6 = np.asarray([0, -apL])  # bottom left when theta=0
                 points=[q1,q2,q3,q4,q5,q6]
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
@@ -744,8 +748,8 @@ def main():
     lattice.show_Lattice()
 
 
-    lattice.elList[2].forceFact = .175
-    lattice.elList[4].forceFact = .175
+    lattice.elList[2].fieldFact = .175
+    lattice.elList[4].fieldFact = .175
 
     q0=np.asarray([-1e-10,-1e-3,1e-3])
     v0=np.asarray([-201.0,-1.0,-1.0])
@@ -778,8 +782,8 @@ def main():
     def func(arg, parallel=True):
         X, newLattice = arg
         F1, F2 = X
-        newLattice.elList[2].forceFact = F1
-        newLattice.elList[4].forceFact = F2
+        newLattice.elList[2].fieldFact = F1
+        newLattice.elList[4].fieldFact = F2
 
         h = 10e-6
         Lt = 10 * lattice.totalLength

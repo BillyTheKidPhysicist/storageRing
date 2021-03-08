@@ -42,11 +42,11 @@ def get_Lattice(trackPotential=False):
                                                   K0,
                                                   numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
     lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=False)
-    lattice.show_Lattice()
+    #lattice.show_Lattice()
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
-    lattice=get_Lattice()
+    lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     #T=Revs*lattice.totalLength/lattice.v0Nominal
     #optimizer=LatticeOptimizer(lattice)
@@ -61,22 +61,22 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
     #func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
     #return func,lattice
     #return sol
-    X=[.1,.28]
-    lattice.elList[2].forceFact = X[0]
-    lattice.elList[4].forceFact = X[1]
+    #X=[.1,.28]
+    #lattice.elList[2].forceFact = X[0]
+    #lattice.elList[4].forceFact = X[1]
 
-    particle=Particle(qi=np.asarray([1e-10,1e-4,1e-4]))
+    particle=Particle(qi=np.asarray([-1e-3,1.5e-20,1e-10]))
     particleTracer=ParticleTracer(lattice)
-    T = .9 * lattice.totalLength / lattice.v0Nominal
+    T = .2 * lattice.totalLength / lattice.v0Nominal
     h=1e-6
     particle=particleTracer.trace(particle,h,T,fastMode=False)
+    lattice.show_Lattice(particle=particle)
     #np.savetxt('poopaids',particle.q)
-    qTest=np.loadtxt('poopaids')
-    #print(particle.q)
-    print((particle.q-qTest)[0])
-    print((particle.q - qTest)[1])
-    print((particle.q - qTest)[2])
-    #particle.plot_Energies()
+    #qTest=np.loadtxt('poopaids')
+    #print(particle.q))
+    plt.plot(particleTracer.test)
+    plt.show()
+    particle.plot_Energies()
     #particle.plot_Position()
     #lattice.show_Lattice(particleCoords=particle.qArr[-1])
 #if __name__=='__main__':
