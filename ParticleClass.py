@@ -28,7 +28,10 @@ class Swarm:
         for particle in self.particles:
             if particle.revolutions is not None:
                 maxList.append(particle.revolutions)
-        return max(maxList)
+        if len(maxList)==0:
+            return 0.0
+        else:
+            return max(maxList)
     def survival_Bool(self, frac=True):
         #returns fraction of particles that have survived, ie not clipped.
         #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles

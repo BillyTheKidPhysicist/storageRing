@@ -28,10 +28,6 @@ class ParticleTracer:
         self.latticeElementList = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=latticeObject.totalLength
 
-        self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
-        self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
-        #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
-        # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
         self.T=None #total time elapsed
         self.h=None #step size
 
@@ -84,6 +80,8 @@ class ParticleTracer:
         self.fastMode=fastMode
         self.h=h
 
+
+
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
@@ -94,7 +92,7 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
-            self.test.append(npl.norm(self.particle.force))
+            #self.test.append(npl.norm(self.particle.force))
             if self.particle.clipped==True:
                 break
             if fastMode==False:
@@ -187,6 +185,7 @@ class ParticleTracer:
             self.particle.cumulativeLength += self.particle.currentEl.Lo #add the previous orbit length
             self.particle.currentEl = el
             exitLoop=True
+
         return exitLoop
 
 

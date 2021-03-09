@@ -16,6 +16,7 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 import pySOT as ps
 from ParaWell import ParaWell
+import skopt
 import poap.controller as pc
 #IMPLEMENT OPTIONAL COPIES
 class SwarmTracer:
@@ -45,10 +46,10 @@ class SwarmTracer:
                 swarm.add_Particle(qi, pi)
         return swarm
 
-    def initalize_Random_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False, sameSeed=True,pxMax=None):
+    def initalize_Random_Swarm_In_Phase_Space(self, qyMax,qzMax, pxMax,pyMax,pzMax, num, upperSymmetry=False, sameSeed=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
-        #get repeatable random results.
+        #get repeatable random results. a sobol sequence is used that is then jittered
 
         # qMax: maximum dimension in position space of hypercube
         # pMax: maximum dimension in momentum space of hupercube
@@ -58,35 +59,30 @@ class SwarmTracer:
         # pxMax: what value to use for longitudinal momentum spread. if None use the nominal value
         #return: swarm: a populated swarm object
 
-
-        if sameSeed == True:  # if i want repetable results to compare to
-            np.random.seed(42)  # seed the generator
+        np.random.seed(42)
+        sampler=skopt.sampler.Sobol()
+        bounds=[(-qyMax,qyMax),(-qzMax,qzMax),(-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax),(-pyMax,pyMax),(-pzMax,pzMax)]
+        if upperSymmetry==True:
+            bounds[1][0]=0.0 #don't let point be generarted below z=0
+        samples=sampler.generate(bounds,num)
         swarm = Swarm()
-        i = 0
-        while (i < num):
-            # randomly assign values
-            x = 0.0
-            y = qMax * 2*(np.random.rand() - .5)
-            z = qMax * 2*(np.random.rand() - .5)
-            if pxMax is None:
-                px = -self.lattice.v0Nominal  # Swarm is initialized heading in the negative x direction,
-            else:
-                px=-self.lattice.v0Nominal+pxMax * 2*(np.random.rand() - .5)
-            py = pMax * 2*(np.random.rand() - .5)
-            pz = pMax * 2*(np.random.rand() - .5)
-            if upperSymmetry == True:  # if only using particles in the upper plane
-                if y < 0:
-                    pass
-                else:
-                    q = np.asarray([x, y, z])
-                    p = np.asarray([px, py, pz])
-                    swarm.add_Particle(q, p)
-                    i += 1
-            else:
-                q = np.asarray([x, y, z])
-                p = np.asarray([px, py, pz])
-                swarm.add_Particle(q, p)
-                i += 1
+
+
+        for sample in samples:
+            x=0.0
+            y,z,px,py,pz=sample
+            Xi=np.asarray([y,z,px,py,pz])
+            for i in range(Xi.shape[0]): #jitter the sequence to help overcome patterns
+                Xi[i]+=(np.random.rand() - .5) * (bounds[i][1] - bounds[i][0]) / 50.0 #seemed like a good value
+                if Xi[i]<bounds[i][0]:
+                    Xi[i]=(bounds[i][0]-Xi[i])+bounds[i][0]
+                if bounds[i][1]<Xi[i]:
+                    Xi[i] = bounds[i][1]-(Xi[i]-bounds[i][1])
+            q = np.append(x,Xi[:2])
+            p = Xi[2:]
+
+            swarm.add_Particle(q,p)
+
         np.random.seed(int(time.time()))  # re randomize
         return swarm
 
@@ -111,9 +107,12 @@ class SwarmTracer:
             particle.p[:2] = particle.p[:2] @ R
             particle.q = particle.q + particle.p * 1e-12  # scoot particle into next element
         return swarm
-    def move_Swarm_To_Combiner_Output(self,swarm):
+    def move_Swarm_To_Combiner_Output(self,swarm,scoot=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
-        #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed
+        #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed.
+        #swarm: the swarm to move to output
+        #scoot: if True, move the particles along a tiny amount so that they are just barely in the next element. Helpful
+        #for the doing the particle tracing sometimes
         swarmNew=swarm.copy()
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
@@ -121,6 +120,8 @@ class SwarmTracer:
             particle.q[:2] = particle.q[:2] @ R
             particle.q += r2
             particle.p[:2] = particle.p[:2] @ R
+            if scoot==True:
+                particle.q+=particle.p*1e-10
         return swarmNew
     def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03, copySwarm=True):
         # models particles traveling through an injecting element, which is a simple ideal magnet. This model
@@ -166,7 +167,7 @@ class SwarmTracer:
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
 
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0, numPhaseSpace=1000, parallel=False,
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numPhaseSpace=1000, parallel=False,
                                             upperSymmetry=False,labFrame=True):
         # this method generates a cloud of particles in phase space at the output of the combiner. The cloud is traced
         #throguh the combiner assuming it is a cloud being loaded, not already circulating. The returned particles are in
@@ -184,9 +185,8 @@ class SwarmTracer:
         # labFrame: wether to return particles in the labframe, or in the element frame. True for lab, False for element
         self.catch_Injection_Errors(Li, LOffset)
 
-        swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax,pMax,numPhaseSpace)#)self.initialize_HyperCube_Swarm_In_Phase_Space(qMax, pMax, numPhaseSpace, upperSymmetry=upperSymmetry)
+        swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax,qMax,pxMax,pMax,pMax,numPhaseSpace)
         swarm = self.send_Swarm_Through_Shaper(swarm, Lo, Li, copySwarm=False)
-        swarm = self.aim_Swarm_At_Combiner(swarm, Li, LOffset)
         # now I need to trace and position the swarm at the output. This is done by moving the swarm along with combiner to the
         # combiner's outlet in it's final position.
         r0 = self.lattice.combiner.r2
@@ -371,7 +371,7 @@ class SwarmTracer:
 
         return swarm.survival_Bool()
 
-    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=False,fastMode=True):
+    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True):
 
         #trace a swarm through the lattice
         swarmNew=swarm.copy()
@@ -379,7 +379,7 @@ class SwarmTracer:
         if parallel==True:
             def func(particle):
                 return particleTracer.trace(particle, h, T,fastMode=fastMode)
-            results = self.helper.parallel_Problem(func, swarmNew.particles)
+            results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]

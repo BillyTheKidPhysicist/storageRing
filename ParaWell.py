@@ -83,7 +83,8 @@ class ParaWell:
 
         #TODO: THOUROUGHLY TEST AND TIME IN MY SITUATION
         #test when having many particles that take short/medium time, compare chunk to standard
-        if self.useGlobal==True: #more investigation needed
+
+        if self.useGlobal==True: #TODO: more investigation needed
             global globalFuncDict
             # if a new function is used then the old pool needs to be cleared else the old function
             # will still superseded the new one because of how global functions and multiprocessing work.

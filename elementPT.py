@@ -398,9 +398,10 @@ class CombinerIdeal(Element):
         qNew=self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
     def transform_Element_Coords_Into_Orbit_Frame(self, q):
-        # TODO: FIX THIS
+        # NOTE: THIS NOT GOING TO BE CORRECT IN GENERALY BECAUSE THE TRAJECTORY IS NOT SMOOTH AND I HAVE NOT WORKED IT OUT
+        #YET
         qo=q.copy()
-        qo[0] = self.L - qo[0]
+        qo[0] = self.Lo - qo[0]
         qo[1] = 0#qo[1]
         return qo
     def force(self, q):
@@ -444,7 +445,7 @@ class CombinerSim(CombinerIdeal):
         Lm = .187
         apL=.015
         apR=.025
-        fringeSpace=4*1.1e-2
+        fringeSpace=5*1.1e-2
         apz=6e-3
         super().__init__(PTL,Lm,np.nan,np.nan,np.nan,sizeScale,fillsParams=False) #TODO: replace all the Nones with np.nan
         self.sim=True
@@ -468,13 +469,7 @@ class CombinerSim(CombinerIdeal):
         self.data[:,3:6]=self.data[:,3:6]/self.sizeScale #scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-
-
-        data = np.asarray(pd.read_csv('smallCombinerBigMagnets_Files/combinerData.txt', delim_whitespace=True, header=None))
-        funcGradx,funcGrady,funcGradz,funcV=self.make_Interp_Functions(data)
-
-
-
+        funcGradx,funcGrady,funcGradz,funcV=self.make_Interp_Functions(self.data)
 
         #self.magnetic_Potential=lambda x, y, z: funcGradx((x, y, z))
         self.FxFunc = lambda x, y, z: funcGradx((x, y, z))
@@ -521,18 +516,16 @@ class CombinerSim(CombinerIdeal):
         qNew=q.copy()
         xFact=1 #value to modify the force based on symmetry
         zFact=1
-        if qNew[0]<=(self.Lm/2+self.space): #if the particle is in the first half of the magnet
+        if 0<=qNew[0]<=(self.Lm/2+self.space): #if the particle is in the first half of the magnet
             if qNew[2]<0: #if particle is in the lower plane
                 qNew[2] = -qNew[2] #flip position to upper plane
                 zFact=-1 #z force is opposite in lower half
-        elif qNew[0]>(self.Lm/2+self.space): #if the particle is in the last half of the magnet
+        elif (self.Lm/2+self.space)<qNew[0]: #if the particle is in the last half of the magnet
             qNew[0]=(self.Lm/2+self.space)-(qNew[0]-(self.Lm/2+self.space)) #use the reflection of the particle
             xFact=-1 #x force is opposite in back plane
             if qNew[2]<0:  # if in the lower plane, need to use symmetry
                 qNew[2] = -qNew[2]
                 zFact=-1#z force is opposite in lower half
-        else:
-            raise Exception('q is outside the field region')
         self.F[0] = xFact*self.FxFunc(*qNew)
         self.F[1] = self.FyFunc(*qNew)
         self.F[2] = zFact*self.FzFunc(*qNew)
@@ -540,10 +533,10 @@ class CombinerSim(CombinerIdeal):
     def magnetic_Potential(self,q):
         #this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
         qNew=q.copy()
-        if qNew[0]<(self.Lm/2+self.space): #if the particle is in the first half of the magnet
+        if 0<=qNew[0]<=(self.Lm/2+self.space): #if the particle is in the first half of the magnet
             if qNew[2]<0: #if particle is in the lower plane
                 qNew[2] = -qNew[2] #flip position to upper plane
-        if qNew[0]>(self.Lm/2+self.space): #if the particle is in the last half of the magnet
+        if (self.Lm/2+self.space)<qNew[0]: #if the particle is in the last half of the magnet
             qNew[0]=(self.Lm/2+self.space)-(qNew[0]-(self.Lm/2+self.space)) #use the reflection of the particle
             if qNew[2]<0:  # if in the lower plane, need to use symmetry
                 qNew[2] = -qNew[2]
@@ -1111,7 +1104,7 @@ class LensSimWithCaps(LensIdeal):
             V0=self.magnetic_Potential_Func_Fringe(x,y,z)
         else:
             warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
-            print(q)
+            print('position is',q)
             V0=0
         V0=self.fieldFact*V0 #modify the magnetic field depending on how the magnet is tuend
         return V0

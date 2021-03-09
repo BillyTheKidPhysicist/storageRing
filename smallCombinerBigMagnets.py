@@ -17,18 +17,18 @@ def get_Lattice(trackPotential=False):
     fileBenderInternalFringe2 = directory + 'benderFringeInternal2.txt'
     file2DLens = directory + 'lens2D.txt'
     file3DLens = directory + 'lens3D.txt'
-    fileCombiner = directory + 'combinerData.txt'
+    fileCombiner = directory + 'combinerV2.txt'
     yokeWidth = .0254 * 5 / 8
     extraSpace = 1e-3  # extra space on each ender between bender segments
     Lm = .0254  # hard edge length of segmented bender
     rp = .0125
     Llens1 = .15  # lens length before drift before combiner inlet
     Llens2 = .3
-    Llens3 = 0.648514129576195
+    Llens3 =0.6672768486245266
     Lcap = 0.01875
     K0 = 12000000  # 'spring' constant of field within 1%
-    rb1 = 0.9987085104809762
-    rb2 = 1.0004783330494842
+    rb1 =0.9991975800489266# 0.9987085104809762
+    rb2 = 1.0011081435099625#1.0004783330494842
     numMagnets1 = 110
     numMagnets2 = 110
     rOffsetFact = 1.00125
@@ -41,15 +41,16 @@ def get_Lattice(trackPotential=False):
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
                                                   K0,
                                                   numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
-    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=False)
+    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=True,buildLattice=True)
+    #print(lattice.solve_Combiner_Constraints())
     #lattice.show_Lattice()
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals):
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
-    #T=Revs*lattice.totalLength/lattice.v0Nominal
-    #optimizer=LatticeOptimizer(lattice)
+    T=Revs*lattice.totalLength/lattice.v0Nominal
+    optimizer=LatticeOptimizer(lattice)
     # from SwarmTracer import SwarmTracer
     # swarmTracer = SwarmTracer(lattice)
     # swarmNew = swarmTracer.initialize_Swarm_At_Combiner_Output(.15, 1.0, 0.0, labFrame=False,numPhaseSpace=10)
@@ -58,28 +59,30 @@ def compute_Sol(h,Revs,numParticles,maxEvals):
 
     #name='smallCombinerBigMagnets'
     #optimizer.plot_Stability(bounds=[(0.0,0.5),(0.0,0.5)],gridPoints=100,savePlot=True,plotName=name)
-    #func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
-    #return func,lattice
+    func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
+    return func,lattice
     #return sol
     #X=[.1,.28]
     #lattice.elList[2].forceFact = X[0]
     #lattice.elList[4].forceFact = X[1]
-
-    particle=Particle(qi=np.asarray([-1e-3,1.5e-20,1e-10]))
-    particleTracer=ParticleTracer(lattice)
-    T = .2 * lattice.totalLength / lattice.v0Nominal
-    h=1e-6
-    particle=particleTracer.trace(particle,h,T,fastMode=False)
-    lattice.show_Lattice(particle=particle)
-    #np.savetxt('poopaids',particle.q)
-    #qTest=np.loadtxt('poopaids')
-    #print(particle.q))
-    plt.plot(particleTracer.test)
-    plt.show()
-    particle.plot_Energies()
-    #particle.plot_Position()
-    #lattice.show_Lattice(particleCoords=particle.qArr[-1])
+    #
+    # qi=np.asarray([-4.49194755e-01 , 1.97701314e-05, -3.91617068e-03])
+    # pi=np.asarray([-199.28143883,   11.35570938  , -4.52998271])
+    # particle=Particle(qi=qi,pi=pi)
+    # particleTracer=ParticleTracer(lattice)
+    # T = 20* lattice.totalLength / lattice.v0Nominal
+    # h=1e-6
+    # print('---------------tracing---------------')
+    # particle=particleTracer.trace(particle,h,T,fastMode=False)
+    # lattice.show_Lattice(particle=particle)
+    # #np.savetxt('poopaids',particle.q)
+    # #qTest=np.loadtxt('poopaids')
+    # #print(particle.q))
+    # #plt.plot(particleTracer.test)
+    # #plt.show()
+    # particle.plot_Energies()
+    # particle.plot_Position()
+    # lattice.show_Lattice(particleCoords=particle.qArr[-1])
 #if __name__=='__main__':
-#    main()
-compute_Sol(1e-5,20,500,50)
+#    compute_Sol(1e-5, 20.0,200,50)
 

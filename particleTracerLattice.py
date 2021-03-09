@@ -274,7 +274,7 @@ class ParticleTracerLattice:
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
 
-        difFrac=5e-3  # fractional difference in bending radii from target radii
+        difFrac=2e-3  # fractional difference in bending radii from target radii
         up=1+difFrac
         low=1-difFrac
         ranges=[(low*r10,up*r10),(low*r20,up*r20)]
@@ -283,22 +283,12 @@ class ParticleTracerLattice:
         #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
         sol=spo.differential_evolution(cost,ranges,mutation=1.5,popsize=50)
 
-        #print(sol)
-        #print(cost(sol.x,returnParams=True))
-        #sys.exit()
-        #print(sol.x[0],sol.x[1])
-        #print(sol.x[0],sol.x[1])
-        #roffset 0.0033327012609907503 0.0033327012609907503
+
 
 
         params = cost(sol.x, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
-        #print(params)
-        #print(params[0],params[1],params,cost(x))
-        #sys.exit()
-        #print(cost(x))
-        #sys.exit()
         if cost(params[:2])>tol:
             raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
@@ -387,6 +377,7 @@ class ParticleTracerLattice:
                 q5=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
                 q6 = np.asarray([0, -apL])  # bottom left when theta=0
                 points=[q1,q2,q3,q4,q5,q6]
+                el.Poop=Polygon(points)
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
                 el.SO=Polygon(points)
@@ -564,7 +555,6 @@ class ParticleTracerLattice:
         deltax=np.abs(rbo[0]-reo[0])
         deltay=np.abs(rbo[1]-reo[1])
         smallNum=1e-10
-        #print(deltax,deltay)
         if deltax > smallNum or deltay > smallNum:
             closed=False
         else:
@@ -604,7 +594,8 @@ class ParticleTracerLattice:
         return outputAngle,outputOffset
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
-        #or swarm then plot the last position of the particle/particles
+        #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
+        #revolutions, then the x marker is not shown
         #particleCoords: Array or list holding particle coordinate such as [x,y]
         #particle: particle object
         #swarm: swarm of particles to plot.
@@ -626,8 +617,12 @@ class ParticleTracerLattice:
             plot_Particle(particle)
         if swarm is not None:
             maxRevs=swarm.longest_Particle_Life_Revolutions()
+            if maxRevs==0.0: #if it hasn't been traced
+                maxRevs=1.0
             for particle in swarm:
                 revs=particle.revolutions
+                if revs is None:
+                    revs=0
                 if showRelativeSurvival==True:
                     plot_Particle(particle,xMarkerSize=1000*revs/maxRevs)
                 else:
@@ -714,134 +709,3 @@ class ParticleTracerLattice:
             pNew[1] = MTot[0, 0] * q[1] + MTot[0, 1] * p[1]
             qNew[1] = MTot[1, 0] * q[1] + MTot[1, 1] * p[1]
 
-
-def main():
-
-    lattice = ParticleTracerLattice(200.0)
-    fileBend1='benderSeg1.txt'
-    fileBend2 = 'benderSeg2.txt'
-    fileBender1Fringe='benderFringeCap1.txt'
-    fileBenderInternalFringe1='benderFringeInternal1.txt'
-    fileBender2Fringe='benderFringeCap2.txt'
-    fileBenderInternalFringe2='benderFringeInternal2.txt'
-    file2DLens='lens2D.txt'
-    file3DLens='lens3D.txt'
-    fileCombiner='combinerData.txt'
-    yokeWidth=.0254*5/8
-    numMagnets=110
-    extraSpace=1e-3
-    Lm=.0254
-    rp=.0125
-    Llens1=.3
-    rb=1.0
-
-
-
-
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Combiner_Sim(fileCombiner)
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1,fileBender1Fringe,fileBenderInternalFringe1,Lm,None,rb,extraSpace,yokeWidth)
-    lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, None)
-    lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2,fileBender2Fringe, fileBenderInternalFringe2, Lm, None, rb, extraSpace,yokeWidth)
-    lattice.end_Lattice()
-    lattice.show_Lattice()
-
-
-    lattice.elList[2].fieldFact = .175
-    lattice.elList[4].fieldFact = .175
-
-    q0=np.asarray([-1e-10,-1e-3,1e-3])
-    v0=np.asarray([-201.0,-1.0,-1.0])
-    h=10e-6
-    Lt=100
-    particleTracer = ParticleTracer(lattice)
-
-    #q, p, qo, po, particleOutside,elIndex = particleTracer.trace(q0, v0, h, Lt / 200)
-    #print(qo[-1]) #[ 3.19866564e+01  0.00000000e+00 -1.64801837e-04]
-    #sys.exit()
-    #lattice.show_Lattice(particleCoords=q[-1])
-    #plt.plot(qo[:,1])
-    #plt.show()
-
-
-    particleTracer = ParticleTracer(lattice)
-    tList=[]
-    for j in range(25):
-        t=time.time()
-        for i in range(10):
-            particle=particleTracer.trace(q0, v0, 1e-5, Lt / 200,fastMode=True)
-        tList.append((time.time()-t)/10.0)
-    tArr=np.asarray(tList)
-    print(np.mean(tArr),np.std(tArr)) #0.2599016189575195 0.006449517871561657
-    #print(particle.cumulativeLength,particle.p,particle.pi)
-    #plt.plot(particle.qoArr[:,0],particle.qoArr[:,1])
-    #plt.show()
-    #print(particle.lengthTraveled,particle.clipped) #(23.943571330550235, True, 1)
-    sys.exit()
-    def func(arg, parallel=True):
-        X, newLattice = arg
-        F1, F2 = X
-        newLattice.elList[2].fieldFact = F1
-        newLattice.elList[4].fieldFact = F2
-
-        h = 10e-6
-        Lt = 10 * lattice.totalLength
-        qMax = 1e-3
-        vtMax = 1.0
-        vlMax = 1.0
-
-        q0=np.asarray([-1e-10,0,0])
-        v0=np.asarray([-200.0,0,0])
-        #particleTracer=ParticleTracer(lattice)
-        temp1=None
-        for i in range(5):
-            temp1,temp2,temp3=particleTracer.trace(q0, v0, h, Lt / 200,fastMode=True)
-        survival = temp1/lattice.totalLength#qo[-1, 0] / lattice.totalLength
-        #temp1Arr,temp2Arr = newLattice.measure_Phase_Space_Survival(qMax, vtMax, vlMax, Lt, h=h, parallel=parallel)
-        #survival = np.mean(temp1Arr)
-        return survival#,np.bincount(temp2Arr), X
-    print(func([[.1666,.23333333],lattice]))# (3.440503668588188, array([0, 5, 9, 0, 0, 2], dtype=int64), [0.1666, 0.16666])
-    sys.exit()
-    # print('starting')
-    # X=[0.19183673,0.44897959]
-    # func(X,parallel=False)
-
-    num = 4
-    F1Arr = np.linspace(.1, 1, num=num)
-    F2Arr = np.linspace(.1, 1, num=num)
-    argsArr = np.asarray(np.meshgrid(F1Arr, F2Arr)).T.reshape(-1, 2)
-    survivalList = []
-
-    #t=time.time()
-    #argsList = []
-    #for arg in argsArr:
-    #    argsList.append([arg, copy.deepcopy(lattice)])
-    #print(time.time()-t)
-    #sys.exit()
-    pool = pa.pools.ProcessPool(nodes=pa.helpers.cpu_count())  # pool object to distribute work load
-    jobs = []  # list of jobs. jobs are distributed across processors
-    results = []  # list to hold results of particle tracing.
-    print('starting')
-    t = time.time()
-    for arg in argsArr:
-        jobs.append(pool.apipe(func, arg))  # create job for each argument in arglist, ie for each particle
-    for job in jobs:
-        results.append(job.get())  # get the results. wait for the result in order given
-    print(time.time() - t)  # 795
-
-    survivalList = []
-    XList = []
-    for result in results:
-        survivalList.append(result[0])
-        XList.append(result[1])
-    survivalArr = np.asarray(survivalList)
-    XArr = np.asarray(XList)
-    # print(survivalArr)
-    print(np.max(survivalArr))  # 44.42
-    print(XArr[np.argmax(survivalArr)][0], XArr[np.argmax(survivalArr)][1])
-
-
-if __name__=='__main__':
-    pass
-    main()
