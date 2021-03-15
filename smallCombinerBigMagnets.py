@@ -6,7 +6,8 @@ from particleTracerLattice import ParticleTracerLattice
 from ParticleTracer import ParticleTracer
 from ParticleClass import Particle
 
-def get_Lattice(trackPotential=False):
+
+def get_Lattice(trackPotential=True):
     lattice = ParticleTracerLattice(200.0)
     directory = 'smallCombinerBigMagnets_Files/'
     fileBend1 = directory + 'benderSeg1.txt'
@@ -46,43 +47,15 @@ def get_Lattice(trackPotential=False):
     #lattice.show_Lattice()
     return lattice
 
-def compute_Sol(h,Revs,numParticles,maxEvals):
+#optimizer=None
+def compute_Sol(h,Revs,maxEvals):
+    print('here')
+    #global optimizer
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
     optimizer=LatticeOptimizer(lattice)
-    # from SwarmTracer import SwarmTracer
-    # swarmTracer = SwarmTracer(lattice)
-    # swarmNew = swarmTracer.initialize_Swarm_At_Combiner_Output(.15, 1.0, 0.0, labFrame=False,numPhaseSpace=10)
-    #name='smallCombinerBigMagnets_Plot_100Grid'
-    #optimizer.plot_Unstable_Regions(gridPoints=100,savePlot=True,plotName=name)
 
-    #name='smallCombinerBigMagnets'
-    #optimizer.plot_Stability(bounds=[(0.0,0.5),(0.0,0.5)],gridPoints=100,savePlot=True,plotName=name)
-    func=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
-    return func,lattice
-    #return sol
-    #X=[.1,.28]
-    #lattice.elList[2].forceFact = X[0]
-    #lattice.elList[4].forceFact = X[1]
-    #
-    # qi=np.asarray([-4.49194755e-01 , 1.97701314e-05, -3.91617068e-03])
-    # pi=np.asarray([-199.28143883,   11.35570938  , -4.52998271])
-    # particle=Particle(qi=qi,pi=pi)
-    # particleTracer=ParticleTracer(lattice)
-    # T = 20* lattice.totalLength / lattice.v0Nominal
-    # h=1e-6
-    # print('---------------tracing---------------')
-    # particle=particleTracer.trace(particle,h,T,fastMode=False)
-    # lattice.show_Lattice(particle=particle)
-    # #np.savetxt('poopaids',particle.q)
-    # #qTest=np.loadtxt('poopaids')
-    # #print(particle.q))
-    # #plt.plot(particleTracer.test)
-    # #plt.show()
-    # particle.plot_Energies()
-    # particle.plot_Position()
-    # lattice.show_Lattice(particleCoords=particle.qArr[-1])
-#if __name__=='__main__':
-#    compute_Sol(1e-5, 20.0,200,50)
-
+    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
+    return sol
+compute_Sol(1e-5,25,50)

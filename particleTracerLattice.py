@@ -185,7 +185,7 @@ class ParticleTracerLattice:
                 self.totalLength+=el.Lo
         if trackPotential==False:
             for el in self.elList:
-                el.magnetic_Potential=None
+                el.magnetic_Potential=lambda x: np.nan
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
@@ -592,7 +592,7 @@ class ParticleTracerLattice:
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
         return outputAngle,outputOffset
-    def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True):
+    def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -602,8 +602,17 @@ class ParticleTracerLattice:
         #showRelativeSurvival: when plotting swarm indicate relative particle survival by varying size of marker
         plt.close('all')
         def plot_Particle(particle,xMarkerSize=1000):
-            plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c='r')
-            plt.scatter(*particle.q[:2], marker='o', s=10, c='r')
+            if particle.clipped==True:
+                color='blue'
+            elif particle.clipped==False:
+                color='red'
+            else: #if None
+                color='green'
+            plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
+            plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
+            if showTraceLines==True:
+                if particle.qArr.shape[0]!=0:
+                    plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,linestyle=':')
 
         for el in self.elList:
             plt.plot(*el.SO.exterior.xy,c='black')

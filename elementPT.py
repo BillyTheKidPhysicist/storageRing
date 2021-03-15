@@ -354,7 +354,7 @@ class CombinerIdeal(Element):
         #length, but for the simulated magnets, it's that plus twice the length at the ends.
         #h: timestep
         #lowField: wether to model low or high field seekers
-        # todo: make proper edge handling
+        print('SOMETHING DOES NOT MAKE SENSE HERE. This needs to follow the same rules as when in the lattice.')
         q = np.asarray([0.0, 0.0, 1e-3])
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         tempList=[] #Array that holds particle coordinates traced through combiner. This is used to find lenght
