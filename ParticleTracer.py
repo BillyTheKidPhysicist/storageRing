@@ -209,7 +209,7 @@ class ParticleTracer:
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         qel = self.particle.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
-        isInside=self.particle.currentEl.is_Coord_Inside(qel) #this returns True or None or false
+        isInside=self.particle.currentEl.is_Coord_Inside(qel)
         if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
             #with shapely
             if return_qel==True:
@@ -241,13 +241,10 @@ class ParticleTracer:
         #or between two element. So try scooting the particle on a tiny bit and try again.
         el=self.which_Element_Shapely(q)
         if el is not None:
-            # now test for the z clipping
-            if el.apz is not None:
-                if -el.apz<q[2]<el.apz:
-                    return el  #found it!
-            else:
-                if el.ap>q[2]>-el.ap:
-                    return el  #found it!
+            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
+            isInside = el.is_Coord_Inside(qel)
+            if isInside==True:
+                return el
 
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
@@ -271,14 +268,11 @@ class ParticleTracer:
         el=self.which_Element_Shapely(qNew)
 
         if el is not None:
-            # now test for the z clipping
-            if el.apz is not None:
-                if -el.apz<q[2]<el.apz:
-                    return el
-                else:
-                    return None
+            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
+            isInside = el.is_Coord_Inside(qel)
+            if isInside == True:
+                return el
             else:
-                return el #no z apeture to check
+                return None
         else:
             return None
-

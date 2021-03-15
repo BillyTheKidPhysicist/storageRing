@@ -39,7 +39,7 @@ class phaseSpaceInterpolater:
         #     xRenormed=(X[:,i]-self.xBounds[i][0])/(self.xBounds[i][1]-self.xBounds[i][0])
         #     self.xNormalized[:, i]=xRenormed
         self.xBounds=np.asarray(self.xBounds)
-        self.interpolater=spi.NearestNDInterpolator(self.X, self.Y,rescale=True,tree_options={'copy_data':True})#LinearNDInterpolator(self.X,self.Y,rescale=True)#
+        self.interpolater=spi.LinearNDInterpolator(self.X,self.Y,rescale=True)#spi.NearestNDInterpolator(self.X, self.Y,rescale=True,tree_options={'copy_data':True})##
         self.interpolater(1e-3,1e-3,-200,1.0,1.0) #first call is slower for some methods
     # def normalize(self,args):
     #     #x array to be normalized
@@ -102,7 +102,7 @@ class LatticeOptimizer:
     def compute_Phase_Space_Map_Function(self,X,swarmInitial,swarmCombiner):
         #return a function that returns a value for mnumber of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
-        #so the could is centered at the origin in the combiner
+        #so the swarm is centered at the origin in the combiner
         #X: arguments to parametarize lattice
         #swarmInitial: swarm to trace through lattice that is initialized in phase space and centered at (0,0,0). This is
         #used as the coordinates for creating the phase space func. You would think to use the swarmCombiner, but I want
@@ -114,19 +114,52 @@ class LatticeOptimizer:
 
 
         swarmTraced=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,fastMode=True)
+        num=0
         for i in range(swarmInitial.num_Particles()):
             q = swarmInitial.particles[i].q.copy()[1:] #only y and z. x is the same
             p = swarmInitial.particles[i].p[:].copy()
+            #if np.sqrt(q[0]**2+q[1]**2)>.01125:
+                #num+=1
+                #print(q[0],q[1])
+                #print('here',swarmInitial.particles[i].revolutions)
             Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum
             phaseSpacePoints.append(Xi)
-            if swarmTraced.particles[i].revolutions is None:
-                print(Xi)
-                raise Exception('PARTICLES BEING AT EDGE CAUSES CLIPPING!')
-                sys.exit()
             revolutions.append(swarmTraced.particles[i].revolutions)
+        #print(num)
         print(swarmTraced.survival_Rev(),swarmTraced.longest_Particle_Life_Revolutions())
         latticePhaseSpaceFunc=phaseSpaceInterpolater(np.asarray(phaseSpacePoints), revolutions)
         gm.interpBounds=latticePhaseSpaceFunc.xBounds
+
+        v0=-200
+        func=latticePhaseSpaceFunc
+        def wrap(y, z):
+            val = []
+            # pArr=np.linspace(-3.0,3.0,num=10)
+            # for py in pArr:
+            #    for pz in pArr:
+            #        val.append(func(y,z,v0,py,pz))
+            return func(y, z, v0, 0.0, 0.0)  # np.nanmean(np.asarray(val))
+
+        bounds = np.asarray([(-1.0, 1.0), (-1.0, 1.0)]) * 15e-3
+        plotxArr = np.linspace(bounds[0][0], bounds[0][1], num=50)
+        plotyArr = np.linspace(bounds[1][0], bounds[1][1], num=50)
+        image = np.empty((plotxArr.shape[0], plotyArr.shape[0]))
+        for i in range(plotxArr.shape[0]):
+            for j in range(plotyArr.shape[0]):
+                image[j, i] = wrap(plotxArr[i], plotyArr[j])
+
+        image = np.flip(image, axis=0)
+        extent = [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]]
+        print(v0, np.nanmean(image), np.nanmax(image), np.nanmin(image))
+        plt.imshow(image, extent=extent)
+
+        x=np.cos(np.linspace(0,2*np.pi))*self.lattice.elList[self.lattice.combinerIndex+1].ap
+        y=np.sin(np.linspace(0,2*np.pi))*self.lattice.elList[self.lattice.combinerIndex+1].ap
+
+        plt.plot(x,y)
+        plt.show()
+
+        plt.show()
         return latticePhaseSpaceFunc
 
 
@@ -274,23 +307,26 @@ class LatticeOptimizer:
         #clip particles located at the combiner outlet if they have too much kinetic energy to be trapped in the next
         #next section to not waste time tracing
         pass
-    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=1000,pMax=5e0,returnBestSwarm=False,parallel=False,
+    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=10000,pMax=5e0,returnBestSwarm=False,parallel=False,
                                          maxEvals=100,bounds=None,precision=10e-3):
         self.h=h
         self.T=T
-        print('ARE PARTICLE RESPECTING THE FORCE FIELDS BECAUSE THE APETURE IS ASSUMED TO BE CIRCULAR??????')
-        #make a swarm that whos position span the maximum capturable
+        #make a swarm that whos position spans the next element's input
         qyMax=self.lattice.elList[self.lattice.combinerIndex+1].ap
-        qzMax=self.lattice.combiner.apz
+        qzMax=qyMax
         pxMax=1.1
         #now estimate the maximum possible transverse velocity
         deltav=(self.lattice.v0Nominal*qyMax/self.lattice.combiner.Lo)
-        print('values changed!')
-        pyMax=deltav
-        pzMax=deltav
+        pyMax=deltav/10.0
+        pzMax=deltav/10.0
+
+
+        #TODO: INITIALIZE A CIRCULAR SWARM
         swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyMax,qzMax,pxMax,pyMax,pzMax, numParticles)
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
 
+        func = self.compute_Phase_Space_Map_Function([.25,.25], swarmInitial, swarmCombiner)
+        return func
         if bounds is None:
             bounds=[(0.0, .5), (0.0, .5)]
         class Solution:
@@ -382,7 +418,7 @@ class LatticeOptimizer:
         x = [0, 0]
         for i in range(len(sol.x)):  # change normalized bounds to actual
             x[i] = ((bounds[i][1] - bounds[i][0]) * float(sol.x[i]) / float(boundsNorm[i][1] - boundsNorm[i][0]) +
-                       bounds[i][0])
+                    bounds[i][0])
         solution.x = x
         solution.fun = -sol.fun * T * self.lattice.v0Nominal / self.lattice.totalLength
         return solution

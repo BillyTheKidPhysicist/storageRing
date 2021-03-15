@@ -54,8 +54,9 @@ def compute_Sol(h,Revs,maxEvals):
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
-    optimizer=LatticeOptimizer(lattice)
 
+
+    optimizer=LatticeOptimizer(lattice)
     sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
     return sol
 compute_Sol(1e-5,25,50)

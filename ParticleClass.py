@@ -70,7 +70,7 @@ class Particle:
         #after the particle leaves the tracing algorithm and such can be used to record where it clipped
         self.cumulativeLength=0 #total length traveled by the particle IN TERMS of lattice elements. It updates after
         #the particle leaves an element by adding that elements length (particle trajectory length that is)
-        self.revolutions=None #revolutions particle makd around lattice
+        self.revolutions=0 #revolutions particle makd around lattice. Initially zero
         self.clipped=None #wether particle clipped an apeture
         #these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         #they are converted into arrays

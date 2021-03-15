@@ -25,8 +25,6 @@ def solve():
                 p = particle.p
                 Xi = np.append(q, p)
                 temp.append(mode_Func(*Xi))
-                if mode_Func(*Xi) is None:
-                    print(Xi)
         temp = np.asarray(temp)
         return np.nansum(temp), np.nanmax(temp), np.nanmean(temp), np.sum(~np.isnan(temp))
 

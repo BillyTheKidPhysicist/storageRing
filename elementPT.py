@@ -200,12 +200,13 @@ class LensIdeal(Element):
         # elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
         # returned, it is unknown
         # q: coordinates to test
-        if not -self.ap<q[1]<self.ap or not -self.ap<q[2]<self.ap:
-            return False
-        elif q[0] < 0 or q[0] > self.L:
+        if not 0<=q[0]<=self.L:
             return False
         else:
-            return True
+            if np.sqrt(q[1]**2+q[2]**2)<self.ap:
+                return True
+            else:
+                return False
 
 class Drift(LensIdeal):
     def __init__(self,PTL,L,ap):
@@ -290,15 +291,19 @@ class BenderIdeal(Element):
             self.F=np.zeros(3)
         return self.F.copy()
     def is_Coord_Inside(self,q):
-        if np.abs(q[2]) > self.ap:  # if clipping in z direction
-            return False
         phi = np.arctan2(q[1], q[0])
-        if (phi > self.ang and phi < 2 * np.pi) or phi < 0:  # if outside bender's angle range
+        if phi < 0:  # constraint to between zero and 2pi
+            phi += 2 * np.pi
+        if phi < self.ang: # if particle is in bending segment
+            rh = np.sqrt(q[0] ** 2 + q[1] ** 2)-self.rb #horizontal radius
+            r=np.sqrt(rh**2+q[2]**2) #particle displacement from center of apeture
+            if r>self.ap:
+                return False
+            else:
+                return True
+        else:
             return False
-        r = np.sqrt(q[0] ** 2 + q[1] ** 2)
-        if r < self.rb - self.ap or r > self.rb + self.ap:
-            return False
-        return True
+
 
 class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
@@ -416,15 +421,15 @@ class CombinerIdeal(Element):
 
     def is_Coord_Inside(self,q):
         #q: coordinate to test in element's frame
-        if not -self.apz<q[2]<self.apz: #if outside the z apeture
+        if not -self.apz<q[2]<self.apz: #if outside the z apeture (vertical)
             return False
         elif 0<=q[0]<=self.Lb:  # particle is in the horizontal section (in element frame) that passes
-            # through the combiner
+            # through the combiner. Simple square apeture
             if -self.apL<q[1]<self.apR: #if inside the y (width) apeture
                 return True
         elif q[0]<0:
             return False
-        else:  # particle is in the bent section leading into combiner
+        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             m=np.tan(self.ang)
             Y1=m*q[0]+(self.apR-m*self.Lb) #upper limit
             Y2 =(-1/m)*q[0]+self.La*np.sin(self.ang)+(self.Lb+self.La*np.cos(self.ang))/m
@@ -678,21 +683,6 @@ class BenderIdealSegmented(BenderIdeal):
         qNew[0]=r*np.cos(theta) #cartesian coords in unit cell frame
         qNew[1]=r*np.sin(theta) #cartesian coords in unit cell frame
         return qNew
-
-    def is_Coord_Inside(self, q):
-        if np.abs(q[2]) > self.ap:  # if clipping in z direction
-            return False
-        phi = np.arctan2(q[1], q[0])
-        if phi < 0:  # constraint to between zero and 2pi
-            phi += 2 * np.pi
-        if phi < self.ang:
-            r = np.sqrt(q[0] ** 2 + q[1] ** 2)
-            if r < self.rb - self.ap or r > self.rb + self.ap:
-                return False
-        else:
-            return False
-
-        return True
 
 class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     def __init__(self,PTL,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetfact,ap,fillParams=True):

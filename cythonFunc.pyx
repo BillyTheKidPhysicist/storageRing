@@ -46,24 +46,26 @@ def is_Coord_Inside_CYTHON_BenderIdealSegmentedWithCap(np.ndarray[DTYPE_FLOAT,nd
     qx=q[0]
     qy=q[1]
     qz=q[2]
-    if not -ap<qz<ap:  # if clipping in z direction
-        return False
+
     phi=atan2(q[1], q[0])
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * M_PI
-    if phi<ang: #if inside the bending region
-        r = sqrt(qx ** 2 + qy ** 2)
-        if rb-ap<r<rb+ap:
+    if phi<=ang: #if inside the bending region
+        rh = sqrt(qx ** 2 + qy ** 2)-rb #horizontal bending radius
+        r=sqrt(rh**2+q[2]**2)
+        if r<ap:
             return True
-    if phi>ang:  # if outside bender's angle range
-        if (rb - ap < qx < rb + ap) and (0 > qy > -Lcap): #If inside the cap on
+        else:
+            return False
+    else:  # if outside bender's angle range
+        if (rb - ap < qx < rb + ap) and (0 >= qy >= -Lcap): #If inside the cap on
             #the eastward side
             return True
         qxTest = RIn_Ang[0, 0] * qx + RIn_Ang[0, 1] * qy
         qyTest = RIn_Ang[1, 0] * qx + RIn_Ang[1, 1] * qy
-        if (rb - ap < qxTest < rb + ap) and (Lcap > qyTest > 0): #if inside on the westward side
+        if (rb - ap < qxTest < rb + ap) and (Lcap >= qyTest >= 0): #if inside on the westward side
             return True
-    return False
+        return False
 
 @cdivision(True)
 @boundscheck(False)
