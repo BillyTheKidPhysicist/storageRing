@@ -6,11 +6,17 @@ class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
         self.particles = [] #list of particles in swarm
-    def add_Particle(self, qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
+    def add_Particle(self, qi=None,pi=None):
         #add an additional particle to phase space
         #qi: spatial coordinates
         #pi: momentum coordinates
+        if pi is None:
+            pi=np.asarray([-200.0,0.0,0.0])
+        if qi is None:
+            qi = np.asarray([-1e-10, 0.0, 0.0])
+
         self.particles.append(Particle(qi, pi))
+
     def survival_Rev(self):
         #return average number of revolutions of particles
         revs=0

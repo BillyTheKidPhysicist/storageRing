@@ -95,70 +95,72 @@ class ParaWell:
             else: #if its the first time the parawell instance is being accessed
                 globalFuncDict[self.id] = func
             if parallelType== 'STANDARD':
-                def wrapper(args):
-                    result = globalFuncDict[self.id](args)
-                    return args, result
+                def wrapper(arg):
+                    result = globalFuncDict[self.id](arg[0]) #second value of arg is marker
+                    return arg, result
             elif parallelType== 'CHUNK':
                 def wrapper(chunk):
                     funcResults = []
                     for arg in chunk:
-                        funcResults.append((arg, globalFuncDict[self.id](arg)))
+                        funcResults.append((arg, globalFuncDict[self.id](arg[0]))) #second value of arg is marker
                     return funcResults
             else:
                 raise Exception('NO VALID NAME PROVIDED')
             return wrapper
         else:
             if parallelType== 'STANDARD':
-                def wrapper(args):
-                    result = func(args)
-                    return args, result
+                def wrapper(arg):
+                    result = func(arg[0])#second value of arg is marker
+                    return arg, result
             elif parallelType== 'CHUNK':
                 def wrapper(chunk):
                     funcResults = []
                     for arg in chunk:
-                        funcResults.append((arg, func(arg)))
+                        funcResults.append((arg, func(arg[0])))#second value of arg is marker
                     return funcResults
             else:
                 raise Exception('NO PROPER NAME PROVIDED')
             return wrapper
     def parallel_Problem(self,func,argsList,numWorkers=pa.helpers.cpu_count(),mutableFunction=True):
-        """
-        solve func in parallel over the provided arguments argsList.
-
-        :param func: Function that is to be solved in parallel.
-        :param argsList: List of arguments to be work on in parallel with func.
-        :param numWorkers: Number of processes to work on the problem in parallel with. Defaults to the available number
-        of processors (which may be double from hyper threading)
-        :param mutableFunction: Some functions may be considered mutable which here I mean that the function may depend
-        on other parameters which will change from call to call. If using a posix system global variables are used to
-        improve performance but they will prevent functions from being able to reflect these changes.
-        :return: list of tuples like (args,results) with length len(argslist).
-        """
-        wrapper=self.prepare_Wrapper(func,'STANDARD')
+        # solve func in parallel over the provided arguments argsList. Returned result is in same order as argsList
+        #
+        # :param func: Function that is to be solved in parallel.
+        # :param argsList: List of arguments to be work on in parallel with func.
+        # :param numWorkers: Number of processes to work on the problem in parallel with. Defaults to the available number
+        # of processors (which may be double from hyper threading)
+        # :param mutableFunction: Some functions may be considered mutable which here I mean that the function may depend
+        # on other parameters which will change from call to call. If using a posix system global variables are used to
+        # improve performance but they will prevent functions from being able to reflect these changes.
+        # :return: list of tuples like (argument,result) with length len(argslist).
+        argsList=self.prepare_ArgsList(argsList) #add marker to each argument for keeping order
+        wrapper=self.prepare_Wrapper(func,'STANDARD') 
         self.manage_Pool(numWorkers)
         jobs = []  # list of jobs. jobs are distributed across processors
         results = []  # list to hold results of particle tracing.
+
         for arg in argsList:
             jobs.append(self.pool.apipe(wrapper, arg))  # create job for each argument in arglist, ie for each particle
-
         for job in jobs:
             results.append(job.get())  # get the results. wait for the result in order given
-
+        results=self.wrangle_Results(results,'STANDARD')
         if mutableFunction==True:
             self.pool.clear()
         return results
     def parallel_Chunk_Problem(self,func,argsList,numWorkers=pa.helpers.cpu_count(),mutableFunction=True):
-        #solve a small problem in parallel. the logic is
+        #solve a small problem in parallel. The returned resuts is in the same order as argsList 
+        # the basic logic is
+        #0: tag arguments for sorting
         #1: split the arguments into evenly sized chunk for each work (some will have more or less)
         #2: create a wrapper function that parses these chunks out
         #3: use pathos to work on each chunk
-        #4: stitch the results together
+        #4: stitch the results together and sort
 
         #func: the function that is being fed the arguments
         #argsList: a list of arguments to work on
         # numWorkers: processes to work on the problem
-        #returns a list of tuples of the arguments paired with the results as (args,results)
-        random.shuffle(argsList)
+        #returns a list of tuples of the arguments paired with the results as (argument,result)
+        #print(argsList)
+        argsList=self.prepare_ArgsList(argsList)
         argChunkList=[]
         for i in range(numWorkers):
             argChunkList.append([])
@@ -169,26 +171,47 @@ class ParaWell:
                 j=0
             else:
                 j+=1
-
         wrapper=self.prepare_Wrapper(func,'CHUNK')
         self.manage_Pool(numWorkers)
-
         jobs = []  # list of jobs. jobs are distributed across processors
         chunkResults = []  # list to hold results of particle tracing.
         for chunk in argChunkList:
             jobs.append(self.pool.apipe(wrapper,chunk))  # create job for each argument in arglist, ie for each particle
-
         for job in jobs:
             chunkResults.append(job.get())  # get the results. wait for the result in order given
-
-        resultsList=[]
-        for result in chunkResults:
-            resultsList.extend(result)
+        resultsList=self.wrangle_Results(chunkResults,'CHUNK')
         if mutableFunction==True:
             self.pool.clear()
-
         return resultsList
-
+    def wrangle_Results(self,resultsList,parallelType):
+        #Shape and order the results.
+        newResultsList=[]
+        markerList=[] #list of integers of positions.
+        tempArgsList=[] #intermediate list that will hold the results and arugments seperate from the marker
+        if parallelType=='STANDARD':
+            for result in resultsList:
+                tempArgsList.append((result[0][0],result[1])) #list of (arg,result)
+                markerList.append(result[0][1])#extract the unique integer marker
+        elif parallelType=='CHUNK':
+            for chunk in resultsList:
+                for result in chunk:
+                    tempArgsList.append((result[0][0],result[1])) #list of (arg,result)
+                    markerList.append(result[0][1]) #extract the unique integer marker
+        else:
+            raise Exception('NOT A VALID CHOICE')
+        sortIndices = np.argsort(np.asarray(markerList))
+        for index in sortIndices:
+            newResultsList.append(tempArgsList[index]) #add (arg,result) in order to new list
+        return newResultsList
+    def prepare_ArgsList(self, argsList):
+        #this method marks each argument so the results can be sorted later
+        newArgList=[]
+        marker=0 #to keep track of order of arguments and results
+        for arg in argsList:
+            newArgList.append([arg,marker])
+            marker+=1
+        random.shuffle(newArgList) #shuffle AFTER marking
+        return newArgList
     def manage_Pool(self,numWorkers):
         #keep track of the number of time pool has been called, and make a new pool if the previous one gets changed
         #with a new selection of workers

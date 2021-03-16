@@ -47,7 +47,7 @@ class SwarmTracer:
         return swarm
 
     def initalize_Random_Swarm_In_Phase_Space(self, qyMax,qzMax, pxMax,pyMax,pzMax, num, upperSymmetry=False, sameSeed=True,
-                                              cornerPoints=True):
+                                              cornerPoints=True,cylinderivalApeture=None):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
@@ -60,6 +60,7 @@ class SwarmTracer:
         # upperSymmetry: wether to exploit lattice symmetry by only using particles in upper half plane
         # sameSeed: wether to use the same seed eveythime in the nump random generator, the number 42, or a new one
         # cornerPonints: wether to add points at the corner of the hypercube
+        # cylindericalApeture: The size of the cylinderical apeture to trim points to. if None don't trim points
         #return: swarm: a populated swarm object
 
 
@@ -71,7 +72,6 @@ class SwarmTracer:
             np.random.seed(42)
         if upperSymmetry==True:
             bounds[1][0]=0.0 #don't let point be generarted below z=0
-
 
 
         x=0.0
@@ -98,9 +98,17 @@ class SwarmTracer:
                     Xi[i]=(bounds[i][0]-Xi[i])+bounds[i][0]
                 if bounds[i][1]<Xi[i]:
                     Xi[i] = bounds[i][1]-(Xi[i]-bounds[i][1])
-            q = np.append(x,Xi[:2])
+            q = np.append(x, Xi[:2])
             p = Xi[2:]
-            swarm.add_Particle(q,p)
+
+            if cylinderivalApeture is not None:
+                y,z=Xi[:2]
+                if np.sqrt(y**2+z**2)<cylinderivalApeture:
+                    swarm.add_Particle(qi=q, pi=p)
+                else:
+                    pass
+            else:
+                swarm.add_Particle(qi=q,pi=p)
 
 
 
@@ -135,6 +143,7 @@ class SwarmTracer:
         #scoot: if True, move the particles along a tiny amount so that they are just barely in the next element. Helpful
         #for the doing the particle tracing sometimes
         swarmNew=swarm.copy()
+
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
         for particle in swarmNew.particles:
@@ -350,8 +359,6 @@ class SwarmTracer:
             if is_Clipped(q) == True:
                 particle.clipped = True
                 break
-            # if npl.norm(F_n)==0:
-            #     print(q,apL,apR,apz)
         if particle.clipped is None:
             particle.clipped = False
         particle.traced = True
@@ -452,7 +459,7 @@ class SwarmTracer:
         if parallel==True:
             def func(particle):
                 return particleTracer.trace(particle, h, T,fastMode=fastMode)
-            results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
+            results = self.helper.parallel_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]

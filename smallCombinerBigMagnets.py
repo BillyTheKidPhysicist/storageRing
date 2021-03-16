@@ -59,4 +59,4 @@ def compute_Sol(h,Revs,maxEvals):
     optimizer=LatticeOptimizer(lattice)
     sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
     return sol
-compute_Sol(1e-5,25,50)
+#compute_Sol(1e-5,25,20)
