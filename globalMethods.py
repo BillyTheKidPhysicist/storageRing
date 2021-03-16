@@ -48,5 +48,5 @@ def solve():
         val = inject(args)[2] #mean value
         return -val
     bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
-    sol = spo.differential_evolution(minimize, bounds, maxiter=10, workers=-1, polish=False, disp=True, popsize=32)
+    sol = spo.differential_evolution(minimize, bounds, maxiter=5, workers=-1, polish=False, disp=True, popsize=32)
     return sol.fun

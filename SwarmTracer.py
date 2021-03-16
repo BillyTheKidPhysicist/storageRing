@@ -14,10 +14,8 @@ import scipy.optimize as spo
 import time
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
-import pySOT as ps
 from ParaWell import ParaWell
 import skopt
-import poap.controller as pc
 #IMPLEMENT OPTIONAL COPIES
 class SwarmTracer:
     def __init__(self,lattice):
@@ -46,12 +44,14 @@ class SwarmTracer:
                 swarm.add_Particle(qi, pi)
         return swarm
 
-    def initalize_Random_Swarm_In_Phase_Space(self, qyMax,qzMax, pxMax,pyMax,pzMax, num, upperSymmetry=False, sameSeed=True,
-                                              cornerPoints=True,cylinderivalApeture=None):
+    def initalize_Random_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
+                                              cornerPoints=True, apetureRadius=None):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
         #each corner exactly and midpoints between corners if desired
+        #NOTE: it's not guaranteed that there will be exactly num particles.
+
 
         # qxMax and qyMax: x and y maximum dimension in position space of hypercube
         # pxMax and pyMax: px and py maximum dimension in momentum space of hupercube
@@ -67,16 +67,22 @@ class SwarmTracer:
         bounds=np.asarray([[-qyMax,qyMax],[-qzMax,qzMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
                            [-pyMax,pyMax],[-pzMax,pzMax]])
 
+        if apetureRadius is not None:
+            #one can estimate how many particle will be removed by using the cylinderical apeture. Then add this many
+            #back to the total number to try and hit the desired amount. This probably only works if the apeture is smaller
+            #than qyMax and qzMax
+            frac=np.pi*apetureRadius**2 /(2*qyMax*2*qzMax) #the ratio of the are of the circle to the cross section
+            if frac <1: #only add more if the apeture reduces the total amount
+                num=int(num/frac)
 
         if sameSeed==True:
             np.random.seed(42)
         if upperSymmetry==True:
             bounds[1][0]=0.0 #don't let point be generarted below z=0
 
-
-        x=0.0
+        x=0.0 #all particles have same x position of 0,0
         swarm = Swarm()
-        if cornerPoints==True:
+        if cornerPoints==True: #placing points at corner of hypercube
             XiArr=np.asarray(np.meshgrid(*bounds)).T.reshape(-1,bounds.shape[0])
             for Xi in XiArr:
                 q = np.append(x, Xi[:2])
@@ -101,16 +107,14 @@ class SwarmTracer:
             q = np.append(x, Xi[:2])
             p = Xi[2:]
 
-            if cylinderivalApeture is not None:
+            if apetureRadius is not None:
                 y,z=Xi[:2]
-                if np.sqrt(y**2+z**2)<cylinderivalApeture:
+                if np.sqrt(y**2+z**2)<apetureRadius:
                     swarm.add_Particle(qi=q, pi=p)
                 else:
                     pass
             else:
                 swarm.add_Particle(qi=q,pi=p)
-
-
 
         np.random.seed(int(time.time()))  # re randomize
         return swarm
@@ -239,7 +243,7 @@ class SwarmTracer:
                 # is not important
                 swarm.particles[i] = results[i][1]
         return swarm
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numParticles=1000, parallel=False,
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numParticles=2000, parallel=False,
                                             upperSymmetry=False,labFrame=True,h=1e-5,clipForNextApeture=True,fastMode=True):
         # this method generates a cloud of particles in phase space at the output of the combiner. The cloud is traced
         #throguh the combiner assuming it is a cloud being loaded, not already circulating. The returned particles are in

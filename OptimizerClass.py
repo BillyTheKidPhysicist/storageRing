@@ -17,7 +17,6 @@ import time
 import scipy.interpolate as spi
 import scipy.spatial as sps
 import matplotlib.pyplot as plt
-import pySOT as ps
 from ParaWell import ParaWell
 from SwarmTracer import SwarmTracer
 import globalMethods as gm
@@ -40,7 +39,7 @@ class phaseSpaceInterpolater:
         for i in range(X.shape[1]): #loop through dimensions
              self.xBounds.append([self.X[:,i].min(),self.X[:,i].max()])
         self.xBounds=np.asarray(self.xBounds)
-        self.interpolater=spi.NearestNDInterpolator(self.X, self.Y,rescale=True,tree_options={'copy_data':True})#spi.LinearNDInterpolator(self.X,self.Y,rescale=True)###
+        self.interpolater=spi.NearestNDInterpolator(self.X, self.Y,rescale=True,tree_options={'copy_data':True})#spi.LinearNDInterpolator(self.X,self.Y,rescale=True)####
     def build(self):
         #some method, mostly the ones that use qhull, require the function to be called to build, which can take a while.
         #I would rather do that here
@@ -86,10 +85,11 @@ class LatticeOptimizer:
         #space
     def update_Lattice(self,X):
         #Update the various paremters in the lattice and injections that are variable
+        #X: lattice parameters in the form of an iterable
         self.lattice.elList[2].fieldFact = X[0]
         self.lattice.elList[4].fieldFact = X[1]
-    def compute_Phase_Space_Map_Function(self,X,swarmInitial,swarmCombiner):
-        #return a function that returns a value for mnumber of revolutions at a given point in phase space. The phase
+    def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
+        #return a function that returns a value for number of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
         #so the swarm is centered at the origin in the combiner
         #X: arguments to parametarize lattice
@@ -100,24 +100,16 @@ class LatticeOptimizer:
         self.update_Lattice(X)
         phaseSpacePoints=[] #holds the coordinates of the particles in phase space at the combiner output
         revolutions=[] #values of revolution for each particle in swarm
-
-
         swarmTraced=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,fastMode=False)
-
-        for i in range(swarmInitial.num_Particles()):
-            q = swarmInitial.particles[i].qi.copy()[1:] #only y and z. x is the same
-            p = swarmInitial.particles[i].pi.copy()
-
-            Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum
-
+        for i in range(swarmTraced.num_Particles()):
+            q = swarmTraced.particles[i].qi.copy()[1:] #only y and z. x is the same all (0)
+            p = swarmTraced.particles[i].pi.copy()
+            Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum (y,z,px,py,pz)
             phaseSpacePoints.append(Xi)
             revolutions.append(swarmTraced.particles[i].revolutions)
-
         print(swarmTraced.survival_Rev(),swarmTraced.longest_Particle_Life_Revolutions())
-
-        apeture=self.lattice.elList[self.lattice.combinerIndex+1].ap
+        apeture=self.lattice.elList[self.lattice.combinerIndex+1].ap #apeture of next element
         latticePhaseSpaceFunc=phaseSpaceInterpolater(np.asarray(phaseSpacePoints), revolutions,apeture)
-
         return latticePhaseSpaceFunc
 
 
@@ -258,13 +250,14 @@ class LatticeOptimizer:
             while (loops < 10):  # try to force the optimizer to pick another point if there are duplicates
                 if np.any(np.sum((np.asarray(self.skoptModel.Xi) - np.asarray(XSample)) ** 2, axis=1) == 0):  # if any duplicate
                     # points
+                    print('DUPLICATE POINT', XSample)
                     self.skoptModel.acq_func_kwargs['xi'] = self.skoptModel.acq_func_kwargs['xi'] * 2 #increase the required
                     #improvement. Eventually this will force the model to make a more random guess
                     self.skoptModel.update_next()
                     XSample = self.skoptModel.ask()
                     loops += 1
                     self.xiResetCounter=0 #set the counter that will count up to xiReset before resetting xi
-                    print('DUPLICATE POINTS', XSample,'NEW POINTS',XSample)
+                    print('NEW POINT',XSample)
                 else: #if no duplicates move on
                     break
             if loops == 9: #failed
@@ -273,32 +266,29 @@ class LatticeOptimizer:
                 #changed)
                 self.xiResetCounter+=1
                 if self.xiResetCounter==xiReset:
-                    print('xi was reset')
                     self.skoptModel.acq_func_kwargs['xi'] = self.xi
                     self.xiResetCounter=0
             print(self.skoptModel.acq_func_kwargs['xi'] )
         return XSample
 
 
-    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=5000,pMax=5e0,returnBestSwarm=False,parallel=False,
+    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=30000,pMax=5e0,returnBestSwarm=False,parallel=False,
                                          maxEvals=100,bounds=None,precision=10e-3):
         self.h=h
         self.T=T
         #make a swarm that whos position spans the next element's input
         qyMax=self.lattice.elList[self.lattice.combinerIndex+1].ap
         qzMax=qyMax
-        pxMax=1.1
+        pxMax=1.05
         #now estimate the maximum possible transverse velocity
         deltav=(self.lattice.v0Nominal*qyMax/self.lattice.combiner.Lo)
         pyMax=deltav
         pzMax=deltav
-
-
-        #TODO: INITIALIZE A CIRCULAR SWARM
-        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyMax,qzMax,pxMax,pyMax,pzMax, numParticles,
-                                                                            cylinderivalApeture=qyMax)
-
+        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyMax, qzMax, pxMax, pyMax, pzMax, numParticles,
+                                                                            apetureRadius=qyMax)
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
+
+        self.compute_Phase_Space_Map_Function([.17,.3],swarmCombiner)
 
 
         if bounds is None:
@@ -325,7 +315,7 @@ class LatticeOptimizer:
                 XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
             print('start lattice tracing')
             t=time.time()
-            func = self.compute_Phase_Space_Map_Function(XNew, swarmInitial, swarmCombiner)
+            func = self.compute_Phase_Space_Map_Function(XNew,swarmCombiner)
             print('done mode matching',time.time()-t)
             gm.lattice=self.lattice
             gm.func=func
