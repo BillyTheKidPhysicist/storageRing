@@ -25,11 +25,11 @@ def get_Lattice(trackPotential=True):
     rp = .0125
     Llens1 = .15  # lens length before drift before combiner inlet
     Llens2 = .3
-    Llens3 =0.6672768486245266
+    Llens3 =0.6660736971880906
     Lcap = 0.01875
     K0 = 12000000  # 'spring' constant of field within 1%
-    rb1 =0.9991975800489266# 0.9987085104809762
-    rb2 = 1.0011081435099625#1.0004783330494842
+    rb1 = 0.9991839560717193
+    rb2 = 1.0011135734421053
     numMagnets1 = 110
     numMagnets2 = 110
     rOffsetFact = 1.00125
@@ -37,14 +37,14 @@ def get_Lattice(trackPotential=True):
     lattice.add_Combiner_Sim(fileCombiner, sizeScale=1.0)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens2)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm, Lcap, rp,
-                                                  K0, numMagnets1, rb1, extraSpace, yokeWidth, rOffsetFact)
+                                                   K0, numMagnets1, rb1, extraSpace, yokeWidth, rOffsetFact)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens3)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
-                                                  K0,
-                                                  numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
-    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=True,buildLattice=True)
+                                                   K0,
+                                                   numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
+    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=False,buildLattice=True)
     #print(lattice.solve_Combiner_Constraints())
-    #lattice.show_Lattice()
+    lattice.show_Lattice()
     return lattice
 
 #optimizer=None
@@ -54,9 +54,21 @@ def compute_Sol(h,Revs,maxEvals):
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
+    qi=np.asarray([-.1-1e-15,0.0,0.0])
+    particle=Particle(qi=qi)
+    particleTracer=ParticleTracer(lattice)
+    print('----------trace--------------')
+    particleTracer.trace(particle,1e-7,.002)
+    #particle.plot_Energies()
+    particle.plot_Position()
+    #1e-6: -5e-7
+    #5e-7: -4.3e-7
+    #3e-7
+    #1e-7
 
 
-    optimizer=LatticeOptimizer(lattice)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
-    return sol
-#compute_Sol(1e-5,100.0,20)
+    lattice.show_Lattice(particle=particle,showTraceLines=True)
+    # optimizer=LatticeOptimizer(lattice)
+    # sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
+    #return sol
+compute_Sol(1e-5,100.0,20)

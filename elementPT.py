@@ -58,8 +58,8 @@ class Element:
         self.r0=None #coordinates of center of bender, minus any caps
         self.ROut=None #2d matrix to rotate a vector out of the element's reference frame
         self.RIn = None #2d matrix to rotate a vector into the element's reference frame
-        self.r1=None #3D coordinates of beginning (clockwise sense) of element
-        self.r2=None #3D coordinates of ending (clockwise sense) of element
+        self.r1=None #3D coordinates of beginning (clockwise sense) of element in lab frame
+        self.r2=None #3D coordinates of ending (clockwise sense) of element in lab frame
         self.SO = None #the shapely object for the element. These are used for plotting, and for finding if the coordinates
         #are inside an element that can't be found with simple geometry
         self.ang=0 #bending angle of the element. 0 for lenses and drifts
@@ -320,7 +320,7 @@ class CombinerIdeal(Element):
         self.Lm=Lm*self.sizeScale
         self.La=None #length of segment between inlet and straight section inside the combiner. This length goes from
         #the center of the inlet to the center of the kink
-        self.Lb=None #length of straight section after the kink after the inlet
+        self.Lb=None #length of straight section after the kink after the inlet actuall inside the magnet
         self.c1=c1/self.sizeScale
         self.c2=c2/self.sizeScale
         self.space=0 #space at the end of the combiner to account for fringe fields
@@ -350,53 +350,59 @@ class CombinerIdeal(Element):
         self.La = self.ap * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb #TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
 
-    def compute_Input_Angle_And_Offset(self,h=1e-6,lowField=True):
-        #TODO: CAN i GET RID OF THIS LIMIT STUFF CLEANLY?
-
+    def compute_Input_Angle_And_Offset(self,h=1e-7,lowField=True):
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
+        #NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
+        #to go to zero (finite field space) so the the particle will violate conservation of energy
         #limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
         #length, but for the simulated magnets, it's that plus twice the length at the ends.
         #h: timestep
         #lowField: wether to model low or high field seekers
-        print('SOMETHING DOES NOT MAKE SENSE HERE. This needs to follow the same rules as when in the lattice.')
-        q = np.asarray([0.0, 0.0, 1e-3])
+        q = np.asarray([0.0, 0.0, 0.0])
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
-        tempList=[] #Array that holds particle coordinates traced through combiner. This is used to find lenght
+        coordList=[] #Array that holds particle coordinates traced through combiner. This is used to find lenght
         # #of orbit.
-        xList=[]
-        yList=[]
-        test=[]
+        #xList=[]
+        #yList=[]
+        #test=[]
+
         if lowField==True:
             force=self.force
         else:
             force = lambda x: -self.force(x)
         limit=self.Lm+2*self.space
+
+        forcePrev=force(q) #recycling the previous force value cut simulation time in half
         while True:
-            F = force(q)
+            F = forcePrev
+            F[2]=0.0 #exclude z component, ideally zero
             a = F
             q_n = q + p * h + .5 * a * h ** 2
             F_n = force(q_n)
+            F_n[2]=0.0
             a_n = F_n  # accselferation new or accselferation sub n+1
             p_n = p + .5 * (a + a_n) * h
-            if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
+            if q_n[0]>limit:  # if overshot, go back and walk up to the edge assuming no force
                 dr = limit - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
-                tempList.append(q)
+                coordList.append(q)
                 break
-            #test.append(self.magnetic_Potential(q))
+            #test.append(npl.norm(F))#self.magnetic_Potential(q))
             #xList.append(q[0])
             #yList.append(q[1])
+
             q = q_n
             p = p_n
-            tempList.append(q)
+            forcePrev=F_n
+            coordList.append(q)
         #plt.plot(xList,test)
         #plt.grid()
         #plt.show()
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
-        return outputAngle, outputOffset,np.asarray(tempList)
+        return outputAngle, outputOffset,np.asarray(coordList)
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew=q.copy()
         qNew = qNew - self.r2
@@ -485,25 +491,25 @@ class CombinerSim(CombinerIdeal):
 
         #TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset() #0.07891892567413786
-
         #to find the length
         self.Lo = self.compute_Trajectory_Length(qTracedArr)#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo #TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
+
+        y0=inputOffset
+        x0=self.space
+        theta=inputAngle
+        self.La=(y0+x0/np.tan(theta))/(np.sin(theta)+np.cos(theta)**2/np.sin(theta))
+
+
+
         self.inputOffset=inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard
-        # edge
-
-        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
-        self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
-        self.angLoad = inputAngleLoad
-        self.inputOffsetLoad = inputOffsetLoad
-
-        # the inlet length needs to be long enough to extend past the fringe fields
-        # TODO: MAKE EXACT, now it overshoots I think.
-        self.La = self.space + np.tan(self.ang) * self.apR
-        #self.Lo = self.La + self.Lb
+        # edge5
+        #inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
+        #self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
+        #self.angLoad = inputAngleLoad
+        #self.inputOffsetLoad = inputOffsetLoad
         self.data=None #to save memory and pickling time
-
     def compute_Trajectory_Length(self, qTracedArr):
         #TODO: CHANGE THAT X DOESN'T START AT ZERO
         #to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
@@ -518,6 +524,7 @@ class CombinerSim(CombinerIdeal):
         return Lo
     def force(self,q):
         #this function uses the symmetry of the combiner to extract the force everywhere.
+
         qNew=q.copy()
         xFact=1 #value to modify the force based on symmetry
         zFact=1
@@ -534,6 +541,7 @@ class CombinerSim(CombinerIdeal):
         self.F[0] = xFact*self.FxFunc(*qNew)
         self.F[1] = self.FyFunc(*qNew)
         self.F[2] = zFact*self.FzFunc(*qNew)
+
         return self.F
     def magnetic_Potential(self,q):
         #this function uses the symmetry of the combiner to extract the magnetic potential everywhere.

@@ -377,10 +377,14 @@ class ParticleTracerLattice:
                 q5=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
                 q6 = np.asarray([0, -apL])  # bottom left when theta=0
                 points=[q1,q2,q3,q4,q5,q6]
-                el.Poop=Polygon(points)
+
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
                 el.SO=Polygon(points)
+                # plt.plot(*el.SO.exterior.xy)
+                # plt.scatter(.297, 0.011996368601029202)
+                # plt.grid()
+                # plt.show()
             else:
                 raise Exception('No correct element provided')
     def catch_Errors(self,constrain,builLattice):
@@ -510,9 +514,8 @@ class ParticleTracerLattice:
                     #more than 360 deg
                     #to find location of output coords use vector that connects input and output in element frame
                     #and rotate it. Input is where nominal trajectory particle enters
-                    drx=-(el.Lb+(el.La-el.inputOffset*np.sin(el.ang))*np.cos(el.ang))
-                    dry=-(el.inputOffset+(el.La-el.inputOffset*np.sin(el.ang))*np.sin(el.ang))
-
+                    drx=-(el.Lm+2*el.space)#(el.Lb+(el.La-el.inputOffset*np.sin(el.ang))*np.cos(el.ang))
+                    dry=-(el.inputOffset+np.tan(el.ang) * el.space )#(el.inputOffset+(el.La-el.inputOffset*np.sin(el.ang))*np.sin(el.ang))
                     #drx = -(el.Lb+el.La *np.cos(el.ang))
                     #dry = -(el.La*np.sin(el.ang))
 
@@ -566,32 +569,6 @@ class ParticleTracerLattice:
             import warnings
             print(deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-    def compute_Input_Angle_And_Offset(self,el,h=1e-6):
-        #this computes the output angle and offset for a combiner magnet. These values need to be computed numerically
-        #for numerical fields. For consistency, this is also used on the analytic hard edge combiner.
-        q = np.asarray([0, 0, 0])
-        p=np.asarray([self.v0Nominal,0,0])
-        #xList=[]
-        #yList=[]
-        while True:
-            F=el.force(q)
-            a=F
-            q_n=q+p*h+.5*a*h**2
-            F_n=el.force(q_n)
-            a_n = F_n  # acceleration new or acceleration sub n+1
-            p_n=p+.5*(a+a_n)*h
-            if q_n[0]>el.Lb: #if overshot, go back and walk up to the edge assuming no force
-                dr=el.Lb-q[0]
-                dt=dr/p[0]
-                q=q+p*dt
-                break
-            #xList.append(q[0])
-            #yList.append(q[1])
-            q=q_n
-            p=p_n
-        outputAngle = np.arctan2(p[1], p[0])
-        outputOffset = q[1]
-        return outputAngle,outputOffset
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
@@ -636,85 +613,6 @@ class ParticleTracerLattice:
                     plot_Particle(particle,xMarkerSize=1000*revs/maxRevs)
                 else:
                     plot_Particle(particle)
-
         plt.grid()
         plt.gca().set_aspect('equal')
         plt.show()
-    def measure_Phase_Space_Survival(self,qMax,vtMax,vlMax,Lt,h=1e-5,parallel=False):
-        #this method populates and tests initial conditions in 5 deg phase space, there is always one particle at the origin
-        #qMax: maximum distance in position phase space
-        #vMax: maximum distance in velocity phase space
-        #vlMax: maximum distance in velocity space along the longitudinal direction
-        #num: number of point along each dimension in phase space. must be even so point doesn't end up at origin
-        #todo: reuse argslist!!!
-        #if num<=0:
-        #    raise Exception('NUM MUST BE NOT ZERO and POSITIVE')
-        qArr=np.linspace(-qMax,qMax,num=2)
-        vtArr=np.linspace(-vtMax,vtMax,num=2)
-        vlArr=np.linspace(-vlMax,vlMax,num=2)
-        tempArr = np.asarray(np.meshgrid(qArr,qArr, vtArr, vtArr,vlArr)).T.reshape(-1, 5) #qx,qy,vx,vy
-        argList = []
-        for arg in tempArr:
-            if arg[1]>0: #if the particle is in the upper half
-                qi = np.asarray([-1e-10, arg[0], arg[1]])
-                pi = np.asarray([-200+arg[4], arg[2], arg[3]])
-                argList.append((qi, pi, h, Lt / 200, True)) #position, velocity, timestep,total time, fastmode
-        elIndexArr=np.zeros(len(argList),dtype=int) #array of element indices where the particle was last
-        survivalArr=np.zeros(len(argList))
-        if parallel==True:
-            particleTracer=ParticleTracer(self)
-            results=particleTracer.multi_Trace(argList)
-            for i in range(survivalArr.shape[0]):
-                survivalArr[i]=results[i][0]/self.totalLength
-                elIndexArr[i]=results[i][2]
-        else:
-            i=0
-            for arg in argList:
-                qi=arg[0]
-                pi=arg[1]
-                particleTracer = ParticleTracer(self)
-                Lo,temp,currentElIndex=particleTracer.trace(qi,pi,h,Lt/200,fastMode=True)
-                survivalArr[i]=(Lo/self.totalLength)
-                elIndexArr[i]=currentElIndex
-                #q, p, qo, po, particleOutside,elIndex = particleTracer.trace(qi, pi, h, Lt / 200)
-                #self.show_Lattice(particleCoords=q[-1])
-                i+=1
-        return survivalArr,elIndexArr
-    def inject_Into_Combiner(self,args,qi,pi,h=1e-6):
-        #this models the phenomena of the particles originating at the focus of the big lens and traveling through
-        #a injecting lens, then through the combiner. This is done in two steps. This is all done in the lab frame
-        pass
-    def trace_Through_Injector(self,argList,Lo,Li,Bp=.25,rp=.03):
-        #models particles traveling through an injecting element
-        #for now a thin lens
-        #qi: intial particle coords
-        #vi: initial velocity coords
-        #Lo: object distance for injector
-        #Li: nominal image distance
-        K=2*self.u0*Bp/(rp**2*self.v0Nominal**2)
-
-        #now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix
-        CFunc= lambda x : np.cos(np.sqrt(K)*x)
-        SFunc = lambda x: np.sin(np.sqrt(K)*x)/np.sqrt(K)
-        CdFunc= lambda x: -np.sqrt(K)*np.sin(np.sqrt(K)*x)
-        SdFunc=lambda x :np.cos(np.sqrt(K)*x)
-        LiFunc= lambda x: -(CFunc(x)*Lo+SFunc(x))/(CdFunc(x)+SdFunc(x))
-        minFunc=lambda x: (LiFunc(x)-Li)**2
-        sol=spo.minimize_scalar(minFunc,method='bounded',bounds=(1e-3,.25))
-        Lm=sol.x
-
-        MLens=np.asarray([[CFunc(Lm),SFunc(Lm)],[CdFunc(Lm),SdFunc(Lm)]])
-        MLo=np.asarray([[1,Lo],[1,0]])
-        MLi=np.asarray([[1,Li],[1,0]])
-        MTot=MLi@MLens@MLo
-        for arg in argList:
-            q=arg[0]
-            p=arg[1]
-            qNew=q.copy()
-            pNew=p.copy()
-            qNew[0]=MTot[0,0]*q[0]+MTot[0,1]*p[0]
-            pNew[0]=MTot[1,0]*q[0]+MTot[1,1]*p[0]
-
-            pNew[1] = MTot[0, 0] * q[1] + MTot[0, 1] * p[1]
-            qNew[1] = MTot[1, 0] * q[1] + MTot[1, 1] * p[1]
-
