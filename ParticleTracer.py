@@ -10,7 +10,6 @@ import pathos as pa
 #from ParticleClass import Particle
 #from profilehooks import profile,coverage
 
-#todo: compute energy
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
     #ucAng=angle/(2*numMagnets)
@@ -62,7 +61,6 @@ class ParticleTracer:
             self.particle.log_Params()
 
     def trace(self,particle,h,T0,fastMode=False):
-        #TODO: HOW TO DEAL WITH PARTICLE BEING TRACED MULTIPLE TIMES. IS THAT SOMETHING I EVEN WANT TO DO EVER?
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -151,7 +149,7 @@ class ParticleTracer:
         el, qel = self.which_Element(q_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
         #not always checking if the particle is inside the element by looking at how far away it is from and edge and
         #calculating when I should check again the soonest
-        exitLoop=self.check_Element_And_Handle_Edge_Event(el)  #check if element has changed.
+        exitLoop=self.check_Which_Element_And_Handle_Edge_Event(el)  #check if element has changed.
         if exitLoop==True:
             self.elHasChanged = True
             return
@@ -164,8 +162,7 @@ class ParticleTracer:
         self.particle.force=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
-    def check_Element_And_Handle_Edge_Event(self,el):
-        #todo: change this to something that makes more sense
+    def check_Which_Element_And_Handle_Edge_Event(self, el):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when

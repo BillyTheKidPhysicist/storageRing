@@ -472,4 +472,3 @@ class SwarmTracer:
                 swarmNew.particles[i]=particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
 
         return swarmNew
-

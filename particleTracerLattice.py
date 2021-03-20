@@ -118,7 +118,6 @@ class ParticleTracerLattice:
         self.benderIndices.append(el.index)
         self.elList.append(el)
     def add_Bender_Ideal(self,ang,Bp,rb,rp,ap=None):
-        #TODO: remove keyword args
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
         #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -480,7 +479,6 @@ class ParticleTracerLattice:
                     #the bender can be tilted so this is tricky. This is a rotation about a point that is
                     #not the origin. First I need to find that point.
                     xc=xb+np.sin(el.theta)*el.rb #without including trajectory offset
-                    #TODO: INCLUDE TRAJECTORY OFFSET STRAIGHT AWAY?
                     yc=yb-np.cos(el.theta)*el.rb
                     #now use the point to rotate around
                     phi=-el.ang #bending angle. Need to keep in mind that clockwise is negative
