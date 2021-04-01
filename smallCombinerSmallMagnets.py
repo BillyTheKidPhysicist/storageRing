@@ -20,20 +20,20 @@ def get_Lattice(trackPotential=False):
     fileBenderInternalFringe2 = directory+'benderFringeInternal2.txt'
     file2DLens = directory+'lens2D.txt'
     file3DLens = directory+'lens3D.txt'
-    fileCombiner = directory+'combiner.txt'
+    fileCombiner = directory+'combinerV2.txt'
     yokeWidth = (.0254 * 5 / 8)/2.0
     extraSpace = 1e-3 #extra space on each ender between bender segments
     Lm = .0254/2.0 #hard edge length of segmented bender
     rp = .0125/2.0
     Llens1 = .15 #lens length before drift before combiner inlet
     Llens2 = .3
-    Llens3=0.6487670028507553
+    Llens3=0.6663098863755409
     Lcap=0.01875/2.0
     K0 = 47600000 #'spring' constant of field within 1%
-    rb1=1.0002351979519162
-    rb2=0.9987621230376847
-    numMagnets1=209
-    numMagnets2=207
+    rb1=0.9990882758945251
+    rb2=1.0010433561862029
+    numMagnets1=208
+    numMagnets2=208
     rOffsetFact=1.0005
 
 
@@ -49,7 +49,8 @@ def get_Lattice(trackPotential=False):
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm,Lcap,rp, K0,
                                                   numMagnets2, rb2,extraSpace, yokeWidth,rOffsetFact)
     #lattice.add_Bender_Ideal(None,1.0,1.0,rp)
-    lattice.end_Lattice(buildLattice=True,trackPotential=trackPotential)
+    lattice.end_Lattice(buildLattice=False,trackPotential=trackPotential)
+    print(lattice.solve_Combiner_Constraints())
     return lattice
 
 def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
@@ -60,7 +61,7 @@ def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
 
     #name='smallCombinerSmallMagnets_sub'
     #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals,bounds=bounds)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h, T, numParticles=numParticles, maxHardsEvals=maxEvals, bounds=bounds)
     return sol
 
     #name='smallCombinerSmallMagnets_Plot_Reduced'
@@ -91,3 +92,4 @@ def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
     # particle.plot_Energies()
     # particle.plot_Position()
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
+get_Lattice()

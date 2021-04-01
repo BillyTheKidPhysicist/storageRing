@@ -74,7 +74,7 @@ class LatticeOptimizer:
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
         self.stepsLens1=None #number of steps between min and max value to explore in parameter space
         self.stepsLens2=None # for lens 2
-        self.evals=0 #number of evaluations of the lattice particle tracing function so far
+        self.hardEvals=0 #number of evaluations of the lattice particle tracing function so far
         self.skoptModel=None #skopt model for use gaussian process minimization
         self.numInit=None #initial number of lattice tracing evaluations before asking the model for points
         self.xi=None #the value for skoptmodel to use to choose the next point. The next point must give this much
@@ -86,7 +86,7 @@ class LatticeOptimizer:
     def update_Lattice(self,X):
         #Update the various paremters in the lattice and injections that are variable
         #X: lattice parameters in the form of an iterable
-        self.lattice.elList[2].fieldFact = X[0]
+        self.lattice.elList[0].fieldFact = X[0]
         self.lattice.elList[4].fieldFact = X[1]
     def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
         #return a function that returns a value for number of revolutions at a given point in phase space. The phase
@@ -140,8 +140,7 @@ class LatticeOptimizer:
             #X lattice arguments
             #for the given configuraiton X and particle(s) return the maximum number of revolutions, or True for stable
             #or False for unstable
-            self.lattice.elList[2].fieldFact=X[0]
-            self.lattice.elList[4].fieldFact = X[1]
+            self.update_Lattice(X)
             revolutionsList=[]
             for particle in swarm:
                 particle=self.particleTracer.trace(particle.copy(),h,T,fastMode=True)
@@ -191,23 +190,23 @@ class LatticeOptimizer:
         if bounds is None:
             bounds = [(0.0, .5), (0.0, .5)]
 
-        stabilityFunc=self.compute_Revolution_Func_Over_Grid(bounds=bounds,qMax=qMax,
+        revolutionFunc=self.compute_Revolution_Func_Over_Grid(bounds=bounds,qMax=qMax,
                                                              numParticlesPerDim=numParticlesPerDim, gridPoints=gridPoints,cutoff=cutoff,h=h)
         plotxArr=np.linspace(bounds[0][0],bounds[0][1],num=250)
         plotyArr = np.linspace(bounds[1][0], bounds[1][1], num=250)
         image=np.empty((plotxArr.shape[0],plotyArr.shape[0]))
         for i in range(plotxArr.shape[0]):
             for j in range(plotyArr.shape[0]):
-                image[j,i]=stabilityFunc(plotxArr[i],plotyArr[j])
+                image[j,i]=revolutionFunc(plotxArr[i],plotyArr[j])
 
         image=np.flip(image,axis=0)
         extent=[bounds[0][0],bounds[0][1],bounds[1][0],bounds[1][1]]
         plt.imshow(image,extent=extent)
 
-        plt.suptitle('Stability regions')
+        plt.suptitle(plotName)
         plt.title('Yellow indicates more stability, purple indicates more unstable')
-        plt.xlabel('Field strength multiplier')
-        plt.ylabel('Field strength multiplier')
+        plt.xlabel('Field strength of tunable 1')
+        plt.ylabel('Field strength of tunable 2')
         if savePlot==True:
             plt.savefig(plotName)
         if showPlot==True:
@@ -227,24 +226,17 @@ class LatticeOptimizer:
 
         #todo: catch duplicating random points
         xiReset=5 #this many evaluations after a duplicate point before resetting to a lower value
-        if self.evals <= self.numInit - 1:  # if still initializing the model
-            if len(self.randomSampleList)==0: #either the first evaluation or the list has been exhausted
-                points=5*self.numInit #from experience I know that at least this amount is requied based on how sparse
-                #expensive evaluations are
-                r = np.sqrt(2 * (1.0/points) / np.pi) #this is used to get near the required amount of points with
-                #poission disc method, which does not give an exact number of points
-                samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0,1.0]), k=100, radius=r)
-                np.random.shuffle(samples) #shuffle array in place
-                # convert to the integer value that the skopt model requires
-                samples[:,0]=samples[:,0]*self.stepsLens1
-                samples[:, 1] = samples[:, 1] * self.stepsLens2
-                samples=samples.astype(int)
-                self.randomSampleList=list(samples)
-            XSample=list(self.randomSampleList.pop()) #pop a value off the list. The value is removed and the list is
-            # shorter. model.tell requires a list so need to cast
+        if self.hardEvals <= self.numInit - 1:  # if still initializing the model
+            if len(self.randomSampleList)==0: #if the low discrepancy list has been exhausted
+                XSample=np.random.rand(2)
+                XSample[0]=XSample[0]*self.stepsLens1
+                XSample[1] = XSample[1]*self.stepsLens2
+            else:
+                XSample=list(self.randomSampleList.pop()) #pop a value off the list. The value is removed and the list is
+                # shorter. model.tell requires a list so need to cast
         else:
             XSample = self.skoptModel.ask()
-        if self.evals > self.numInit - 1:  # check if the optimizer is suggesting
+        if self.hardEvals > self.numInit - 1:  # check if the optimizer is suggesting
             # duplicate points, but only if have asked it, not a random value
             loops = 0
             while (loops < 10):  # try to force the optimizer to pick another point if there are duplicates
@@ -272,8 +264,8 @@ class LatticeOptimizer:
         return XSample
 
 
-    def maximize_Suvival_Through_Lattice(self,h,T,numParticles=30000,pMax=5e0,returnBestSwarm=False,parallel=False,
-                                         maxEvals=100,bounds=None,precision=10e-3):
+    def maximize_Suvival_Through_Lattice(self, h, T, numParticles=3000, pMax=5e0, returnBestSwarm=False, parallel=False,
+                                         maxHardsEvals=100, bounds=None, precision=10e-3):
         self.h=h
         self.T=T
         #make a swarm that whos position spans the next element's input
@@ -288,8 +280,8 @@ class LatticeOptimizer:
                                                                             apetureRadius=qyMax)
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
 
-        self.compute_Phase_Space_Map_Function([.17,.3],swarmCombiner)
 
+        swarm=self.swarmTracer.initialize_Swarm_At_Combiner_Output(.2,1.0,0.0)
 
         if bounds is None:
             bounds=[(0.0, .5), (0.0, .5)]
@@ -307,7 +299,6 @@ class LatticeOptimizer:
             raise Exception('THERE ARE NOT ENOUGH POINTS IN SPACE TO EXPLORE, MUST BE MORE THAN 1')
         boundsNorm = [(0, self.stepsLens1), (0, self.stepsLens2)]
         print('bounds',boundsNorm)
-        boundsInjector = [(.15, .25), (.5, 1.5), (-.1, .1)] # (LoMin,LoMax),(LiMin,LiMax),(LOffsetMin,LOffsetMax)
 
         def min_Func(X):
             XNew = X.copy()
@@ -341,9 +332,25 @@ class LatticeOptimizer:
                 XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
             return stabilityFunc(XNew)
 
+        #generate random sample list. This really needs to be improved, I liked the feature where I added one point
+        #at a time but that requires using random numbers when this is exhausted
+        points = 10 * self.numInit  # from experience I know that at least this amount is requied based on how sparse
+        # expensive evaluations are
+        r = np.sqrt(2 * (1.0 / points) / np.pi)  # this is used to get near the required amount of points with
+        # poission disc method, which does not give an exact number of points
+        samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0, 1.0]), k=1000, radius=r)
+        plt.scatter(samples[:, 0], samples[:, 1])
+        np.random.shuffle(samples)  # shuffle array in place
+        # convert to the integer value that the skopt model requires
+        samples[:, 0] = samples[:, 0] * self.stepsLens1
+        samples[:, 1] = samples[:, 1] * self.stepsLens2
+        samples = samples.astype(int)
+        self.randomSampleList = list(samples)
+
+
         unstableCost = -1.5 * (self.lattice.totalLength / self.lattice.v0Nominal) / T  # typically unstable regions return an average
-        # of 1-2 revolution
-        self.numInit = int(maxEvals * .5)  # 50% is just random
+        # of 1 to 2 revolution
+        self.numInit = int(maxHardsEvals * .5)  # 50% is just random
         xiRevs = .25  # search for the next points that returns an imporvement of at least this many revs
         self.xi = (xiRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
         noiseRevs =1e-2 #small amount of noise to account for variability of results and encourage a smooth fit
@@ -355,19 +362,19 @@ class LatticeOptimizer:
 
 
 
-        self.evals = 0
+        self.hardEvals = 0
         t = time.time()
 
         print('starting')
-        while (self.evals < maxEvals): #TODO: REMOVE DUPLICATE CODE
-            print(self.evals)
+        while (self.hardEvals < maxHardsEvals):
+            print(self.hardEvals)
             XSample=self.generate_Next_Point()
             print(XSample)
             if stability_Func_Wrapper(XSample) == True:  # possible solution
                 print('stable')
                 cost = min_Func(XSample)
                 self.skoptModel.tell(XSample, cost)
-                self.evals += 1
+                self.hardEvals += 1
 
             else:  # not possible solution
                 self.skoptModel.tell(XSample, unstableCost+np.random.rand()*noiseRevs) #add a little random noise to help

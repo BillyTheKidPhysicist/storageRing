@@ -20,18 +20,18 @@ def get_Lattice(trackPotential=False):
     fileBenderInternalFringe2 = directory+'benderFringeInternal2.txt'
     file2DLens = directory+'lens2D.txt'
     file3DLens = directory+'lens3D.txt'
-    fileCombiner = directory+'combiner.txt'
+    fileCombiner = directory+'combinerV2.txt'
     yokeWidth = (.0254 * 5 / 8)/2.0
     extraSpace = 1e-3 #extra space on each ender between bender segments
     Lm = .0254/2.0 #hard edge length of segmented bender
     rp = .0125/2.0
     Llens1 = .15 #lens length before drift before combiner inlet
     Llens2 = .3
-    Llens3=0.9211288392979132
+    Llens3=0.9635503684115658
     Lcap=0.01875/2.0
     K0 = 47600000 #'spring' constant of field within 1%
-    rb1=0.9992389431496942
-    rb2=1.00092917243572
+    rb1=0.9992202314659981
+    rb2=1.000910885530456
     numMagnets1=208
     numMagnets2=208
     rOffsetFact=1.0005
@@ -60,7 +60,7 @@ def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
 
     #name='smallCombinerSmallMagnets_sub'
     #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals,bounds=bounds)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h, T, numParticles=numParticles, maxHardsEvals=maxEvals, bounds=bounds)
     return sol
 
 
@@ -74,4 +74,3 @@ def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
     # qoArr=particle.qoArr
     # EArr=particle.EArr
     # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
-compute_Sol(5e-6,50,2000,50)

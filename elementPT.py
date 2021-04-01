@@ -524,10 +524,10 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard
         # edge5
-        # inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
-        # self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
-        # self.angLoad = inputAngleLoad
-        # self.inputOffsetLoad = inputOffsetLoad
+        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
+        self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
+        self.angLoad = inputAngleLoad
+        self.inputOffsetLoad = inputOffsetLoad
         self.data = None  # to save memory and pickling time
 
     def compute_Trajectory_Length(self, qTracedArr):

@@ -43,7 +43,25 @@ class SwarmTracer:
             else:
                 swarm.add_Particle(qi, pi)
         return swarm
+    def initialize_Observed_Swarm_In_Phase_Space(self,numParticles=10000,sameSeed=True):
+        #generate a cloud in phase space from observed data from the experiment. This loads saved data because it takes
+        #a while to generate these values. The returned particle are randomly sampled from the full cloud to achieve
+        #the desired number of particles
+        #numParticles: Number of particles sampled. Maximum of about 20000 (depends on the files exact amount).
+        #sameSeed: Wether to reuse the same seed for reproducible results
+        #returns an array of particle coordinates as [[x,y,pz,px,py],....]
 
+        fileName= 'phaseSpaceCloud.dat'
+        data=np.loadtxt(fileName)
+        maxParticles=data.shape[0]
+        if numParticles>maxParticles:
+            raise Exception('You have requested more particles than are available in the file')
+        if sameSeed==True:
+            np.random.seed(42)
+        np.random.shuffle(data)
+        indexArr=np.random.choice(np.arange(data.shape[0]),size=numParticles)
+        particleCoords=data[indexArr]
+        return particleCoords
     def initalize_Random_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
                                               cornerPoints=True, apetureRadius=None):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
@@ -243,7 +261,7 @@ class SwarmTracer:
                 # is not important
                 swarm.particles[i] = results[i][1]
         return swarm
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numParticles=2000, parallel=False,
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numParticles=1000, parallel=False,
                                             upperSymmetry=False,labFrame=True,h=1e-5,clipForNextApeture=True,fastMode=True):
         # this method generates a cloud of particles in phase space at the output of the combiner. The cloud is traced
         #throguh the combiner assuming it is a cloud being loaded, not already circulating. The returned particles are in
@@ -299,7 +317,7 @@ class SwarmTracer:
         # return p_n+1
         return p + .5 * (F + F_New) * h
 
-    def step_Particle_Through_Combiner(self, particle, h=1e-5,fastMode=True):
+    def step_Particle_Through_Combiner(self, particle, h=1e-5,fastMode=False):
         #this method traces the particle through the combiner. First the particle is moved up the combiner input. Then
         #it is checked if it clipping in which case the algorithm is stopped. The particle is then traced through the
         #combiner checking for clipping at each point.
@@ -309,13 +327,17 @@ class SwarmTracer:
         if fastMode==False:
             particle.log_Params()
 
-        #todo: this method of moving particles up to the combiner ignores the tilt in the combiner input.
-        dx = (self.lattice.combiner.space * 2 + self.lattice.combiner.Lm) - q[0]
-        dt = dx / p[0]
-        q += dt * p
+        #There is a line parallel to the input of the cominer on the loading side. Walk the particles up to that point.
+        m=-1/np.tan(self.lattice.combiner.angLoad)
+        xi=(self.lattice.combiner.space * 2 + self.lattice.combiner.Lm)
+        yi=self.lattice.combiner.inputOffsetLoad
+        b=yi-m*xi
+        dt=(m*q[0]+b-q[1])/(p[1]-m*p[0])
+        q=q+dt*p #particle is walked up to the line now
         particle.q = q
         if fastMode==False:
             particle.log_Params()
+
         force = self.lattice.combiner.force
         apL = self.lattice.combiner.apL
         apR = self.lattice.combiner.apR
@@ -325,8 +347,10 @@ class SwarmTracer:
             #return True if the particle is clipped. remember combiner apeture is not cylinderical
             if not -apz<q[2]<apz:  # if clipping in z direction
                 return True
-            elif not -apL<q[1]<apR:
-                return True
+            elif q[0]<self.lattice.combiner.Lm+self.lattice.combiner.space: #only check if the particle is in the straight
+                #section
+                if not -apL<q[1]<apR:
+                    return True
             else:
                 return False
 
@@ -342,7 +366,7 @@ class SwarmTracer:
             else:
                 F = -force(q)  # force is negative for high field seeking
             q_n = self.fast_qNew(q, F, p, h)  # q + p * h + .5 * F * h ** 2
-            if q_n[0] < -1e-3:  # if overshot, go back and walk up to the edge assuming no force
+            if q_n[0] < 0:  # if overshot, go back and walk up to the edge assuming no force
                 dr = - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
@@ -350,7 +374,6 @@ class SwarmTracer:
                 particle.p = p
                 break
             F_n = -force(q_n)  # force is negative for high field seeking
-
             p_n = self.fast_pNew(p, F, F_n, h)  # p + .5 * (F + F_n) * h
             q = q_n
             p = p_n
@@ -472,3 +495,5 @@ class SwarmTracer:
                 swarmNew.particles[i]=particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
 
         return swarmNew
+# swarmTracer=SwarmTracer(None)
+# swarmTracer.initialize_Observed_Swarm_In_Phase_Space()

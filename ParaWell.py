@@ -121,19 +121,36 @@ class ParaWell:
             else:
                 raise Exception('NO PROPER NAME PROVIDED')
             return wrapper
-    def parallel_Problem(self,func,argsList,numWorkers=pa.helpers.cpu_count(),mutableFunction=True):
+    def prepare_ArgsList_And_Wrapper(self,argsList,numEvals,func,parallelType):
+        #return the properly wrangled argslist and wrapper
+        if (argsList is None and numEvals is None) or argsList is not None and numEvals is not None:
+            raise Exception('You must use either argsList or numEvals, but not both or neither')
+
+        if argsList is not None:
+            argsList=self.prepare_ArgsList(argsList)
+            wrapper=self.prepare_Wrapper(func,parallelType)
+            return argsList,wrapper
+        else: #if numevals is not None
+            tempList=list(np.zeros(numEvals))
+            argsList=self.prepare_ArgsList(tempList)
+            funcNew=lambda x: func()
+            wrapper=self.prepare_Wrapper(funcNew,parallelType)
+            return argsList,wrapper
+    def parallel_Problem(self,func,argsList=None,numEvals=None,numWorkers=pa.helpers.cpu_count(),mutableFunction=True,
+                         onlyReturnResults=False):
         # solve func in parallel over the provided arguments argsList. Returned result is in same order as argsList
-        #
-        # :param func: Function that is to be solved in parallel.
-        # :param argsList: List of arguments to be work on in parallel with func.
-        # :param numWorkers: Number of processes to work on the problem in parallel with. Defaults to the available number
-        # of processors (which may be double from hyper threading)
-        # :param mutableFunction: Some functions may be considered mutable which here I mean that the function may depend
-        # on other parameters which will change from call to call. If using a posix system global variables are used to
-        # improve performance but they will prevent functions from being able to reflect these changes.
-        # :return: list of tuples like (argument,result) with length len(argslist).
-        argsList=self.prepare_ArgsList(argsList) #add marker to each argument for keeping order
-        wrapper=self.prepare_Wrapper(func,'STANDARD') 
+
+        # if argsList is not None, then the arguments of argsList are fed to func. If numEvals is not none, then func
+        # is assumed to have no arguments and is evaluated numEvals times.
+        # func: the function that is being fed the arguments
+        # argsList: a list of arguments to work on
+        # numEvals: number of times to run a function
+        # numWorkers: processes to work on the problem
+        # onlyReturnResults: If True, don't couple the arguments with the results. The returned list would then be
+        # shape (m) where m is the number of results. If false then it's shape (m,2)
+        # returns a list of tuples of the arguments paired with the results as [(argument1,result1),etc]
+        # if onlyReturnResults=False. if onlyReturnResults=True then a list of the results like [result1,result2,etc]# :return: list of tuples like (argument,result) with length len(argslist).
+        argsList,wrapper=self.prepare_ArgsList_And_Wrapper(argsList,numEvals,func,'STANDARD')
         self.manage_Pool(numWorkers)
         jobs = []  # list of jobs. jobs are distributed across processors
         results = []  # list to hold results of particle tracing.
@@ -142,11 +159,12 @@ class ParaWell:
             jobs.append(self.pool.apipe(wrapper, arg))  # create job for each argument in arglist, ie for each particle
         for job in jobs:
             results.append(job.get())  # get the results. wait for the result in order given
-        results=self.wrangle_Results(results,'STANDARD')
+        results=self.wrangle_Results(results,onlyReturnResults,'STANDARD')
         if mutableFunction==True:
             self.pool.clear()
         return results
-    def parallel_Chunk_Problem(self,func,argsList,numWorkers=pa.helpers.cpu_count(),mutableFunction=True):
+    def parallel_Chunk_Problem(self,func,argsList=None,numEvals=None,numWorkers=pa.helpers.cpu_count(),mutableFunction=True,
+                               onlyReturnResults=False):
         #solve a small problem in parallel. The returned resuts is in the same order as argsList 
         # the basic logic is
         #0: tag arguments for sorting
@@ -155,12 +173,9 @@ class ParaWell:
         #3: use pathos to work on each chunk
         #4: stitch the results together and sort
 
-        #func: the function that is being fed the arguments
-        #argsList: a list of arguments to work on
-        # numWorkers: processes to work on the problem
-        #returns a list of tuples of the arguments paired with the results as (argument,result)
-        #print(argsList)
-        argsList=self.prepare_ArgsList(argsList)
+        #see parallel_Problem for explanation of arguments
+
+        argsList, wrapper = self.prepare_ArgsList_And_Wrapper(argsList, numEvals, func, 'CHUNK')
         argChunkList=[]
         for i in range(numWorkers):
             argChunkList.append([])
@@ -171,7 +186,6 @@ class ParaWell:
                 j=0
             else:
                 j+=1
-        wrapper=self.prepare_Wrapper(func,'CHUNK')
         self.manage_Pool(numWorkers)
         jobs = []  # list of jobs. jobs are distributed across processors
         chunkResults = []  # list to hold results of particle tracing.
@@ -179,11 +193,11 @@ class ParaWell:
             jobs.append(self.pool.apipe(wrapper,chunk))  # create job for each argument in arglist, ie for each particle
         for job in jobs:
             chunkResults.append(job.get())  # get the results. wait for the result in order given
-        resultsList=self.wrangle_Results(chunkResults,'CHUNK')
+        resultsList=self.wrangle_Results(chunkResults,onlyReturnResults,'CHUNK')
         if mutableFunction==True:
             self.pool.clear()
         return resultsList
-    def wrangle_Results(self,resultsList,parallelType):
+    def wrangle_Results(self,resultsList,onlyReturnResults,parallelType):
         #Shape and order the results.
         newResultsList=[]
         markerList=[] #list of integers of positions.
@@ -201,7 +215,10 @@ class ParaWell:
             raise Exception('NOT A VALID CHOICE')
         sortIndices = np.argsort(np.asarray(markerList))
         for index in sortIndices:
-            newResultsList.append(tempArgsList[index]) #add (arg,result) in order to new list
+            if onlyReturnResults==True:
+                newResultsList.append(tempArgsList[index][1])  # add result in order to new list
+            else:
+                newResultsList.append(tempArgsList[index]) #add (arg,result) in order to new list
         return newResultsList
     def prepare_ArgsList(self, argsList):
         #this method marks each argument so the results can be sorted later

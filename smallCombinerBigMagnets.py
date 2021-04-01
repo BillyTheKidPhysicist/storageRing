@@ -33,8 +33,14 @@ def get_Lattice(trackPotential=True):
     numMagnets1 = 110
     numMagnets2 = 110
     rOffsetFact = 1.00125
+
+    # Llens2New=Llens2-LDrift
+
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
+
+
     lattice.add_Combiner_Sim(fileCombiner, sizeScale=1.0)
+    #lattice.add_Drift(Llens2)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens2)
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend1, fileBender1Fringe, fileBenderInternalFringe1, Lm, Lcap, rp,
                                                    K0, numMagnets1, rb1, extraSpace, yokeWidth, rOffsetFact)
@@ -42,9 +48,9 @@ def get_Lattice(trackPotential=True):
     lattice.add_Bender_Sim_Segmented_With_End_Cap(fileBend2, fileBender2Fringe, fileBenderInternalFringe2, Lm, Lcap, rp,
                                                    K0,
                                                    numMagnets2, rb2, extraSpace, yokeWidth, rOffsetFact)
-    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=False,buildLattice=True)
+    lattice.end_Lattice(trackPotential=trackPotential,enforceClosedLattice=True,buildLattice=True)
     #print(lattice.solve_Combiner_Constraints())
-    lattice.show_Lattice()
+    #lattice.show_Lattice()
     return lattice
 
 #optimizer=None
@@ -54,21 +60,16 @@ def compute_Sol(h,Revs,maxEvals):
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
-    qi=np.asarray([-.1-1e-15,0.0,0.0])
-    particle=Particle(qi=qi)
-    particleTracer=ParticleTracer(lattice)
-    print('----------trace--------------')
-    particleTracer.trace(particle,1e-7,.002)
-    #particle.plot_Energies()
-    particle.plot_Position()
-    #1e-6: -5e-7
-    #5e-7: -4.3e-7
-    #3e-7
-    #1e-7
+    optimizer=LatticeOptimizer(lattice)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h, T, maxHardsEvals=maxEvals)
+    return sol
 
+lattice=get_Lattice()
+optimizer=LatticeOptimizer(lattice)
+optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='stabilityPlot'+str(0),showPlot=False)
 
-    lattice.show_Lattice(particle=particle,showTraceLines=True)
-    # optimizer=LatticeOptimizer(lattice)
-    # sol=optimizer.maximize_Suvival_Through_Lattice(h,T,maxEvals=maxEvals)
-    #return sol
-compute_Sol(1e-5,100.0,20)
+# LDriftList=[2,4,6,8,10,12,14,16,18]
+# for LDrift in LDriftList:
+#     lattice=get_Lattice(LDrift*1e-2)
+#     optimizer=LatticeOptimizer(lattice)
+#     optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='stabilityPlot'+str(LDrift),showPlot=False)
