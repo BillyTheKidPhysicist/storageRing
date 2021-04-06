@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import skopt
 import poisson_disc
 import numpy as np
@@ -25,18 +26,31 @@ def lorentz(x,gamma):
 
 
 
-#samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0,1.0]),radius=.01,k=100)
-sampler=skopt.sampler.Sobol()
+numSamples=10000#final count will not be this value because of the sample reject method being used
+
 yzBound=apetureDiam/2
 bounds=[(-yzBound,yzBound),(-yzBound,yzBound)]
-samples=np.asarray(sampler.generate(bounds,100))
+#--------poisson disc sampling--------------------
+r = np.sqrt(2 * (1.0 / numSamples) / np.pi)  # this is used to get near the required amount of points with
+# poission disc method, which does not give an exact number of points
+samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0,1.0]),radius=r,k=100)
 np.random.shuffle(samples)
+samples[:,0]=samples[:,0]*(bounds[0][1]-bounds[0][0])+bounds[0][0]
+samples[:,1]=samples[:,1]*(bounds[1][1]-bounds[1][0])+bounds[1][0]
+# plt.scatter(samples[:,0],samples[:,1])
+# plt.show()
 
-# samples[:,0]=samples[:,0]*(bounds[1]-bounds[0])+bounds[0]
-# samples[:,1]=samples[:,1]*(bounds[1]-bounds[0])+bounds[0]
 
-#plt.scatter(samples[:,0],samples[:,1])
-#plt.show()
+
+
+
+#----------sobol sampling-----------------
+#
+# sampler=skopt.sampler.Sobol()
+# samples=np.asarray(sampler.generate(bounds,numSamples))
+# np.random.shuffle(samples)
+# plt.scatter(samples[:,0],samples[:,1])
+# plt.show()
 
 
 
@@ -61,18 +75,30 @@ positionArr=np.column_stack((xPos,positionArr))
 
 #--------momentum space--------
 #now use a multivariate gaussian to construct the momentum space sample before stitching together
-sigma0Arr=np.zeros((3,3))
-sigma0Arr[0,0]=sigmaLong0
-sigma0Arr[1,1]=sigmaTrans0
-sigma0Arr[2,2]=sigmaTrans0
+varianceArr=np.zeros((3, 3))
+varianceArr[0, 0]= sigmaLong0 ** 2
+varianceArr[1, 1]= sigmaTrans0 ** 2
+varianceArr[2, 2]= sigmaTrans0 ** 2
 meanArr=np.zeros(3)
 meanArr[0]=v0Nominal
 meanArr[1:]=0
-momentumSamples=np.random.multivariate_normal(meanArr,sigma0Arr,size=len(acceptedList))
+momentumSamples=np.random.multivariate_normal(meanArr, varianceArr, size=len(acceptedList))
+print(np.std(momentumSamples[:,1]),np.std(positionArr[:,1]))
+# plt.hist(momentumSamples[:,0],bins=50)
+# plt.show()
+#
+# plt.hist(momentumSamples[:,1],bins=50)
+# plt.show()
+#
+# plt.hist(momentumSamples[:,2],bins=50)
+# plt.show()
 
 
 
-#save the results
+#save the results.
+#SAVE IN UNITS OF M AND M/S
+positionArr=positionArr*1e-3 #convert to meter from mm
 phaseSpaceCoords=np.column_stack((positionArr,momentumSamples)) #combine into 6d phase space coords
+print('Total number of particle generated:',phaseSpaceCoords.shape[0])
 np.savetxt('phaseSpaceCloud.dat',phaseSpaceCoords)
 

@@ -1,6 +1,6 @@
 import skopt
 import numba
-from profilehooks import profile
+# from profilehooks import profile
 from ParticleTracer import ParticleTracer
 #import black_box as bb
 import numpy.linalg as npl
@@ -43,25 +43,33 @@ class SwarmTracer:
             else:
                 swarm.add_Particle(qi, pi)
         return swarm
-    def initialize_Observed_Swarm_In_Phase_Space(self,numParticles=10000,sameSeed=True):
+    def initialize_Observed_Swarm_In_Phase_Space(self,numParticles=None,sameSeed=True):
         #generate a cloud in phase space from observed data from the experiment. This loads saved data because it takes
         #a while to generate these values. The returned particle are randomly sampled from the full cloud to achieve
         #the desired number of particles
-        #numParticles: Number of particles sampled. Maximum of about 20000 (depends on the files exact amount).
+        #numParticles: Number of particles sampled. Maximum of about 20000 (depends on the files exact amount). If None
+        #use all
         #sameSeed: Wether to reuse the same seed for reproducible results
         #returns an array of particle coordinates as [[x,y,pz,px,py],....]
 
         fileName= 'phaseSpaceCloud.dat'
         data=np.loadtxt(fileName)
         maxParticles=data.shape[0]
-        if numParticles>maxParticles:
+        if numParticles==None:
+            numParticles=maxParticles
+        elif numParticles>maxParticles:
             raise Exception('You have requested more particles than are available in the file')
-        if sameSeed==True:
+        if sameSeed==True: #use the same seed to get repeatable results
             np.random.seed(42)
         np.random.shuffle(data)
         indexArr=np.random.choice(np.arange(data.shape[0]),size=numParticles)
         particleCoords=data[indexArr]
-        return particleCoords
+        swarm=Swarm()
+        for coords in particleCoords:
+            swarm.add_Particle(qi=coords[:3],pi=coords[3:])
+        if sameSeed==True:
+            np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
+        return swarm
     def initalize_Random_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
                                               cornerPoints=True, apetureRadius=None):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
@@ -113,6 +121,7 @@ class SwarmTracer:
         sampler=skopt.sampler.Sobol()
         samples=sampler.generate(bounds,num)
 
+        #jittere coordinates to remoce patterns and use them to make particles to add to the swarm
         for sample in samples:
             y,z,px,py,pz=sample
             Xi=np.asarray([y,z,px,py,pz])
@@ -124,7 +133,6 @@ class SwarmTracer:
                     Xi[i] = bounds[i][1]-(Xi[i]-bounds[i][1])
             q = np.append(x, Xi[:2])
             p = Xi[2:]
-
             if apetureRadius is not None:
                 y,z=Xi[:2]
                 if np.sqrt(y**2+z**2)<apetureRadius:
@@ -133,8 +141,8 @@ class SwarmTracer:
                     pass
             else:
                 swarm.add_Particle(qi=q,pi=p)
-
-        np.random.seed(int(time.time()))  # re randomize
+        if sameSeed==True:
+            np.random.seed(int(time.time()))  # re randomize
         return swarm
 
     def initialize_Random_Swarm_At_Combiner_Output(self, qMax, pMax, num, upperSymmetry=False, sameSeed=True,pxMax=None):
@@ -158,23 +166,24 @@ class SwarmTracer:
             particle.p[:2] = particle.p[:2] @ R
             particle.q = particle.q + particle.p * 1e-12  # scoot particle into next element
         return swarm
-    def move_Swarm_To_Combiner_Output(self,swarm,scoot=True):
+    def move_Swarm_To_Combiner_Output(self,swarm,scoot=True,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
         #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed.
         #swarm: the swarm to move to output
         #scoot: if True, move the particles along a tiny amount so that they are just barely in the next element. Helpful
         #for the doing the particle tracing sometimes
-        swarmNew=swarm.copy()
+        if copySwarm==True:
+            swarm=swarm.copy()
 
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
-        for particle in swarmNew.particles:
+        for particle in swarm.particles:
             particle.q[:2] = particle.q[:2] @ R
             particle.q += r2
             particle.p[:2] = particle.p[:2] @ R
             if scoot==True:
                 particle.q+=particle.p*1e-10
-        return swarmNew
+        return swarm
     def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03, copySwarm=True):
         # models particles traveling through an injecting element, which is a simple ideal magnet. This model
         # has the object at the origin and the lens at y=0 and x>0. Particles end up on the output of the lens
@@ -218,7 +227,7 @@ class SwarmTracer:
             raise Exception("IMAGE LENGTH IS TOO SHORT")
         if LOffset > self.lattice.combiner.Lo / 2:
             raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
-    def inject_Swarm(self,swarm,Lo,Li,LOffset,labFrame=True,h=1e-5,parallel=False,fastMode=True):
+    def inject_Swarm(self,swarm,Lo,Li,LOffset,labFrame=True,h=1e-5,parallel=False,fastMode=True,copySwarm=True):
         # this traces a swarm through the shaper and into the output of the combiner. The swarm is traced
         # throguh the combiner assuming it is a swarm being loaded, not already circulating. The returned particles are in
         # the lab or combiner frame
@@ -234,9 +243,12 @@ class SwarmTracer:
         # upperSymmetry: wether to exploit the upper symmetry of the lattice and ignore particles with z<0
         # labFrame: wether to return particles in the labframe, or in the element frame. True for lab, False for element
         # fastMode: wether to log particle paramters while tracing
-        swarm=swarm.copy()
+        #copySwarm: if True, then make a copy of the swarm to avoid editing the original
+        if copySwarm==True:
+            swarm=swarm.copy()
         swarm = self.send_Swarm_Through_Shaper(swarm, Lo, Li, copySwarm=False)
-        swarm=self.aim_Swarm_At_Combiner(swarm,Li,LOffset)
+        swarm=self.aim_Swarm_At_Combiner(swarm,Li,LOffset,copySwarm=False)
+
         # now I need to trace and position the swarm at the output. This is done by moving the swarm along with combiner to the
         # combiner's outlet in it's final position.
         r0 = self.lattice.combiner.r2
@@ -251,7 +263,6 @@ class SwarmTracer:
                         particle.qArr[j,:2] = R @ particle.qArr[j,:2] + r0[:2]  # now transform the lab frame
                         particle.pArr[j,:2] = R @ particle.pArr[j,:2]
             return particle
-
         if parallel == False:
             for i in range(swarm.num_Particles()):
                 swarm.particles[i] = func(swarm.particles[i])
@@ -260,9 +271,10 @@ class SwarmTracer:
             for i in range(len(results)):  # replaced the particles in the swarm with the new traced particles. Order
                 # is not important
                 swarm.particles[i] = results[i][1]
+
         return swarm
-    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset, qMax=3e-3, pMax=5.0e0,pxMax=1.0, numParticles=1000, parallel=False,
-                                            upperSymmetry=False,labFrame=True,h=1e-5,clipForNextApeture=True,fastMode=True):
+    def initialize_Swarm_At_Combiner_Output(self, Lo, Li, LOffset,  numParticles=1000, parallel=False,labFrame=True,
+                                            h=1e-5,clipForNextApeture=False,fastMode=True):
         # this method generates a cloud of particles in phase space at the output of the combiner. The cloud is traced
         #throguh the combiner assuming it is a cloud being loaded, not already circulating. The returned particles are in
         #the lab or combiner frame
@@ -272,33 +284,32 @@ class SwarmTracer:
         # LOffset: length that the image distance is offset from the combiner output. Positive
         # value corresponds coming to focus before the output (ie, inside the combiner), negative
         # is after the output.
-        # qMax: absolute vale of maximum value in space dimensions
-        # pMax: absolute vale of maximum value in momentum dimensions
         # numParticles: number of particles along each axis, total number is axis**n where n is dimensions
-        # upperSymmetry: wether to exploit the upper symmetry of the lattice and ignore particles with z<0
         # labFrame: wether to return particles in the labframe, or in the element frame. True for lab, False for element
         # clipForNextApeture: If true, clip particles if they are not respecting the apeture imediately following the combiner
         #fastMode: wehter to log particle parameters while tracing
         self.catch_Injection_Errors(Li, LOffset)
-        swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax,qMax,pxMax,pMax,pMax,numParticles,upperSymmetry=upperSymmetry)
-        swarm=self.inject_Swarm(swarm,Lo,Li,LOffset,labFrame=labFrame,h=h,parallel=parallel,fastMode=fastMode)
+        swarm=self.initialize_Observed_Swarm_In_Phase_Space(numParticles=numParticles)
+        swarm=self.inject_Swarm(swarm,Lo,Li,LOffset,labFrame=labFrame,h=h,parallel=parallel,fastMode=fastMode,copySwarm=False)
         if clipForNextApeture==True: #if checking to see if particle passes the next apeture
             ap=self.lattice.elList[self.lattice.combinerIndex+1].ap#get the next element's apeture. assumed to be
             #cylinderival/square
             r0 = self.lattice.combiner.r2
             R = self.lattice.combiner.RIn
             for particle in swarm:
-                q = particle.q.copy() #don't want to change the values so copy
-                if labFrame==True:
-                    q[:2]=R@(q[:2]-r0[:2]) #transform to element frame to make checking easy
-                if not (-ap<q[1]<ap and -ap<q[2]<ap): #if particle is NOT inside the apeture
-                    particle.clipped=True
+                if particle.clipped==False: #only bother if the particle isn't already clipped
+                    q = particle.q
+                    if labFrame==True:
+                        q=q.copy() # to avoid editing the original
+                        q[:2]=R@(q[:2]-r0[:2]) #transform to element frame to make checking easy
+                    if np.sqrt(q[1]**2+q[2]**2)>ap: #if particle is NOT inside the apeture
+                        particle.clipped=True
         return swarm
 
     @staticmethod
     @numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:], numba.float64))
     def fast_qNew(q, F, p, h):
-        #this is a numbafied version. It makes an appreciable differenence if performance
+        #this is a numbafied version. It makes an appreciable differenence in performance
         #q: position, n
         #F: force, n
         #p: momentum, n
@@ -316,14 +327,13 @@ class SwarmTracer:
         # h: timestep
         # return p_n+1
         return p + .5 * (F + F_New) * h
-
     def step_Particle_Through_Combiner(self, particle, h=1e-5,fastMode=False):
         #this method traces the particle through the combiner. First the particle is moved up the combiner input. Then
         #it is checked if it clipping in which case the algorithm is stopped. The particle is then traced through the
         #combiner checking for clipping at each point.
         particle.currentEl = self.lattice.combiner
-        q = particle.q.copy()
-        p = particle.p.copy()
+        q = particle.q
+        p = particle.p
         if fastMode==False:
             particle.log_Params()
 
@@ -338,11 +348,10 @@ class SwarmTracer:
         if fastMode==False:
             particle.log_Params()
 
-        force = self.lattice.combiner.force
+
         apL = self.lattice.combiner.apL
         apR = self.lattice.combiner.apR
         apz = self.lattice.combiner.apz
-        #TODO: INCLUDE ONLY LOOKING AT CLIPPING IF INSIDE THE COMBINER
         def is_Clipped(q):
             #return True if the particle is clipped. remember combiner apeture is not cylinderical
             if not -apz<q[2]<apz:  # if clipping in z direction
@@ -364,7 +373,7 @@ class SwarmTracer:
             if forcePrev is not None:
                 F = forcePrev
             else:
-                F = -force(q)  # force is negative for high field seeking
+                F = -self.lattice.combiner.force(q)  # force is negative for high field seeking
             q_n = self.fast_qNew(q, F, p, h)  # q + p * h + .5 * F * h ** 2
             if q_n[0] < 0:  # if overshot, go back and walk up to the edge assuming no force
                 dr = - q[0]
@@ -373,7 +382,7 @@ class SwarmTracer:
                 particle.q = q
                 particle.p = p
                 break
-            F_n = -force(q_n)  # force is negative for high field seeking
+            F_n = -self.lattice.combiner.force(q_n)  # force is negative for high field seeking
             p_n = self.fast_pNew(p, F, F_n, h)  # p + .5 * (F + F_n) * h
             q = q_n
             p = p_n
@@ -392,13 +401,15 @@ class SwarmTracer:
         particle.finished()
         return particle
 
-    def aim_Swarm_At_Combiner(self, swarm, Li, LOffset):
+    def aim_Swarm_At_Combiner(self, swarm, Li, LOffset,copySwarm=True):
         # This method takes a swarm in phase space, located at the origin, and moves it in phase space
         # so momentum vectors point at the combiner input. This is done IN THE COMBINER REFERENCE FRAME
         # swarm: swarm of particles in phase space. must be centered at the origin in space
         # Li: the image length, only makes sense for hard edge model
         # LiOffset: image offset in combiner. see initialize_Swarm_At_Combiner_Output
-        swarmNew = swarm.copy()  # don't change the original swarm
+        # copySwarm: if True, copy the swarm to prevent modifying the original one
+        if copySwarm==True:
+            swarm = swarm.copy()  # don't change the original swarm
         inputOffsetLoad = self.lattice.combiner.inputOffsetLoad
         inputAngleLoad = self.lattice.combiner.angLoad
         dL = Li - self.lattice.combiner.Lo + LOffset
@@ -408,14 +419,14 @@ class SwarmTracer:
         dy += dL * np.sin(inputAngleLoad)
         dR = np.asarray([dx, dy])
         rotMat = np.asarray([[np.cos(inputAngleLoad), -np.sin(inputAngleLoad)], [np.sin(inputAngleLoad), np.cos(inputAngleLoad)]])
-        for particle in swarmNew.particles:
+        for particle in swarm.particles:
             q = particle.q
             p = particle.p
             q[:2] = rotMat @ q[:2]+dR
             p[:2] = rotMat @ p[:2]
             particle.q = q
             particle.p = p
-        return swarmNew
+        return swarm
     def compute_Survival_Through_Lattice(self,Lo,Li,LOffset,F1,F2,h,T,parallel=False):
         qMax=2.5e-3
         pMax=3e1

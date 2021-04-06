@@ -52,7 +52,9 @@ class phaseSpaceInterpolater:
         args=np.asarray(args)
         if np.any(args>self.xBounds[:,1])==True or np.any(args<self.xBounds[:,0])==True: #if any argument is out of bounds
             #return a nan
-           return np.nan
+            print('args out of bounds')
+            print(args,self.xBounds)
+            return np.nan
         else: #if inside bounds, can still be outside apeture
             y,z=args[:2]
             if np.sqrt(y**2+z**2)<self.ap:
@@ -87,7 +89,7 @@ class LatticeOptimizer:
         #Update the various paremters in the lattice and injections that are variable
         #X: lattice parameters in the form of an iterable
         self.lattice.elList[0].fieldFact = X[0]
-        self.lattice.elList[4].fieldFact = X[1]
+        self.lattice.elList[2].fieldFact = X[1]
     def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
         #return a function that returns a value for number of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
@@ -100,7 +102,7 @@ class LatticeOptimizer:
         self.update_Lattice(X)
         phaseSpacePoints=[] #holds the coordinates of the particles in phase space at the combiner output
         revolutions=[] #values of revolution for each particle in swarm
-        swarmTraced=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,fastMode=False)
+        swarmTraced=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,fastMode=True)
         for i in range(swarmTraced.num_Particles()):
             q = swarmTraced.particles[i].qi.copy()[1:] #only y and z. x is the same all (0)
             p = swarmTraced.particles[i].pi.copy()
@@ -113,8 +115,7 @@ class LatticeOptimizer:
         return latticePhaseSpaceFunc
 
 
-
-    def get_Stability_Function(self,qMax=250e-6,numParticlesPerDim=2,h=5e-6,cutoff=8.0,funcType='bool'):
+    def get_Stability_Function(self,qMax=.5e-3,numParticlesPerDim=2,h=5e-6,cutoff=8.0,funcType='bool'):
         #return a function that can evaluated at the lattice parameters, X, and return wether True for stable
         #and False for unstable
         #qMax: #if using multiple particles this defineds the bounds of the initial positions square,meters
@@ -136,6 +137,7 @@ class LatticeOptimizer:
             swarm.add_Particle(qi,pi)
         if numParticlesPerDim%2==0: #if even number then add one more particle at the center
             swarm.add_Particle()
+
         def compute_Stability(X):
             #X lattice arguments
             #for the given configuraiton X and particle(s) return the maximum number of revolutions, or True for stable
@@ -228,6 +230,7 @@ class LatticeOptimizer:
         xiReset=5 #this many evaluations after a duplicate point before resetting to a lower value
         if self.hardEvals <= self.numInit - 1:  # if still initializing the model
             if len(self.randomSampleList)==0: #if the low discrepancy list has been exhausted
+                print("LOW DISCREPANCY LIST EXHAUSTED")
                 XSample=np.random.rand(2)
                 XSample[0]=XSample[0]*self.stepsLens1
                 XSample[1] = XSample[1]*self.stepsLens2
@@ -260,28 +263,32 @@ class LatticeOptimizer:
                 if self.xiResetCounter==xiReset:
                     self.skoptModel.acq_func_kwargs['xi'] = self.xi
                     self.xiResetCounter=0
-            print(self.skoptModel.acq_func_kwargs['xi'] )
         return XSample
 
 
-    def maximize_Suvival_Through_Lattice(self, h, T, numParticles=3000, pMax=5e0, returnBestSwarm=False, parallel=False,
-                                         maxHardsEvals=100, bounds=None, precision=10e-3):
+    def maximize_Suvival_Through_Lattice(self, h, T, numParticles=30000, maxHardsEvals=100, bounds=None, precision=10e-3):
         self.h=h
         self.T=T
-        #make a swarm that whos position spans the next element's input
-        qyMax=self.lattice.elList[self.lattice.combinerIndex+1].ap
-        qzMax=qyMax
-        pxMax=1.05
+
+
+        #make a swarm that whos position spans the next element's input. This is the monte carlo initial condition
+        #I carefully compared these to the values that occur at the outlet of the combiner and it makes sense. i used
+        #several different configurations
+        sigmaLong0=1.5 #the std of the longitudinal distribution. m/s
+        qyMax=self.lattice.elList[self.lattice.combinerIndex+1].ap*1.01
+        qzMax=self.lattice.combiner.apz*1.01
+        pxMax=sigmaLong0*3 #3 sigma rule
         #now estimate the maximum possible transverse velocity
-        deltav=(self.lattice.v0Nominal*qyMax/self.lattice.combiner.Lo)
-        pyMax=deltav
-        pzMax=deltav
+        pyMax=self.lattice.v0Nominal*(qyMax/self.lattice.combiner.Lo)
+        pzMax=self.lattice.v0Nominal*(qzMax/self.lattice.combiner.Lo)
+        print(qyMax,qzMax,pxMax,pyMax,pzMax)
+        sys.exit()
+
+
         swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyMax, qzMax, pxMax, pyMax, pzMax, numParticles,
                                                                             apetureRadius=qyMax)
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
 
-
-        swarm=self.swarmTracer.initialize_Swarm_At_Combiner_Output(.2,1.0,0.0)
 
         if bounds is None:
             bounds=[(0.0, .5), (0.0, .5)]
@@ -304,10 +311,11 @@ class LatticeOptimizer:
             XNew = X.copy()
             for i in range(len(X)):  # change normalized bounds to actual
                 XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
+            print(XNew)
             print('start lattice tracing')
             t=time.time()
             func = self.compute_Phase_Space_Map_Function(XNew,swarmCombiner)
-            print('done mode matching',time.time()-t)
+            print('done lattice matching',time.time()-t)
             gm.lattice=self.lattice
             gm.func=func
             t=time.time()
@@ -318,12 +326,10 @@ class LatticeOptimizer:
             # self.update_Lattice(XNew)
             # swarm=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner, self.h, self.T, fastMode=True)
             # survival=swarm.survival_Rev()
-            print(survival)
             Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
             cost = -Tsurvival / T  # cost scales from 0 to -1.0
             print(cost)
             return cost
-
         stabilityFunc = self.get_Stability_Function(numParticlesPerDim=1, cutoff=8.0,h=5e-6)
 
         def stability_Func_Wrapper(X):
@@ -332,14 +338,14 @@ class LatticeOptimizer:
                 XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
             return stabilityFunc(XNew)
 
+        self.numInit = int(maxHardsEvals * .5)  # 50% is just random
         #generate random sample list. This really needs to be improved, I liked the feature where I added one point
         #at a time but that requires using random numbers when this is exhausted
-        points = 10 * self.numInit  # from experience I know that at least this amount is requied based on how sparse
+        points = 5 * self.numInit  # from experience I know that at least this amount is requied based on how sparse
         # expensive evaluations are
         r = np.sqrt(2 * (1.0 / points) / np.pi)  # this is used to get near the required amount of points with
         # poission disc method, which does not give an exact number of points
-        samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0, 1.0]), k=1000, radius=r)
-        plt.scatter(samples[:, 0], samples[:, 1])
+        samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0, 1.0]), k=100, radius=r)
         np.random.shuffle(samples)  # shuffle array in place
         # convert to the integer value that the skopt model requires
         samples[:, 0] = samples[:, 0] * self.stepsLens1
@@ -347,10 +353,8 @@ class LatticeOptimizer:
         samples = samples.astype(int)
         self.randomSampleList = list(samples)
 
-
         unstableCost = -1.5 * (self.lattice.totalLength / self.lattice.v0Nominal) / T  # typically unstable regions return an average
         # of 1 to 2 revolution
-        self.numInit = int(maxHardsEvals * .5)  # 50% is just random
         xiRevs = .25  # search for the next points that returns an imporvement of at least this many revs
         self.xi = (xiRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
         noiseRevs =1e-2 #small amount of noise to account for variability of results and encourage a smooth fit
@@ -383,6 +387,7 @@ class LatticeOptimizer:
 
         print(time.time() - t)
         sol = self.skoptModel.get_result()
+        print(sol)
         solution = Solution()
         solution.skoptSol = sol
         x = [0, 0]

@@ -232,7 +232,6 @@ class ParaWell:
     def manage_Pool(self,numWorkers):
         #keep track of the number of time pool has been called, and make a new pool if the previous one gets changed
         #with a new selection of workers
-
         if self.pool is None:
             self.pool=pa.pools.ProcessPool(nodes=numWorkers)
             self.poolUse=0

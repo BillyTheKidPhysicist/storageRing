@@ -151,7 +151,7 @@ class Particle:
         plt.legend()
         plt.grid()
         plt.show()
-    def plot_Position(self,plotYAxis='y'):
+    def plot_Orbit_Reference_Frame_Position(self, plotYAxis='y'):
         if plotYAxis!='y' and plotYAxis!='z':
             raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
         if self.qoArr.shape[0]==0:

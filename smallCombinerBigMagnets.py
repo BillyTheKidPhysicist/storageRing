@@ -1,11 +1,12 @@
 #config with bigger magnets (1/4), and small combiner. Lens before combiner is a reasonable distance from the combiner
 import numpy as np
+from SwarmTracer import SwarmTracer
 import matplotlib.pyplot as plt
 from OptimizerClass import LatticeOptimizer
 from particleTracerLattice import ParticleTracerLattice
 from ParticleTracer import ParticleTracer
 from ParticleClass import Particle
-
+import time
 
 def get_Lattice(trackPotential=True):
     lattice = ParticleTracerLattice(200.0)
@@ -37,8 +38,6 @@ def get_Lattice(trackPotential=True):
     # Llens2New=Llens2-LDrift
 
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens1)
-
-
     lattice.add_Combiner_Sim(fileCombiner, sizeScale=1.0)
     #lattice.add_Drift(Llens2)
     lattice.add_Lens_Sim_With_Caps(file2DLens, file3DLens, Llens2)
@@ -55,21 +54,93 @@ def get_Lattice(trackPotential=True):
 
 #optimizer=None
 def compute_Sol(h,Revs,maxEvals):
-    print('here')
-    #global optimizer
     lattice=get_Lattice(trackPotential=True)
     #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
     optimizer=LatticeOptimizer(lattice)
+
     sol=optimizer.maximize_Suvival_Through_Lattice(h, T, maxHardsEvals=maxEvals)
     return sol
-
+#compute_Sol(1e-5,50.0,30)
 lattice=get_Lattice()
-optimizer=LatticeOptimizer(lattice)
-optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='stabilityPlot'+str(0),showPlot=False)
+swarmTracer=SwarmTracer(lattice)
 
-# LDriftList=[2,4,6,8,10,12,14,16,18]
-# for LDrift in LDriftList:
-#     lattice=get_Lattice(LDrift*1e-2)
-#     optimizer=LatticeOptimizer(lattice)
-#     optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='stabilityPlot'+str(LDrift),showPlot=False)
+
+
+
+
+
+
+#find maximum for monte carlo integration
+import skopt
+from ParaWell import ParaWell
+helper=ParaWell()
+bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
+num=100
+sampler = skopt.sampler.Sobol()
+samples = sampler.generate(bounds, num)
+
+def wrapper(args):
+    Lo,Li,LOffset=args
+    swarm = swarmTracer.initialize_Swarm_At_Combiner_Output(.1, 1.0, 0.05, labFrame=False, clipForNextApeture=True,
+                                                            numParticles=1000, fastMode=True)
+    swarm.vectorize()
+    qVec=swarm.qVec
+    pVec=swarm.pVec
+    pxLims=(np.min(qVec[:,0]),np.max(qVec[:,0]))
+    pyLims=(np.min(qVec[:,1]),np.max(qVec[:,1]))
+    pzLims=(np.min(qVec[:,2]),np.max(qVec[:,2]))
+    return pxLims,pyLims,pzLims
+argList=samples
+results=helper.parallel_Problem(wrapper,argList)
+
+
+
+
+
+
+
+
+# for particle in swarm:
+# #     particle.plot_Position(plotYAxis='z')
+# qVec=[]
+# pVec=[]
+# for particle in swarm:
+#     if particle.clipped==False:
+#         qVec.append(particle.q)
+#         pVec.append(particle.p)
+# qVec=np.asarray(qVec)
+# pVec=np.asarray(pVec)
+# print('-------extrema---------------')
+#
+# # plt.hist(pVec[:,0],bins=25)
+# # plt.show()
+# print(np.max(qVec[:,1]),np.max(qVec[:,2]))
+# print(np.min(qVec[:,1]),np.min(qVec[:,2]))
+# print(np.max(pVec[:,0]),np.max(pVec[:,1]),np.max(pVec[:,2]))
+# print(np.min(pVec[:,0]),np.min(pVec[:,1]),np.min(pVec[:,2]))
+# # print('py',np.mean(pVec[:,1]),np.std(pVec[:,1]))
+# # print('pz',np.mean(pVec[:,2]),np.std(pVec[:,2]))
+# compute_Sol(1e-5,50.0,30)
+# for particle in swarm:
+#     print(particle.q,particle.p,particle.clipped,particle.traced)
+# lattice.show_Lattice(swarm=swarm)
+
+
+# lattice=get_Lattice()
+# from SwarmTracer import SwarmTracer
+# swarmTracer=SwarmTracer(lattice)
+# def func():
+#     swarmTracer.initialize_Swarm_At_Combiner_Output(.2,1.0,0.0)
+# func()
+#compute_Sol(1e-5,100,100)
+#
+# lattice=get_Lattice()
+# optimizer=LatticeOptimizer(lattice)
+# optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='24',showPlot=False)
+
+# # LDriftList=[2,4,6,8,10,12,14,16,18]
+# # for LDrift in LDriftList:
+# #     lattice=get_Lattice(LDrift*1e-2)
+# #     optimizer=LatticeOptimizer(lattice)
+# #     optimizer.plot_Stability(h=1e-5,cutoff=8.0,gridPoints=40,savePlot=True,plotName='stabilityPlot'+str(LDrift),showPlot=False)
