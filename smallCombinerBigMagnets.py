@@ -61,45 +61,84 @@ def compute_Sol(h,Revs,maxEvals):
 
     sol=optimizer.maximize_Suvival_Through_Lattice(h, T, maxHardsEvals=maxEvals)
     return sol
-#compute_Sol(1e-5,50.0,30)
-lattice=get_Lattice()
-swarmTracer=SwarmTracer(lattice)
+# compute_Sol(1e-5,50.0,30)
+# lattice=get_Lattice()
+# swarmTracer=SwarmTracer(lattice)
+#
+#
+#
+#
+#
+#
+#
+# #find maximum for monte carlo integration
+# import skopt
+# from ParaWell import ParaWell
+# helper=ParaWell()
+# bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
+# num=250
+# sampler = skopt.sampler.Sobol()
+# samples = sampler.generate(bounds, num)
+#
+# def wrapper(args):
+#     Lo,Li,LOffset=args
+#     swarm = swarmTracer.initialize_Swarm_At_Combiner_Output(Lo,Li,LOffset, labFrame=False, clipForNextApeture=True,
+#                                                             numParticles=5000, fastMode=True) #5000
+#     qVec,pVec=swarm.vectorize(onlyUnclipped=True)
+#     pxArr=pVec[:,0]+lattice.v0Nominal
+#     pyArr=pVec[:,1]
+#     pzArr=pVec[:,2]
+#     valMaxList=[pxArr.max(),pyArr.max(),pzArr.max()]
+#     arrList=[pxArr,pyArr,pzArr]
+#     integrationMaxList=[]
+#     for i in range(len(valMaxList)):
+#         arr=arrList[i]
+#         valMax=valMaxList[i]
+#         valArr=np.linspace(valMax,0)
+#         for val in valArr:
+#             frac=np.sum(np.abs(arr)<val)/arr.shape[0]
+#             if frac<=.95: #95% survival
+#                 integrationMaxList.append(val)
+#                 break
+#     return integrationMaxList
 
 
 
+# argList=samples
+# t=time.time()
+# results=helper.parallel_Problem(wrapper,argList,onlyReturnResults=True)
+# print(time.time()-t)
+# pxList=[]
+# pyList=[]
+# pzList=[]
+# for result in results:
+#     pxList.append(result[0])
+#     pyList.append(result[1])
+#     pzList.append(result[2])
+# pxArr=np.asarray(pxList)
+# pyArr=np.asarray(pyList)
+# # pzArr=np.asarray(pzList)
+# print(np.round(pxArr.min(),5),np.round(pxArr.max(),5),np.round(np.std(pxArr),5),np.round(np.mean(pxArr),5))#2.77239 3.15021 0.08595 2.89656
+# print(np.round(pyArr.min(),5),np.round(pyArr.max(),5),np.round(np.std(pyArr),5),np.round(np.mean(pyArr),5))#1.51252 5.13699 0.87522 2.80488
+# print(np.round(pzArr.min(),5),np.round(pzArr.max(),5),np.round(np.std(pzArr),5),np.round(np.mean(pzArr),5))#3.28359 5.02499 0.24238 4.27949
+
+#num=100,numParticles=1000
+#2.87565 3.38391 0.12991 3.07914
+#1.6302 5.19287 0.91562 2.88932
+#3.26431 4.92706 0.26201 4.21084
+
+#num=100, numParticles=5000
+#2.80367 3.1185 0.07379 2.89195
+#1.48238 5.11805 0.88336 2.81599
+#3.4208 4.88048 0.23519 4.27259
+
+#num=250, numParticles=1000
+#2.87502 3.3896 0.1256 3.07598
+#1.52445 5.16437 0.89249 2.87191
+#3.37325 4.92706 0.24737 4.23559
 
 
-
-
-#find maximum for monte carlo integration
-import skopt
-from ParaWell import ParaWell
-helper=ParaWell()
-bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
-num=100
-sampler = skopt.sampler.Sobol()
-samples = sampler.generate(bounds, num)
-
-def wrapper(args):
-    Lo,Li,LOffset=args
-    swarm = swarmTracer.initialize_Swarm_At_Combiner_Output(.1, 1.0, 0.05, labFrame=False, clipForNextApeture=True,
-                                                            numParticles=1000, fastMode=True)
-    swarm.vectorize()
-    qVec=swarm.qVec
-    pVec=swarm.pVec
-    pxLims=(np.min(qVec[:,0]),np.max(qVec[:,0]))
-    pyLims=(np.min(qVec[:,1]),np.max(qVec[:,1]))
-    pzLims=(np.min(qVec[:,2]),np.max(qVec[:,2]))
-    return pxLims,pyLims,pzLims
-argList=samples
-results=helper.parallel_Problem(wrapper,argList)
-
-
-
-
-
-
-
+# compute_Sol(1e-5,50.0,30)
 
 # for particle in swarm:
 # #     particle.plot_Position(plotYAxis='z')

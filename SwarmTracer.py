@@ -120,8 +120,7 @@ class SwarmTracer:
                                 'particles')
         sampler=skopt.sampler.Sobol()
         samples=sampler.generate(bounds,num)
-
-        #jittere coordinates to remoce patterns and use them to make particles to add to the swarm
+        #jitter coordinates to remove patterns and use them to make particles to add to the swarm
         for sample in samples:
             y,z,px,py,pz=sample
             Xi=np.asarray([y,z,px,py,pz])
@@ -141,6 +140,7 @@ class SwarmTracer:
                     pass
             else:
                 swarm.add_Particle(qi=q,pi=p)
+        samples=np.asarray(samples)
         if sameSeed==True:
             np.random.seed(int(time.time()))  # re randomize
         return swarm

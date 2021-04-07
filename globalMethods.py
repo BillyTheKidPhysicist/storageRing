@@ -47,6 +47,6 @@ def solve(numParticles=3000):
         val = inject(args) #mean number of revolutions
         return -val
     bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
-    sol = spo.differential_evolution(minimize, bounds, maxiter=10, workers=1, polish=False, disp=True, popsize=10,mutation=0.1)
+    sol = spo.differential_evolution(minimize, bounds, maxiter=10, workers=-1, polish=False, disp=True, popsize=10,mutation=0.1)
     print('optimal injector args:', sol.x)
     return sol.fun

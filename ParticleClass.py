@@ -6,9 +6,6 @@ class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
         self.particles = [] #list of particles in swarm
-        self.qVec=None #for some applications it's far better to use a position vector to represent the swarm instaed of
-        #only a list of particles. When using this it's important to ensure the particle order does not get screwed up
-        self.pVec=None #a momentum vector for the swarm
     def add_Particle(self, qi=None,pi=None):
         #add an additional particle to phase space
         #qi: spatial coordinates
@@ -19,15 +16,21 @@ class Swarm:
             qi = np.asarray([-1e-10, 0.0, 0.0])
 
         self.particles.append(Particle(qi, pi))
-    def vectorize(self):
-        #fill the position and momentum vectors for the particle swarm
-        self.qVec=[]
-        self.pVec=[]
+    def vectorize(self,onlyUnclipped=False):
+        #return position and momentum vectors for the particle swarm
+        qVec=[]
+        pVec=[]
         for particle in self.particles:
-            self.qVec.append(particle.q)
-            self.pVec.append(particle.p)
-        self.qVec=np.asarray(self.qVec)
-        self.pVec=np.asarray(self.pVec)
+            if onlyUnclipped==True:
+                if particle.clipped==False:
+                    qVec.append(particle.q)
+                    pVec.append(particle.p)
+            else:
+                qVec.append(particle.q)
+                pVec.append(particle.p)
+        qVec=np.asarray(qVec)
+        pVec=np.asarray(pVec)
+        return qVec,pVec
     def survival_Rev(self):
         #return average number of revolutions of particles
         revs=0

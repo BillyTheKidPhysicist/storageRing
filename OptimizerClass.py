@@ -52,8 +52,6 @@ class phaseSpaceInterpolater:
         args=np.asarray(args)
         if np.any(args>self.xBounds[:,1])==True or np.any(args<self.xBounds[:,0])==True: #if any argument is out of bounds
             #return a nan
-            print('args out of bounds')
-            print(args,self.xBounds)
             return np.nan
         else: #if inside bounds, can still be outside apeture
             y,z=args[:2]
@@ -264,29 +262,82 @@ class LatticeOptimizer:
                     self.skoptModel.acq_func_kwargs['xi'] = self.xi
                     self.xiResetCounter=0
         return XSample
+    def generate_Monte_Carlo_Bounds(self,numPoints=250,numParticles=5000,survivalFrac=.95,sameSeed=True):
+        #this function generates the 5 bounds for the monte carlo integration of tracing particles through the lattice.
+        #it is crucial to have the bounds of the integration encompass the particl'es that will be mode matched. However,
+        #having too much integration volume rapidly becomes computationally expensive. Thus, this method minimizes the required
+        #limits. This is done by finding the limits of numPoints of configurations of the injection system with a cloud
+        #of numParticles. To avoid wasing resources on outlier, the integreation bound that captures survivalFrac of particles
+        #is used. The limit of integration is calculated for each configuration and that largest is used.
+        #the position values are given by simple geometry, however the velocity limits are more complicated and require
+        #this method. Remember that the monte carlo integration has square limits
+        #numPonts: Number of configurations to test
+        #numParticles: Number of particles to test each configuration with
+        #survivalFrac: Fraction of particles that corresponds to the limit. This is to prevent wasted resources with outliers
+        #sameSeed: Wether the use the same seed to get repeatable results. Otherwise the sobol seuqnece uses the numpy random
+        #generator
+        if sameSeed==True:
+            np.random.seed(42)
 
+        def wrapper(args):
+            #this does all the wrangling of unpacking the results and finding the survivalFrac cutoff values
+            Lo, Li, LOffset = args
+            swarm = self.swarmTracer.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, labFrame=False,
+                                                                    clipForNextApeture=True,
+                                                                    numParticles=numParticles, fastMode=True)  # 5000
+            qVec, pVec = swarm.vectorize(onlyUnclipped=True)
+            pxArr = pVec[:, 0] + self.lattice.v0Nominal #set the pxArr to an offset from the nominal value (not necesarily
+            #the mean though)
+            pyArr = pVec[:, 1]
+            pzArr = pVec[:, 2]
+            #I'm avoiding using 3 different loops here. Kind of iffy if this actuall saves space honestly.
+            #The value that allows survivalFrac is found by creating an array of limits then looping through the array
+            #and counting the number of particles with absolute value less than that limit for each coordinate.
+            valMaxList = [pxArr.max(), pyArr.max(), pzArr.max()]
+            arrList = [pxArr, pyArr, pzArr]
+            integrationMaxList = [] #the result that corresponds to 95% survival
+            for i in range(len(valMaxList)): #loop over the three dimensions we're testing (px,py,pz)
+                arr = arrList[i]
+                valMax = valMaxList[i]
+                valArr = np.linspace(valMax, 0)
+                for val in valArr: #loop through and test the cutoff
+                    frac = np.sum(np.abs(arr) < val) / arr.shape[0]
+                    if frac <= survivalFrac:
+                        integrationMaxList.append(val)
+                        break #move onto the next dimension
+            return integrationMaxList
 
+        bounds = [(.15, .25), (.5, 1.5), (-.1, .1)] #bounds of the injector system. Li,Lo,LOffset, meters
+        sampler = skopt.sampler.Sobol() #low discrepancy sampling
+        samples = sampler.generate(bounds, numPoints)
+        argList = samples
+        results = self.helper.parallel_Problem(wrapper, argList, onlyReturnResults=True)
+        pxList = []
+        pyList = []
+        pzList = []
+        for result in results:
+            pxList.append(result[0])
+            pyList.append(result[1])
+            pzList.append(result[2])
+
+        pxLimit=np.max(np.asarray(pxList)) #the momentum limits of integration
+        pyLimit=np.max(np.asarray(pyList))#the momentum limits of integration
+        pzLimit=np.max(np.asarray(pzList))#the momentum limits of integration
+        #use the limits of the combiner and the next element as the limits of the integration
+        #remember there is no x limit. All particles are assumed to start at x=0
+        qyLimit=self.lattice.elList[self.lattice.combinerIndex+1].ap*1.01 #the position limits of integration
+        qzLimit=self.lattice.combiner.apz*1.01#the position limits of integration
+        if sameSeed==True:
+            np.random.seed(int(time.time()))#reset the seed, kind of
+        return qyLimit,qzLimit,pxLimit,pyLimit,pzLimit
     def maximize_Suvival_Through_Lattice(self, h, T, numParticles=30000, maxHardsEvals=100, bounds=None, precision=10e-3):
         self.h=h
         self.T=T
 
-
-        #make a swarm that whos position spans the next element's input. This is the monte carlo initial condition
-        #I carefully compared these to the values that occur at the outlet of the combiner and it makes sense. i used
-        #several different configurations
-        sigmaLong0=1.5 #the std of the longitudinal distribution. m/s
-        qyMax=self.lattice.elList[self.lattice.combinerIndex+1].ap*1.01
-        qzMax=self.lattice.combiner.apz*1.01
-        pxMax=sigmaLong0*3 #3 sigma rule
-        #now estimate the maximum possible transverse velocity
-        pyMax=self.lattice.v0Nominal*(qyMax/self.lattice.combiner.Lo)
-        pzMax=self.lattice.v0Nominal*(qzMax/self.lattice.combiner.Lo)
-        print(qyMax,qzMax,pxMax,pyMax,pzMax)
-        sys.exit()
-
-
-        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyMax, qzMax, pxMax, pyMax, pzMax, numParticles,
-                                                                            apetureRadius=qyMax)
+        print('generating monte carlo bounds')
+        qyLimit,qzLimit,pxLimit,pyLimit,pzLimit=self.generate_Monte_Carlo_Bounds()
+        print('done generating monte carlo bounds')
+        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyLimit, qzLimit, pxLimit, pyLimit, pzLimit, numParticles)
         swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
 
 
@@ -315,7 +366,7 @@ class LatticeOptimizer:
             print('start lattice tracing')
             t=time.time()
             func = self.compute_Phase_Space_Map_Function(XNew,swarmCombiner)
-            print('done lattice matching',time.time()-t)
+            print('done lattice tracing',time.time()-t)
             gm.lattice=self.lattice
             gm.func=func
             t=time.time()

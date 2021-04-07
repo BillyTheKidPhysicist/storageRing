@@ -26,7 +26,7 @@ def lorentz(x,gamma):
 
 
 
-numSamples=10000#final count will not be this value because of the sample reject method being used
+numSamples=20000#final count will not be this value because of the sample reject method being used
 
 yzBound=apetureDiam/2
 bounds=[(-yzBound,yzBound),(-yzBound,yzBound)]
@@ -100,5 +100,5 @@ print(np.std(momentumSamples[:,1]),np.std(positionArr[:,1]))
 positionArr=positionArr*1e-3 #convert to meter from mm
 phaseSpaceCoords=np.column_stack((positionArr,momentumSamples)) #combine into 6d phase space coords
 print('Total number of particle generated:',phaseSpaceCoords.shape[0])
-np.savetxt('phaseSpaceCloud.dat',phaseSpaceCoords)
+# np.savetxt('phaseSpaceCloud.dat',phaseSpaceCoords)
 
