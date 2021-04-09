@@ -546,7 +546,6 @@ class CombinerSim(CombinerIdeal):
 
     def force(self, q):
         # this function uses the symmetry of the combiner to extract the force everywhere.
-
         qNew = q.copy()
         xFact = 1  # value to modify the force based on symmetry
         zFact = 1

@@ -90,7 +90,7 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
-            #self.test.append(npl.norm(self.particle.force))
+            # self.test.append(npl.norm(self.particle.force))
             if self.particle.clipped==True:
                 break
             if fastMode==False:

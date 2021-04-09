@@ -140,7 +140,6 @@ class SwarmTracer:
                     pass
             else:
                 swarm.add_Particle(qi=q,pi=p)
-        samples=np.asarray(samples)
         if sameSeed==True:
             np.random.seed(int(time.time()))  # re randomize
         return swarm
@@ -222,11 +221,13 @@ class SwarmTracer:
         return swarmNew
 
     def catch_Injection_Errors(self, Li, LOffset):
+        deltaL=Li+LOffset-self.lattice.combiner.Lo #distance of magnet from beginning
+        #of combiner. Must be greater than at least zero
+        if deltaL<.1: #if the magnet is closer than 10 cm
+            print(Li,LOffset,deltaL,self.lattice.combiner.Lo)
+            raise Exception('Magnet is too close to combiner')
 
-        if Li < self.lattice.combiner.Lo:  # image length must be larger than combiner length
-            raise Exception("IMAGE LENGTH IS TOO SHORT")
-        if LOffset > self.lattice.combiner.Lo / 2:
-            raise Exception("OFFSET IS TOO DEEP INTO THE COMBINER WITH THE CURRENT ALGORITHM")
+
     def inject_Swarm(self,swarm,Lo,Li,LOffset,labFrame=True,h=1e-5,parallel=False,fastMode=True,copySwarm=True):
         # this traces a swarm through the shaper and into the output of the combiner. The swarm is traced
         # throguh the combiner assuming it is a swarm being loaded, not already circulating. The returned particles are in
@@ -236,7 +237,7 @@ class SwarmTracer:
         # Lo: object distance
         # LOffset: length that the image distance is offset from the combiner output. Positive
         # value corresponds coming to focus before the output (ie, inside the combiner), negative
-        # is after the output.
+        # is after the output, ie outside after the output
         # qMax: absolute vale of maximum value in space dimensions
         # pMax: absolute vale of maximum value in momentum dimensions
         # numParticles: number of particles along each axis, total number is axis**n where n is dimensions
@@ -412,7 +413,7 @@ class SwarmTracer:
             swarm = swarm.copy()  # don't change the original swarm
         inputOffsetLoad = self.lattice.combiner.inputOffsetLoad
         inputAngleLoad = self.lattice.combiner.angLoad
-        dL = Li - self.lattice.combiner.Lo + LOffset
+        dL = Li - self.lattice.combiner.Lo + LOffset #distance from combiner input
         dx = self.lattice.combiner.space * 2 + self.lattice.combiner.Lm
         dy = inputOffsetLoad
         dx += dL * np.cos(inputAngleLoad)

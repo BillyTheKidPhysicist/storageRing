@@ -10,7 +10,7 @@ lattice = None
 
 
 
-def solve(numParticles=3000):
+def solve(optimizer,numParticles=3000):
     #this method solves a mode matching problem using scipy differential evolution in parallel
     from SwarmTracer import SwarmTracer
     import numpy as np
@@ -46,7 +46,7 @@ def solve(numParticles=3000):
         temp.append(0)
         val = inject(args) #mean number of revolutions
         return -val
-    bounds = [(.15, .25), (.5, 1.5), (-.1, .1)]
+    bounds = optimizer.injectorBounds
     sol = spo.differential_evolution(minimize, bounds, maxiter=10, workers=-1, polish=False, disp=True, popsize=10,mutation=0.1)
     print('optimal injector args:', sol.x)
     return sol.fun

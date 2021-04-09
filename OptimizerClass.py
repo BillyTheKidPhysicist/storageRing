@@ -1,21 +1,10 @@
 import poisson_disc
-import copy
 import skopt
-import numba
-from profilehooks import profile
 from ParticleTracer import ParticleTracer
-#import black_box as bb
-import numpy.linalg as npl
-#import matplotlib.pyplot as plt
-import sys
-import multiprocess as mp
-from particleTracerLattice import ParticleTracerLattice
 import numpy as np
 from ParticleClass import Swarm
-import scipy.optimize as spo
 import time
 import scipy.interpolate as spi
-import scipy.spatial as sps
 import matplotlib.pyplot as plt
 from ParaWell import ParaWell
 from SwarmTracer import SwarmTracer
@@ -79,15 +68,34 @@ class LatticeOptimizer:
         self.numInit=None #initial number of lattice tracing evaluations before asking the model for points
         self.xi=None #the value for skoptmodel to use to choose the next point. The next point must give this much
         #improvement
+        self.modulation=None # a string describing which configuration to vary
         self.xiResetCounter=0 #if the value xi was changed to search for new points, this is used to count to
         #resetting back the original value to promote for exploration after getting bogged down
         self.randomSampleList=[] ##list of random samples generated with low discrepancy method for searching paramter
         #space
+        self.minCombinerShaperDistance=.1 #minimum distance between the combiner and the shaper magnet
+        self.injectorBounds=[] #list of bounds for the injection system, Lo, Li, LOffset
+        self.injectorBounds.append((.1,.25)) #Object distance, Lo
+        LiMin=self.lattice.combiner.Lo*1.5+self.minCombinerShaperDistance
+        self.injectorBounds.append((LiMin,LiMin+1.0)) #Image distance, Li
+        self.injectorBounds.append((-self.lattice.combiner.Lo/2,self.lattice.combiner.Lo/2)) #focus offset inside the combiner, LOffset. Keep in mind
+        #the signs!!!
+        print('injector bounds')
+        print(self.injectorBounds)
     def update_Lattice(self,X):
         #Update the various paremters in the lattice and injections that are variable
         #X: lattice parameters in the form of an iterable
-        self.lattice.elList[0].fieldFact = X[0]
-        self.lattice.elList[2].fieldFact = X[1]
+        if self.modulation=='01': #modulate lens 0 and 1
+            self.lattice.elList[0].fieldFact = X[0]
+            self.lattice.elList[2].fieldFact = X[1]
+        elif self.modulation=='12': #modulate lens 1 and 2
+            self.lattice.elList[2].fieldFact = X[0]
+            self.lattice.elList[4].fieldFact = X[1]
+        elif self.modulation=='02':#modulate lens 0 and 2
+            self.lattice.elList[0].fieldFact = X[0]
+            self.lattice.elList[4].fieldFact = X[1]
+        else:
+            raise Exception('not a valid selection')
     def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
         #return a function that returns a value for number of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
@@ -228,10 +236,9 @@ class LatticeOptimizer:
         xiReset=5 #this many evaluations after a duplicate point before resetting to a lower value
         if self.hardEvals <= self.numInit - 1:  # if still initializing the model
             if len(self.randomSampleList)==0: #if the low discrepancy list has been exhausted
-                print("LOW DISCREPANCY LIST EXHAUSTED")
-                XSample=np.random.rand(2)
-                XSample[0]=XSample[0]*self.stepsLens1
-                XSample[1] = XSample[1]*self.stepsLens2
+                XSample=list(np.random.rand(2))
+                XSample[0]=int(XSample[0]*self.stepsLens1)
+                XSample[1] = int(XSample[1]*self.stepsLens2)
             else:
                 XSample=list(self.randomSampleList.pop()) #pop a value off the list. The value is removed and the list is
                 # shorter. model.tell requires a list so need to cast
@@ -307,7 +314,7 @@ class LatticeOptimizer:
                         break #move onto the next dimension
             return integrationMaxList
 
-        bounds = [(.15, .25), (.5, 1.5), (-.1, .1)] #bounds of the injector system. Li,Lo,LOffset, meters
+        bounds=self.injectorBounds
         sampler = skopt.sampler.Sobol() #low discrepancy sampling
         samples = sampler.generate(bounds, numPoints)
         argList = samples
@@ -330,9 +337,23 @@ class LatticeOptimizer:
         if sameSeed==True:
             np.random.seed(int(time.time()))#reset the seed, kind of
         return qyLimit,qzLimit,pxLimit,pyLimit,pzLimit
-    def maximize_Suvival_Through_Lattice(self, h, T, numParticles=30000, maxHardsEvals=100, bounds=None, precision=10e-3):
+    def maximize_Suvival_Through_Lattice(self, h, T, modulation='01',numParticles=30000, maxHardsEvals=100, bounds=None, precision=10e-3):
+        #This function uses bayesian optimization with guassian process to maximise the curvival thorugh the lattice.
+        #this is done by varying lattice paramters, as of now only field strength of two components, then doing a
+        #monte carlo integratino at that point, then using that integration result to optimize an injection system.
+        #h: timestep
+        #T: total time for the monte carlo integration at each point
+        #modulation: The lattice configuration to modulate.
+        #numParticle: Number of particles to use in the monte carlo integration
+        #maxHardEvals: Maximum number of expensive evaluations. Many configuration will be unstable and so very fast
+        #to evaluate
+        #bounds: The region to explore for the monte carlo optimization.
+        #precision: The minimum seperation between paramters from bounds. This is to represent the fact that I can
+        #only tune the knobs of my actual experiment so much, and thus don't want to waste time simulating stuff I can't
+        #actually vary
         self.h=h
         self.T=T
+        self.modulation=modulation
 
         print('generating monte carlo bounds')
         qyLimit,qzLimit,pxLimit,pyLimit,pzLimit=self.generate_Monte_Carlo_Bounds()
@@ -358,6 +379,7 @@ class LatticeOptimizer:
         boundsNorm = [(0, self.stepsLens1), (0, self.stepsLens2)]
         print('bounds',boundsNorm)
 
+
         def min_Func(X):
             XNew = X.copy()
             for i in range(len(X)):  # change normalized bounds to actual
@@ -371,16 +393,17 @@ class LatticeOptimizer:
             gm.func=func
             t=time.time()
             print('start mode match')
-            survival = -gm.solve()
+            survival = -gm.solve(self)
             print('done mode match',time.time()-t)
-            print(survival)
+            print('survival',survival)
             # self.update_Lattice(XNew)
             # swarm=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner, self.h, self.T, fastMode=True)
             # survival=swarm.survival_Rev()
             Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
             cost = -Tsurvival / T  # cost scales from 0 to -1.0
-            print(cost)
+            print('cost',cost)
             return cost
+
         stabilityFunc = self.get_Stability_Function(numParticlesPerDim=1, cutoff=8.0,h=5e-6)
 
         def stability_Func_Wrapper(X):
@@ -392,8 +415,8 @@ class LatticeOptimizer:
         self.numInit = int(maxHardsEvals * .5)  # 50% is just random
         #generate random sample list. This really needs to be improved, I liked the feature where I added one point
         #at a time but that requires using random numbers when this is exhausted
-        points = 5 * self.numInit  # from experience I know that at least this amount is requied based on how sparse
-        # expensive evaluations are
+        points = 5 * self.numInit +int((np.random.rand()-.5)*10) # from experience I know that at least this amount is requied based on how sparse
+        # expensive evaluations are. Add random numbers to shake things up
         r = np.sqrt(2 * (1.0 / points) / np.pi)  # this is used to get near the required amount of points with
         # poission disc method, which does not give an exact number of points
         samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0, 1.0]), k=100, radius=r)
@@ -406,7 +429,7 @@ class LatticeOptimizer:
 
         unstableCost = -1.5 * (self.lattice.totalLength / self.lattice.v0Nominal) / T  # typically unstable regions return an average
         # of 1 to 2 revolution
-        xiRevs = .25  # search for the next points that returns an imporvement of at least this many revs
+        xiRevs = 1.0  # search for the next points that returns an imporvement of at least this many revs
         self.xi = (xiRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
         noiseRevs =1e-2 #small amount of noise to account for variability of results and encourage a smooth fit
         noise = (noiseRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T

@@ -52,25 +52,18 @@ def get_Lattice(trackPotential=False):
     lattice.end_Lattice(trackPotential=trackPotential)
     return lattice
 
-def compute_Sol(h,Revs,numParticles,maxEvals,bounds=None):
-    lattice=get_Lattice()
+def compute_Sol(h,Revs,maxEvals):
+    lattice=get_Lattice(trackPotential=False)
+    #lattice.show_Lattice()
     T=Revs*lattice.totalLength/lattice.v0Nominal
     optimizer=LatticeOptimizer(lattice)
-
-
-    #name='smallCombinerSmallMagnets_sub'
-    #optimizer.plot_Stability(bounds=[(0.0, 0.3), (0.2, 0.5)], gridPoints=20, savePlot=False, plotName=name)
-    sol=optimizer.maximize_Suvival_Through_Lattice(h, T, numParticles=numParticles, maxHardsEvals=maxEvals, bounds=bounds)
+    sol=optimizer.maximize_Suvival_Through_Lattice(h, T, maxHardsEvals=maxEvals)
     return sol
 
-
-    #sol=optimizer.maximize_Suvival_Through_Lattice(h,T,numParticles=numParticles,maxEvals=maxEvals)
-    #return sol
-    # particle=Particle()
-    # particleTracer=ParticleTracer(lattice)
-    #
-    #
-    # particle=particleTracer.trace(particle,h,T,fastMode=False)
-    # qoArr=particle.qoArr
-    # EArr=particle.EArr
-    # #lattice.show_Lattice(particleCoords=particle.qArr[-1])
+# lattice=get_Lattice(trackPotential=True)
+# particleTracer=ParticleTracer(lattice)
+# particle=Particle()
+# particle=particleTracer.trace(particle,1e-6,1,fastMode=False)
+# #particle.plot_Energies()
+# #lattice.show_Lattice(particle=particle,showTraceLines=True)
+# particle.plot_Orbit_Reference_Frame_Position()
