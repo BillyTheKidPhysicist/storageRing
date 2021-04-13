@@ -188,12 +188,14 @@ class LatticeOptimizer:
         return revolutionFunc
 
     def plot_Stability(self,bounds=None,qMax=1e-4,numParticlesPerDim=2,gridPoints=40,savePlot=False,
-                       plotName='stabilityPlot',cutoff=8.0,h=5e-6,showPlot=True):
+                       plotName='stabilityPlot',cutoff=8.0,h=5e-6,showPlot=True,modulation='01'):
         #bounds: region to search over for instability
         #qMax: maximum dimension in transverse directions for initialized particles
         #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2.
         #gridPoints: number of points per axis to test stability. Total is gridPoints**2
         #cutoff: Maximum revolutions below this value are considered unstable
+        #modulation: Which elements in the lattice to modulate the field of
+        self.modulation=modulation
 
         if bounds is None:
             bounds = [(0.0, .5), (0.0, .5)]

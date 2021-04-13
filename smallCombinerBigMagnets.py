@@ -62,6 +62,12 @@ def compute_Sol(h,Revs,maxEvals,modulation='01'):
     # optimizer.plot_Stability(numParticlesPerDim=1,h=1e-5)
     sol=optimizer.maximize_Suvival_Through_Lattice(h, T,modulation=modulation, maxHardsEvals=maxEvals)
     return sol
+lattice=get_Lattice(trackPotential=False)
+# optimizer=LatticeOptimizer(lattice)
+# optimizer.plot_Stability(numParticlesPerDim=1,h=1e-5,modulation='01',showPlot=False,savePlot=True,plotName='smallCombinerBigMagnet_Mod_01')
+# optimizer.plot_Stability(numParticlesPerDim=1,h=1e-5,modulation='12',showPlot=False,savePlot=True,plotName='smallCombinerBigMagnet_Mod_12')
+# optimizer.plot_Stability(numParticlesPerDim=1,h=1e-5,modulation='02',showPlot=False,savePlot=True,plotName='smallCombinerBigMagnet_Mod_02')
+
 # compute_Sol(1,1,1)
 #
 # lattice=get_Lattice()
