@@ -77,6 +77,7 @@ class Element:
         self.apR = None  # apeture on the'right'.
         self.type = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         # constructed in particleTracerLattice
+        self.sigma=None # the transverse translational. Only applicable to bump lenses now
         self.sim = None  # wether the field values are from simulations
         self.F = np.zeros(3)  # object to hold the force to prevent constantly making new force vectors
 
@@ -216,6 +217,10 @@ class LensIdeal(Element):
             else:
                 return False
 
+class BumpsLensIdeal(LensIdeal):
+    def __init__(self, PTL, L, Bp, rp,sigma,ap, fillParams=True):
+        super().__init__(PTL, L, Bp, rp, ap, fillParams=True)
+        self.sigma=sigma #the amount of vertical shift for bumping the beam over
 
 class Drift(LensIdeal):
     def __init__(self, PTL, L, ap):

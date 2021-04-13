@@ -6,7 +6,7 @@ import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim
+    ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim,BumpsLensIdeal
 from ParticleTracer import ParticleTracer
 import scipy.optimize as spo
 from profilehooks import profile
@@ -31,6 +31,10 @@ class ParticleTracerLattice:
         self.bender1=None #bender element object
         self.bender2=None #bender element object
         self.combiner=None #combiner element object
+
+        self.latticeType=None#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
+        #input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
+        #is also at the origin, but seceeding elements follow along the positive x axis
 
         self.elList=[] #to hold all the lattice elements
     @staticmethod
@@ -64,7 +68,23 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=LensIdeal(self, L, Bp, rp, ap=ap) #create a lens element object
+        el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
+        el.index = len(self.elList) #where the element is in the lattice
+        self.elList.append(el) #add element to the list holding lattice elements in order
+    def add_Bump_Lens_Ideal(self,L,Bp,rp,sigma,ap=None):
+        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
+        #L: Length of lens, m
+        #Bp: field strength at pole face of lens, T
+        #rp: bore radius of element, m
+        #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius. unitless
+        #sigma: The transverse translation of the element that gives rise to the bumping of the beam
+        apFrac=.9 #apeture fraction
+        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
+            ap=apFrac*rp
+        else:
+            if ap > rp:
+                raise Exception('Apeture cant be bigger than bore radius')
+        el=BumpsLensIdeal(self, L, Bp, rp,sigma, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
 
@@ -157,7 +177,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False):
+    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False,latticeType='storageRing'):
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
         #TODO: document which parameters mean what when using constrain!
@@ -169,6 +189,9 @@ class ParticleTracerLattice:
         # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
         #track potential. Wether to have enable the element function that returns magnetic pontential at a given point.
         #there is a cost to keeping this enabled because of pickling time
+        #latticeType: Wether lattice is 'storageRing' type or 'injector' type.
+        if latticeType!='storageRing' and latticeType!='injector':
+            raise Exception('invalid lattice type provided')
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
@@ -434,7 +457,12 @@ class ParticleTracerLattice:
             if i==0: #if the element is the first in the lattice
                 xb=0.0#set beginning coords
                 yb=0.0#set beginning coords
-                el.theta=np.pi #first element is straight. It can't be a bender
+                if el.sigma is not None:
+                    raise Exception('First element cannot be bump element')
+                if self.latticeType=='storageRing':
+                    el.theta=np.pi #first element is straight. It can't be a bender
+                else:
+                    el.theta=0
                 xe=el.L*np.cos(el.theta) #set ending coords
                 ye=el.L*np.sin(el.theta) #set ending coords
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input
@@ -443,6 +471,10 @@ class ParticleTracerLattice:
                 xb=self.elList[i-1].r2[0]#set beginning coordinates to end of last
                 yb=self.elList[i-1].r2[1]#set beginning coordinates to end of last
                 prevEl = self.elList[i - 1]
+                if el.sigma is not None:  # a bump element, need to ad transverse displacement
+                    if prevEl.ang!=0:
+                        raise Exception('Bump element is not applicable here')
+                    yb += el.sigma
                 #set end coordinates
                 if el.type=='STRAIGHT':
                     if prevEl.type=='COMBINER':
@@ -565,9 +597,10 @@ class ParticleTracerLattice:
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
         elif enforceClosedLattice==False and closed==False:
             import warnings
-            print(deltax, deltay)
+            print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-    def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False):
+    def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
+                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -575,29 +608,35 @@ class ParticleTracerLattice:
         #particle: particle object
         #swarm: swarm of particles to plot.
         #showRelativeSurvival: when plotting swarm indicate relative particle survival by varying size of marker
+        #showMarkers: Wether to plot a marker at the position of the particle
+        #traceLineAlpha: Darkness of the trace line
+        #trueAspectRatio: Wether to plot the width and height to respect the actual width and height of the plot dimensions
+        # it can make things hard to see
         plt.close('all')
         def plot_Particle(particle,xMarkerSize=1000):
             if particle.clipped==True:
-                color='blue'
-            elif particle.clipped==False:
                 color='red'
-            else: #if None
+            elif particle.clipped==False:
                 color='green'
-            plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
-            plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
+            else: #if None
+                color='blue'
+            if showMarkers==True:
+                plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
+                plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
             if showTraceLines==True:
                 if particle.qArr.shape[0]!=0:
-                    plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,linestyle=':')
+                    plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,alpha=traceLineAlpha)
 
         for el in self.elList:
             plt.plot(*el.SO.exterior.xy,c='black')
-        if particleCoords is not None:
+        if particleCoords is not None: #plot from the provided particle coordinate
             if particleCoords.shape[0]==3: #if the 3d value is provided trim it to 2D
                 particleCoords=particleCoords[:2]
             #plot the particle as both a dot and a X
-            plt.scatter(*particleCoords,marker='x',s=1000,c='r')
-            plt.scatter(*particleCoords, marker='o', s=50, c='r')
-        if particle is not None: #plot from provided particle
+            if showMarkers==True:
+                plt.scatter(*particleCoords,marker='x',s=1000,c='r')
+                plt.scatter(*particleCoords, marker='o', s=50, c='r')
+        elif particle is not None: #instead plot from provided particle
             plot_Particle(particle)
         if swarm is not None:
             maxRevs=swarm.longest_Particle_Life_Revolutions()
@@ -612,5 +651,6 @@ class ParticleTracerLattice:
                 else:
                     plot_Particle(particle)
         plt.grid()
-        plt.gca().set_aspect('equal')
+        if trueAspectRatio==True:
+            plt.gca().set_aspect('equal')
         plt.show()

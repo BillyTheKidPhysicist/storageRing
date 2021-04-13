@@ -106,6 +106,8 @@ class Particle:
         self.TArr=None 
         self.VArr=None 
         self.EArr=None #total energy
+        self.yInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
+        self.zInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
     def log_Params(self):
         #this records value like position and momentum
         self.qList.append(self.q.copy())
@@ -168,6 +170,7 @@ class Particle:
         plt.plot(qoArr[:,0],yPlot)
         plt.ylabel('Trajectory offset, m')
         plt.xlabel('Trajectory length, m')
+        plt.grid()
         plt.show()
 
     def copy(self):
