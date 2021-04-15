@@ -177,7 +177,8 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False,latticeType='storageRing'):
+    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False,latticeType='storageRing',
+                    surpressWarning=False):
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
         #TODO: document which parameters mean what when using constrain!
@@ -200,7 +201,7 @@ class ParticleTracerLattice:
             if self.bender1.sim==False: #bender1 and 2 will have same type enorced before
                 self.constrain_Lattice()
         if buildLattice==True:
-            self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice)
+            self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice,surpressWarning=surpressWarning)
             self.make_Geometry()
             self.totalLength=0
             for el in self.elList: #total length of particle's orbit in an element
@@ -442,7 +443,7 @@ class ParticleTracerLattice:
                 raise Exception('BENDER NUMBER OF MAGNETS IS NOT SPECIFIED')
             if type(self.bender1.numMagnets)!=type(self.bender2.numMagnets): #for segmented benders
                 raise Exception('BENDERS BOTH MUST HAVE NUMBER OF MAGNETS SPECIFIED OR BE None')
-    def set_Element_Coordinates(self,enforceClosedLattice=True):
+    def set_Element_Coordinates(self,enforceClosedLattice=True,surpressWarning=False):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
         #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element
@@ -595,12 +596,12 @@ class ParticleTracerLattice:
         if enforceClosedLattice==True and closed==False:
             print(deltax, deltay)
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-        elif enforceClosedLattice==False and closed==False:
+        elif enforceClosedLattice==False and closed==False and surpressWarning==False:
             import warnings
             print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
-                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True):
+                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -612,6 +613,8 @@ class ParticleTracerLattice:
         #traceLineAlpha: Darkness of the trace line
         #trueAspectRatio: Wether to plot the width and height to respect the actual width and height of the plot dimensions
         # it can make things hard to see
+        #extraObjects: List of shapely objects to add to the plot. Used for adding things like apetures. Limited
+        #functionality right now
         plt.close('all')
         def plot_Particle(particle,xMarkerSize=1000):
             if particle.clipped==True:
@@ -650,6 +653,13 @@ class ParticleTracerLattice:
                     plot_Particle(particle,xMarkerSize=1000*revs/maxRevs)
                 else:
                     plot_Particle(particle)
+
+        if extraObjects is not None: #plot shapely objects that the used passed through. SO far this has limited
+            # functionality
+            for object in extraObjects:
+                plt.plot(*object.coords.xy,linewidth=1,c='black')
+
+
         plt.grid()
         if trueAspectRatio==True:
             plt.gca().set_aspect('equal')

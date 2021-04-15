@@ -497,7 +497,7 @@ class SwarmTracer:
         if parallel==True:
             def func(particle):
                 return particleTracer.trace(particle, h, T,fastMode=fastMode)
-            results = self.helper.parallel_Problem(func, swarmNew.particles)
+            results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]
