@@ -1,6 +1,6 @@
 import skopt
 import numba
-from profilehooks import profile
+# from profilehooks import profile
 from ParticleTracer import ParticleTracer
 #import black_box as bb
 import numpy.linalg as npl
@@ -489,10 +489,13 @@ class SwarmTracer:
 
 
         return swarm.survival_Bool()
-    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True):
+    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True):
 
         #trace a swarm through the lattice
-        swarmNew=swarm.copy()
+        if copySwarm==True:
+            swarmNew=swarm.copy()
+        else:
+            swarmNew=swarm
         particleTracer = ParticleTracer(self.lattice)
         if parallel==True:
             def func(particle):

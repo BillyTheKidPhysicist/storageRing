@@ -70,6 +70,10 @@ class Swarm:
         return copy.deepcopy(self)
     def num_Particles(self):
         return len(self.particles)
+    def reset(self):
+        #reset the swarm.
+        for particle in self.particles:
+            particle.reset()
 class Particle:
     #This object represents a single particle with unit mass. It can track parameters such as position, momentum, and
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
@@ -108,6 +112,9 @@ class Particle:
         self.EArr=None #total energy
         self.yInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
         self.zInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
+    def reset(self):
+        #reset the particle
+        self.__init__(qi=self.qi,pi=self.pi)
     def log_Params(self):
         #this records value like position and momentum
         self.qList.append(self.q.copy())

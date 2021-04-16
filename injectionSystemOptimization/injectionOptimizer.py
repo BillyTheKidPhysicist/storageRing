@@ -4,18 +4,22 @@ import time
 import scipy.optimize as spo
 import numpy as np
 import matplotlib.pyplot as plt
-from storageRingOptimization import elementPT
-from storageRingOptimization.ParticleTracer import ParticleTracer
+# from storageRingOptimization import elementPT
+# from storageRingOptimization.ParticleTracer import ParticleTracer
 from storageRingOptimization.ParticleClass import  Swarm,Particle
-import storageRingOptimization.elementPT
+# import storageRingOptimization.elementPT
 from storageRingOptimization.particleTracerLattice import ParticleTracerLattice
 from storageRingOptimization.SwarmTracer import SwarmTracer
 from shapely.geometry import LineString
+# from profilehooks import profile
 
 class ApetureOptimizer:
     def __init__(self):
         self.lattice=None
         self.swarmInitial=None
+        self.h=None #timestep
+        self.v0Nominal=200.0
+
     def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat'):
         #load a swarm from a file.
         #numParticles: Number of particles to load from the file. if None load all
@@ -101,9 +105,9 @@ class ApetureOptimizer:
                 raise Exception('invalid axis provided')
             temp.append(val)
         return max(temp)
-    def trace_Through_Bumper(self,h):
+    def trace_Through_Bumper(self):
         swarmTracer = SwarmTracer(self.lattice)
-        swarm = swarmTracer.trace_Swarm_Through_Lattice(self.swarmInitial, h, 1.0, fastMode=False,parallel=True)
+        swarm = swarmTracer.trace_Swarm_Through_Lattice(self.swarmInitial, self.h, 1.0, fastMode=False,parallel=False)
         #now 'unclip' particles that got clipped at the last element. The last element represents free space so any
         #clipping there is not part of the model now and is considered not clipped cause I assume all that is captured.
         #Also go through and assign interpolated functions
@@ -129,7 +133,7 @@ class ApetureOptimizer:
         thetaMean=np.mean(np.asarray(thetaList))
         offsetMean=np.mean(np.asarray(offsetList))
         return thetaMean,offsetMean
-    def project_Swarm_Through_Apeture(self, swarm, Li, apetureDiam, theta, offset):
+    def project_Swarm_Through_Apeture(self, swarm, Li, apetureDiam, theta, offset,copySwarm=True):
         #clip particles in the swarm that clip the lens. This is done by placing a perpindicular line
         #at a distance Li from the end of the last lens along the line given by theta and offset
         #swarm: The swarm to test. Needs to have been traced already
@@ -137,8 +141,10 @@ class ApetureOptimizer:
         #apSize: the diameter of the apeture
         #theta: the tilt of the outgoing beam
         #offset: the displacement of the outgoing beam from y=0 at the last element
-        swarmNew=swarm.copy()
-
+        if copySwarm==True:
+            swarmNew=swarm.copy()
+        else:
+            swarmNew=swarm
         #All the below coordinates are in the x,y plane, ie the plane parallel to the ground
         #get m and b for the nominal trajectory
         mTraj=np.tan(theta)
@@ -164,7 +170,7 @@ class ApetureOptimizer:
                 mzAtom=particle.pArr[-1,2]/particle.pArr[-1,0] #slope of atom trajectory
                 bzAtom=particle.qArr[-1,2]-mzAtom*particle.qArr[-1,0] #b of atom in y=mx+b
                 zAtom=mzAtom*xAtom+bzAtom
-                deltaz=zAtom*0
+                deltaz=zAtom
 
                 delta=np.sqrt(deltay**2+deltaz**2)
                 if delta>apetureDiam/2:
@@ -187,13 +193,13 @@ class ApetureOptimizer:
         spotSize=self.get_Frac_Width(np.asarray(qList),fraction=fraction)
         return spotSize
     def update_Lattice(self,args):
-        Lm1,Lm2,Bp1,Bp2,rp1,rp2,sigma,LSep,Lo = args
-        self.lattice = ParticleTracerLattice(200.0)
+        Lm1,Lm2,Bp1,Bp2,rp1,rp2,sigma,LSep,Lo,Li = args
+        self.lattice = ParticleTracerLattice(self.v0Nominal)
         self.lattice.add_Drift(Lo)
-        self.lattice.add_Lens_Ideal(Lm1, Bp1, rp1)
+        self.lattice.add_Lens_Ideal(Lm1, Bp1, rp1, ap=rp1*.9)
         self.lattice.add_Drift(LSep)
-        self.lattice.add_Bump_Lens_Ideal(Lm2, Bp2, rp2, sigma, ap=rp2 - .001)
-        self.lattice.add_Drift(.5,ap=.5)
+        self.lattice.add_Bump_Lens_Ideal(Lm2, Bp2, rp2, sigma, ap=rp2*.9)
+        self.lattice.add_Drift(Li+.05,ap=2*.075*Li)
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True)
     def make_Apeture_Objects(self,Li,apDiam,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
@@ -206,8 +212,8 @@ class ApetureOptimizer:
         #make upper portion of apeture
         xApUp1=xAp+(apDiam/2)*np.cos(theta+np.pi/2)
         yApUp1=yAp+(apDiam/2)*np.sin(theta+np.pi/2)
-        xApUp2 = xAp + (apDiam+apWidthInPlot) * np.cos(theta + np.pi / 2)
-        yApUp2 = yAp + (apDiam+apWidthInPlot) * np.sin(theta + np.pi / 2)
+        xApUp2 = xAp + (apDiam/2+apWidthInPlot) * np.cos(theta + np.pi / 2)
+        yApUp2 = yAp + (apDiam/2+apWidthInPlot) * np.sin(theta + np.pi / 2)
         #make lower shape
         xApLow1 = xAp -(apDiam/2) * np.cos(theta + np.pi / 2)
         yApLow1 = yAp -(apDiam/2) * np.sin(theta + np.pi / 2)
@@ -217,42 +223,84 @@ class ApetureOptimizer:
         upperShape=LineString([(xApUp1,yApUp1),(xApUp2,yApUp2)])
         lowerShape=LineString([(xApLow1,yApLow1),(xApLow2,yApLow2)])
         return [upperShape,lowerShape]
-    def optimize_Output(self,Lo=.1,Bp2=1.0,Li=.2):
-        bounds=[(.05,.2),(.05,.2),(.01,.4),(.005,.03),(.005,.03),(0.0,-.03),(.025,.1)] #Lm1,Lm2,Bp1,rp1,rp2,sigma,LSep
-        def cost_Function(args,printVals=False):
+    def get_Virtual_Object_Distance(self, swarm, Lo):
+        #this method finds the object distance after the swarm has traveled through the first lens. This is done by
+        #using the slope of the beam to estimate the object distance with the initial object distance. Only uses y values
+        xBefore=self.lattice.elList[1].r1[0]
+        xAfter=self.lattice.elList[1].r2[0]
+        mBefore=0 #slope
+        mAfter=0
+        numParticles=0
+        for particle in swarm:
+            if particle.clipped is False: #only consider particles that havn't clip
+                #flip the sign for particles below the y=0 line
+                mBefore+=np.sign(particle.yInterp(xAfter))*(particle.yInterp(xBefore+1e-6)-particle.yInterp(xBefore))/1e-6
+                mAfter+=np.sign(particle.yInterp(xAfter))*(particle.yInterp(xAfter+1e-6)-particle.yInterp(xAfter))/1e-6
+                numParticles+=1
+
+        mBefore=mBefore/numParticles
+        mAfter=mAfter/numParticles
+        LoVirtual=(mBefore/mAfter)*Lo+(xAfter-xBefore) #the ratio of the angle plus the extra distance traveled in the
+        #lens is propotional (I hope, and seems to be) to the virtual object distance
+        return LoVirtual
+
+    def optimize_Output(self,Lo=.1,Bp1=.9,Bp2=.9,Li=.2,apDiam=.005,h=1e-5):
+        #this method optimizes the injection system for passing through an apeture.
+        #Lo: object length of the system
+        #Bp2: Pole face strength of the second lens, ie the shifter
+        #Li: Image length, also where the second apeture should be placed.
+        #apDiam: diamter of the second apeture, located at the image
+        self.h=h
+        bounds=[(.05,.3),(.05,.3),(.005,.05),(.005,.05),(0.0,-.03),(.025,.1)] #Lm1,Lm2,rp1,rp2,sigma,LSep
+        def cost_Function(args,returnResults=False):
+            #todo: need to improve this alot. Needs to be move to its own function or something
             argsLattice=list(args)
             argsLattice.append(Lo)
+            argsLattice.append(Li)
+            argsLattice.insert(2, Bp1)
             argsLattice.insert(3,Bp2)
             self.update_Lattice(argsLattice)
             for el in self.lattice.elList:
                 el.fill_Params()
-            swarm = self.trace_Through_Bumper(1e-5)
-            if swarm.survival_Bool()==0: #sometimes all particles are clipped
-                cost2=np.inf
-                cost1=np.inf
+            swarm = self.trace_Through_Bumper()
+            cost=0
+            if swarm.survival_Bool()==0: #sometimes  all particles are clipped
+                cost+=np.inf
             else:
-
+                swarmPreClipped=swarm #the swarm before clipping at the apeture. This is for testing wether the first
+                #lens collimated the beam.
                 thetaMean, offsetMean = self.characterize_Output(swarm)
-                swarm=self.project_Swarm_Through_Apeture(swarm,Li,.005,thetaMean,offsetMean)
-                if swarm.survival_Bool()!=0: #now they can all clip on the apeture
+                swarm=self.project_Swarm_Through_Apeture(swarm,Li,apDiam,thetaMean,offsetMean,copySwarm=True)
+                if swarm.survival_Bool()!=0: #sometimes they can all clip on the apeture also
+                    LoVirtual = self.get_Virtual_Object_Distance(swarmPreClipped, Lo)
                     offsetAtApeture = np.abs(offsetMean + thetaMean * Li)
-                    print(offsetAtApeture,swarm.survival_Bool())
-                    cost1 = 1 / offsetAtApeture  # reduce this cost
-                    cost2=10*1/swarm.survival_Bool()
+                    cost+= 1.0 / offsetAtApeture  # reduce this cost
+                    if swarm.survival_Bool()<.9: #less than 90% survival punish severaly
+                        cost+=1e2*((.9/swarm.survival_Bool())**2-1.0)
+                    if np.abs(LoVirtual)<1.0: #punish if the object distance is too small
+                       cost+=1e2*(1.0/np.abs(LoVirtual)-1.0)
+                    print(args,swarm.survival_Bool(),offsetAtApeture,LoVirtual,cost)
                 else:
-                    cost1=np.inf
-                    cost2=np.inf
-            if printVals==True:
-                print(1/cost1,thetaMean,offsetMean,1/(cost2/10))
-                return swarm
-
-            return cost1+cost2
+                    cost+=np.inf
+            if returnResults==True:
+                if swarm.survival_Bool()!=0:
+                    return swarm,thetaMean,offsetMean,swarm.survival_Bool(),offsetAtApeture,LoVirtual
+                else:
+                    return swarm
+            return cost
         t=time.time()
-        sol=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,maxiter=5,disp=True,popsize=4)
+        sol=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=1000,mutation=(.5,1.0))
+        # 10 iter parallel
+        #826 seconds, 104 cost, dist .74, survival .817, offset .021
+        #849 seconds, 96 cost, dist 1.15, survival .732, offset .022
         print('run time',time.time()-t)
         print(sol)
-        swarm=cost_Function(sol.x,printVals=True)
-        self.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True)
+        swarm,thetaMean,offsetMean,survival,offsetApeture,LoVirtual=cost_Function(sol.x,returnResults=True)
+        print('distance',LoVirtual)
+        print('survival',survival,'offset',offsetApeture)
+        # apetureObjects=self.make_Apeture_Objects(Li,apDiam,thetaMean,offsetMean)
+        # self.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
+        #                           extraObjects=apetureObjects)
 
 
 
@@ -261,35 +309,35 @@ class ApetureOptimizer:
 
 
 #
-Lo=.1
-Bp1=.33
-rp1=.011
-Lm1=.1
-LSep=.05
-Bp2=1.0
-rp2=3e-2
-Lm2=.15
-sigma=-.02
-lattice=ParticleTracerLattice(200.0)
-lattice.add_Drift(Lo)
-lattice.add_Lens_Ideal(Lm1,Bp1,rp1)
-lattice.add_Drift(LSep)
-lattice.add_Bump_Lens_Ideal(Lm2,Bp2,rp2,sigma,ap=rp2-.001)
-lattice.add_Drift(.4,ap=.1)
-lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
-# lattice.show_Lattice()
+# Lo=.1
+# Bp1=.33
+# rp1=.011
+# Lm1=.1
+# LSep=.05
+# Bp2=1.0
+# rp2=3e-2
+# Lm2=.15
+# sigma=-.02
+# lattice=ParticleTracerLattice(200.0)
+# lattice.add_Drift(Lo)
+# lattice.add_Lens_Ideal(Lm1,Bp1,rp1)
+# lattice.add_Drift(LSep)
+# lattice.add_Bump_Lens_Ideal(Lm2,Bp2,rp2,sigma,ap=rp2-.001)
+# lattice.add_Drift(.4,ap=.1)
+# lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
+
 
 apetureOptimizer=ApetureOptimizer()
 # apetureOptimizer.initialize_Ideal_Point_Swarm(numParticles=1000,maxAng=.1)
 apetureOptimizer.initialize_Observed_Swarm(numParticles=1000)
-apetureOptimizer.lattice=lattice
-swarm=apetureOptimizer.trace_Through_Bumper(1e-5)
-theta,offset=apetureOptimizer.characterize_Output(swarm)
-test=apetureOptimizer.make_Apeture_Objects(.1,.005,theta,offset)
-swarm=apetureOptimizer.project_Swarm_Through_Apeture(swarm,.1,.005,theta,offset)
+# apetureOptimizer.lattice=lattice
+# swarm=apetureOptimizer.trace_Through_Bumper(1e-5)
+# theta,offset=apetureOptimizer.characterize_Output(swarm)
+# test=apetureOptimizer.make_Apeture_Objects(.1,.005,theta,offset)
+# swarm=apetureOptimizer.project_Swarm_Through_Apeture(swarm,.1,.005,theta,offset)
 
 #
 # print(apetureOptimizer.characterize_Output(swarm))
-# apetureOptimizer.optimize_Output()
+apetureOptimizer.optimize_Output()
 
-lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,extraObjects=test)
+# lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,extraObjects=test)
