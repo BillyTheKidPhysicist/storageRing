@@ -6,9 +6,6 @@ from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
-import pathos as pa
-#from ParticleClass import Particle
-#from profilehooks import profile,coverage
 
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
@@ -40,26 +37,31 @@ class ParticleTracer:
 
         self.particle=None #particle object being traced
         self.fastMode=None #wether to use the fast and memory light version that doesn't record parameters of the particle
+        self.qEl=None #this is in the element frame
+        self.pEl=None #this is in the element frame
+        self.currentEl=None
+        self.forceLast=None #the last force value. this is used to save computing time by reusing force
         self.test=[]
 
 
     def initialize(self):
         # prepare for a single particle to be traced
         self.T=0
-        self.particle.cumulativeLength=0
         if self.particle.clipped is not None:
             self.particle.clipped=False
-        self.particle.force=None
         dl=self.particle.v0*self.h #approximate stepsize
         for el in self.latticeElementList:
             if dl>el.Lo/10.0:
                 raise Exception('STEP SIZE TOO LARGE')
-        self.particle.currentEl = self.which_Element_Slow(self.particle.q)
-        if self.particle.currentEl is None:
+        self.currentEl = self.which_Element_Slow(self.particle.q)
+        self.particle.currentEl=self.currentEl
+        if self.currentEl is None:
             self.particle.clipped=True
+        else:
+            self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.q)
+            self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.p)
         if self.fastMode==False:
-            self.particle.log_Params()
-
+            self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
     def trace(self,particle,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
@@ -78,8 +80,6 @@ class ParticleTracer:
         self.fastMode=fastMode
         self.h=h
 
-
-
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
@@ -90,14 +90,15 @@ class ParticleTracer:
                 self.particle.clipped=False
                 break
             self.time_Step_Verlet()
-            # self.test.append(npl.norm(self.particle.force))
             if self.particle.clipped==True:
                 break
             if fastMode==False:
-                self.particle.log_Params()
+                self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
             self.T += self.h
             self.particle.T=self.T
-
+        self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
+        self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
+        self.particle.currentEl=self.currentEl
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
 
         return self.particle
@@ -106,7 +107,11 @@ class ParticleTracer:
         # This method calculates the correct timestep to put the particle just on the other side of the end of the element
         # using velocity verlet. I had intended this to use the force right at the end of the element, but that didn't
         # work right. For now it simply uses explicit euler more or less
-        el,q,p=self.particle.currentEl, self.particle.q, self.particle.p
+        #This returns the new position and momentum in lab frame
+        el=self.currentEl
+        q=el.transform_Element_Coords_Into_Lab_Frame(self.qEl)
+        p=el.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
+
         r=el.r2-q
 
         rt=np.abs(np.sum(el.ne*r[:2])) #perindicular position  to element's end
@@ -118,9 +123,11 @@ class ParticleTracer:
         n_p=p/np.sum(np.sqrt(p**2)) #normalized vector of particle velocity direction
 
         q=q+n_p*eps
-        self.particle.q=q
-        self.particle.p=p
-        #TODO: FIX THIS, IT'S BROKEN. DOESN'T WORK WITH FORCE :(
+        #now the particle is in the next element!
+        return q,p
+
+
+
 
     @staticmethod
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
@@ -131,35 +138,34 @@ class ParticleTracer:
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
     def fast_pNew(p,F,F_n,h):
         return p+.5*(F+F_n)*h
-
     def time_Step_Verlet(self):
         #the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
         #possible
-        q=self.particle.q #q old or q sub n
-        p=self.particle.p #p old or p sub n
-        if self.elHasChanged==False and self.particle.force is not None: #if the particle is inside the lement it was in
+        qEl=self.qEl #q old or q sub n
+        pEl=self.pEl #p old or p sub n
+        if self.elHasChanged==False and self.forceLast is not None: #if the particle is inside the lement it was in
             #last time step, and it's not the first time step, then recycle the force. The particle is starting at the
             #same position it stopped at last time, thus same force
-            F=self.particle.force
+            F=self.forceLast
         else: #the last force is invalid because the particle is at a new position
-            F=self.force(q)
+            F=self.currentEl.force(qEl)
 
         #a = F # acceleration old or acceleration sub n
-        q_n=self.fast_qNew(q,F,p,self.h)#q new or q sub n+1
-        el, qel = self.which_Element(q_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
+        qEl_n=self.fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
+        el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
         #not always checking if the particle is inside the element by looking at how far away it is from and edge and
         #calculating when I should check again the soonest
         exitLoop=self.check_Which_Element_And_Handle_Edge_Event(el)  #check if element has changed.
         if exitLoop==True:
             self.elHasChanged = True
             return
-        F_n=self.force(q_n,el=el,qel=qel)
+        F_n=self.currentEl.force(qEl_n)
 
         #a_n = F_n  # acceleration new or acceleration sub n+1
-        p_n=self.fast_pNew(p,F,F_n,self.h)
-        self.particle.q=q_n
-        self.particle.p=p_n
-        self.particle.force=F_n #record the force to be recycled
+        pEl_n=self.fast_pNew(pEl,F,F_n,self.h)
+        self.qEl=qEl_n
+        self.pEl=pEl_n
+        self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
     def check_Which_Element_And_Handle_Edge_Event(self, el):
@@ -172,57 +178,31 @@ class ParticleTracer:
         if el is None: #if the particle is outside the lattice, the simulation is over
             self.particle.clipped = True
             return True
-        elif el is not self.particle.currentEl:
-            self.handle_Element_Edge()
+        elif el is not self.currentEl:
+            qLab,pLab=self.handle_Element_Edge()
             #it's possible that the particle is now outside the lattice, so check which element it's in
-            if self.which_Element_Slow(self.particle.q) is None:
+            if self.which_Element_Slow(qLab) is None:
                 exitLoop=True
                 self.particle.clipped=True
                 return exitLoop
-            self.particle.cumulativeLength += self.particle.currentEl.Lo #add the previous orbit length
-            self.particle.currentEl = el
+            self.particle.cumulativeLength += self.currentEl.Lo #add the previous orbit length
+            self.currentEl = el
+            self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab)
+            self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab)
             exitLoop=True
-
         return exitLoop
 
-
-    #@profile
-    def force(self,q,qel=None,el=None):
-        #calculate force. The force from the element is in the element coordinates, and the particle's coordinates
-        #must be in the element frame
-        #q: particle's coordinates in lab frame
-        if el is None:
-            el=self.which_Element_Slow(q) #find element the particle is in
-            if el is None: #if particle is outside!
-                return None
-        if qel is None:
-            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
-        Fel=el.force(qel) #force in element frame
-        FLab=el.transform_Element_Frame_Vector_To_Lab_Frame(Fel) #force in lab frame
-        return FLab
-
-
-    def which_Element(self,q,return_qel=True):
+    def which_Element(self,qel):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
-        qel = self.particle.currentEl.transform_Lab_Coords_Into_Element_Frame(q)
-        isInside=self.particle.currentEl.is_Coord_Inside(qel)
+        isInside=self.currentEl.is_Coord_Inside(qel)
         if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
             #with shapely
-            if return_qel==True:
-                return self.particle.currentEl,qel
-            else:
-                return self.particle.currentEl
+            return self.currentEl
         else: #if not defintely inside current element, search everywhere and more carefully (and slowly) with shapely
+            q=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
             el = self.which_Element_Slow(q)
-            if el is None: #if there is no element, then there are also no corresponding coordinates
-                qel=None
-            else:
-                qel = el.transform_Lab_Coords_Into_Element_Frame(q)
-            if return_qel == True:
-                return el,qel
-            else:
-                return el
+            return el
 
 
     def which_Element_Shapely(self,q):

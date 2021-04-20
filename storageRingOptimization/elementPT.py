@@ -105,13 +105,13 @@ class Element:
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
         # vec: 3D vector in lab frame to rotate into element frame
         vecNew = vec.copy()  # copying prevents modifying the original value
-        vecx = vecNew[0];
+        vecx = vecNew[0]
         vecy = vecNew[1]
         vecNew[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
         vecNew[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
         return vecNew
 
-    def transform_Element_Frame_Vector_To_Lab_Frame(self, vec):
+    def transform_Element_Frame_Vector_Into_Lab_Frame(self, vec):
         # rotate vector out of element frame into lab frame
         # vec: vector in
         vecNew = vec.copy()  # copy input vector to not modify the original
@@ -191,6 +191,12 @@ class LensIdeal(Element):
         qNew[0] = qNew[0] - self.r1[0]
         qNew[1] = qNew[1] - self.r1[1]
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
+        return qNew
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl):
+        qNew = qEl.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
+        qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
+        qNew[0] = qNew[0] +self.r1[0]
+        qNew[1] = qNew[1] +self.r1[1]
         return qNew
 
     def force(self, q):
@@ -277,6 +283,11 @@ class BenderIdeal(Element):
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
+        return qNew
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl):
+        qNew=qEl.copy()
+        qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
+        qNew=qNew+self.r0
         return qNew
 
     def transform_Element_Coords_Into_Orbit_Frame(self, q):

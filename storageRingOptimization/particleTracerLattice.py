@@ -193,6 +193,7 @@ class ParticleTracerLattice:
         #latticeType: Wether lattice is 'storageRing' type or 'injector' type.
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
+        self.latticeType=latticeType
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
