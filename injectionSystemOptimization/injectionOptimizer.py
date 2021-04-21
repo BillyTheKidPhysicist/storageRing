@@ -199,7 +199,7 @@ class ApetureOptimizer:
         self.lattice.add_Lens_Ideal(Lm1, Bp1, rp1, ap=rp1*.9)
         self.lattice.add_Drift(LSep)
         self.lattice.add_Bump_Lens_Ideal(Lm2, Bp2, rp2, sigma, ap=rp2*.9)
-        self.lattice.add_Drift(Li+.05,ap=2*.075*Li)
+        self.lattice.add_Drift(Li+.05,ap=2*1.0*Li)
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True)
     def make_Apeture_Objects(self,Li,apDiam,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
@@ -243,14 +243,18 @@ class ApetureOptimizer:
         #lens is propotional (I hope, and seems to be) to the virtual object distance
         return LoVirtual
 
-    def optimize_Output(self,Bp1=.9,Bp2=.9,Li=.2,apDiam=.005,h=1e-5,Lsep=.05):
+    def optimize_Output(self,Bp1=.9,Bp2=.9,Li=.2,apDiam=.01,h=1e-5,Lsep=.05):
         #this method optimizes the injection system for passing through an apeture.
         #Lo: object length of the system
         #Bp2: Pole face strength of the second lens, ie the shifter
         #Li: Image length, also where the second apeture should be placed.
         #apDiam: diamter of the second apeture, located at the image
         self.h=h
-        bounds=[(.05,.2),(.05,.2),(.01,.05),(.01,.05),(-.01,-.05),(.075,.15)] #Lm1,Lm2,rp1,rp2,sigma,Lo
+        bounds=[(.1,.4),(.1,.4),(.01,.05),(.01,.05),(-.01,-.05),(.075,.3)] #Lm1,Lm2,rp1,rp2,sigma,Lo
+        totalLengthCutoff=1.0 #maximum length of system
+        virtualObjectCutoff=1.0 # the distance to the virtual object from the second lens
+        transmission=.95 # fraction of suriving atoms
+        minAspectRatio=5.0 #the minimum ratio of length to radius of the lens
         def cost_Function(args,returnResults=False):
             #todo: need to improve this alot. Needs to be move to its own function or something
             Lm1,Lm2,rp1,rp2,sigma,Lo=args
@@ -271,11 +275,26 @@ class ApetureOptimizer:
                     LoVirtual = self.get_Virtual_Object_Distance(swarmPreClipped, Lo)
                     offsetAtApeture = np.abs(offsetMean + thetaMean * Li)
                     cost+= 10.0 / offsetAtApeture  # reduce this cost
-                    if swarm.survival_Bool()<.9: #less than 90% survival punish severaly
-                        cost+=1e3*((.9/swarm.survival_Bool())**2-1.0)
-                    if np.abs(LoVirtual)<1.0: #punish if the object distance is too small
-                       cost+=1e2*((1.0/np.abs(LoVirtual))**2-1.0)
-                    print(args,swarm.survival_Bool(),offsetAtApeture,LoVirtual,cost)
+                    totalLength=Lo+Lm1+Lm2+Lsep+Li #total length of the system.
+                    collimaterPhase=Lm1*np.sqrt(2*self.lattice.u0*Bp1/(self.v0Nominal**2*rp1**2)) #total phase advance
+                    #in the first lens. I use this to prevent multiple oscillations.
+                    aspectRatioLens1=Lm1/rp1
+                    aspectRatioLens2=Lm2/rp2
+                    if swarm.survival_Bool()<transmission: #less than 90% survival punish severaly
+                        cost+=5e2*((transmission/swarm.survival_Bool())**2-1.0)
+                    if np.abs(LoVirtual)<virtualObjectCutoff: #punish if the object distance is too small
+                       cost+=5e2*((virtualObjectCutoff/np.abs(LoVirtual))**2-1.0)
+                    if collimaterPhase>np.pi: #the system is in a region with a focus inside the first len, not something
+                        #I want
+                        cost+=np.inf
+                    if totalLength>totalLengthCutoff:
+                        cost+=5e2*((totalLength/totalLengthCutoff)**2-1.0)
+                    if aspectRatioLens1<minAspectRatio: #punish because the aspect ratio is below the rule of thumb
+                        cost+=5e2*((aspectRatioLens1/minAspectRatio)**2-1.0)
+                    if aspectRatioLens2<minAspectRatio:
+                        cost+=5e2*((aspectRatioLens2/minAspectRatio)**2-1.0)
+
+                    print(args,swarm.survival_Bool(),offsetAtApeture,LoVirtual,totalLength,cost)
                 else:
                     cost+=np.inf
             if returnResults==True:
@@ -285,28 +304,34 @@ class ApetureOptimizer:
                     return swarm
             return cost
         t=time.time()
-        # sol=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=100,mutation=(.5,1.0))
-        # first run: 0.767 0.04269309529838321 1.0112838483738318 271.91734219765897
-        # second run: 0.752 0.0446271101050993 0.9918208681140157 268.9702182946769
-        # third run: 0.698 0.033675124129491266 1.0093927692918068 363.20989700738335
-        #
-        # print('run time',time.time()-t)
-        # print(sol)
-        args=np.array([ 0.19943398,  0.19701016,  0.04489457,  0.03918361, -0.02430811,
-        0.14959689])
-        # distance
-        # 0.9983702061340425
-        # survival
-        # 0.899
-        # offset
-        # 0.029313948404314262
-        swarm,thetaMean,offsetMean,survival,offsetApeture,LoVirtual=cost_Function(args,returnResults=True)
-        print(time.time()-t)
+        sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=200,mutation=(.5,1.0))
+        print('run time',time.time()-t)
+        print(sol1)
+        swarm1,thetaMean,offsetMean,survival,offsetApeture,LoVirtual=cost_Function(sol1.x,returnResults=True)
+
         print('distance',LoVirtual)
         print('survival',survival,'offset',offsetApeture)
-        apetureObjects=self.make_Apeture_Objects(Li,apDiam,thetaMean,offsetMean)
-        self.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
-                                  extraObjects=apetureObjects)
+        apetureObjects1=self.make_Apeture_Objects(Li,apDiam,thetaMean,offsetMean)
+        print('----------------------')
+
+
+
+        # t = time.time()
+        # sol2 = spo.differential_evolution(cost_Function, bounds, workers=-1, polish=False, disp=True, maxiter=100,
+        #                                   mutation=(.5, 1.0))
+        # print('run time', time.time() - t)
+        # print(sol2)
+        # swarm2, thetaMean, offsetMean, survival, offsetApeture, LoVirtual = cost_Function(sol2.x, returnResults=True)
+        # print(time.time() - t)
+        # print('distance', LoVirtual)
+        # print('survival', survival, 'offset', offsetApeture)
+        # apetureObjects2 = self.make_Apeture_Objects(Li, apDiam, thetaMean, offsetMean)
+
+
+        self.lattice.show_Lattice(swarm=swarm1,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
+                                  extraObjects=apetureObjects1)
+        # self.lattice.show_Lattice(swarm=swarm2,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
+        #                           extraObjects=apetureObjects2)
 
 
 
