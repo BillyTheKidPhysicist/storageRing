@@ -15,21 +15,23 @@ from shapely.geometry import LineString
 # from profilehooks import profile
 
 class ApetureOptimizer:
-    def __init__(self,Bp1=.9,Bp2=.9,Li=.2,apDiam=.01,h=1e-5,Lsep=.05):
+    def __init__(self,Bp1=.9,Bp2=.9,Li=.2,apDiam=.01,h=5e-6,Lsep=.05):
         self.lattice=None
         self.swarmInitial=None
         self.h=None #timestep
         self.v0Nominal=200.0
         self.apDiam=apDiam
+        self.h=h
         self.X0={'Bp1':Bp1,'Bp2':Bp2,'Li':Li,'apDiam':apDiam,'Lsep':Lsep} #dictionary of lattice paramters that are not
         #varied by the optimizer. This is used in both tunabiliyt testing and the differential evoluiton
-        self.X={'rp1':None,'rp2':None,'sigma':None,'Lo':None,'Li':None,'apDiam':None} #the full fictionary of lattice paramters. Need
-        #to add the X0 params
-        self.X.update(self.X0) #now add the rest
-    def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat'):
+        self.X={'rp1':None,'rp2':None,'sigma':None,'Lo':None,'Li':None,'apDiam':None} #the full fictionary of lattice
+        # paramters. Need to add the X0 params
+        self.X.update(self.X0) #now add the rest, the x0 params
+    def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0):
         #load a swarm from a file.
         #numParticles: Number of particles to load from the file. if None load all
         #fileName: Name of the file with the particle data in the format (y,z,px,py,pz)
+        #dv: extra longitudinal velocity to add
         self.swarmInitial=Swarm()
         data= np.loadtxt(fileName)
         if numParticles is not None:
@@ -37,17 +39,21 @@ class ApetureOptimizer:
         for coords in data:
             x,y,z,px,py,pz=coords
             px=-px #need to flip the coords!!
+            px+=dv
             q=np.asarray([1e-10,y,z]) #add a tiny offset in the x direction so the particle starts in the element,
             #otherwise the algorithm spends extra time checking to see if the particle is exactly on the edge
             p=np.asarray([px,py,pz])
             self.swarmInitial.add_Particle(qi=q,pi=p)
-    def initialize_Ideal_Point_Swarm(self,numParticles=1000,maxAng=.05):
+    def initialize_Ideal_Point_Swarm(self,numParticles=1000,maxAng=.05,v0=None):
+        if v0 is None:
+            v0=self.v0Nominal
         self.swarmInitial = Swarm()
         x=np.zeros(numParticles)
         y=x.copy()
         z=x.copy()
-        x+=1e-10
-        px=200.0
+        x+=1e-10 #to scoot the particle along into the first element to save time
+        # [-0.13000223  0.05427037  0.81334243]
+        px=v0
         py=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
         pz=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
         for i in range(numParticles):
@@ -124,8 +130,10 @@ class ApetureOptimizer:
             particle.zInterp=spi.interp1d(particle.qArr[:,0],particle.qArr[:,2])
         return swarm
     def characterize_Output(self,swarm):
-        #calculate the mean tilt and offset of the output beam. Offset is the offset at the lens output
+        #calculate the mean tilt and offset of the output beam. Offset is the offset at the lens output measured in meter.
+        # theta is relative to x axis and in radians
         #swarm: The traced swarm
+        #returns an array as [thetaMean,offsetMean]
         lastEl=self.lattice.elList[-1]
         thetaList=[] #list of tilt values
         offsetList=[] #list of offset values
@@ -198,6 +206,7 @@ class ApetureOptimizer:
         spotSize=self.get_Frac_Width(np.asarray(qList),fraction=fraction)
         return spotSize
     def update_Lattice(self):
+        #sigma here moves the element upwards
         self.lattice = ParticleTracerLattice(self.v0Nominal)
         self.lattice.add_Drift(self.X['Lo'])
         self.lattice.add_Lens_Ideal(self.X['Lm1'], self.X['Bp1'], self.X['rp1'], ap=self.X['rp1']*.9)
@@ -236,7 +245,7 @@ class ApetureOptimizer:
         mAfter=0
         numParticles=0
         for particle in swarm:
-            if particle.clipped is False: #only consider particles that havn't clip
+            if particle.qArr[-1][0]>xAfter: #only consider particles that have survived through the first lens
                 #flip the sign for particles below the y=0 line
                 mBefore+=np.sign(particle.yInterp(xAfter))*(particle.yInterp(xBefore+1e-6)-particle.yInterp(xBefore))/1e-6
                 mAfter+=np.sign(particle.yInterp(xAfter))*(particle.yInterp(xAfter+1e-6)-particle.yInterp(xAfter))/1e-6
@@ -246,62 +255,112 @@ class ApetureOptimizer:
         LoVirtual=(mBefore/mAfter)*Lo+(xAfter-xBefore) #the ratio of the angle plus the extra distance traveled in the
         #lens is propotional (I hope, and seems to be) to the virtual object distance
         return LoVirtual
-    def test_Tunability(self,args0,dSigma=1e-3,dSep=1e-3,h=1e-5,apDiam=.01):
-        #This method varies a few relevant parameters to quantify the tunability of the system. It varies the position
-        #of lens1 and lens2 to measure how these affect the image distance, and slope and offset of the output. This
-        #is quantified by computing the jacobian and hessian
-        #args0: The coordinates to expand around. Lm1,Lm2,rp1,rp2,sigma,Lo
-        self.h=h
-        self.X['apDiam']=apDiam
-        deltaX=np.asarray([dSigma,dSep])
-        self.get_Gradients(args0,deltaX)
-        # dSigmaArr=np.asarray([-1.0,0.0,1.0])*dSigma
-        # dSepArr=np.asarray([-1.0,0.0,1.0])*dSep
-        # deltaXArr=np.asarray(np.meshgrid(dSigmaArr,dSepArr)).T.reshape(-1,2)
-        # print(deltaXArr)
-    def get_Gradients(self,args0,deltaX):
-        gradTheta=[0.0,0.0] #dtheta/dsigma, doffset/dsigma
-        gradOffset=[0.0,0.0] #dtheta/dsep, doffset/dsep
-        jacobian=np.asarray([gradTheta,gradOffset])
-        #fill out the jacobian, but need to wrangle later
-        jacobian[0]=(self.perturb_Lattice(args0,deltaX)-self.perturb_Lattice(args0,-deltaX))/(2*deltaX)
-        jacobian[1]=(self.perturb_Lattice(args0,deltaX)-self.perturb_Lattice(args0,-deltaX))/(2*deltaX)
-        #jacobian is not in the right form
+    def test_Tunability_For_Velocity(self,args0,dv=5.0):
+        #This method tests the tunability characteristics for deviations if velocity. This is done by finding the knob
+        #positions for three velocities, (v0-dv,v0,v0+dv) using newton's method and seeing how much this deviates
+        #from the actual value.
+        #args0: The coordinates to test at
+        #dv: max deviation in velocity
+        #apDiam: diameter of second aperture
+        #returns: the original knob position, as well as the knob position for high and low coupled with the corresponding
+        #error. (knob0,[knobLow,errorLow],[KnobHigh,errorHigh)
 
-        print(jacobian)
+        # high and low velocities
+        self.initialize_Observed_Swarm(numParticles=1000, dv=-dv)
+        FLow = self.perturb_Lattice(args0, [0.0, 0.0])
+        self.initialize_Observed_Swarm(numParticles=1000,dv=dv) #make cloud with extra longitudinal velocity
+        FHigh=self.perturb_Lattice(args0,[0.0,0.0])
+        #now for v0
+        self.initialize_Observed_Swarm(numParticles=1000)
+        F0=self.perturb_Lattice(args0,[0.0,0.0]) #expansion point.
+        jacobian=self.get_Tunability_Jacobian(args0)
 
+
+        #now find the new knob positions using newton's method, and the error in each parameter. This is done by
+        #using the values at F0 as target parameters
+
+        deltaXLow = (np.linalg.inv(jacobian) @ (F0[:,None]- FLow[:,None])).T[0] #newton's method. Need arrays to be column
+        #vectors, then I turn them back into 1D arrays
+        deltaXHigh = (np.linalg.inv(jacobian) @ (F0[:,None]- FHigh[:,None])).T[0]
+
+        X0=np.asarray([args0['sigma'],self.X0['Lsep']])
+        XHigh=X0+deltaXHigh
+        XLow=X0+deltaXLow
+
+        print(F0)
+        #now test the results to see if the tweeks in the knobs give a low error. Need to make the new swarm for
+        # each velocity
+        self.initialize_Observed_Swarm(numParticles=1000,dv=-dv)
+        errorLow=100*np.linalg.norm((F0-self.perturb_Lattice(args0,deltaXLow))/F0) #percent error magnitude
+
+        self.initialize_Observed_Swarm(numParticles=1000, dv=dv)
+        errorHigh = 100 * np.linalg.norm((F0 - self.perturb_Lattice(args0, deltaXHigh)) / F0)  # percent error magnitude
+
+
+        return X0,[XLow,errorLow],[XHigh,errorHigh]
+
+    def get_Tunability_Jacobian(self,args0,dSigma=1e-3,dSep=1e-3,dLo=1e-3):
+        #this method computes the jacobian of the 'knobs' that are available. The object distance (Lo) for the first
+        # lens, the transvers position of the second lens (sigma), and the longitudinal seperation between the second
+        # and first lens (dSep). The calculation is done with the central difference derivative.
+        #args0: The points the jacobian is calculated at
+        #: dSigma: The stepsize for the sigma in derivative calculation
+        #: dSigma: The stepsize for the sep in derivative calculation
+        #: dSigma: The stepsize for the object distance in derivative calculation
+
+
+        gradTheta=[0.0,0.0] #dtheta/dsigma, dtheta/dsep
+        gradOffset=[0.0,0.0] #doffset/dsigma, doffset/dsep
+        #gradLoVirtual=[0.0,0.0,0.0] #dLoVirtual/dsigma, dLoVirtual/dsep, dLoVirtual/dLo.
+        jacobian=np.asarray([gradTheta,gradOffset])#,gradLoVirtual])
+        #fill out the first row
+        deltaX1=np.asarray([dSigma,0.0])
+        jacobian[:,0]=(self.perturb_Lattice(args0,deltaX1)-self.perturb_Lattice(args0,-deltaX1))/(2*deltaX1[0])
+        #fill out the second row
+        deltaX2 = np.asarray([0.0,dSep])
+        jacobian[:,1]=(self.perturb_Lattice(args0,deltaX2)-self.perturb_Lattice(args0,-deltaX2))/(2*deltaX2[1])
+        #fill out the third row. WORK IN PROGRESS
+        # deltaX3 = np.asarray([0.0,0.0, dLo])
+        # jacobian[:,2] = (self.perturb_Lattice(args0, deltaX3) - self.perturb_Lattice(args0, -deltaX3)) / (2 * deltaX3[2])
+
+
+        return jacobian
 
     def perturb_Lattice(self,args0,deltaX):
         #this function returns the paramters of interest for testing tunability, theta, offset and image distance by
         #varying the parameters of interest with a deviation given by deltax. Ensures the total length stay the same
         #args: The pertubration points, This isn't ALL the paramters, just the ones that aren't constant
         #deltaX: the perturbation. deltaX=[deltaSigma,deltaLsep]
+        #return the angle with the axis and the b value as y=np.tan(theta)*x+b. Offset is NOT what I want
         self.updateX(args0)
+        self.X['sigma']=args0['sigma']+deltaX[0]
         self.X['Lsep']=self.X0['Lsep']+deltaX[1]
-        self.X['Li']=self.X0['Li']-deltaX[1]#preseve total lattice length
-        self.X['sigma']=args0[4]+deltaX[0]
+        # self.X['Lo']=args0['Lo']+deltaX[2] #object length for the first lens
         self.update_Lattice()
         swarm = self.trace_Through_Bumper(parallel=True)
         thetaMean, offsetMean = self.characterize_Output(swarm)
+        b=offsetMean-np.tan(thetaMean)*self.lattice.elList[-1].r1[0]
+        # LoVirtual=self.get_Virtual_Object_Distance(swarm,self.X['Lo'])
         # swarm = self.project_Swarm_Through_Apeture(swarm, thetaMean, offsetMean, copySwarm=True)
         # apetureObjects = self.make_Apeture_Objects(thetaMean, offsetMean)
         # self.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,extraObjects=apetureObjects)
-        return np.asarray([thetaMean, offsetMean])
+        return np.asarray([thetaMean, b])
 
     def updateX(self,args):
         #unpack args into the lattice paramters dictionary
-        self.X['Lm1']=args[0]
-        self.X['Lm2']=args[1]
-        self.X['rp1']=args[2]
-        self.X['rp2']=args[3]
-        self.X['sigma']=args[4]
-        self.X['Lo']=args[5]
-    def optimize_Output(self):
+        self.X['Lm1']=args['Lm1']
+        self.X['Lm2']=args['Lm2']
+        self.X['rp1']=args['rp1']
+        self.X['rp2']=args['rp2']
+        self.X['sigma']=args['sigma']
+        self.X['Lo']=args['Lo']
+    def optimize_Output(self,numParticles=1000):
         #this method optimizes the injection system for passing through an apeture.
         #Lo: object length of the system
         #Bp2: Pole face strength of the second lens, ie the shifter
         #Li: Image length, also where the second apeture should be placed.
         #apDiam: diamter of the second apeture, located at the image
+        apetureOptimizer.initialize_Observed_Swarm(numParticles=numParticles)
         bounds=[(.1,.4),(.1,.4),(.01,.05),(.01,.05),(-.01,-.05),(.075,.3)] #Lm1,Lm2,rp1,rp2,sigma,Lo
         totalLengthCutoff=1.0 #maximum length of system
         virtualObjectCutoff=1.0 # the distance to the virtual object from the second lens
@@ -412,20 +471,8 @@ class ApetureOptimizer:
 # lattice.add_Drift(.4,ap=.1)
 # lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
 
-
 apetureOptimizer=ApetureOptimizer()
-# apetureOptimizer.initialize_Ideal_Point_Swarm(numParticles=1000,maxAng=.1)
-apetureOptimizer.initialize_Observed_Swarm(numParticles=1000)
-# apetureOptimizer.lattice=lattice
-# swarm=apetureOptimizer.trace_Through_Bumper(1e-5)
-# theta,offset=apetureOptimizer.characterize_Output(swarm)
-# test=apetureOptimizer.make_Apeture_Objects(.1,.005,theta,offset)
-# swarm=apetureOptimizer.project_Swarm_Through_Apeture(swarm,.1,.005,theta,offset)
-
-#
-# print(apetureOptimizer.characterize_Output(swarm))
 # apetureOptimizer.optimize_Output()
-X0 = np.array([0.10293192, 0.3442374, 0.02746703, 0.04993316, -0.0367223,
-                 0.13033733])  # Lm1,Lm2,rp1,rp2,sigma,Lo
-apetureOptimizer.test_Tunability(X0)
-# lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,extraObjects=test)
+
+X0={'Lm1':0.10293192,'Lm2':0.3442374,'rp1':0.02746703,'rp2':0.04993316,'sigma':-0.0367223,'Lo':0.13033733}
+print(apetureOptimizer.test_Tunability_For_Velocity(X0))

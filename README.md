@@ -17,4 +17,4 @@ The main files are as follows:
 - Various notebooks to test and use the above classes, mostly OptimizerClass, on different configurations. 
 
 ## injectionSystemOptimization
-Optimize the injection system. Work in progress
+Contains files to optimize the injection system. Currently this contains a class to optimize the bump injection system wherein the lithium beam is 'bumped' out of the helium beam so the helium beam can be sent into a turbo pump and pumped away. This is done by a differential evolution algorithm to vary paramters of the injection system while minimizing a cost function composed of the particle survival, total length, degree of bumping (more is better for space) and maintaining a large object distance to make the second lens's image less sensitive to changes in its position.
