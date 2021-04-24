@@ -47,6 +47,8 @@ smallCombinerBigMagnets_Files
 smallCombinerSmallMagnets_Files
 bigCombinerSmallMagnets_Files
 venv
+injectionSystemOptimization/lens2D_Injection_Short.txt
+injectionSystemOptimization/lens3D_Injection_Short.txt
 paraWellTest.py
 poopaids
 paraWellTest.py

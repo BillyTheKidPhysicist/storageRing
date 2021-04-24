@@ -86,14 +86,14 @@ class LatticeOptimizer:
         #Update the various paremters in the lattice and injections that are variable
         #X: lattice parameters in the form of an iterable
         if self.modulation=='01': #modulate lens 0 and 1
-            self.lattice.elList[0].fieldFact = X[0]
-            self.lattice.elList[2].fieldFact = X[1]
+            self.lattice.elList[0].BpFact = X[0]
+            self.lattice.elList[2].BpFact = X[1]
         elif self.modulation=='12': #modulate lens 1 and 2
-            self.lattice.elList[2].fieldFact = X[0]
-            self.lattice.elList[4].fieldFact = X[1]
+            self.lattice.elList[2].BpFact = X[0]
+            self.lattice.elList[4].BpFact = X[1]
         elif self.modulation=='02':#modulate lens 0 and 2
-            self.lattice.elList[0].fieldFact = X[0]
-            self.lattice.elList[4].fieldFact = X[1]
+            self.lattice.elList[0].BpFact = X[0]
+            self.lattice.elList[4].BpFact = X[1]
         else:
             raise Exception('not a valid selection')
     def compute_Phase_Space_Map_Function(self,X,swarmCombiner):

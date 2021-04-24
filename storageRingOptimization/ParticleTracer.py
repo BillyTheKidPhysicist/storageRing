@@ -96,6 +96,7 @@ class ParticleTracer:
                 self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
             self.T += self.h
             self.particle.T=self.T
+            # self.test.append(npl.norm(self.forceLast))
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl

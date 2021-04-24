@@ -1077,13 +1077,18 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
 class LensSimWithCaps(LensIdeal):
-    def __init__(self, PTL, file2D, file3D, L, ap):
-        super().__init__(PTL, None, None, None, None, fillParams=False)
+    def __init__(self, PTL, file2D, file3D, L,rp, ap):
+        #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
+        #to accomdate the new rp such as force values and positions
+        super().__init__(PTL, None, None, rp, None, fillParams=False)
         self.file2D = file2D
         self.file3D = file3D
         self.L = L
-        self.ap = ap
-        self.Lcap = None
+        self.ap0 = ap #initial aperture value to keep track of how it scales with changing bore radius
+        self.ap=ap
+        self.Lcap0 = None #the length of the segments from comsol representing the fringle fields. Scaling the radius 
+        #will change the cap length so I need to keep track of this
+        self.Lcap=None
         self.Linner = None
         self.data2D = None
         self.data3D = None
@@ -1095,22 +1100,38 @@ class LensSimWithCaps(LensIdeal):
         self.Fy_Func_Inner = None
         self.Fz_Func_Inner = None
         self.magnetic_Potential_Func_Inner = None
-        self.fieldFact = 1.0
+        self.BpFact = 1.0
+        self.rp0=None #the value of the initial bore radius from comsol simulation. This is required to hold onto the 
+        #original value when the user changes the bore radius
+        self.rpFieldFact=1.0 #factor to modify the force if the bore radius is changed. Force scale as 1/rp**2
+        self.rpScaleFact=1.0 #factor to modify the position in the lens of coordinates when the bore radius is changed.
+        #A larger new bore radius requires the coordinates in the element to be shrunk down to correspond to the previous
+        #values
         self.fill_Params()
 
     def fill_Params(self):
         if self.data3D is None and self.file3D is not None:  # if data has not been loaded yet
             self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
             self.fill_Force_Func_Cap()
-            self.Lcap = self.data3D[:, 2].max() - self.data3D[:, 2].min() - 2 * self.comsolExtraSpace
+            self.Lcap0 = self.data3D[:, 2].max() - self.data3D[:, 2].min() - 2 * self.comsolExtraSpace
+            self.Lcap=self.Lcap0
             self.data3D = False
         if self.data2D is None and self.file2D is not None:  # if data has not been loaded yet
             self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
             self.fill_Force_Func_2D()
-            self.rp = (self.data2D[:, 0].max() - self.data2D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
+            self.rp0 = (self.data2D[:, 0].max() - self.data2D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
             if self.ap is None:
-                self.ap = .9 * self.rp
-            self.data2D = False
+                self.ap0 = .9 * self.rp0
+                self.ap = self.ap0
+            else:
+                self.ap0 = self.ap
+            if self.rp is None:
+                self.rp=self.rp0
+            if self.rp is not None: #if user is setting value for bore radius
+                self.set_Bore_Radius(self.rp)
+            if self.ap>self.rp or self.ap0>self.rp0:
+                raise Exception('Aperture cannot be larger than radius')
+            self.data2D = False #to save memory
         if self.L is not None and self.Lcap is not None:
             self.set_Length(self.L)
 
@@ -1120,6 +1141,14 @@ class LensSimWithCaps(LensIdeal):
         if self.Linner < 0:
             raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
         self.Lo = self.L
+    def set_Bore_Radius(self,rpNew):
+        #changing the bore radius changes the total field values. Field scales as 1/rp**2. In addition, changing the 
+        #bore radius changes the length of the fringe fields, so the caps must scale as well
+        self.rpFieldFact=(self.rp0/rpNew) #scale the field by this value
+        self.Lcap=self.Lcap0*(rpNew/self.rp0) #smaller bore means smaller fringe fields as well
+        self.ap=self.ap0*rpNew/self.rp0 #scale the apeture with bore radius
+        self.rp=rpNew #update to the new value
+        self.rpScaleFact=self.rp0/rpNew #how much to scale coordinates in the lens up by to account for rpNew
 
     def fill_Force_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
@@ -1147,42 +1176,51 @@ class LensSimWithCaps(LensIdeal):
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)[0][0]
 
     def magnetic_Potential(self, q):
+        qScaled=q*self.rpScaleFact
         if q[0] <= self.Lcap:
-            x, y, z = q
-            x = self.Lcap - x
+            x, y, z = qScaled
+            x = self.Lcap0 - x
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         elif self.Lcap < q[0] < self.L - self.Lcap:
-            V0 = self.magnetic_Potential_Func_Inner(*q)
+            V0 = self.magnetic_Potential_Func_Inner(*qScaled)
         elif q[0] < self.L:
-            x, y, z = q
-            x = x - (self.L - self.Lcap)
+            y, z = qScaled[1:]
+            x = (q[0] - (self.Linner + self.Lcap))*self.rpScaleFact #need to shift x the correct amount then scale
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         else:
-            warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
+            print('PARTICLE IS OUTSIDE ELEMENT')
             print('position is', q)
             V0 = 0
-        V0 = self.fieldFact * V0  # modify the magnetic field depending on how the magnet is tuend
+        V0 = self.BpFact * V0  # modify the magnetic field depending on how the magnet is tuned and the
+        #bore radius. Keep in mind bore radius effect on potential is not same as force! ie it does not change it!
         return V0
 
     def force(self, q):
+        qScaled=q*self.rpScaleFact
         if q[0] <= self.Lcap:
-            x, y, z = q
-            x = self.Lcap - x
+            x, y, z = qScaled
+            x = self.Lcap0 - x
             self.F[0] = -self.Fx_Func_Fringe(x, y, z)
             self.F[1] = self.Fy_Func_Fringe(x, y, z)
             self.F[2] = self.Fz_Func_Fringe(x, y, z)
         elif self.Lcap < q[0] < self.L - self.Lcap:
             self.F[0] = 0.0
-            self.F[1] = self.Fy_Func_Inner(*q)
-            self.F[2] = self.Fz_Func_Inner(*q)
-        elif self.L - self.Lcap <= q[0] < self.L:
-            x, y, z = q
-            x = x - (self.Linner + self.Lcap)
+            self.F[1] = self.Fy_Func_Inner(*qScaled)
+            self.F[2] = self.Fz_Func_Inner(*qScaled)
+        elif q[0] < self.L: #this one is tricky with the scaling
+            y, z = qScaled[1:]
+            x = (q[0] - (self.Linner + self.Lcap))*self.rpScaleFact #need to shift x the correct amount then scale
             self.F[0] = self.Fx_Func_Fringe(x, y, z)
             self.F[1] = self.Fy_Func_Fringe(x, y, z)
             self.F[2] = self.Fz_Func_Fringe(x, y, z)
         else:
-            warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
+            print('PARTICLE IS OUTSIDE ELEMENT')
+            print('position is', q)
             self.F = np.zeros(3)
-        self.F = self.fieldFact * self.F  # modify the forces depending on how much the magnet is tuned
+        self.F = self.BpFact*self.rpFieldFact * self.F  # modify the forces depending on how much the magnet is tuned
         return self.F.copy()
+
+class BumpsLensSimWithCaps(LensSimWithCaps):
+    def __init__(self, PTL, file2D, file3D, L,rp, ap,sigma):
+        super().__init__(PTL, file2D, file3D, L,rp, ap)
+        self.sigma=sigma #the amount of vertical shift for bumping the beam over

@@ -115,15 +115,17 @@ class Particle:
     def reset(self):
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi)
-    def log_Params(self,currentEl,qEl,pEl):
+    def log_Params(self,currentEl,qel,pel):
         #this records value like position and momentum
-        self.q = currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
-        self.p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)
+        #qel: element position coordinate
+        #pel: momentum position coordinate
+        self.q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
+        self.p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
         self.qList.append(self.q.copy())
         self.pList.append(self.p.copy())
         self.TList.append(np.sum(self.p**2)/2.0)
         if currentEl is not None:
-            qel=self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
+            qel=currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
             self.qoList.append(currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
             self.VList.append(currentEl.magnetic_Potential(qel))
 
