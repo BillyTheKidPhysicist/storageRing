@@ -1,10 +1,11 @@
-import scipy.misc as spm
+import sys
 import scipy.interpolate as spi
 import warnings
 import time
 import scipy.optimize as spo
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.signal as sps
 # from storageRingOptimization import elementPT
 # from storageRingOptimization.ParticleTracer import ParticleTracer
 from storageRingOptimization.ParticleClass import  Swarm,Particle
@@ -15,16 +16,17 @@ from shapely.geometry import LineString
 # from profilehooks import profile
 
 class ApetureOptimizer:
-    def __init__(self,Bp1=.9,Bp2=.9,Li=.2,apDiam=.01,h=5e-6,Lsep=.025):
+    def __init__(self,Li=.2,apDiam=.01,h=5e-6,Lsep=.025):
         self.lattice=None
         self.swarmInitial=None
         self.h=None #timestep
         self.v0Nominal=200.0
         self.apDiam=apDiam
         self.h=h
-        self.X0={'Bp1':Bp1,'Bp2':Bp2,'Li':Li,'apDiam':apDiam,'Lsep':Lsep} #dictionary of lattice paramters that are not
+        self.X0={'Li':Li,'apDiam':apDiam,'Lsep':Lsep} #dictionary of lattice paramters that are not
         #varied by the optimizer. This is used in both tunabiliyt testing and the differential evoluiton
-        self.X={'rp1':None,'rp2':None,'sigma':None,'Lo':None,'Li':None,'apDiam':None} #the full dictionary of lattice
+        self.X={'Bp1':None,'Bp2':None,'Lm1':None,'Lm2':None,'rp1':None,'rp2':None,'sigma':None,'Lo':None,
+                'Li':None,'apDiam':None} #the full dictionary of lattice
         # paramters. Need to add the X0 params
         self.X.update(self.X0) #now add the rest, the x0 params
     def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0):
@@ -45,6 +47,7 @@ class ApetureOptimizer:
             p=np.asarray([px,py,pz])
             self.swarmInitial.add_Particle(qi=q,pi=p)
     def initialize_Ideal_Point_Swarm(self,numParticles=1000,maxAng=.05,v0=None):
+        np.random.seed(42)
         if v0 is None:
             v0=self.v0Nominal
         self.swarmInitial = Swarm()
@@ -56,11 +59,12 @@ class ApetureOptimizer:
         px=v0
         py=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
         pz=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
+        print('pz set to zero')
         for i in range(numParticles):
             q=np.asarray([x[i],y[i],z[i]])
             p=np.asarray([px,py[i],pz[i]])
             self.swarmInitial.add_Particle(qi=q,pi=p)
-
+        np.random.seed(int(time.time()))
 
 
     def move_Swarm_Through_Free_Space(self,swarm,L):
@@ -215,8 +219,9 @@ class ApetureOptimizer:
         self.lattice.add_Bump_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt',self.X['Lm2'],self.X['sigma'],rp=self.X['rp2'])
         self.lattice.add_Drift(self.X['Li']+.05,ap=2*.2*self.X['Li'])
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
-        # self.lattice.elList[1].BpFact=.5 #tune down the models
-        # self.lattice.elList[3].BpFact=.5 #tune down the models
+        self.lattice.elList[1].BpFact=self.X['Bp1'] #tune down the models
+        self.lattice.elList[3].BpFact=self.X['Bp2'] #tune down the models
+        print(self.lattice.elList[1].BpFact)
     def make_Apeture_Objects(self,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
         apWidthInPlot=.05 #the width of the apeture for plotting purposes. This is the distance from the beginning
@@ -243,11 +248,13 @@ class ApetureOptimizer:
     def collimation_Factor_First_Lens(self,swarm):
         #this function return a factor descibing how collimated the beam is in the first len. It is simply the gradient
         #of the rms at the lens output divided by the value of what the gradient would be if there was no lens present.
-        #if zero perfect collimation, if one then zero collimation, if greater than one, divergin.
+        #if zero perfect collimation, if one then zero collimation, if greater than one, divergin. I also return np.inf
+        #if the output is a focus, because there is collimation at both mins and maxes of the rms profile, but mins
+        #have high divergence
         yList=[]
         xLensInlet=self.lattice.elList[1].r1[0]
         xLensOutlet=self.lattice.elList[1].r2[0]
-        xArr=np.linspace(xLensInlet,xLensOutlet,num=100)
+        xArr=np.linspace(xLensInlet,xLensOutlet,num=1000)
         myList=[]#slope before the lens, for the projected gradient of rms
         byList=[] #intercept before the lens, for the projected gradient of rms
         for particle in swarm:
@@ -260,21 +267,32 @@ class ApetureOptimizer:
 
         rmsProj=np.sqrt(np.mean((myArr*xLensOutlet+byArr)**2)) #theoretical rms at lens outlet
         rmsSlopeProj=np.mean((myArr*xLensOutlet+byArr)*myArr)/rmsProj
-
         yArr=np.asarray(yList)
         y_rmsArr=np.sqrt(np.mean(yArr**2,axis=0))
-        y_rmsSlopeArr=np.gradient(y_rmsArr,xArr)
+        y_rmsSlopeArr=np.gradient(y_rmsArr,xArr) #remember, the slope always stops changing at the end of the sim element
+        #because the fields fall off!
         rmsSlopeActual=y_rmsSlopeArr[-1]
-        collimationFactor=rmsSlopeActual/rmsSlopeProj
-        plt.plot(y_rmsArr)
-        plt.plot(y_rmsSlopeArr)
-        plt.show()
-        #good, but not guaranteed ( I don't think), check for having only one oscillation is that the minimum value of
-        #the slope is the last value.
-        if not np.argmin(y_rmsSlopeArr)==y_rmsArr.shape[0]: #minimum value of slope must be last value
-            return np.inf
+        collimationFactor=np.abs(rmsSlopeActual/rmsSlopeProj)
+        height=y_rmsArr[0] #to use the prominence feature. Otherwise find peaks will find teeny peaks that aren't
+        #real
+        numPeaks=sps.find_peaks(y_rmsArr,prominence=.1*height)[0].shape[0]
+        numTrough=sps.find_peaks(-y_rmsArr,prominence=.1*height)[0].shape[0]
+        #if there are no peaks, then the output can't be a focus. If there is at least one, then if there is one or more
+        #troughs then the output could be a focus. If there is a peak, the outgoin rms value cannot be below
+        #the average of the peak and first rms value. this keeps the output away from the focus
+        if numPeaks>=1:
+            if numTrough>=1:
+                return np.inf
+            else:
+                minVal=y_rmsArr[0] #to keep the output being near a focus focus
+                if y_rmsArr[-1]<minVal:
+                    return np.inf
+                else:
+                    return collimationFactor
         else:
             return collimationFactor
+
+
 
     def get_bject_Distance(self,swarm):
         #this uses the analytic method of finding the focus that minimizes the RMS of a cloud of particles. Simple algeb
@@ -398,12 +416,15 @@ class ApetureOptimizer:
 
     def updateX_With_List(self,args):
         #unpack args into the lattice paramters dictionary
-        self.X['Lm1']=args[0]
-        self.X['Lm2']=args[1]
-        self.X['rp1']=args[2]
-        self.X['rp2']=args[3]
-        self.X['sigma']=args[4]
-        self.X['Lo']=args[5]
+        Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
+        self.X['Bp1']=Bp1
+        self.X['Bp2']=Bp2
+        self.X['Lm1']=Lm1
+        self.X['Lm2']=Lm2
+        self.X['rp1']=rp1
+        self.X['rp2']=rp2
+        self.X['sigma']=sigma
+        self.X['Lo']=Lo
     def optimize_Output(self,numParticles=1000):
         #this method optimizes the injection system for passing through an apeture.
         #Lo: object length of the system
@@ -411,16 +432,16 @@ class ApetureOptimizer:
         #Li: Image length, also where the second apeture should be placed.
         #apDiam: diamter of the second apeture, located at the image
         apetureOptimizer.initialize_Observed_Swarm(numParticles=numParticles)
-        bounds=[(.1,.4),(.1,.4),(.01,.05),(.01,.05),(-.01,-.05),(.075,.3)] #Lm1,Lm2,rp1,rp2,sigma,Lo
+        bounds=[(.1,1.0),(.1,1.0),(.1,.4),(.1,.4),(.01,.05),(.01,.05),(-.01,-.05),(.075,.3)] #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo
         totalLengthMax=1.0 #maximum length of system
         transmissionTarget=.95 # fraction of suriving atoms
         minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
         #books that 5 is a good value, but there is also a restriction from COMSOL
-        offsetApetureTarget=.03 #target value for distance from axis at aperture
+        offsetApetureTarget=.04 #target value for distance from axis at aperture
 
         def cost_Function(args,returnResults=False,parallel=False):
             #todo: need to improve this alot. Needs to be move to its own function or something
-            Lm1,Lm2,rp1,rp2,sigma,Lo=args
+            Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
             aspectRatioLens1 = Lm1 / rp1
             aspectRatioLens2 = Lm2 / rp2
             if aspectRatioLens1<minAspectRatio or aspectRatioLens2<minAspectRatio: #not a valid solution.
@@ -431,6 +452,10 @@ class ApetureOptimizer:
             for el in self.lattice.elList:
                 el.fill_Params()
             swarm = self.trace_Through_Bumper(parallel=parallel)
+            # qArr = swarm.particles[0].qArr
+            # plt.plot(qArr[:,0],qArr[:,1])
+            # plt.show()
+            # sys.exit()
             cost=0
             if swarm.survival_Bool()==0: #sometimes  all particles are clipped
                 cost+=np.inf
@@ -439,66 +464,67 @@ class ApetureOptimizer:
                 #lens collimated the beam.
                 thetaMean, offsetMean = self.characterize_Output(swarm)
                 swarm=self.project_Swarm_Through_Apeture(swarm,thetaMean,offsetMean,copySwarm=True)
+
                 if swarm.survival_Bool()!=0: #sometimes they can all clip on the apeture also
                     offsetAtApeture = np.abs(offsetMean + thetaMean * self.X['Li'])
                     if offsetAtApeture<offsetApetureTarget:
                         cost+= 5e2*(1.0-(offsetAtApeture/offsetApetureTarget)**2)  # reduce this cost
+                    else:
+                        cost+=-10*(offsetAtApeture/offsetApetureTarget-1.0) #encourage more seperation
+                    # print('---------------------------------------------------')
+                    # print(cost)
                     colFactor=self.collimation_Factor_First_Lens(swarmPreClipped) #0 for max collimation,1 for none
-                    cost+=1e2*colFactor
+                    cost+=5e2*colFactor
+                    # print(cost)
                     totalLength=Lo+Lm1+Lm2+self.X['Lsep']+self.X['Li'] #total length of the system.
-                    if swarm.survival_Bool()<transmissionTarget: #less than 90% survival punish severaly
+                    if swarm.survival_Bool()<transmissionTarget: #less than this percent% survival punish severaly
                         cost+=5e2*((transmissionTarget/swarm.survival_Bool())**2-1.0)
+                    else:
+                        cost+=-10*(swarm.survival_Bool()/transmissionTarget-1.0)  #encourage more survival
+                    # print(cost)
                     if totalLength>totalLengthMax:
                         cost+=5e2*((totalLength/totalLengthMax)**2-1.0)
-                    print(args,swarm.survival_Bool(),offsetAtApeture,totalLength,thetaMean,offsetMean,cost)
+                    print('--------------')
+                    print(args)
+                    print(swarm.survival_Bool(),offsetAtApeture,totalLength,thetaMean,offsetMean,cost)
                 else:
                     cost+=np.inf
             if returnResults==True:
                 if swarm.survival_Bool()!=0:
-                    return swarm,thetaMean,offsetMean,swarm.survival_Bool(),offsetAtApeture
+                    return swarm,swarm.survival_Bool(),offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean
                 else:
                     raise Exception('no surviving particles!!')
             return cost
-
-        args=np.array([ .27,  0.31034347,  0.04,  0.0460156 , -0.02134582,
-        0.10570997])
-        swarm1,thetaMean,offsetMean,survival,offsetApeture=cost_Function(args,returnResults=True,parallel=True)
-
-        self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
-                                  trueAspectRatio=True)
-        sys.exit()
+        #0.952 0.040307572343863105 0.8385517545202241 -0.10942242596132262 -0.018423087151598575 inf
+        # args=np.array([ 5.0,  0.66531146,  0.21835243,  0.3205889 ,  0.02448544,
+        # 0.04838734, -0.03262402,  0.07659906])
+        # t=time.time()
+        # swarm1,survival,offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean=cost_Function(args,returnResults=True,parallel=False)
+        # print(time.time()-t) #2.65554141998291
+        # #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
+        #
+        #
+        # self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=1,
+        #                           trueAspectRatio=True)
+        # sys.exit()
 
         t=time.time()
-        sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=10,mutation=(.5,1.0))
+        sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=100
+                                        ,mutation=(.5,1.0))
         print('run time',time.time()-t)
         print(sol1)
 
-        swarm1,thetaMean,offsetMean,survival,offsetApeture,LoVirtual=cost_Function(sol1.x,returnResults=True,parallel=True)
+        swarm1,survival,offsetApeture,apertureLens1,apertureLens2,thetaMean,offsetMean=cost_Function(sol1.x,returnResults=True,parallel=True)
 
 
-        print('distance',LoVirtual)
         print('survival',survival,'offset',offsetApeture)
         apetureObjects1=self.make_Apeture_Objects(thetaMean,offsetMean)
         print('----------------------')
 
 
 
-        # t = time.time()
-        # sol2 = spo.differential_evolution(cost_Function, bounds, workers=-1, polish=False, disp=True, maxiter=100,
-        #                                   mutation=(.5, 1.0))
-        # print('run time', time.time() - t)
-        # print(sol2)
-        # swarm2, thetaMean, offsetMean, survival, offsetApeture, LoVirtual = cost_Function(sol2.x, returnResults=True)
-        # print(time.time() - t)
-        # print('distance', LoVirtual)
-        # print('survival', survival, 'offset', offsetApeture)
-        # apetureObjects2 = self.make_Apeture_Objects(Li, apDiam, thetaMean, offsetMean)
-
-
         self.lattice.show_Lattice(swarm=swarm1,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
                                   extraObjects=apetureObjects1)
-        # self.lattice.show_Lattice(swarm=swarm2,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,trueAspectRatio=True,
-        #                           extraObjects=apetureObjects2)
 
 
 
@@ -524,7 +550,7 @@ class ApetureOptimizer:
 # lattice.add_Drift(.4,ap=.1)
 # lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
 
-apetureOptimizer=ApetureOptimizer()
+apetureOptimizer=ApetureOptimizer(h=1e-5)
 
 apetureOptimizer.optimize_Output(numParticles=250)
 

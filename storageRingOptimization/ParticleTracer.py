@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
 
+import elementPT
+
 
 def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
     #ucAng=angle/(2*numMagnets)
@@ -41,6 +43,9 @@ class ParticleTracer:
         self.pEl=None #this is in the element frame
         self.currentEl=None
         self.forceLast=None #the last force value. this is used to save computing time by reusing force
+
+        self.fastMode=None #wether to log particle positions
+        self.T0=None #total time to trace
         self.test=[]
 
 
@@ -51,7 +56,7 @@ class ParticleTracer:
             self.particle.clipped=False
         dl=self.particle.v0*self.h #approximate stepsize
         for el in self.latticeElementList:
-            if dl>el.Lo/10.0:
+            if dl>el.Lo/3.0: #have at least a few steps in each element
                 raise Exception('STEP SIZE TOO LARGE')
         self.currentEl = self.which_Element_Slow(self.particle.q)
         self.particle.currentEl=self.currentEl
@@ -79,36 +84,85 @@ class ParticleTracer:
             return self.particle
         self.fastMode=fastMode
         self.h=h
+        self.T0=T0
 
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
             return particle
-        while(True):
-            if self.T>T0:
-                self.particle.clipped=False
-                break
-            self.time_Step_Verlet()
-            if self.particle.clipped==True:
-                break
-            if fastMode==False:
-                self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-            self.T += self.h
-            self.particle.T=self.T
-            # self.test.append(npl.norm(self.forceLast))
+        self.time_Step_Loop()
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
-
         return self.particle
+    def time_Step_Loop(self):
+        while (True):
 
+            if self.T >= self.T0: #if out of time
+                self.particle.clipped = False
+                break
+            if type(self.currentEl)==elementPT.Drift :
+                self.handle_Drift_Region()
+                if self.particle.clipped==True:
+                    break
+            else:
+                self.time_Step_Verlet()
+                if self.particle.clipped==True:
+                    break
+                if self.fastMode==False:
+                    self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+                self.T+=self.h
+                self.particle.T=self.T
+    def handle_Drift_Region(self):
+        # it is more efficient to explote the fact that there is no field inside the drift region to project the
+        #paricle through it rather than timestep if through.
+        driftEl=self.currentEl #to  record the drift element for logging params
+        pi=self.pEl.copy() #position at beginning of drift in drift frame
+        qi=self.qEl.copy() #momentum at begining of drift in drift frame
+        pf=pi
+        my=pi[1]/pi[0]
+        mz=pi[2]/pi[0]
+        by=qi[1]-my*qi[0]
+        bz=qi[2]-mz*qi[0]
+        #now to find out if the particle is outside the drift region. Assume circular aperture. use simple geometry of
+        #lines
+        r0=self.currentEl.ap #aperture, radial
+        x0=(np.sqrt((mz*r0)**2+(my*r0)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
+        #that the particle clips the aperture at
+        if x0>self.currentEl.Lo: #if particle clips the aperture at a x position past the end of the drift element,
+            #then it has not clipped
+            clipped=False
+            xEnd=self.currentEl.Lo #particle ends at the end of the drift
+        else: #otherwise it clips inside the drift region
+            xEnd=x0 #particle ends somewhere inside the drift
+            clipped=True
+            #now place it just at the beginning of the next element
+        dt = (xEnd - qi[0]) / pi[0]  # time to travel to end coordinate
+        if self.T+dt>self.T0: #there is not enough simulation time
+            dt=self.T0-self.T #set to the remaining time available
+            self.T=self.T0
+            self.qEl=qi+pi*dt
+
+        else:
+            if clipped==False:
+                qEl=qi+pi*(dt+1e-10) #to put the particle just on the other side
+                el=self.which_Element(qEl)
+                self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el) #reuse the code here. This steps alos logs
+                #the time!!
+            else:
+                self.T += dt
+                self.qEl=qi+pi*dt
+                self.pEl=pf
+                self.particle.clipped=True
+        if self.fastMode==False: #need to log the parameters
+            qf = qi + pi * dt  # the final position of the particle. Either at the end, or at some place where it
+            # clipped, or where time ran out
+            self.particle.log_Params_Line_In_Drift_Region(qi, pi, qf, self.h,driftEl)
     def handle_Element_Edge(self):
         # This method calculates the correct timestep to put the particle just on the other side of the end of the element
-        # using velocity verlet. I had intended this to use the force right at the end of the element, but that didn't
-        # work right. For now it simply uses explicit euler more or less
-        #This returns the new position and momentum in lab frame
+        # using explicit euler.
         el=self.currentEl
         q=el.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         p=el.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
@@ -156,9 +210,8 @@ class ParticleTracer:
         el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
         #not always checking if the particle is inside the element by looking at how far away it is from and edge and
         #calculating when I should check again the soonest
-        exitLoop=self.check_Which_Element_And_Handle_Edge_Event(el)  #check if element has changed.
+        exitLoop=self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el)  #check if element has changed.
         if exitLoop==True:
-            self.elHasChanged = True
             return
         F_n=self.currentEl.force(qEl_n)
 
@@ -169,7 +222,7 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
-    def check_Which_Element_And_Handle_Edge_Event(self, el):
+    def check_If_Element_Has_Changed_And_Handle_Edge_Event(self, el):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
@@ -190,6 +243,7 @@ class ParticleTracer:
             self.currentEl = el
             self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab)
             self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab)
+            self.elHasChanged = True
             exitLoop=True
         return exitLoop
 
