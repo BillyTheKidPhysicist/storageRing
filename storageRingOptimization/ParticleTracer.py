@@ -26,6 +26,7 @@ class ParticleTracer:
         self.latticeElementList = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=latticeObject.totalLength
 
+
         self.T=None #total time elapsed
         self.h=None #step size
 
@@ -99,7 +100,6 @@ class ParticleTracer:
         return self.particle
     def time_Step_Loop(self):
         while (True):
-
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
@@ -113,6 +113,7 @@ class ParticleTracer:
                     break
                 if self.fastMode==False:
                     self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+
                 self.T+=self.h
                 self.particle.T=self.T
     def handle_Drift_Region(self):
@@ -131,10 +132,10 @@ class ParticleTracer:
         r0=self.currentEl.ap #aperture, radial
         x0=(np.sqrt((mz*r0)**2+(my*r0)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
         #that the particle clips the aperture at
-        if x0>self.currentEl.Lo: #if particle clips the aperture at a x position past the end of the drift element,
+        if x0>driftEl.Lo: #if particle clips the aperture at a x position past the end of the drift element,
             #then it has not clipped
             clipped=False
-            xEnd=self.currentEl.Lo #particle ends at the end of the drift
+            xEnd=driftEl.Lo #particle ends at the end of the drift
         else: #otherwise it clips inside the drift region
             xEnd=x0 #particle ends somewhere inside the drift
             clipped=True
@@ -144,7 +145,6 @@ class ParticleTracer:
             dt=self.T0-self.T #set to the remaining time available
             self.T=self.T0
             self.qEl=qi+pi*dt
-
         else:
             if clipped==False:
                 qEl=qi+pi*(dt+1e-10) #to put the particle just on the other side
@@ -159,7 +159,7 @@ class ParticleTracer:
         if self.fastMode==False: #need to log the parameters
             qf = qi + pi * dt  # the final position of the particle. Either at the end, or at some place where it
             # clipped, or where time ran out
-            self.particle.log_Params_Line_In_Drift_Region(qi, pi, qf, self.h,driftEl)
+            self.particle.log_Params_In_Drift_Region(qi, pi, qf, self.h,driftEl)
     def handle_Element_Edge(self):
         # This method calculates the correct timestep to put the particle just on the other side of the end of the element
         # using explicit euler.

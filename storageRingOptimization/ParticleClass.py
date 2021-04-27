@@ -128,16 +128,16 @@ class Particle:
             qel=currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
             self.qoList.append(currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
             self.VList.append(currentEl.magnetic_Potential(qel))
-    def log_Params_Line_In_Drift_Region(self,qEli,pEli,qElf,h,currentEl):
+    def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,currentEl):
         #log the parameters when the particle has traveled in a straight line inside a drift region
         #qi: initial position
         #pi: initial momentum
         #qf: final position
         #h: stepsize
         T=(qElf[0]-qEli[0])/pEli[0]
-        timeSteps=int(T/h)-1 #round the time steps to an integer
-        if timeSteps<0:
-            raise Exception('There are not enough timesteps in the element to log parameters')
+        timeSteps=int(T/h)+1
+        if timeSteps<=1:
+            timeSteps=2
         TArr=np.linspace(0,T,num=timeSteps)
         qElArr=qEli+TArr[:,np.newaxis]*pEli #trick to muliply across rows
         pElArr=np.ones((TArr.shape[0],3))*pEli #to get the right shape

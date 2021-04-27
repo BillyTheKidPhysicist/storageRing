@@ -59,7 +59,6 @@ class ApetureOptimizer:
         px=v0
         py=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
         pz=(np.random.rand(numParticles)-.5)*200*np.tan(maxAng)
-        print('pz set to zero')
         for i in range(numParticles):
             q=np.asarray([x[i],y[i],z[i]])
             p=np.asarray([px,py[i],pz[i]])
@@ -210,6 +209,7 @@ class ApetureOptimizer:
                 qList.append([L,y,z])
         spotSize=self.get_Frac_Width(np.asarray(qList),fraction=fraction)
         return spotSize
+
     def build_Lattice(self):
         #sigma here moves the element upwards
         self.lattice = ParticleTracerLattice(self.v0Nominal)
@@ -221,7 +221,6 @@ class ApetureOptimizer:
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
         self.lattice.elList[1].BpFact=self.X['Bp1'] #tune down the models
         self.lattice.elList[3].BpFact=self.X['Bp2'] #tune down the models
-        print(self.lattice.elList[1].BpFact)
     def make_Apeture_Objects(self,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
         apWidthInPlot=.05 #the width of the apeture for plotting purposes. This is the distance from the beginning
@@ -275,6 +274,8 @@ class ApetureOptimizer:
         collimationFactor=np.abs(rmsSlopeActual/rmsSlopeProj)
         height=y_rmsArr[0] #to use the prominence feature. Otherwise find peaks will find teeny peaks that aren't
         #real
+        # plt.plot(y_rmsArr)
+        # plt.show()
         numPeaks=sps.find_peaks(y_rmsArr,prominence=.1*height)[0].shape[0]
         numTrough=sps.find_peaks(-y_rmsArr,prominence=.1*height)[0].shape[0]
         #if there are no peaks, then the output can't be a focus. If there is at least one, then if there is one or more
@@ -366,6 +367,9 @@ class ApetureOptimizer:
 
         return X0,[XLow,(errorLowPre,errorLowPost)],[XHigh,(errorHighPre,errorHighPost)]
 
+
+
+
     def get_Tunability_Jacobian(self,args0,dSigma=1e-3,dSep=1e-3,dLo=1e-3):
         #this method computes the jacobian of the 'knobs' that are available. The object distance (Lo) for the first
         # lens, the transvers position of the second lens (sigma), and the longitudinal seperation between the second
@@ -425,6 +429,22 @@ class ApetureOptimizer:
         self.X['rp2']=rp2
         self.X['sigma']=sigma
         self.X['Lo']=Lo
+    def plot_Swarm_In_Bumper(self,args,numParticles=250):
+        self.initialize_Observed_Swarm(numParticles=numParticles)
+        minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
+        #books that 5 is a good value, but there is also a restriction from COMSOL
+        Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
+        aspectRatioLens1=Lm1/rp1
+        aspectRatioLens2=Lm2/rp2
+        if aspectRatioLens1<minAspectRatio or aspectRatioLens2<minAspectRatio:  #not a valid solution.
+            print('aspect ratio violate')
+        self.updateX_With_List(args)
+        self.build_Lattice()
+        swarm=self.trace_Through_Bumper(parallel=True)
+        print(self.collimation_Factor_First_Lens(swarm))
+        self.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False,traceLineAlpha=.1,
+                                          trueAspectRatio=True)
+
     def optimize_Output(self,numParticles=1000):
         #this method optimizes the injection system for passing through an apeture.
         #Lo: object length of the system
@@ -438,7 +458,7 @@ class ApetureOptimizer:
         minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
         #books that 5 is a good value, but there is also a restriction from COMSOL
         offsetApetureTarget=.04 #target value for distance from axis at aperture
-
+        transmissionCutoff=.5 #less than this transmission don't do any other analysis
         def cost_Function(args,returnResults=False,parallel=False):
             #todo: need to improve this alot. Needs to be move to its own function or something
             Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
@@ -452,12 +472,8 @@ class ApetureOptimizer:
             for el in self.lattice.elList:
                 el.fill_Params()
             swarm = self.trace_Through_Bumper(parallel=parallel)
-            # qArr = swarm.particles[0].qArr
-            # plt.plot(qArr[:,0],qArr[:,1])
-            # plt.show()
-            # sys.exit()
             cost=0
-            if swarm.survival_Bool()==0: #sometimes  all particles are clipped
+            if swarm.survival_Bool()<=transmissionCutoff: #sometimes  all or nearly all particles are clipped
                 cost+=np.inf
             else:
                 swarmPreClipped=swarm #the swarm before clipping at the apeture. This is for testing wether the first
@@ -495,18 +511,18 @@ class ApetureOptimizer:
                 else:
                     raise Exception('no surviving particles!!')
             return cost
-        #0.952 0.040307572343863105 0.8385517545202241 -0.10942242596132262 -0.018423087151598575 inf
-        # args=np.array([ 5.0,  0.66531146,  0.21835243,  0.3205889 ,  0.02448544,
-        # 0.04838734, -0.03262402,  0.07659906])
-        # t=time.time()
-        # swarm1,survival,offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean=cost_Function(args,returnResults=True,parallel=False)
-        # print(time.time()-t) #2.65554141998291
-        # #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
-        #
-        #
-        # self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=1,
-        #                           trueAspectRatio=True)
-        # sys.exit()
+        #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
+ #        args=np.array([ 0.12599184  ,1.0,  0.34247058  ,0.22691336,  0.03981349,  0.02424718,
+ # 0.0 ,0.26610076])
+ #        t=time.time()
+ #        swarm1,survival,offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean=cost_Function(args,returnResults=True,parallel=False)
+ #        print(time.time()-t) #2.65554141998291
+ #        #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
+ #
+ #
+ #        self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
+ #                                  trueAspectRatio=True)
+ #        sys.exit()
 
         t=time.time()
         sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=100
@@ -550,9 +566,17 @@ class ApetureOptimizer:
 # lattice.add_Drift(.4,ap=.1)
 # lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
 
-apetureOptimizer=ApetureOptimizer(h=1e-5)
+        #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
+ #        args=np.array([ 0.12599184  ,1.0,  0.34247058  ,0.22691336,  0.03981349,  0.02424718,
+ # 0.0 ,0.26610076])
+#
+# apetureOptimizer=ApetureOptimizer(h=1e-5)
+# Length=.28
+# args=np.array([ .5,0.0,  0.28  ,1.0,  Length/6,  0.02424718,
+#  0.0 ,0.15])
+# apetureOptimizer.plot_Swarm_In_Bumper(args)
 
-apetureOptimizer.optimize_Output(numParticles=250)
+# apetureOptimizer.optimize_Output(numParticles=250)
 
 # X0={'Lm1':0.10293192,'Lm2':0.3442374,'rp1':0.02546703,'rp2':.034,'sigma':-0.0167223,'Lo':0.13033733}
 # X0['Lm1']=.25
