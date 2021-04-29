@@ -52,12 +52,12 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Sim_With_Caps(self, file2D, file3D, L, ap=None,rp=None):
-        el=LensSimWithCaps(self, file2D, file3D, L, rp,ap)
+    def add_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L, ap=None,rp=None):
+        el=LensSimWithCaps(self, file2D, file3D,fringeFrac, L, rp,ap)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D, L,sigma, ap=None,rp=None):
-        el=BumpsLensSimWithCaps(self, file2D, file3D, L, rp,ap,sigma)
+    def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None):
+        el=BumpsLensSimWithCaps(self, file2D, file3D, fringeFrac,L, rp,ap,sigma)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Ideal(self,L,Bp,rp,ap=None):

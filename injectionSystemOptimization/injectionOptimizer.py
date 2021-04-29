@@ -16,19 +16,16 @@ from shapely.geometry import LineString
 # from profilehooks import profile
 
 class ApetureOptimizer:
-    def __init__(self,Li=.2,apDiam=.01,h=5e-6,Lsep=.025):
+    def __init__(self,Li=.1,apDiam=.005,h=5e-6,Lsep=.025,Lo=.1,fringeFrac=1.5):
         self.lattice=None
         self.swarmInitial=None
         self.h=None #timestep
         self.v0Nominal=200.0
         self.apDiam=apDiam
         self.h=h
-        self.X0={'Li':Li,'apDiam':apDiam,'Lsep':Lsep} #dictionary of lattice paramters that are not
-        #varied by the optimizer. This is used in both tunabiliyt testing and the differential evoluiton
-        self.X={'Bp1':None,'Bp2':None,'Lm1':None,'Lm2':None,'rp1':None,'rp2':None,'sigma':None,'Lo':None,
-                'Li':None,'apDiam':None} #the full dictionary of lattice
-        # paramters. Need to add the X0 params
-        self.X.update(self.X0) #now add the rest, the x0 params
+        self.X={'Lm2':None,'rp1':None,'sigma':None,'Li':Li,'Lm1':None,'Lo':Lo,'apDiam':apDiam,'Lsep':Lsep,
+                'fringeFrac':fringeFrac} #dictionairy of lattice parameters
+        self.X0=self.X.copy() #initial values of lattice parameters
     def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0):
         #load a swarm from a file.
         #numParticles: Number of particles to load from the file. if None load all
@@ -66,18 +63,7 @@ class ApetureOptimizer:
         np.random.seed(int(time.time()))
 
 
-    def move_Swarm_Through_Free_Space(self,swarm,L):
-        #Move a swarm through free space by simple explicit euler. Distance is along the x axis. Moves TO a position
-        #swarm: swarm to move
-        #L: the distance to move to, positive or negative, along the x axis
-        #Return: A new swarm object
-        for particle in swarm:
-            q=particle.q
-            p=particle.p
-            dt=(L-q[0])/p[0]
-            q=q+p*dt
-            particle.q=q
-        return swarm
+
     def get_RMS_Width(self,swarm,axis='y'):
         #Get the RMS width of the beam. Swarm is assumed to have the same x value for all particles. RMS is of the y axis
         temp=[]
@@ -215,14 +201,17 @@ class ApetureOptimizer:
     def build_Lattice(self):
         #sigma here moves the element upwards
         self.lattice = ParticleTracerLattice(self.v0Nominal)
-        self.lattice.add_Drift(self.X['Lo'])
-        self.lattice.add_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt',self.X['Lm1'],rp=self.X['rp1'])
+        self.lattice.add_Drift(None) #need to update this after adding the first lens
+        self.lattice.add_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection.txt',self.X['fringeFrac'],None)
+        self.X['rp1']=self.lattice.elList[1].rp
+        self.X['Lm1']=2*self.lattice.elList[1].Lcap0
+        Lo0=self.X['Lo']-self.X['rp1']*self.X['fringeFrac']
+        self.lattice.elList[0].set_Length(Lo0) #set the drift element length correctly
         self.lattice.add_Drift(self.X['Lsep'])
-        self.lattice.add_Bump_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt',self.X['Lm2'],self.X['sigma'],rp=self.X['rp2'])
+        self.lattice.add_Bump_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt'
+                                                 ,self.X['fringeFrac'],self.X['Lm2'],self.X['sigma'],rp=self.X['rp2'])
         self.lattice.add_Drift(self.X['Li']+.05,ap=2*.2*self.X['Li'])
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
-        self.lattice.elList[1].BpFact=self.X['Bp1'] #tune down the models
-        self.lattice.elList[3].BpFact=self.X['Bp2'] #tune down the models
     def make_Apeture_Objects(self,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
         apWidthInPlot=.05 #the width of the apeture for plotting purposes. This is the distance from the beginning
@@ -296,36 +285,41 @@ class ApetureOptimizer:
         else:
             return collimationFactor
 
-
-
-    def get_bject_Distance(self,swarm):
-        #this uses the analytic method of finding the focus that minimizes the RMS of a cloud of particles. Simple algeb
-        xAfter = self.lattice.elList[1].r2[0]
+    def get_Image_Distance(self,swarm,thetaMean,offsetMean):
+        #this uses the analytic method of finding the focus that minimizes the RMS of a cloud of particles.
+        #Simple algebra. the swarm here is the swarm leaving the output of the second lens, and so there is a mean
+        #tilt and offset for the cloud. These values are used to correct for that.
+        xAfter = self.lattice.elList[3].r2[0] #end of second lens
         bList=[]
         mList=[]
-        xArr=np.linspace(-1,1,num=1000)
+        xArr=np.linspace(xAfter-.1,xAfter+.5,num=1000)
         yList=[]
         for particle in swarm.particles:
             if particle.qArr[-1][0]>xAfter: #only consider particles that have survived through the first lens
                 #find m and b in the equation y=m*x+b. I find m and b for each axis right after the first lens
                 my=(particle.yInterp(xAfter+1e-6)-particle.yInterp(xAfter))/1e-6 #use forward difference to
                 #not include step inside lens where it can be changing, though it probably doesn't matter
+                my=my-np.tan(thetaMean) #remove the mean difference
                 #mz=(particle.zInterp(xAfter+1e-6)-particle.zInterp(xAfter))/1e-6
-                by=particle.yInterp(xAfter)-my*xAfter
+                by=(particle.yInterp(xAfter)-offsetMean)-my*xAfter #account for mean difference here as well
                 #bz=particle.zInterp(xAfter)-mz*particle.zInterp(xAfter)
                 mList.extend([my])#,mz])
                 bList.extend([by])#,bz])
                 yList.append(my*xArr+by)
+
                 plt.plot(xArr,my*xArr+by,c='black',alpha=.1)
-        yArr=np.asarray(yList)
-        rmsArr=np.sqrt(np.mean(yArr**2,axis=0))
+        rmsArr=np.sqrt(np.mean(np.asarray(yList)**2,axis=0))
         mArr=np.asarray(mList)
         bArr=np.asarray(bList)
-        xFocus=-np.sum(mArr*bArr)/np.sum(mArr**2)
+        xFocus=-np.sum(mArr*bArr)/np.sum(mArr**2) #get absolute position of focus
+        Li=xFocus-xAfter #image distance is relative
         print('focus',xFocus)
+        print('Li',Li)
         plt.axvline(x=xAfter)
+        # plt.gca().set_aspect('equal')
         plt.plot(xArr,rmsArr)
         plt.show()
+        return Li
     def test_Tunability_For_Velocity(self,args0,dv=5.0):
         #This method tests the tunability characteristics for deviations if velocity. This is done by finding the knob
         #positions for three velocities, (v0-dv,v0,v0+dv) using newton's method and seeing how much this deviates
@@ -423,15 +417,10 @@ class ApetureOptimizer:
 
     def updateX_With_List(self,args):
         #unpack args into the lattice paramters dictionary
-        Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
-        self.X['Bp1']=Bp1
-        self.X['Bp2']=Bp2
-        self.X['Lm1']=Lm1
+        Lm2,rp2,sigma=args
         self.X['Lm2']=Lm2
-        self.X['rp1']=rp1
         self.X['rp2']=rp2
         self.X['sigma']=sigma
-        self.X['Lo']=Lo
     def plot_Swarm_In_Bumper(self,args,numParticles=250):
         self.initialize_Observed_Swarm(numParticles=numParticles)
         minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
@@ -451,23 +440,22 @@ class ApetureOptimizer:
     def optimize_Output(self,numParticles=1000):
         #this method optimizes the injection system for passing through an apeture.
         #Lo: object length of the system
-        #Bp2: Pole face strength of the second lens, ie the shifter
         #Li: Image length, also where the second apeture should be placed.
         #apDiam: diamter of the second apeture, located at the image
-        apetureOptimizer.initialize_Observed_Swarm(numParticles=numParticles)
-        bounds=[(.1,1.0),(.1,1.0),(.1,.4),(.1,.4),(.01,.05),(.01,.05),(-.01,-.05),(.075,.3)] #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo
+        self.initialize_Observed_Swarm(numParticles=numParticles)
+        bounds=[(.1,.4),(.01,.05),(-.01,-.05)] #Lm2,rp2,sigma
         totalLengthMax=1.0 #maximum length of system
-        transmissionTarget=.95 # fraction of suriving atoms
+        transmissionTarget=.95 # fraction of suriving atoms through the first lens
         minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
         #books that 5 is a good value, but there is also a restriction from COMSOL
         offsetApetureTarget=.04 #target value for distance from axis at aperture
         transmissionCutoff=.5 #less than this transmission don't do any other analysis
+        imageDistanceTarget=self.X['Li']
         def cost_Function(args,returnResults=False,parallel=False):
             #todo: need to improve this alot. Needs to be move to its own function or something
-            Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
-            aspectRatioLens1 = Lm1 / rp1
+            Lm2,rp2,sigma=args
             aspectRatioLens2 = Lm2 / rp2
-            if aspectRatioLens1<minAspectRatio or aspectRatioLens2<minAspectRatio: #not a valid solution.
+            if aspectRatioLens2<minAspectRatio: #not a valid solution.
                 return np.inf
             self.updateX_With_List(args)
             self.build_Lattice()
@@ -479,53 +467,71 @@ class ApetureOptimizer:
             if swarm.survival_Bool()<=transmissionCutoff: #sometimes  all or nearly all particles are clipped
                 cost+=np.inf
             else:
-                swarmPreClipped=swarm #the swarm before clipping at the apeture. This is for testing wether the first
-                #lens collimated the beam.
+                print('--------------')
                 thetaMean, offsetMean = self.characterize_Output(swarm)
-                swarm=self.project_Swarm_Through_Apeture(swarm,thetaMean,offsetMean,copySwarm=True)
+                # LiSwarm=self.get_Image_Distance(swarm,thetaMean,offsetMean) #image distance of swarm. This should line
+                #up with the aperture. This is not very robust because this does not behave well in principle
+                postApertureSwarm=self.project_Swarm_Through_Apeture(swarm,thetaMean,offsetMean,copySwarm=True) #this
+                #swarm is just used to get the injector to respect the location of the aperture.
 
-                if swarm.survival_Bool()!=0: #sometimes they can all clip on the apeture also
-                    offsetAtApeture = np.abs(offsetMean + thetaMean * self.X['Li'])
-                    if offsetAtApeture<offsetApetureTarget:
-                        cost+= 5e2*(1.0-(offsetAtApeture/offsetApetureTarget)**2)  # reduce this cost
-                    else:
-                        cost+=-10*(offsetAtApeture/offsetApetureTarget-1.0) #encourage more seperation
-                    # print('---------------------------------------------------')
-                    # print(cost)
-                    colFactor=self.collimation_Factor_First_Lens(swarmPreClipped) #0 for max collimation,1 for none
-                    cost+=5e2*colFactor
-                    # print(cost)
-                    totalLength=Lo+Lm1+Lm2+self.X['Lsep']+self.X['Li'] #total length of the system.
-                    if swarm.survival_Bool()<transmissionTarget: #less than this percent% survival punish severaly
-                        cost+=5e2*((transmissionTarget/swarm.survival_Bool())**2-1.0)
-                    else:
-                        cost+=-10*(swarm.survival_Bool()/transmissionTarget-1.0)  #encourage more survival
-                    # print(cost)
-                    if totalLength>totalLengthMax:
-                        cost+=5e2*((totalLength/totalLengthMax)**2-1.0)
-                    print('--------------')
-                    print(args)
-                    print(swarm.survival_Bool(),offsetAtApeture,totalLength,thetaMean,offsetMean,cost)
-                else:
-                    cost+=np.inf
+
+                #punish if the bump lens is clipping particles
+                if swarm.survival_Bool()<transmissionTarget:  #less than this percent% survival punish severaly
+                    cost+=5e2*((transmissionTarget/swarm.survival_Bool())**2-1.0)
+
+                #punish for the aperture clipping the swarms.
+                cost+=1e2*((swarm.survival_Bool()/postApertureSwarm.survival_Bool())**2-1)
+
+                #reward for having greater seperation at the aperture. Punish more severely for exceeding the
+                #target
+                offsetAtAperture = np.abs(offsetMean + thetaMean * self.X['Li'])
+                if offsetAtAperture<offsetApetureTarget:  #punish if the beam isn't seperated enough from the helium
+                    #beam at the aperture
+                    cost+= 5e2*(1.0-(offsetAtAperture/offsetApetureTarget)**2)  # reduce this cost
+                # else: #reward
+                #     cost+=-10*(offsetAtAperture/offsetApetureTarget-1.0) #encourage more seperation
+
+                #punish severely for exceeding the total length
+                totalLength=self.X['Lo']+self.X['Lm1']+Lm2+self.X['Lsep']+self.X['sLi'] #total length of the system.
+                if totalLength>totalLengthMax:
+                    cost+=5e2*((totalLength/totalLengthMax)**2-1.0)
+
+                print(args)
+                print(swarm.survival_Bool(),postApertureSwarm.survival_Bool(),offsetAtAperture,totalLength,thetaMean,offsetMean,cost)
+
+                #
+                # if swarm.survival_Bool()!=0: #sometimes they can all clip on the apeture if that is being used
+                #     if offsetAtAperture<offsetApetureTarget: #punish if the beam isn't seperated enough from the helium
+                #         #beam at the aperture
+                #         cost+= 5e2*(1.0-(offsetAtAperture/offsetApetureTarget)**2)  # reduce this cost
+                #     else: #reward
+                #         cost+=-10*(offsetAtAperture/offsetApetureTarget-1.0) #encourage more seperation
+                #     # cost+=1e3*np.abs(LiSwarm-imageDistanceTarget)/imageDistanceTarget #force the lens to focus at the
+                #     #image distance
+
+                # print('---------------------------------------------------')
+                # print(cost)
+
+                #     if totalLength>totalLengthMax:
+
+                # else:
+                #     cost+=np.inf
             if returnResults==True:
                 if swarm.survival_Bool()!=0:
-                    return swarm,swarm.survival_Bool(),offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean
+                    return swarm,swarm.survival_Bool(),offsetAtAperture,aspectRatioLens2,thetaMean,offsetMean
                 else:
                     raise Exception('no surviving particles!!')
             return cost
         #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
- #        args=np.array([ 0.12599184  ,1.0,  0.34247058  ,0.22691336,  0.03981349,  0.02424718,
- # 0.0 ,0.26610076])
- #        t=time.time()
- #        swarm1,survival,offsetAtApeture,aspectRatioLens1,aspectRatioLens2,thetaMean,offsetMean=cost_Function(args,returnResults=True,parallel=False)
- #        print(time.time()-t) #2.65554141998291
- #        #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
- #
- #
- #        self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
- #                                  trueAspectRatio=True)
- #        sys.exit()
+        # args=np.array([ 0.98595678,  0.39641611,  0.04995774, -0.03846243])
+        # t=time.time()
+        # swarm1,survival1,offsetAtApeture1,aspectRatioLens2_1,thetaMean1,offsetMean1=cost_Function(args,returnResults=True,parallel=True)
+        # print(time.time()-t) #2.65554141998291
+        # #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
+        # apetureObjects1=self.make_Apeture_Objects(thetaMean1,offsetMean1)
+        # self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
+        #                           trueAspectRatio=True,extraObjects=apetureObjects1)
+        # sys.exit()
 
         t=time.time()
         sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=100
@@ -533,7 +539,7 @@ class ApetureOptimizer:
         print('run time',time.time()-t)
         print(sol1)
 
-        swarm1,survival,offsetApeture,apertureLens1,apertureLens2,thetaMean,offsetMean=cost_Function(sol1.x,returnResults=True,parallel=True)
+        swarm1,survival,offsetApeture,apertureLens2,thetaMean,offsetMean=cost_Function(sol1.x,returnResults=True,parallel=True)
 
 
         print('survival',survival,'offset',offsetApeture)
@@ -551,35 +557,15 @@ class ApetureOptimizer:
 
 
 
-#
-# Lo=.1
-# Bp1=.33
-# rp1=.011
-# Lm1=.1
-# LSep=.05
-# Bp2=1.0
-# rp2=3e-2
-# Lm2=.15
-# sigma=-.02
-# lattice=ParticleTracerLattice(200.0)
-# lattice.add_Drift(Lo)
-# lattice.add_Lens_Ideal(Lm1,Bp1,rp1)
-# lattice.add_Drift(LSep)
-# lattice.add_Bump_Lens_Ideal(Lm2,Bp2,rp2,sigma,ap=rp2-.001)
-# lattice.add_Drift(.4,ap=.1)
-# lattice.end_Lattice(enforceClosedLattice=False,latticeType='injector')
 
-        #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
- #        args=np.array([ 0.12599184  ,1.0,  0.34247058  ,0.22691336,  0.03981349,  0.02424718,
- # 0.0 ,0.26610076])
 #
-# apetureOptimizer=ApetureOptimizer(h=1e-5)
+apetureOptimizer=ApetureOptimizer(h=1e-5,apDiam=.01,Li=.2)
 # Length=.28
 # args=np.array([ .5,0.0,  0.28  ,1.0,  Length/6,  0.02424718,
 #  0.0 ,0.15])
 # apetureOptimizer.plot_Swarm_In_Bumper(args)
 
-# apetureOptimizer.optimize_Output(numParticles=250)
+apetureOptimizer.optimize_Output(numParticles=1000)
 
 # X0={'Lm1':0.10293192,'Lm2':0.3442374,'rp1':0.02546703,'rp2':.034,'sigma':-0.0167223,'Lo':0.13033733}
 # X0['Lm1']=.25

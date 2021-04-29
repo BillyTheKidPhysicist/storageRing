@@ -1078,7 +1078,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
 class LensSimWithCaps(LensIdeal):
-    def __init__(self, PTL, file2D, file3D, L,rp, ap):
+    def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
@@ -1087,9 +1087,11 @@ class LensSimWithCaps(LensIdeal):
         self.L = L
         self.ap0 = ap #initial aperture value to keep track of how it scales with changing bore radius
         self.ap=ap
-        self.Lcap0 = None #the length of the segments from comsol representing the fringle fields. Scaling the radius 
+        self.Lcap0 = None #the length of the segments from comsol representing the fringle fields. Scaling the radius
         #will change the cap length so I need to keep track of this
         self.Lcap=None
+        self.fringeFrac=fringeFrac#multiple of boreRadius added to length ot account for fringe fields to EACH side. So
+        #total is double
         self.Linner = None
         self.data2D = None
         self.data3D = None
@@ -1102,7 +1104,7 @@ class LensSimWithCaps(LensIdeal):
         self.Fz_Func_Inner = None
         self.magnetic_Potential_Func_Inner = None
         self.BpFact = 1.0
-        self.rp0=None #the value of the initial bore radius from comsol simulation. This is required to hold onto the 
+        self.rp0=None #the value of the initial bore radius from comsol simulation. This is required to hold onto the
         #original value when the user changes the bore radius
         self.rpFieldFact=1.0 #factor to modify the force if the bore radius is changed. Force scale as 1/rp**2
         self.rpScaleFact=1.0 #factor to modify the position in the lens of coordinates when the bore radius is changed.
@@ -1159,7 +1161,7 @@ class LensSimWithCaps(LensIdeal):
             raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
         self.Lo = self.L
     def set_Bore_Radius(self,rpNew):
-        #changing the bore radius changes the total field values. Field scales as 1/rp**2. In addition, changing the 
+        #changing the bore radius changes the total field values. Field scales as 1/rp**2. In addition, changing the
         #bore radius changes the length of the fringe fields, so the caps must scale as well
         self.rpFieldFact=(self.rp0/rpNew) #scale the field by this value
         self.Lcap=self.Lcap0*(rpNew/self.rp0) #smaller bore means smaller fringe fields as well
@@ -1238,6 +1240,6 @@ class LensSimWithCaps(LensIdeal):
         return self.F.copy()
 
 class BumpsLensSimWithCaps(LensSimWithCaps):
-    def __init__(self, PTL, file2D, file3D, L,rp, ap,sigma):
-        super().__init__(PTL, file2D, file3D, L,rp, ap)
+    def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap,sigma):
+        super().__init__(PTL, file2D, file3D,fringeFrac, L,rp, ap)
         self.sigma=sigma #the amount of vertical shift for bumping the beam over

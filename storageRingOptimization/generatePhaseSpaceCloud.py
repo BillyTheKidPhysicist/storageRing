@@ -9,7 +9,7 @@ import numpy as np
 #generated particles if the random state isn't set
 
 
-#----constants
+#----constants----
 gamma0=4.2 #spot size FWHM, mm
 sigmaTrans0=4.0 #Sigma of the entire spot. dubious with multipeaks.m/s
 sigmaLong0=1.5 #longitudinal sigma. A guess based on temperature m/s
