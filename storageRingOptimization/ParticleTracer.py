@@ -113,7 +113,6 @@ class ParticleTracer:
                     break
                 if self.fastMode==False:
                     self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-
                 self.T+=self.h
                 self.particle.T=self.T
     def handle_Drift_Region(self):
@@ -147,10 +146,12 @@ class ParticleTracer:
             self.qEl=qi+pi*dt
         else:
             if clipped==False:
-                qEl=qi+pi*(dt+1e-10) #to put the particle just on the other side
-                el=self.which_Element(qEl)
-                self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el) #reuse the code here. This steps alos logs
+                qEl=qi+pi*dt
+                el=self.which_Element(qEl+1e-10) #put the particle just on the other side
+                exitLoop=self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el) #reuse the code here. This steps alos logs
                 #the time!!
+                if exitLoop==True and el is None:
+                    self.qEl=qEl
             else:
                 self.T += dt
                 self.qEl=qi+pi*dt
@@ -161,7 +162,7 @@ class ParticleTracer:
             # clipped, or where time ran out
             self.particle.log_Params_In_Drift_Region(qi, pi, qf, self.h,driftEl)
     def handle_Element_Edge(self):
-        # This method calculates the correct timestep to put the particle just on the other side of the end of the element
+        # This method uses the correct timestep to put the particle just on the other side of the end of the element
         # using explicit euler.
         el=self.currentEl
         q=el.transform_Element_Coords_Into_Lab_Frame(self.qEl)
@@ -228,12 +229,14 @@ class ParticleTracer:
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
         #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
         #None. Most of the time this return false and the leapfrog algorithm continues
+        #el: The element to check against
         exitLoop=False
         if el is None: #if the particle is outside the lattice, the simulation is over
             self.particle.clipped = True
-            return True
+            exitLoop=True
+            return exitLoop
         elif el is not self.currentEl:
-            qLab,pLab=self.handle_Element_Edge()
+            qLab,pLab=self.handle_Element_Edge() #just over the edge of the next element
             #it's possible that the particle is now outside the lattice, so check which element it's in
             if self.which_Element_Slow(qLab) is None:
                 exitLoop=True
@@ -241,8 +244,9 @@ class ParticleTracer:
                 return exitLoop
             self.particle.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
-            self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab)
-            self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab)
+            self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab) #at the beginning of the next element
+            self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab) #at the beginning of the next
+            #element
             self.elHasChanged = True
             exitLoop=True
         return exitLoop

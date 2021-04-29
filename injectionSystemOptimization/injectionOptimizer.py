@@ -101,7 +101,7 @@ class ApetureOptimizer:
             warnings.warn('Low number of particles will result in larger error with this method')
         rArr=np.sqrt(qArr[:,1]**2+qArr[:,2]**2)
         rArrSorted=np.sort(rArr)
-        cutoffIndex=int(fraction*numParticles) #the 90% particle. There is some minor rounding error
+        cutoffIndex=int(fraction*numParticles) #the 100*fraction% particle. There is some minor rounding error
         width=2*rArrSorted[cutoffIndex]
         return width
     def get_Max_Displacement(self,swarm,axis='radial'):
@@ -203,10 +203,12 @@ class ApetureOptimizer:
         #the bumper
         qList=[]
         for particle in swarm:
-            if particle.q[0]>L: #only particle that have survived
+            if particle.q[0]>L: #only particles that have survived
                 y=particle.yInterp(L)
                 z=particle.zInterp(L)
                 qList.append([L,y,z])
+        if len(qList)==0:
+            raise Exception('No particles are available to caculate the spot size')
         spotSize=self.get_Frac_Width(np.asarray(qList),fraction=fraction)
         return spotSize
 
@@ -271,6 +273,7 @@ class ApetureOptimizer:
         y_rmsSlopeArr=np.gradient(y_rmsArr,xArr) #remember, the slope always stops changing at the end of the sim element
         #because the fields fall off!
         rmsSlopeActual=y_rmsSlopeArr[-1]
+        print(rmsSlopeActual/rmsSlopeProj)
         collimationFactor=np.abs(rmsSlopeActual/rmsSlopeProj)
         height=y_rmsArr[0] #to use the prominence feature. Otherwise find peaks will find teeny peaks that aren't
         #real

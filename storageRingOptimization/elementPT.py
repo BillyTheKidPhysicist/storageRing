@@ -151,6 +151,7 @@ class Element:
         BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
         BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
         B0Matrix[xIndices, yIndices, zIndices] = data[:, 6]
+
         interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
         interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
         interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
@@ -1115,26 +1116,42 @@ class LensSimWithCaps(LensIdeal):
             self.fill_Force_Func_Cap()
             self.Lcap0 = self.data3D[:, 2].max() - self.data3D[:, 2].min() - 2 * self.comsolExtraSpace
             self.Lcap=self.Lcap0
-            self.data3D = False
-        if self.data2D is None and self.file2D is not None:  # if data has not been loaded yet
-            self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
-            self.fill_Force_Func_2D()
-            self.rp0 = (self.data2D[:, 0].max() - self.data2D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
+            if self.L is None:
+                self.L=2*self.Lcap0
+            self.rp0 = (self.data3D[:, 0].max() - self.data3D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
             if self.ap is None:
                 self.ap0 = .9 * self.rp0
                 self.ap = self.ap0
             else:
                 self.ap0 = self.ap
             if self.rp is None:
-                self.rp=self.rp0
-            if self.rp is not None: #if user is setting value for bore radius
+                self.rp = self.rp0
+            if self.rp is not None:  # if user is setting value for bore radius
                 self.set_Bore_Radius(self.rp)
-            if self.ap>self.rp or self.ap0>self.rp0:
+            if self.ap > self.rp or self.ap0 > self.rp0:
                 raise Exception('Aperture cannot be larger than radius')
+            self.data3D = False
+        if self.data2D is None and self.file2D is not None:  # if data has not been loaded yet
+            self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
+            self.fill_Force_Func_2D()
+
             self.data2D = False #to save memory
         if self.L is not None and self.Lcap is not None:
             self.set_Length(self.L)
-
+        xArr=np.linspace(self.L*0,self.L*.99,num=1000)
+        y0=self.rp/2
+        z0=self.rp/2
+        temp=[]
+        for x in xArr:
+            q=np.asarray([x,y0,z0])
+            v=self.magnetic_Potential(q)
+            F=self.force(q)
+            temp.append(npl.norm(F))
+        # plt.title('meshFactor=3.0')
+        # plt.plot(xArr,temp)
+        # plt.ylabel('Force, au')
+        # plt.xlabel('Longitudinal position, au')
+        # plt.show()
     def set_Length(self, L):
         self.L = L
         self.Linner = L - 2 * self.Lcap
