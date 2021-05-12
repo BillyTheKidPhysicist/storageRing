@@ -15,7 +15,7 @@ sigmaTrans0=4.0 #Sigma of the entire spot. dubious with multipeaks.m/s
 sigmaLong0=1.5 #longitudinal sigma. A guess based on temperature m/s
 v0Nominal=-200.0 #longitudinal speed m/s
 np.random.seed(42) #set to repeatable seed
-apetureDiam=5.0 #mm. Diameter of the apeture at the focus
+apetureDiam=4*5.0 #mm. Diameter of the apeture at the focus
 
 
 def lorentz(x,gamma):
@@ -26,7 +26,7 @@ def lorentz(x,gamma):
 
 
 
-numSamples=20000#final count will not be this value because of the sample reject method being used
+numSamples=50000#final count will not be this value because of the sample reject method being used
 
 yzBound=apetureDiam/2
 bounds=[(-yzBound,yzBound),(-yzBound,yzBound)]
@@ -62,7 +62,7 @@ randList=[]
 probList=[]
 for sample in samples:
     r=np.sqrt(sample[0]**2+sample[1]**2)
-    if r<bounds[0][1]:
+    if r<apetureDiam/2:
         prob=lorentz(r,gamma0)/prob0 #scale the probability
         rand=np.random.rand()
         if prob>rand: #simple test and reject/accept method. robust

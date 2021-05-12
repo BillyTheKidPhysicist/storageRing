@@ -6,6 +6,7 @@ import scipy.optimize as spo
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal as sps
+import numpy.linalg as npl
 # from storageRingOptimization import elementPT
 # from storageRingOptimization.ParticleTracer import ParticleTracer
 from storageRingOptimization.ParticleClass import  Swarm,Particle
@@ -16,7 +17,7 @@ from shapely.geometry import LineString
 # from profilehooks import profile
 
 class ApetureOptimizer:
-    def __init__(self,Li=.1,apDiam=.005,h=5e-6,Lsep=.025,Lo=.1,fringeFrac=1.5):
+    def __init__(self,Li=.2,apDiam=.005,h=5e-6,Lsep=.2,Lo=.1,fringeFrac=1.5):
         self.lattice=None
         self.swarmInitial=None
         self.h=None #timestep
@@ -26,23 +27,32 @@ class ApetureOptimizer:
         self.X={'Lm2':None,'rp1':None,'sigma':None,'Li':Li,'Lm1':None,'Lo':Lo,'apDiam':apDiam,'Lsep':Lsep,
                 'fringeFrac':fringeFrac} #dictionairy of lattice parameters
         self.X0=self.X.copy() #initial values of lattice parameters
-    def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0):
+    def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0,
+                                  magFact=1.0,aperture=5e-3):
         #load a swarm from a file.
         #numParticles: Number of particles to load from the file. if None load all
         #fileName: Name of the file with the particle data in the format (y,z,px,py,pz)
         #dv: extra longitudinal velocity to add
+        #magFact: factor to modify the  magnification by artificially. Larger corresponds to smaller image size
+        #aperture: Transverse aperture in meters
         self.swarmInitial=Swarm()
         data= np.loadtxt(fileName)
-        if numParticles is not None:
-            data=data[:numParticles] #restrict the data
+        if numParticles is None:
+            numParticles=np.inf
+        numParticlesAdded=0
         for coords in data:
             x,y,z,px,py,pz=coords
             px=-px #need to flip the coords!!
             px+=dv
-            q=np.asarray([1e-10,y,z]) #add a tiny offset in the x direction so the particle starts in the element,
+            q=np.asarray([1e-10,y/magFact,z/magFact]) #add a tiny offset in the x direction so the particle starts in the element,
             #otherwise the algorithm spends extra time checking to see if the particle is exactly on the edge
-            p=np.asarray([px,py,pz])
-            self.swarmInitial.add_Particle(qi=q,pi=p)
+            if np.sqrt(q[1]**2+q[2]**2)<aperture:
+                numParticlesAdded+=1
+                p=np.asarray([px,py*magFact,pz*magFact,])
+                self.swarmInitial.add_Particle(qi=q,pi=p)
+            if numParticles<=numParticlesAdded:
+                break# leave the for loop
+
     def initialize_Ideal_Point_Swarm(self,numParticles=1000,maxAng=.05,v0=None):
         np.random.seed(42)
         if v0 is None:
@@ -209,9 +219,11 @@ class ApetureOptimizer:
         self.lattice.elList[0].set_Length(Lo0) #set the drift element length correctly
         self.lattice.add_Drift(self.X['Lsep'])
         self.lattice.add_Bump_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt'
-                                                 ,self.X['fringeFrac'],self.X['Lm2'],self.X['sigma'],rp=self.X['rp2'])
+                                                 ,self.X['fringeFrac'],self.X['Lm2'],self.X['sigma'],rp=self.X['rp2']
+                                                 ,ap=.8*self.X['rp2'])
         self.lattice.add_Drift(self.X['Li']+.05,ap=2*.2*self.X['Li'])
         self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
+        self.lattice.elList[3].BpFact=.9
     def make_Apeture_Objects(self,theta,offset):
         #create shapely object to represent the apeture for plotting purposes
         apWidthInPlot=.05 #the width of the apeture for plotting purposes. This is the distance from the beginning
@@ -262,7 +274,6 @@ class ApetureOptimizer:
         y_rmsSlopeArr=np.gradient(y_rmsArr,xArr) #remember, the slope always stops changing at the end of the sim element
         #because the fields fall off!
         rmsSlopeActual=y_rmsSlopeArr[-1]
-        print(rmsSlopeActual/rmsSlopeProj)
         collimationFactor=np.abs(rmsSlopeActual/rmsSlopeProj)
         height=y_rmsArr[0] #to use the prominence feature. Otherwise find peaks will find teeny peaks that aren't
         #real
@@ -442,9 +453,9 @@ class ApetureOptimizer:
         #Lo: object length of the system
         #Li: Image length, also where the second apeture should be placed.
         #apDiam: diamter of the second apeture, located at the image
-        self.initialize_Observed_Swarm(numParticles=numParticles)
+        self.initialize_Observed_Swarm(numParticles=numParticles,magFact=2.0)
         bounds=[(.1,.4),(.01,.05),(-.01,-.05)] #Lm2,rp2,sigma
-        totalLengthMax=1.0 #maximum length of system
+        totalLengthMax=1.2 #maximum length of system
         transmissionTarget=.95 # fraction of suriving atoms through the first lens
         minAspectRatio=6.0 #the minimum ratio of length to radius of the lens. I've seen quoted in particle acclerator
         #books that 5 is a good value, but there is also a restriction from COMSOL
@@ -467,7 +478,6 @@ class ApetureOptimizer:
             if swarm.survival_Bool()<=transmissionCutoff: #sometimes  all or nearly all particles are clipped
                 cost+=np.inf
             else:
-                print('--------------')
                 thetaMean, offsetMean = self.characterize_Output(swarm)
                 # LiSwarm=self.get_Image_Distance(swarm,thetaMean,offsetMean) #image distance of swarm. This should line
                 #up with the aperture. This is not very robust because this does not behave well in principle
@@ -478,9 +488,10 @@ class ApetureOptimizer:
                 #punish if the bump lens is clipping particles
                 if swarm.survival_Bool()<transmissionTarget:  #less than this percent% survival punish severaly
                     cost+=5e2*((transmissionTarget/swarm.survival_Bool())**2-1.0)
-
                 #punish for the aperture clipping the swarms.
                 cost+=1e2*((swarm.survival_Bool()/postApertureSwarm.survival_Bool())**2-1)
+                #0.996 0.898 1.1091314031180401
+                #
 
                 #reward for having greater seperation at the aperture. Punish more severely for exceeding the
                 #target
@@ -488,14 +499,14 @@ class ApetureOptimizer:
                 if offsetAtAperture<offsetApetureTarget:  #punish if the beam isn't seperated enough from the helium
                     #beam at the aperture
                     cost+= 5e2*(1.0-(offsetAtAperture/offsetApetureTarget)**2)  # reduce this cost
-                # else: #reward
-                #     cost+=-10*(offsetAtAperture/offsetApetureTarget-1.0) #encourage more seperation
+
 
                 #punish severely for exceeding the total length
-                totalLength=self.X['Lo']+self.X['Lm1']+Lm2+self.X['Lsep']+self.X['sLi'] #total length of the system.
+                totalLength=self.X['Lo']+self.X['Lm1']+Lm2+self.X['Lsep']+self.X['Li'] #total length of the system.
                 if totalLength>totalLengthMax:
                     cost+=5e2*((totalLength/totalLengthMax)**2-1.0)
 
+                print('--------------')
                 print(args)
                 print(swarm.survival_Bool(),postApertureSwarm.survival_Bool(),offsetAtAperture,totalLength,thetaMean,offsetMean,cost)
 
@@ -523,15 +534,15 @@ class ApetureOptimizer:
                     raise Exception('no surviving particles!!')
             return cost
         #Bp1,Bp2,Lm1,Lm2,rp1,rp2,sigma,Lo=args
-        # args=np.array([ 0.98595678,  0.39641611,  0.04995774, -0.03846243])
-        # t=time.time()
-        # swarm1,survival1,offsetAtApeture1,aspectRatioLens2_1,thetaMean1,offsetMean1=cost_Function(args,returnResults=True,parallel=True)
-        # print(time.time()-t) #2.65554141998291
-        # #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
-        # apetureObjects1=self.make_Apeture_Objects(thetaMean1,offsetMean1)
-        # self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
-        #                           trueAspectRatio=True,extraObjects=apetureObjects1)
-        # sys.exit()
+        args=np.array([ 0.32311644,  0.04562323, -0.03038365])
+        t=time.time()
+        swarm1,survival1,offsetAtApeture1,aspectRatioLens2_1,thetaMean1,offsetMean1=cost_Function(args,returnResults=True,parallel=True)
+        print(time.time()-t) #2.65554141998291
+        #0.96 0.034196875755942664 0.9924620100000001 -0.07921540321032133 -0.018353795113878395 -127.32676741402396
+        apetureObjects1=self.make_Apeture_Objects(thetaMean1,offsetMean1)
+        self.lattice.show_Lattice(swarm=swarm1, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
+                                  trueAspectRatio=True,extraObjects=apetureObjects1)
+        sys.exit()
 
         t=time.time()
         sol1=spo.differential_evolution(cost_Function,bounds,workers=-1,polish=False,disp=True,maxiter=100
@@ -559,22 +570,6 @@ class ApetureOptimizer:
 
 
 #
-apetureOptimizer=ApetureOptimizer(h=1e-5,apDiam=.01,Li=.2)
-# Length=.28
-# args=np.array([ .5,0.0,  0.28  ,1.0,  Length/6,  0.02424718,
-#  0.0 ,0.15])
-# apetureOptimizer.plot_Swarm_In_Bumper(args)
-
-apetureOptimizer.optimize_Output(numParticles=1000)
-
-# X0={'Lm1':0.10293192,'Lm2':0.3442374,'rp1':0.02546703,'rp2':.034,'sigma':-0.0167223,'Lo':0.13033733}
-# X0['Lm1']=.25
-# apetureOptimizer.X.update(X0)
-# apetureOptimizer.build_Lattice()
-# apetureOptimizer.initialize_Observed_Swarm(numParticles=1000)
-# swarm=apetureOptimizer.trace_Through_Bumper(parallel=True)
-# #
-# #
-# apetureOptimizer.lattice.show_Lattice(swarm=swarm,showTraceLines=True,showMarkers=False)
-# print(apetureOptimizer.test_Tunability_For_Velocity(X0))
-
+# Lo=.1
+# apetureOptimizer=ApetureOptimizer(h=1e-5,apDiam=.009,Li=.2,Lo=Lo)
+# apetureOptimizer.optimize_Output()

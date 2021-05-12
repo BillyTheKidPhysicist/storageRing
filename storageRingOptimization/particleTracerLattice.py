@@ -622,12 +622,15 @@ class ParticleTracerLattice:
         #functionality right now
         plt.close('all')
         def plot_Particle(particle,xMarkerSize=1000):
-            if particle.clipped==True:
-                color='red'
-            elif particle.clipped==False:
-                color='green'
-            else: #if None
-                color='blue'
+            if particle.color is None: #use default plotting behaviour
+                if particle.clipped==True:
+                    color='red'
+                elif particle.clipped==False:
+                    color='green'
+                else: #if None
+                    color='blue'
+            else: #else use the specified color
+                color=particle.color
             if showMarkers==True:
                 plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
@@ -668,4 +671,6 @@ class ParticleTracerLattice:
         plt.grid()
         if trueAspectRatio==True:
             plt.gca().set_aspect('equal')
+        plt.xlabel('meters')
+        plt.ylabel('meters')
         plt.show()

@@ -190,6 +190,8 @@ class SwarmTracer:
         # swarm: swarm to transform through injector
         # Lo: object distance for injector
         # Li: nominal image distance
+        raise Exception('This needs to be improved. The longitdunial positions are not updated, and K should change'
+                        'for each particle. DOUBLE CHECK')
         if copySwarm == True:
             swarmNew = swarm.copy()
         else:

@@ -151,7 +151,6 @@ class Element:
         BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
         BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
         B0Matrix[xIndices, yIndices, zIndices] = data[:, 6]
-
         interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
         interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
         interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
@@ -1121,15 +1120,22 @@ class LensSimWithCaps(LensIdeal):
             if self.L is None:
                 self.L=2*self.Lcap0
             self.rp0 = (self.data3D[:, 0].max() - self.data3D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
-            if self.ap is None:
+            if self.ap is None and self.rp is None:
                 self.ap0 = .9 * self.rp0
                 self.ap = self.ap0
-            else:
-                self.ap0 = self.ap
-            if self.rp is None:
                 self.rp = self.rp0
-            if self.rp is not None:  # if user is setting value for bore radius
-                self.set_Bore_Radius(self.rp)
+            elif self.ap is not None and self.rp is not None:
+                self.ap0=self.ap*(self.rp0/self.rp) #scale the aperture back to
+            elif self.ap is None and self.rp is not None:
+                self.ap=.9*self.rp
+                self.ap0=.9*self.rp0
+            elif self.ap is not None and self.rp is None:
+                raise Exception('Specifying the aperture but not the radius is not implemented')
+            self.rpFieldFact = (self.rp0 / self.rp)  # scale the field by this value. Not squard because the particle's
+            #fractional position goes unchanged, so rp appears only once
+            self.Lcap = self.Lcap0 * (self.rp / self.rp0)  # smaller bore means smaller fringe fields as well
+            self.rpScaleFact = self.rp0 / self.rp  # how much to scale coordinates in the lens up by to account for rpNew
+
             if self.ap > self.rp or self.ap0 > self.rp0:
                 raise Exception('Aperture cannot be larger than radius')
             self.data3D = False
@@ -1140,34 +1146,14 @@ class LensSimWithCaps(LensIdeal):
             self.data2D = False #to save memory
         if self.L is not None and self.Lcap is not None:
             self.set_Length(self.L)
-        xArr=np.linspace(self.L*0,self.L*.99,num=1000)
-        y0=self.rp/2
-        z0=self.rp/2
-        temp=[]
-        for x in xArr:
-            q=np.asarray([x,y0,z0])
-            v=self.magnetic_Potential(q)
-            F=self.force(q)
-            temp.append(npl.norm(F))
-        # plt.title('meshFactor=3.0')
-        # plt.plot(xArr,temp)
-        # plt.ylabel('Force, au')
-        # plt.xlabel('Longitudinal position, au')
-        # plt.show()
     def set_Length(self, L):
         self.L = L
         self.Linner = L - 2 * self.Lcap
         if self.Linner < 0:
             raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
         self.Lo = self.L
-    def set_Bore_Radius(self,rpNew):
-        #changing the bore radius changes the total field values. Field scales as 1/rp**2. In addition, changing the
-        #bore radius changes the length of the fringe fields, so the caps must scale as well
-        self.rpFieldFact=(self.rp0/rpNew) #scale the field by this value
-        self.Lcap=self.Lcap0*(rpNew/self.rp0) #smaller bore means smaller fringe fields as well
-        self.ap=self.ap0*rpNew/self.rp0 #scale the apeture with bore radius
-        self.rp=rpNew #update to the new value
-        self.rpScaleFact=self.rp0/rpNew #how much to scale coordinates in the lens up by to account for rpNew
+
+
 
     def fill_Force_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)

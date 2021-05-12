@@ -87,6 +87,8 @@ class Particle:
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
         self.v0=np.sqrt(np.sum(pi**2)) #initial speed
+        self.color=None #color that can be added to each particle for plotting
+
 
         self.force=None #current force on the particle
         self.currentEl=None #which element the particle is ccurently in
@@ -134,6 +136,7 @@ class Particle:
         #pi: initial momentum
         #qf: final position
         #h: stepsize
+
         T=(qElf[0]-qEli[0])/pEli[0]
         timeSteps=int(T/h)+1
         if timeSteps<=1:

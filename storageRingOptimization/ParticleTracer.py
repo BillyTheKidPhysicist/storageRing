@@ -129,7 +129,10 @@ class ParticleTracer:
         #now to find out if the particle is outside the drift region. Assume circular aperture. use simple geometry of
         #lines
         r0=self.currentEl.ap #aperture, radial
-        x0=(np.sqrt((mz*r0)**2+(my*r0)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
+        if my==0 and mz==0: #no slope then it never clips
+            x0=np.inf
+        else:
+            x0=(np.sqrt((mz*r0)**2+(my*r0)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
         #that the particle clips the aperture at
         if x0>driftEl.Lo: #if particle clips the aperture at a x position past the end of the drift element,
             #then it has not clipped
