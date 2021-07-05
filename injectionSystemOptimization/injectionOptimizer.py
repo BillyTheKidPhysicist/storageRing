@@ -1,3 +1,4 @@
+import numba
 import sys
 import scipy.interpolate as spi
 import warnings
@@ -87,14 +88,16 @@ class ApetureOptimizer:
                 raise Exception('no proper axis provided')
         rms=np.std(np.asarray(temp))
         return rms
-    def get_Frac_Width(self,qArr,fraction=.95):
+    @staticmethod
+    @numba.njit(numba.float64(numba.float64[:,:],numba.float64))
+    def get_Frac_Width(qArr,fraction):
         #get the width of the beam that captures fraction of the atoms
         #fraction: fraction of the atoms in that width
         if not 0<fraction<1.0:
             raise Exception('fraction must be number between 0 and 1')
         numParticles=qArr.shape[0]
         if numParticles<100:
-            warnings.warn('Low number of particles will result in larger error with this method')
+            print('Low number of particles will result in larger error with this method')
         rArr=np.sqrt(qArr[:,1]**2+qArr[:,2]**2)
         rArrSorted=np.sort(rArr)
         cutoffIndex=int(fraction*numParticles) #the 100*fraction% particle. There is some minor rounding error

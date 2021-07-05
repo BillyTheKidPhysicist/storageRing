@@ -471,7 +471,7 @@ class SwarmTracer:
         qMax, pMax, numParticles=3e-3,10.0,9
         swarm = self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numParticles,parallel=parallel)
         particleTracer=ParticleTracer(self.lattice)
-
+        parallel=False
         if testNextElement==True:
             elNext=self.lattice.elList[self.lattice.combinerIndex+1]
             #need to scoot particle along
@@ -488,11 +488,11 @@ class SwarmTracer:
                 results=self.helper.parallel_Chunk_Problem(wrapper,swarm.particles)
                 for i in range(len(results)):
                     swarm.particles[i]=results[i][1]
+                    swarm.particles[i].plot_Energies()
 
 
         return swarm.survival_Bool()
     def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True):
-
         #trace a swarm through the lattice
         if copySwarm==True:
             swarmNew=swarm.copy()

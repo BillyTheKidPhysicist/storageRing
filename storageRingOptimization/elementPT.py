@@ -70,7 +70,7 @@ class Element:
         # value because for segmented benders the path length is not simple to compute
         self.index = None  # elements position in lattice
         self.cap = False  # wether there is a cap or not present on the element. Cap simulates fringe fields
-        self.comsolExtraSpace = .1e-3  # extra space in comsol files to exported grids. this can be used to find dimensions
+        self.comsolExtraSpace = None  # extra space in comsol files to exported grids. this can be used to find dimensions
         self.ap = None  # apeture of element. most elements apetures are assumed to be square
         self.apz = None  # apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
         self.apL = None  # apeture on the 'left' as seen going clockwise. This is for the combiner
@@ -511,6 +511,7 @@ class CombinerSim(CombinerIdeal):
 
     def fill_Params(self):
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
+
         # use the new size scaling to adjust the provided data
         self.data[:, :3] = self.data[:, :3] * self.sizeScale  # scale the dimensions
         self.data[:, 3:6] = self.data[:, 3:6] / self.sizeScale  # scale the field gradient
@@ -830,6 +831,7 @@ class BenderSimSegmented(BenderIdealSegmented):
 class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def __init__(self, PTL, fileSeg, fileCap, fileInternalFringe, Lm, Lcap, rp, K0, numMagnets, rb, extraSpace,
                  yokeWidth, rOffsetFact, ap):
+        raise Exception('GET RID OF THE 1E-3 BS')
         super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
                          fillParams=False)
         self.sim = True
@@ -838,7 +840,6 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fileCap = fileCap
         self.fileInternalFringe = fileInternalFringe
         self.numMagnets = numMagnets
-        self.extraSpace = extraSpace
         self.yokeWidth = yokeWidth
         self.ap = ap
         self.K0 = K0
@@ -1111,31 +1112,31 @@ class LensSimWithCaps(LensIdeal):
         #values
         self.fill_Params()
 
-    def fill_Params(self):
-        if self.data3D is None and self.file3D is not None:  # if data has not been loaded yet
-            self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
+    def fill_Params(self,externalDataProvided=False):
+        if (self.data3D is None and self.file3D is not None) or externalDataProvided==True:  # if data has not been loaded yet
+            if externalDataProvided==False:
+                self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
             self.fill_Force_Func_Cap()
-            self.Lcap0 = self.data3D[:, 2].max() - self.data3D[:, 2].min() - 2 * self.comsolExtraSpace
+            self.Lcap0 = self.data3D[:, 2].max() - self.data3D[:, 2].min()
             self.Lcap=self.Lcap0
             if self.L is None:
                 self.L=2*self.Lcap0
-            self.rp0 = (self.data3D[:, 0].max() - self.data3D[:, 0].min() - 2 * self.comsolExtraSpace) / 2
+            self.rp0 = (self.data3D[:, 0].max() - self.data3D[:, 0].min()) / 2
             if self.ap is None and self.rp is None:
-                self.ap0 = .9 * self.rp0
+                self.ap0 = .7 * self.rp0
                 self.ap = self.ap0
                 self.rp = self.rp0
             elif self.ap is not None and self.rp is not None:
                 self.ap0=self.ap*(self.rp0/self.rp) #scale the aperture back to
             elif self.ap is None and self.rp is not None:
-                self.ap=.9*self.rp
-                self.ap0=.9*self.rp0
+                self.ap=.7*self.rp
+                self.ap0=.7*self.rp0
             elif self.ap is not None and self.rp is None:
                 raise Exception('Specifying the aperture but not the radius is not implemented')
             self.rpFieldFact = (self.rp0 / self.rp)  # scale the field by this value. Not squard because the particle's
             #fractional position goes unchanged, so rp appears only once
             self.Lcap = self.Lcap0 * (self.rp / self.rp0)  # smaller bore means smaller fringe fields as well
             self.rpScaleFact = self.rp0 / self.rp  # how much to scale coordinates in the lens up by to account for rpNew
-
             if self.ap > self.rp or self.ap0 > self.rp0:
                 raise Exception('Aperture cannot be larger than radius')
             self.data3D = False
