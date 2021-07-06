@@ -1,5 +1,6 @@
 from profilehooks import profile
 import time
+import numpy.linalg as npl
 from injectionOptimizer import ApetureOptimizer
 from particleTracerLattice import ParticleTracerLattice
 from SwarmTracer import SwarmTracer
@@ -13,7 +14,7 @@ import scipy.special as sps
 import poisson_disc
 import scipy.signal as spsig
 
-class Compactor(ApetureOptimizer):
+class Injector(ApetureOptimizer):
     def __init__(self,h=1e-5):
         self.X={"Lo1":None,"Lm1":None,"Bp1":None,"rp1":None,'Lsep1':None,'Lm2':None,'Bp2':None,'rp2':None,'Lsep2':None,
                 'Lm3':None,'rp3':None,'Lsep3':None,'Lm4':None,'rp4':None,'sigma':None}
@@ -26,20 +27,19 @@ class Compactor(ApetureOptimizer):
     def build_Lattice(self):
         #sigma here moves the element upwards
         self.lattice = ParticleTracerLattice(self.v0Nominal)
-        self.lattice.add_Drift(self.X["Lo1"]-self.X['rp1']*self.fringeFrac,ap=.05) #need to update this after adding the first lens
-        # self.lattice.add_Lens_Ideal(self.X["Lm2"],-1*self.X['Bp2'],self.X['rp1'])
-        self.lattice.add_Lens_Sim_With_Caps(None,None,self.fringeFrac,None)#"optimizerData_Full.txt"
-        self.lattice.add_Drift(self.X['Lsep1'],ap=.25) #need to update this after adding the first lens
+        self.lattice.add_Drift(self.X["Lo1"],ap=.05) #need to update this after adding the first lens
+        self.lattice.add_Lens_Ideal(self.X["Lm1"],self.X['Bp1'],self.X['rp1'],ap=.8*self.X['rp1'])
+        self.lattice.add_Drift(self.X['Lsep1'],ap=.1) #need to update this after adding the first lens
         # self.lattice.add_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt',self.fringeFrac,L=self.X['Lm2'],
         #                                     rp=self.X['rp2'],ap=.8*self.X['rp2'])
         # self.lattice.add_Drift(self.X['Lsep2'],ap=.02) #need to update this after adding the first lens
         # self.lattice.add_Lens_Sim_With_Caps('lens2D_Injection_Short.txt','lens3D_Injection_Short.txt',self.fringeFrac,L=self.X['Lm3'],
         #                                     rp=self.X['rp3'],ap=.8*self.X['rp3'])
         # self.lattice.add_Drift(self.X['Lsep3'],ap=.02) #need to update this after adding the first lens
-        # self.lattice.add_Bump_Lens_Ideal(self.X['Lm3'],1.0,self.X['rp4'],self.X['sigma'],ap=.8*self.X['rp4'])
-        # self.lattice.add_Drift(.25,ap=.05)
+        self.lattice.add_Bump_Lens_Ideal(self.X['Lm2'],1.0,self.X['rp2'],self.X['sigma'],ap=.8*self.X['rp2'])
+        self.lattice.add_Drift(.25,ap=.1)
         # self.lattice.elList[1].ap=self.lattice.elList[1].rp*self.X['ap1']
-        # self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
+        self.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
     def updateX_With_List(self,args):
         #unpack args into the lattice paramters dictionary
         Lm1,Bp1,rp1=args
@@ -61,7 +61,7 @@ class Compactor(ApetureOptimizer):
     def get_Width_Along_Lattice(self,swarm,numPoints,elStart=0,fraction=.9,offset=0.0):
         if not 0<fraction<1.0:
             raise Exception('fraction must be number between 0 and 1')
-        zArr=np.linspace(self.lattice.elList[elStart].r1[0]+1e-2+offset,self.lattice.elList[-1].r2[0]-1e-2,num=numPoints)
+        zArr=np.linspace(self.lattice.elList[elStart].r1[0]+1e-3+offset,self.lattice.elList[-1].r2[0]-1e-2,num=numPoints)
         rList=[]
         for particle in swarm:
                 qyArr = particle.yInterp(zArr)
@@ -76,14 +76,14 @@ class Compactor(ApetureOptimizer):
         widthArr=rArrSorted[:,cutoffIndex]
         return zArr,widthArr
     def initialize_Test_Swarm1(self):
+        #swarm that exists in only one dimension.
         print('using test swarm 1')
         swarm=Swarm()
-        qyArr=np.linspace(0,5.0e-3,num=50)#np.asarray([0.0,.001,.003,.004,])
+        qyArr=np.linspace(0,5.0e-3,num=3)#np.asarray([0.0,.001,.003,.004,])
         qyArr=np.append(qyArr,-qyArr[1:])
-        pyArr=np.linspace(-15.0,15.0,num=21)
+        pyArr=np.linspace(-15.0,15.0,num=15)
         pxArr=np.linspace(-1,1,num=3)
-        #colorList=['blue','green','orange','red','purple','brown']
-        colorList=['red']
+        colorList=['blue','green','orange','red','purple','brown']
         i=0
         for qy in qyArr:
             for py in pyArr:
@@ -97,21 +97,21 @@ class Compactor(ApetureOptimizer):
                 i=0
         self.swarmInitial=swarm
     def initialize_Test_Swarm2(self,thetaArr=None,numPhiParticlesMax=100,thetaMax=10/200,numTheta=10,useSymmetry=False):
-        #A swarm originationg from the origin but spread out in phase space
-        # print('using test swarm 2')
+        #A swarm originationg from the origin but spread out in phase space equally
+        print('using test swarm 2')
 
         swarm=Swarm()
         if thetaArr is None:
             thetaArr=np.linspace(thetaMax/5,thetaMax,num=numTheta)
         pxArr=[0]#np.linspace(-1,1,num=3)
-        colorList=['blue','green','orange']
+        colorList=['blue','green','orange','yellow','red','brown','purple']
+        i=0
         for theta in thetaArr:
             numPhi=int(numPhiParticlesMax*theta/thetaMax)
             phiArr=np.linspace(0,np.pi*2,num=numPhi,endpoint=False)
             if useSymmetry==True:
                 phiArr=phiArr[phiArr<np.pi/6] #exploit the 6 fold symmetry
             for phi in phiArr:
-                i=0
                 for pxDelta in pxArr:
                     py=self.v0Nominal*np.sin(theta)*np.sin(phi)
                     pz=self.v0Nominal*np.sin(theta)*np.cos(phi)
@@ -119,7 +119,9 @@ class Compactor(ApetureOptimizer):
                     particle=Particle(qi=np.asarray([1e-10,0,0]),pi=np.asarray([px,py,pz]))
                     particle.color=colorList[i]
                     swarm.particles.append(particle)
-                    i+=1
+            # i+=1
+            # if i>=len(colorList):
+            #     i=0
         self.swarmInitial=swarm
     def initialize_Test_Swarm3(self,rMax=.001,pTransMax=15.0,numParticles=1000,T=.001,seedDistance=0.0):
         #A swarm spread out in phase space uniformally
@@ -212,16 +214,25 @@ class Compactor(ApetureOptimizer):
                 qList.append([particle.q[0], qy, qz])
         width = self.get_Frac_Width(np.asarray(qList), fraction)
         return width
-    def analyze(self,numParticles=1000,numPoints=25,aperture=5e-3,plot=False):
+    def analyze(self,numParticles=1000,numPoints=100,aperture=5e-3,plot=False):
         #find magnification
         self.build_Lattice()
         # zFocal=self.find_Image_Plane()
         # print('image distance',zFocal-self.lattice.elList[1].r2[0])
-        self.initialize_Observed_Swarm(numParticles=numParticles,aperture=aperture)
+        # self.initialize_Observed_Swarm(numParticles=numParticles,aperture=aperture,fileName='run40PhaseSpaceParticleCloudMinimum.dat')
         self.initialize_Test_Swarm1()
+        # self.initialize_Ideal_Point_Swarm(numParticles=100)
         swarm=self.trace_Through_Compactor(parallel=True)
         print(swarm.survival_Bool())
-        initialSpotSize=self.get_Width_At_Point(swarm,1e-6)
+        pT = []
+        for particle in swarm:
+            # q=particle.q
+            # p=particle.p
+            # phi=np.arctan(q[1]/q[2])
+            pT.append(npl.norm(particle.p[1:]))
+        pT = np.asarray(pT)
+        print('mean transverse velocity',np.mean(pT))
+        # initialSpotSize=self.get_Width_At_Point(swarm,1e-6)
         # spotSize=self.get_Width_At_Point(swarm,zFocal)
         # print(np.round(1e3*initialSpotSize,1),np.round(1e3*spotSize))
         if plot==True:
@@ -232,12 +243,14 @@ class Compactor(ApetureOptimizer):
             #         particle.color='purple'
             self.lattice.show_Lattice(swarm=swarm, showTraceLines=True, showMarkers=False, traceLineAlpha=.1,
                                       trueAspectRatio=False)
+            #
             zArr, widthArr = self.get_Width_Along_Lattice(swarm, numPoints)
             plt.plot(zArr,widthArr)
             plt.axvline(x=self.lattice.elList[1].r1[0],c='black')
             plt.axvline(x=self.lattice.elList[1].r2[0],c='black')
             plt.grid()
             plt.show()
+        return np.mean(pT)
     def voigt(self,r,a,b,sigma,gamma):
         V0=sps.voigt_profile(0,sigma,gamma)
         V=sps.voigt_profile(r,sigma,gamma)
@@ -384,6 +397,19 @@ class Compactor(ApetureOptimizer):
         # return zArr[np.argmin(spotSizeArr)],np.min(spotSizeArr)
 
 
+
+
+injector=Injector(h=1e-6)
+Lm0=.035
+LmArr=[.075]#np.linspace(.05,.15,num=20)#np.asarray([.02585])#np.linspace(.02,.035)
+pTList=[]
+for Lm in LmArr:
+    print('-----',Lm)
+    injector.X={"Lo1":.15,"Lm1":Lm0,"Bp1":1.0,"rp1":.015,'Lsep1':.15,'Lm2':Lm,'Bp2':1.0,'rp2':.0254,'Lsep2':None,
+                'Lm3':None,'rp3':None,'Lsep3':None,'Lm4':None,'rp4':None,'sigma':-.0125}
+    pTList.append(injector.analyze(plot=True))
+plt.plot(LmArr,pTList)
+plt.show()
 # compactor=Compactor(h=1e-5)
 # t=time.time()
 # compactor.initialize_Test_Swarm3(numParticles=1000,T=0,pTransMax=5.0)

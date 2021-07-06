@@ -28,7 +28,7 @@ class ApetureOptimizer:
         self.X={'Lm2':None,'rp1':None,'sigma':None,'Li':Li,'Lm1':None,'Lo':Lo,'apDiam':apDiam,'Lsep':Lsep,
                 'fringeFrac':fringeFrac} #dictionairy of lattice parameters
         self.X0=self.X.copy() #initial values of lattice parameters
-    def initialize_Observed_Swarm(self,numParticles=None,fileName='../storageRingOptimization/phaseSpaceCloud.dat',dv=0.0,
+    def initialize_Observed_Swarm(self,numParticles=None,fileName='phaseSpaceCloud.dat',dv=0.0,
                                   magFact=1.0,aperture=5e-3):
         #load a swarm from a file.
         #numParticles: Number of particles to load from the file. if None load all
@@ -36,14 +36,16 @@ class ApetureOptimizer:
         #dv: extra longitudinal velocity to add
         #magFact: factor to modify the  magnification by artificially. Larger corresponds to smaller image size
         #aperture: Transverse aperture in meters
+        fileName='../phaseSpaceGenerationAndExtraction/'+fileName
         self.swarmInitial=Swarm()
         data= np.loadtxt(fileName)
+        np.random.shuffle(data)
         if numParticles is None:
             numParticles=np.inf
         numParticlesAdded=0
         for coords in data:
             x,y,z,px,py,pz=coords
-            px=-px #need to flip the coords!!
+            # px=-px #need to flip the coords!!
             px+=dv
             q=np.asarray([1e-10,y/magFact,z/magFact]) #add a tiny offset in the x direction so the particle starts in the element,
             #otherwise the algorithm spends extra time checking to see if the particle is exactly on the edge

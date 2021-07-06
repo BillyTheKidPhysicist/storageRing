@@ -1,5 +1,6 @@
 import pandas as pd
-from injectorAnalysis import Compactor
+from injectorAnalysis import Injector
+from particleTracerLattice import ParticleTracerLattice
 import time
 import sys
 from ParaWell import ParaWell
@@ -233,7 +234,6 @@ class ShimOptimizer:
                     coordList.append([x,y,z+self.dx])
         self.gridCoordArr=np.asarray(coordList)
         self.gridBVecArr=np.asarray(BVecList)
-        print(np.isnan(self.gridBVecArr).sum())
 
     def generate_Trace_Data(self,noSpheres=False):
         gridBVecArrTemp=self.gridBVecArr.copy()
@@ -269,17 +269,22 @@ class ShimOptimizer:
 
     def cost(self,noSpheres=False,Print=False,parallel=False,numParticles=150):
         self.generate_Trace_Data(noSpheres=noSpheres)
+        
 
-        compactor=Compactor(h=1e-5) #tested to work but seems a little excessive to me
-        compactor.X={"Lo1":.6,"Lm1":None,"rp1":.05,'ap1':self.vacuumTubeFrac,'Lsep1':1.2}
-        compactor.build_Lattice()
-        compactor.lattice.elList[1].data3D=self.data
-        compactor.lattice.elList[1].fill_Params(externalDataProvided=True)
-        compactor.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
-        lensOutputLocation=compactor.lattice.elList[1].r2[0]+3*compactor.lattice.elList[1].rp
-        lensInputLocation=compactor.lattice.elList[1].r1[0]+3*compactor.lattice.elList[1].rp
+        injector=Injector(h=1e-5) 
+        injector.X={"Lo1":.6,"Lm1":None,"rp1":.05,'ap1':self.vacuumTubeFrac,'Lsep1':1.2}
+        injector.lattice = ParticleTracerLattice(injector.v0Nominal)
+        injector.lattice.add_Drift(injector.X["Lo1"]-injector.X['rp1']*injector.fringeFrac,ap=.05) #need to update this after adding the first lens
+        # injector.lattice.add_Lens_Ideal(injector.X["Lm2"],-1*injector.X['Bp2'],injector.X['rp1'])
+        injector.lattice.add_Lens_Sim_With_Caps(None,None,injector.fringeFrac,None)#"optimizerData_Full.txt"
+        injector.lattice.add_Drift(injector.X['Lsep1'],ap=.25) #need to update this after adding the first lens
+        injector.lattice.elList[1].data3D=self.data
+        injector.lattice.elList[1].fill_Params(externalDataProvided=True)
+        injector.lattice.end_Lattice(enforceClosedLattice=False, latticeType='injector', surpressWarning=True,trackPotential=True)
+        lensOutputLocation=injector.lattice.elList[1].r2[0]+3*injector.lattice.elList[1].rp
+        lensInputLocation=injector.lattice.elList[1].r1[0]+3*injector.lattice.elList[1].rp
 
-        imagePlane,spotDiam=compactor.find_Image_Plane(parallel=parallel,numPhiParticlesMax=numParticles)
+        imagePlane,spotDiam=injector.find_Image_Plane(parallel=parallel,numPhiParticlesMax=numParticles)
 
         magnification=(imagePlane-lensOutputLocation)/lensInputLocation
 
