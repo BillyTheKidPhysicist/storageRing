@@ -1,6 +1,5 @@
 import numpy as np
 import time
-import winsound as ws
 import sys
 
 #this file contains the global variables to be used in all other fields
@@ -156,40 +155,40 @@ lambdipPeakSepVolts=2.0 #roughly how Far apart are two lambdip peaks in terms of
 
 
 
-
-
-def piezoWait():
-    time.sleep(.05)
-def etalonWait():
-    time.sleep(.01)
-def error_Sound():
-    ws.Beep(700, 500)
-    ws.Beep(1000, 500)
-    ws.Beep(700, 500)
-    ws.Beep(1000, 500)
-    time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
-            #sounding like one warning/error
-def begin_Flow_Sound():
-    ws.Beep(750, 500)
-def begin_Sound(noWait=False):
-    ws.Beep(500, 1000)
-    if noWait==False:
-        time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
-            #sounding like one warning/error
-def finished_Sound(noWait=False):
-    ws.Beep(1100, 1000)
-    if noWait==False:
-        time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
-            #sounding like one warning/error
-
-
-def warning_Sound(noWait=False):
-    ws.Beep(800, 250)
-    ws.Beep(1200, 250)
-    if noWait==False:
-        time.sleep(.5) #if there is another noise after this from another error or warning this will prevent them from
-            #sounding like one warning/error
-
+#
+#
+# def piezoWait():
+#     time.sleep(.05)
+# def etalonWait():
+#     time.sleep(.01)
+# def error_Sound():
+#     ws.Beep(700, 500)
+#     ws.Beep(1000, 500)
+#     ws.Beep(700, 500)
+#     ws.Beep(1000, 500)
+#     time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
+#             #sounding like one warning/error
+# def begin_Flow_Sound():
+#     ws.Beep(750, 500)
+# def begin_Sound(noWait=False):
+#     ws.Beep(500, 1000)
+#     if noWait==False:
+#         time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
+#             #sounding like one warning/error
+# def finished_Sound(noWait=False):
+#     ws.Beep(1100, 1000)
+#     if noWait==False:
+#         time.sleep(1) #if there is another noise after this from another error or warning this will prevent them from
+#             #sounding like one warning/error
+#
+#
+# def warning_Sound(noWait=False):
+#     ws.Beep(800, 250)
+#     ws.Beep(1200, 250)
+#     if noWait==False:
+#         time.sleep(.5) #if there is another noise after this from another error or warning this will prevent them from
+#             #sounding like one warning/error
+#
 
 
 

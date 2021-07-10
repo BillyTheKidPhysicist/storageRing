@@ -4,8 +4,17 @@ import poisson_disc
 import numpy as np
 import scipy.interpolate as spi
 import scipy.ndimage as spni
+import scipy.optimize as spo
+import scipy.special as spspec
 
 #Here mass is taken to have a value of 1, with no units
+
+
+def voigt(x,x0,a,b,sigma,gamma):
+    v0=spspec.voigt_profile(0,sigma,gamma)
+    v=spspec.voigt_profile(x-x0,sigma,gamma)
+    return a*v/v0+b
+
 
 numParticlesProbe=100000 #number of particles to project onto the dsitrbution. Final number will be much smaller
 
@@ -22,7 +31,7 @@ maxPTrans=10 #maximum transverse momentum accepted
 
 
 
-runName='run45Far'
+runName='run39Far'
 fileName=runName+'phaseSpaceData.dat'
 data=np.loadtxt(fileName)
 xArr=np.arange(data.shape[1]-1)*magnification*binning*pixelSize
@@ -33,12 +42,31 @@ pxArr=data[:,0]  #transverse momentum, with m=1. m/s
 #-------center spatially-------------
 spatialProfile=np.sum(data[:,1:],axis=0) #I consider this a probability function
 spatialProfile=spatialProfile/spatialProfile.max()
+
+
+
+
+
+
 tempPeakFunc=spi.Rbf(xArr,spatialProfile,smooth=1) #make interpolating function to find peak. SMooth as well a little
 xArrDense=np.linspace(xArr[0],xArr[-1],num=1000)
 
 xPeak=xArrDense[np.argmax(tempPeakFunc(xArrDense))] #value to subtract from xarr
 xArr=xArr-xPeak #center
-#------center in momentu-------
+
+# guess=[0.0,1.0,0.0,.001,.001]
+# params=spo.curve_fit(voigt,xArr,spatialProfile,p0=guess)[0]
+# sig=params[3]
+# gamma=params[4]
+# print(1e3*sig,1e3*gamma) #0.6763213367271955 2.3265951178689797
+# plt.plot(xArr,spatialProfile)
+# plt.plot(xArr,voigt(xArr,*params))
+# plt.grid()
+# plt.show()
+
+
+
+#------center in momentum-------
 
 momentumProfile=np.sum(data[:,1:],axis=1) #I consider this a probability function
 momentumProfile=np.flip(momentumProfile) #because bottom left is lower frequency, not top
@@ -61,7 +89,8 @@ phaseSpace2DArray=data[:,1:] #phase space data
 
 phaseSpace2DArray=spni.gaussian_filter(phaseSpace2DArray,.5)
 phaseSpace2DArray=phaseSpace2DArray/phaseSpace2DArray.max() #normalize to probability function
-
+# plt.imshow(phaseSpace2DArray)
+# plt.show()
 
 
 #----build spatial probability function. ----
@@ -151,7 +180,6 @@ def probability_Function(x,px,momentumOnly=False,positionOnly=False):
 #     image[np.argmax(profile),i]=0
 #
 #
-#
 # extent=[xPlot[0],xPlot[-1],pPlot[0],pPlot[-1]]
 # aspect=(extent[1]-extent[0])/(extent[3]-extent[2])
 # plt.title('Phase space plot of far field data')
@@ -159,8 +187,8 @@ def probability_Function(x,px,momentumOnly=False,positionOnly=False):
 # plt.xlabel('Position, m')
 # plt.imshow(image,extent=extent,aspect=aspect)
 # plt.show()
-#
-#
+
+
 
 
 
@@ -170,8 +198,9 @@ def probability_Function(x,px,momentumOnly=False,positionOnly=False):
 r=(1/numParticlesProbe**(.25))*.9
 
 
-samples=poisson_disc.Bridson_sampling(dims=np.asarray([1.0,1.0,1.0,1.0]),radius=r,k=30) #returned samples are in the
+# samples=poisson_disc.Bridson_sampling(dims=np.asarray([1.0,1.0,1.0,1.0]),radius=r,k=30) #returned samples are in the
 #form [[x,y,px,py]..]
+samples=np.random.rand(numParticlesProbe,4)
 samples=(samples-.5)*2
 samples[:,:2]=samples[:,:2]*apertureDiam/2
 samples[:,2:]=samples[:,2:]*maxPTrans
@@ -180,18 +209,27 @@ samples[:,2:]=samples[:,2:]*maxPTrans
 
 
 
-
 particleList=[]
-
+print('FIX PROBABILITY THINGY')
+yList=[]
+pyList=[]
 for sample in samples:
     y,z,py,pz=sample
     r=np.sqrt(y**2+z**2)
     pr=np.sqrt(py**2+pz**2)
+    z=0
+    pz=0
     if r<apertureDiam/2 and pr<maxPTrans:
-        probability=probability_Function(y,py)*probability_Function(z,pz)
+        probability=probability_Function(y,py)#*probability_Function(z,pz)
         if np.random.rand()<probability:
             px=v0+np.random.normal(scale=sigma)
             particleList.append([0,y,z,px,py,pz])
+            yList.append(y)
+            pyList.append(py)
             # plt.scatter(y,z,alpha=.5,c='r')
-
-# np.savetxt('phaseSpaceParticleCloudOriginal.dat',np.asarray(particleList))
+print(1e3*np.std(np.asarray(yList)))
+hist=np.histogram2d(yList,pyList,bins=30)[0].T
+print('Generated: ',len(particleList), 'particles')
+# plt.imshow(hist)
+# plt.show()
+# np.savetxt(runName+'phaseSpaceParticleCloudOriginal.dat',np.asarray(particleList))

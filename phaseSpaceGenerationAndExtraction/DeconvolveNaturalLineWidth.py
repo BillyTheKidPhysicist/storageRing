@@ -45,22 +45,33 @@ def generate_MConv(a,b):
     return M
 
 
-def deconvolve(a):
+def deconvolve(a,deltaF):
+    #a: signal to deconvolve natural linewidht from
+    #deltaF: frequency range over which a resides
     peakSig=a.max() #to properly scale the final result
     x=np.arange(a.shape[0])
-    xDense=np.linspace(x[0],x[-1],num=101)
+    xDense=np.linspace(x[0],x[-1],num=251)
     a=a/a.max()
+    # plt.scatter(x,a)
+
 
 
     dataAnalyzer=DataAnalyzer()
-    b=dataAnalyzer.multi_Voigt((xDense-(xDense.min()+xDense.max())/2)*230/xDense.max(),0,1,0,1e-10)
+    b=dataAnalyzer.multi_Voigt((xDense-(xDense.min()+xDense.max())/2)*deltaF/xDense.max(),0,1,0,1e-10)
     b=b/b.max()
-    # b=b[50:-50]
-    aFunc=spi.Rbf(x,a,smooth=10)#interp1d(x,a)
+    # b=b[75:-75]
+    aFunc=spi.Rbf(x,a,smooth=0.0)#interp1d(x,a)
     a=aFunc(xDense)
+    # plt.plot(xDense,a)
 
-    a = sps.savgol_filter(a, 15, 2)
+    window=2*int((a.shape[0]/20)//2)+1
+    for i in range(25):
+        a = sps.savgol_filter(a, window, 2)
     a=a/a.max()
+
+    # plt.plot(xDense,a)
+    # plt.plot(b)
+    # plt.show()
 
 
 
@@ -70,19 +81,33 @@ def deconvolve(a):
     # plt.plot(generate_Curve(test,a.shape[0]))
     # plt.show()
 
+    @numba.njit(numba.float64(numba.float64[:]))
+    def cost_Inner(c):
+        cost=0
 
-
-    # @numba.njit(numba.float64(numba.float64[:]))
-    def cost(args):
-        #args: the deviation from the original array
-        c=generate_Curve(args,a.shape[0])
+        cost+=10*np.abs(np.sum(c[c<0])) #sum up the negative values
         # c=c-c.min()
         c=c/c.max()
         aNew=M@c
         aNew=aNew/aNew.max()
-        cost=np.sum((aNew-a)**2)
+        cost+=np.sum((aNew-a)**2)
+        cost0=1.0
+        #find any peaks in the data, besides the one single peak
+        j=0
+        for i in range(0, c.shape[0] - 3):  # xclude the end
+            probe = c[i:i + 3]
+            if np.argmax(probe)==1: #center should not be peak, except at the actual peak
+                if j!=0: #There should be at least one peak, so ingore the fir time
+                    cost+=cost0 #add a small penalty
+                j=1
         return cost
 
+    def cost(args):
+        #args: the deviation from the original array
+        c=generate_Curve(args,a.shape[0])
+        # cFunc=spi.interp1d(np.linspace(0,a.shape[0],args.shape[0]),args)
+        # c=cFunc(np.arange(0,a.shape[0]))
+        return cost_Inner(c)
 
     bounds=[]
 
@@ -92,27 +117,48 @@ def deconvolve(a):
     #     deltaUpper=deltayMaxFact*a[i]+.1
     #     bounds.append((-deltaLower,deltaUpper))
     for i in range(25):
-        bounds.append((-.1,1))
-    sol=spo.differential_evolution(cost,bounds,maxiter=1000,disp=False,popsize=1,tol=0,workers=1,polish=False)
-
-
-    c=generate_Curve(sol.x,a.shape[0])
-    c=sps.savgol_filter(c,15,2)
+        bounds.append((-1.0,1.0))
+    bestSol=None
+    for i in range(5):
+        sol=spo.differential_evolution(cost,bounds,maxiter=5000,disp=False,mutation=(.5,1.5),recombination=.25,popsize=1,tol=0,workers=1,polish=True)
+        if sol.fun<1.0:
+            bestSol=sol
+            break
+        else:
+            if bestSol is None:
+                bestSol=sol
+            elif sol.fun<bestSol.fun:
+                bestSol=sol
+    # cFunc = spi.interp1d(np.linspace(0, a.shape[0], bestSol.x.shape[0]), bestSol.x)
+    # c = cFunc(np.arange(0, a.shape[0]))
+    c=generate_Curve(bestSol.x,a.shape[0])
     c=c*peakSig/c.max()
+    # plt.plot(c/c.max())
+    # window = 2 * int((a.shape[0] / 10) // 2) + 1
+    # c=sps.savgol_filter(c,window,2)
+    # j = 0
+    # for i in range(0, c.shape[0] - 3):  # xclude the end
+    #     probe = c[i:i + 3]
+    #     if np.argmax(probe) == 1:  # center should not be peak, except at the actual peak
+    #         if j != 0:  # There should be at least one peak, so ingore the fir time
+    #             print('fail')
+    #         j = 1
+    # plt.plot(c)
+    # c=sps.savgol_filter(c,window,2)
+    # c=sps.savgol_filter(c,window,2)
 
+    # plt.plot(c/c.max())
 
-
-    #
     # aNew=M@c
     # aNew=aNew/aNew.max()
     # plt.plot(a)
     # plt.plot(aNew)
+    # aNew=aNew/aNew.max()
     # print(np.sum((a-aNew)**2))
-    # plt.plot(c)
+
     # plt.show()
 
-    cFunc=spi.interp1d(xDense,c)
+    cFunc=spi.Rbf(xDense,c)
     cDownSample=cFunc(x)
-    print(np.argmax(a),np.argmax(c))
     return cDownSample
 

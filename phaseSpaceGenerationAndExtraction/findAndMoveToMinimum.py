@@ -21,11 +21,12 @@ def get_Frac_Width(qArr, fraction=.95):
     width = 2 * rArrSorted[cutoffIndex]
     return width
 moveCloudToMinimimum=False
-particleCoords=np.loadtxt('run40PhaseSpaceParticleCloudOriginal.dat')
+runName='run45Far'
+particleCoords=np.loadtxt(runName+'PhaseSpaceParticleCloudOriginal.dat')
 
 
-xStart=-.05
-xEnd=.05
+xStart=-.2
+xEnd=.2
 
 widthList=[]
 numSteps=100
@@ -38,7 +39,13 @@ for x in xArr:
         y=y0+py0*dt
         z=z0+pz0*dt
         qList.append([x0,y,z])
-    width=get_Frac_Width(np.asarray(qList),fraction=.95)
+    qArr=np.asarray(np.asarray(qList))
+    # hist,bins=np.histogram(qArr[:,1],bins=50)
+    # bins=bins[:-1]
+    # plt.hist(qArr[:,1],bins=bins)
+    # plt.show()
+    # width=get_Frac_Width(np.asarray(qList),fraction=.95)
+    width=np.std(qArr[:,1])
     widthList.append(width)
 widthArr=np.asarray(widthList)
 widthArr=sps.savgol_filter(widthArr,11,2)
