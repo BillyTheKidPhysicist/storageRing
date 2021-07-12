@@ -80,10 +80,10 @@ class Particle:
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
     def __init__(self,qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
-        self.q=qi
-        self.p=pi
-        self.qi=qi.copy()#initial coordinates
-        self.pi=pi.copy()#initial coordinates
+        self.q=qi #position, lab frame, meters
+        self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
+        self.qi=qi.copy()#initial position, lab frame, meters
+        self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
         self.v0=np.sqrt(np.sum(pi**2)) #initial speed
@@ -100,11 +100,11 @@ class Particle:
         self.clipped=None #wether particle clipped an apeture
         #these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         #they are converted into arrays
-        self.pList=[] #List of momentum vectors
-        self.qList=[] #List of position vector
-        self.qoList=[] #List of position in orbit frame vectors
-        self.TList=[] #kinetic energy list
-        self.VList=[] #potential energy list
+        self._pList=[] #List of momentum vectors
+        self._qList=[] #List of position vector
+        self._qoList=[] #List of position in orbit frame vectors
+        self._TList=[] #kinetic energy list
+        self._VList=[] #potential energy list
         #array versions
         self.pArr=None
         self.qArr=None 
@@ -123,13 +123,13 @@ class Particle:
         #pel: momentum position coordinate
         self.q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
         self.p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
-        self.qList.append(self.q.copy())
-        self.pList.append(self.p.copy())
-        self.TList.append(np.sum(self.p**2)/2.0)
+        self._qList.append(self.q.copy())
+        self._pList.append(self.p.copy())
+        self._TList.append(np.sum(self.p**2)/2.0)
         if currentEl is not None:
             qel=currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
-            self.qoList.append(currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
-            self.VList.append(currentEl.magnetic_Potential(qel))
+            self._qoList.append(currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
+            self._VList.append(currentEl.magnetic_Potential(qel))
     def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,currentEl):
         #log the parameters when the particle has traveled in a straight line inside a drift region
         #qi: initial position
@@ -154,28 +154,28 @@ class Particle:
             qList.append(currentEl.transform_Element_Coords_Into_Lab_Frame(qElArr[i]))
             pList.append(currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pElArr[i]))
         #now fill the lists that log parameters
-        self.qList.extend(qList)
-        self.pList.extend(pList)
-        self.TList.extend(list(np.sum(pElArr**2/2.0,axis=1)))
-        self.qoList.extend(qList)
-        self.VList.extend([0]*len(qList)) #python list creation trick
+        self._qList.extend(qList)
+        self._pList.extend(pList)
+        self._TList.extend(list(np.sum(pElArr**2/2.0,axis=1)))
+        self._qoList.extend(qList)
+        self._VList.extend([0]*len(qList)) #python list creation trick
     def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
         self.traced=True
         self.force=None
-        self.qArr=np.asarray(self.qList)
-        self.qList = []  # save memory
-        self.pArr = np.asarray(self.pList)
-        self.pList = []  
-        self.qoArr = np.asarray(self.qoList)
-        self.qoList = []
+        self.qArr=np.asarray(self._qList)
+        self._qList = []  # save memory
+        self.pArr = np.asarray(self._pList)
+        self._pList = []  
+        self.qoArr = np.asarray(self._qoList)
+        self._qoList = []
 
 
-        self.TArr = np.asarray(self.TList)
-        self.TList = []
-        self.VArr = np.asarray(self.VList)
-        self.VList = []
+        self.TArr = np.asarray(self._TList)
+        self._TList = []
+        self.VArr = np.asarray(self._VList)
+        self._VList = []
         self.EArr=self.TArr+self.VArr
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
@@ -191,9 +191,12 @@ class Particle:
         VArr=self.VArr
         qoArr=self.qoArr
         plt.close('all')
+        plt.title('Particle energies vs position. \n Total initial energy is '+str(np.round(EArr[0],1)) +' energy units')
         plt.plot(qoArr[:,0],EArr-EArr[0],label='E')
         plt.plot(qoArr[:, 0], TArr - TArr[0],label='T')
         plt.plot(qoArr[:, 0], VArr - VArr[0],label='V')
+        plt.ylabel("Energy")
+        plt.xlabel('Meters')
         plt.legend()
         plt.grid()
         plt.show()

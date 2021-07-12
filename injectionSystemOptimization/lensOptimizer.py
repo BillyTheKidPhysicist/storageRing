@@ -1,6 +1,6 @@
 import pandas as pd
 from injectorAnalysis import Injector
-from particleTracerLattice import ParticleTracerLattice
+from ParticleTracerLatticeClass import ParticleTracerLattice
 import time
 import sys
 from ParaWell import ParaWell

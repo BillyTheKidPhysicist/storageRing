@@ -4,6 +4,8 @@
 injectorPlotter.py
 accuracyTesterParticleTracer.ipynb
 sampleData
+storageRingOptimization/temp.py
+storageRingOptimization\temp.py
 .idea/
 data.txt
 dataCap.txt
@@ -57,6 +59,7 @@ injectionSystemOptimization/lens3D_Injection_MeshFactor2.5.txt
 injectionSystemOptimization/lens3D_Injection_MeshFactor2.txt
 injectionSystemOptimization/lens3D_Injection_MeshFactor3.txt
 injectionSystemOptimization/phaseSpaceCloud.dat
+injectionSystemOptimization/temp.py
 
 paraWellTest.py
 poopaids

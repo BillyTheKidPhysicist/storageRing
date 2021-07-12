@@ -2,6 +2,7 @@ import time
 import numpy as np
 import numpy.linalg as npl
 from interp3d import interp_3d
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import numba
@@ -36,10 +37,29 @@ def make_Interp_Functions(data):
     return interpFx, interpFy, interpFz
 
 
-class Cube:
-    def __init__(self, widthInInches=1.0,M=1.15E6):
-        #M: magnetization
-        self.width = widthInInches * .0254  # convert to meter
+class RectangularPrism:
+    #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
+    #are equal, but the length, in the z plane, can be anything. not specified a cube is assumed.
+    def __init__(self, width,length,M=1.15E6,MVec=np.asarray([1,0,0]),spherePerDim=6):
+        #width: The width in the x,y plane without rotation, meters
+        #lengthI: The length in the z plane without rotation, meters
+        #M: magnetization, SI
+        #MVec: direction of the magnetization vector
+        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
+        #a factor
+        # theta rotation is clockwise about y in my notation, originating at positive z
+        # psi is counter clockwise around z
+        self.width = width
+        self.length=length
+        self.M=M
+        self.spherePerDim=spherePerDim
+        if MVec[0]==0 and MVec[1]==0:
+            self.Mpsi=0
+        else:
+            self.Mpsi=np.arctan2(MVec[1],MVec[0]) #magnetization psi direction.
+        self.Mtheta=np.pi/2-np.arctan(MVec[2]/npl.norm(MVec[:2])) #magnetization theta direction
+
+
         self.n = None
         self.r = 0.0
         self.z = 0.0
@@ -47,18 +67,15 @@ class Cube:
         self.r0 = np.asarray([self.r * np.cos(self.phi), self.r * np.sin(self.phi), self.z])
         self.theta = 0
         self.psi = 0
-        self.M=M
         self.sphereList = None
 
-    def _build_Cube(self):
-        # build a cube made of 9 spheres, one at the center, and one at each corner.
+    def _build_RectangularPrism(self):
+        # build a rectangular prism made of multiple spheres
         # make rotation matrices
         # theta rotation is clockwise about y in my notation. psi is coutner clokwise around z
-        
         #rotation matrices
         Rtheta = np.asarray([[np.cos(self.theta), np.sin(self.theta)], [-np.sin(self.theta), np.cos(self.theta)]]) 
         Rpsi = np.asarray([[np.cos(self.psi), -np.sin(self.psi)], [np.sin(self.psi), np.cos(self.psi)]])
-
         rArr,radiusArr=self.generate_Positions_And_Radii_Ver2()
         self.sphereList = []
         i=0
@@ -68,24 +85,26 @@ class Cube:
             r[[0, 2]] = Rtheta @ r[[0, 2]]
             r[:2] = Rpsi @ r[:2]
             sphere.r0 = r + self.r0
-            sphere.orient(self.theta, self.psi)
+            sphere.orient(self.theta+self.Mtheta, self.psi+self.Mpsi)
             self.sphereList.append(sphere)
             i+=1
+
     def generate_Positions_And_Radii_Ver1(self):
-        #create a model of a cube with a large sphere in the middle and spheres at each of the 8 corners
+        #create a model of a rectangular prism with a large sphere in the middle and spheres at each of the 8 corners
         #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
-        radiussphereCenter=self.width/2 #central sphere fits just inside the cube
-        volumeRemaining=self.width**3-(4/3)*np.pi*radiussphereCenter**3 #remaining volume of cube after subtracting
+        #only useful for a cube
+        radiussphereCenter=self.width/2 #central sphere fits just inside the RectangularPrism
+        volumeRemaining=self.width**3-(4/3)*np.pi*radiussphereCenter**3 #remaining volume of RectangularPrism after subtracting
         #center sphere
         radiusSphereCorners=((volumeRemaining/8)/(4*np.pi/3))**(1/3)
 
         # now do the spheres at the faces.
         # make list of starting positions
         r1 = np.asarray([0.0, 0.0, 0.0])
-        r2 = np.asarray([self.width / 2, self.width / 2, self.width / 2])
-        r3 = np.asarray([-self.width / 2, self.width / 2, self.width / 2])
-        r4 = np.asarray([-self.width / 2, -self.width / 2, self.width / 2])
-        r5 = np.asarray([self.width / 2, -self.width / 2, self.width / 2])
+        r2 = np.asarray([self.width / 2, self.width / 2, self.length / 2])
+        r3 = np.asarray([-self.width / 2, self.width / 2, self.length / 2])
+        r4 = np.asarray([-self.width / 2, -self.width / 2, self.length / 2])
+        r5 = np.asarray([self.width / 2, -self.width / 2, self.length / 2])
         r6=-r2
         r7=-r3
         r8=-r4
@@ -95,33 +114,44 @@ class Cube:
         rList = [r1, r2, r3, r4, r5, r6, r7,r8,r9]
         return np.asarray(rList),radiusArr
     def generate_Positions_And_Radii_Ver2(self):
-        #create a model of a cube with an array of spheres
+        #create a model of a rectangular prism with an array of spheres
         #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
-        numSphersDim=6 #number of spheres in each dimension. total spheres is this cubed
-        radius=((self.width**3/numSphersDim**3)/((4*np.pi/3)))**(1/3)
-        posArr=np.linspace(-self.width/2,self.width/2,num=numSphersDim)
-        rArr=np.asarray(np.meshgrid(posArr,posArr,posArr)).T.reshape(-1,3)
+        numSpheresXYDim=self.spherePerDim #number of spheres in the XY dimension without rotation.
+        numSpheresZDim=int(self.length*numSpheresXYDim/self.width)
+        numSpheres=numSpheresXYDim**2*numSpheresZDim
+        radius=((self.width**2*self.length/numSpheres)/((4*np.pi/3)))**(1/3) #this is not the actual radius, a virtual
+        # print(numSpheres)
+        #radius to set the total magnetization of the sphere
+        xySpacing=self.width/numSpheresXYDim  #the spacing between the spheres, including that I want a half gap at each
+        #edge
+        zSpacing=self.length/numSpheresZDim
+        xyPosArr=np.linspace(-self.width/2+xySpacing/2,self.width/2-xySpacing/2,num=numSpheresXYDim)
+        zPosArr=np.linspace(-self.length/2+zSpacing/2,self.length/2-zSpacing/2,num=numSpheresZDim)
+        rArr=np.asarray(np.meshgrid(xyPosArr,xyPosArr,zPosArr)).T.reshape(-1,3)
         radiusArr=np.ones(rArr.shape[0])*radius
         return rArr,radiusArr
 
     def position(self, r=None, phi=None, z=None):
-        # r: the distance from x,y=0 from the inner edge of the cube
+        # r: the distance from x,y=0 from the inner edge of the RectangularPrism
+
+
         if phi is not None:
             self.phi = phi
         if z is not None:
             self.z = z
         if r is not None:
-            self.r = r + self.width / 2  # need to add the width of the cube
+            self.r = r + self.width / 2  # need to add the width of the RectangularPrism
         x = self.r * np.cos(self.phi)
         y = self.r * np.sin(self.phi)
         self.r0 = np.asarray([x, y, self.z])
-        self._build_Cube()
+        self._build_RectangularPrism()
 
-    def orient(self, theta, psi):
-        # tilt the cube in spherical coordinates
+    def orient(self, theta=0.0, psi=0.0):
+        # tilt the RectangularPrism in spherical coordinates
         self.theta = theta
         self.psi = psi
-        self._build_Cube()
+        self._build_RectangularPrism()
+
 
     def B(self, r):
         BVec = np.zeros(r.shape)
@@ -172,8 +202,8 @@ class Sphere:
         y = self.r * np.sin(self.phi)
         self.r0 = np.asarray([x, y, self.z])
 
-    def update_Size(self, radiusNewInches):
-        self.radius = radiusNewInches * .0254
+    def update_Size(self, radius):
+        self.radius = radius
         self.volume = (4 * np.pi / 3) * self.radius ** 3
         M = 1.15e6  # magnetization density
         self.m0 = M * (4 / 3) * np.pi * self.radius ** 3  # dipole moment
@@ -262,50 +292,67 @@ class Sphere:
 
 
 class Layer:
-    # class object for a layer of the magnet. Uses the cube object
-    def __init__(self, z,M=1.15e6):
+    # class object for a layer of the magnet. Uses the RectangularPrism object
+    def __init__(self, z,width,length,spherePerDim,M):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center of the
-        #M: magnetization
+        #width: width of the rectangular prism in the xy plane
+        #length: length of the rectangular prism in the z axis
+        #M: magnetization, SI
+        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
+        #a factor
         self.z = z
+        self.width=width
+        self.length=length
         self.M=M
+        self.spherePerDim=spherePerDim
         self.r1 = None  # radius values for the 3 kinds of magnets in each layer
         self.r2 = None  # radius values for the 3 kinds of magnets in each layer
         self.r3 = None  # radius values for the 3 kinds of magnets in each layer
-        self.cubesList = None  # list of cubes
+        self.RectangularPrismsList = []  # list of RectangularPrisms
 
     def build(self, r1, r2, r3):
-        # shape the layer. Create new cubes for each reshpaing adds negligeable performance hit
-        cube1 = Cube(M=self.M)
-        cube1.position(r=r1, phi=0, z=self.z)
-        cube1.orient(-np.pi / 2, 0)
+        # shape the layer. Create new RectangularPrisms for each reshpaing adds negligeable performance hit
+        RectangularPrism1 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
+                                             ,spherePerDim=self.spherePerDim)
+        RectangularPrism1.position(r=r1, phi=0, z=self.z)
 
-        cube2 = Cube(M=self.M)
-        cube2.position(r=r2, phi=np.pi / 6, z=self.z)
-        cube2.orient(np.pi / 2, -2 * np.pi / 6)
-        #
-        cube3 = Cube(M=self.M)
-        cube3.position(r=r3, phi=-np.pi / 6, z=self.z)
-        cube3.orient(np.pi / 2, 2 * np.pi / 6)
-        self.cubesList = [cube1, cube2, cube3]
+        RectangularPrism2 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
+                                             ,spherePerDim=self.spherePerDim)
+        RectangularPrism2.position(r=r2, phi=np.pi / 6, z=self.z)
+        RectangularPrism2.orient(psi=(2*np.pi/3))
 
+        RectangularPrism3 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
+                                             ,spherePerDim=self.spherePerDim)
+        RectangularPrism3.position(r=r3, phi=-np.pi / 6, z=self.z)
+        RectangularPrism3.orient(psi=-2*np.pi/3)
+
+        self.RectangularPrismsList = [RectangularPrism1, RectangularPrism2, RectangularPrism3]
     def B(self, r):
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        BArr = self.cubesList[0].B_Symmetric(r)
-        BArr += self.cubesList[1].B_Symmetric(r)
-        BArr += self.cubesList[2].B_Symmetric(r)
+        BArr=0
+        for prism in self.RectangularPrismsList:
+            BArr+= prism.B_Symmetric(r)
         return BArr
 
-class Lens:
+class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0
-    def __init__(self, numLayers, width,r=None,M=1.03e6):
+    def __init__(self, numLayers, width,rp,length=None,M=1.03e6,spherePerDim=3):
         # numLayers: Number of layers
-        # width: Width of each cube in the layer, inches
-        # r: radius of each layer. If none, don't build.
+        # width: Width of each Rectangular Prism in the layer, meter
+        #length: the length of each layer, meter. If None, each layer is built of cubes
+        # rp: bore radius of every layer. If none, don't build.
         #Br: remnant flux density
         #M: magnetization.
+        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
+        #a factor
         self.numLayers=numLayers
         self.width=width
+        self.spherePerDim=spherePerDim
+        if length is None:
+            self.length=width
+        else:
+            self.length=length
         self.layerList=[] #object to hold layers
         self.layerArgs=[] #list of tuples of arguments for each layer
         self.M=M
@@ -313,16 +360,15 @@ class Lens:
         if numLayers==1:
             self.zArr=np.asarray([0])
         else:
-            self.zArr=np.linspace(-(self.width/2+(self.numLayers-2)*self.width/2),
-                                  (self.width/2+(self.numLayers-2)*self.width/2),num=self.numLayers)
-            self.zArr=self.zArr*.0254 #convert to meters
-        if r is not None:
-            self.set_Radius(r)
-            self._build()
+            self.zArr=np.linspace(-(self.length/2+(self.numLayers-2)*self.length/2),
+                                  (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
+        if rp is not None:
+            self.set_Radius(rp)
     def _build(self):
+        #build the lens.
         self.layerList=[]
         for i in range(self.numLayers):
-            layer=Layer(self.zArr[i],M=self.M)
+            layer=Layer(self.zArr[i],self.width,self.length,M=self.M,spherePerDim=self.spherePerDim)
             layer.build(*self.layerArgs[i])
             self.layerList.append(layer)
     def update(self,layerArgs):
@@ -331,7 +377,8 @@ class Lens:
         self.layerArgs=layerArgs
         self._build()
     def set_Radius(self,r):
-        #set the radius of the entire lens
+        #set the radius of the entire lens. There are 3 fundamental magnets in the halbach hexapole, and each can have a
+        #unique radius, so they are set independently here. Allows for tunability in other applications
         #r: radius, meter
         self.layerArgs=[]
         for i in range(self.numLayers):
@@ -351,7 +398,7 @@ class Lens:
             return BArr[0]
         else:
             return BArr
-    def B_Norm(self,r):
+    def BNorm(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
         if len(r.shape)==1:
@@ -359,11 +406,11 @@ class Lens:
         else:
             rEval=r.copy()
         BVec=self.B_Vec(rEval)
-        if len(BVec.shape)==1:
+        if len(r.shape)==1:
             return npl.norm(BVec)
         else:
             return npl.norm(BVec,axis=1)
-    def B_Grad(self,r):
+    def BNorm_Gradient(self,r):
         #Return the gradient of the norm of the B field. use central difference theorom
         #r: (N,3) vector of coordinates or (3) vector of coordinates.
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -377,7 +424,7 @@ class Lens:
             coordb[:, index] += dr
             coorda = rEval.copy()  # lower step
             coorda[:, index] += -dr
-            return (self.B_Norm(coordb)-self.B_Norm(coorda))/dr
+            return (self.BNorm(coordb)-self.BNorm(coorda))/(2*dr)
         BGradx=grad(0)
         BGrady=grad(1)
         BGradz=grad(2)
@@ -385,3 +432,146 @@ class Lens:
             return np.asarray([BGradx[0],BGrady[0],BGradz[0]])
         else:
             return np.column_stack((BGradx,BGrady,BGradz))
+class DoubeLayerHalbachLens:
+    #model of a halbach lens that is composed of two layers. Here they are taken to have the same magnets for the
+    #inner and outer layer. This is simply modeled as two concentric halbach lenses
+    def __init__(self, numLayers, width, rp, length=None, M=1.03e6, spherePerDim=4):
+        lensInner=HalbachLens(numLayers,width,rp,length=length,M=M,spherePerDim=spherePerDim)
+        rpOuterLayer=rp+width
+        lensOuter=HalbachLens(numLayers,1.5*width,rpOuterLayer,length=length,M=M,spherePerDim=spherePerDim)
+        self.lensList=[lensInner,lensOuter]
+    def B_Vec(self,r):
+        #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
+        #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
+        if len(r.shape)==1:
+            rEval=np.asarray([r])
+        else:
+            rEval=r.copy()
+        BArr=np.zeros(rEval.shape)
+        for lens in self.lensList:
+            for layer in lens.layerList:
+                BArr+=layer.B(rEval)
+        if len(r.shape)==1:
+            return BArr[0]
+        else:
+            return BArr
+    def BNorm(self,r):
+       return HalbachLens.BNorm(self,r)
+    def BNorm_Gradient(self,r):
+        return HalbachLens.BNorm_Gradient(self,r)
+#
+# rp=.01
+# magnetWidth=rp*np.tan(2*np.pi/24)*2
+# num=100
+# lens=HalbachLens(1,magnetWidth,rp,length=4*rp)
+# xyArr=np.linspace(-rp,rp,num=num)/2
+# coords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
+# BNorm=lens.BNorm(coords).reshape(num,num)
+# plt.imshow(BNorm)
+# plt.show()
+#
+#
+#
+# L0=.5
+# lens=HalbachLens(1,.0254,.05,length=L0)
+# num=40
+# rMax=.04
+# posArr=np.linspace(-rMax,rMax,num=num)
+# coordsList=[]
+# for x in posArr:
+#     for y in posArr:
+#         if np.sqrt(x**2+y**2)<rMax:
+#             coordsList.append([x,y])
+# coords=np.asarray(coordsList)
+# planeCoords=np.column_stack((coords,np.zeros(coords.shape[0])))
+# zArr=np.linspace(3*.05,L0/2+5*.05,num=30)
+# resList=[]
+# sumList=[]
+# for z in zArr:
+#     planeCoords[:,2]=z
+#     BSum = npl.norm(lens.BNorm_Gradient(planeCoords), axis=1).sum()
+#     resList.append(BSum)
+#     print(z,sum(resList))
+#     sumList.append(sum(resList))
+# resArr=np.asarray(sumList)
+# resArr=np.abs(resArr-resArr[-1])
+# resArr=100*resArr/resArr[0]
+# plt.title('PercentField remainig of cumulative sum as a \n function of distance along magnet')
+# plt.semilogy(((zArr-L0/2)/.05)[:-1],resArr[:-1],marker='x')
+# plt.grid()
+# plt.xlabel('Distance from magnet edge, multiple of bore radius')
+# plt.ylabel('Percent of final value')
+# plt.show()
+
+
+
+
+# num=40
+# rMax=.045
+# posArr=np.linspace(-rMax,rMax,num=num)
+# coordsList=[]
+# posArrz=np.linspace(-.1,.1,num=num)
+# for x in posArr:
+#     for y in posArr:
+#         for z in posArrz:
+#             if np.sqrt(x**2+y**2)<rMax:
+#                 coordsList.append([x,y,z])
+# coords=np.asarray(coordsList)
+#
+# sphereNumArr=np.arange(2,12)
+# resList=[]
+# tList=[]
+# for sphereNum in sphereNumArr:
+#     print(sphereNum)
+#     t=time.time()
+#     lens=HalbachLens(1,.0254,.05,length=5*.0254,spherePerDim=sphereNum)
+#     BArr=lens.BNorm(coords)
+#     tList.append(time.time()-t)
+#     resList.append(np.sum(BArr))
+#
+# plt.title('Time to solve')
+# plt.xlabel('Number of spheres along xy dimensions')
+# plt.ylabel('Time,seconds')
+# plt.plot(sphereNumArr,tList,marker='x')
+# plt.show()
+#
+# resArr=np.asarray(resList)
+# resArr=100*np.abs(resArr-resArr[-1])/resArr[-1]
+# plt.title('Error from \'actual\' model. \n percent error from last value over sum of values from test points')
+# plt.grid()
+# plt.xlabel('Number of spheres along xy dimensions')
+# plt.ylabel('Percent error')
+# plt.semilogy(sphereNumArr[:-1],resArr[:-1],marker='x')
+# plt.show()
+#
+#
+# num=40
+# rMax=.04
+# posArr=np.linspace(-rMax,rMax,num=num)
+# coordsList=[]
+# for x in posArr:
+#     for y in posArr:
+#         if np.sqrt(x**2+y**2)<rMax:
+#             coordsList.append([x,y])
+# planeCoords=np.asarray(coordsList)
+# planeCoords=np.column_stack((planeCoords,np.zeros(planeCoords.shape[0])))
+#
+#
+# # FracArr = np.linspace(1, 10, num=25)
+# FracArr=np.arange(1,10.5,.5)
+# FracArr = np.append(FracArr, 30)
+# resList = []
+# rp=.05
+# for Frac in FracArr:
+#     print(Frac)
+#     lens = HalbachLens(1, .0254, rp, length=rp * Frac)
+#     BNorm = npl.norm(lens.BNorm_Gradient(planeCoords),axis=1)
+#     resList.append(np.sum(BNorm))
+# resArr = np.asarray(resList)
+# resArr = 100 * np.abs(resArr[-1] - resArr) / resArr[-1]
+# plt.title('Percent difference of total field values from \'actual\' \n value at z=0')
+# plt.xlabel('Magnet length as multiple of bore radius')
+# plt.ylabel('Percent difference')
+# plt.semilogy(FracArr[:-1], resArr[:-1],marker='x')
+# plt.grid()
+# plt.show()

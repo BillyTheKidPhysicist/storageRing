@@ -2,7 +2,7 @@ from profilehooks import profile
 import time
 import numpy.linalg as npl
 from injectionOptimizer import ApetureOptimizer
-from particleTracerLattice import ParticleTracerLattice
+from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracer import SwarmTracer
 import scipy.interpolate as spi
 import numpy as np

@@ -1,13 +1,13 @@
 import skopt
 import numba
 # from profilehooks import profile
-from ParticleTracer import ParticleTracer
+from ParticleTracerClass import ParticleTracer
 #import black_box as bb
 import numpy.linalg as npl
 #import matplotlib.pyplot as plt
 import sys
 import multiprocess as mp
-from particleTracerLattice import ParticleTracerLattice
+from ParticleTracerLatticeClass import ParticleTracerLattice
 import numpy as np
 from ParticleClass import Swarm
 import scipy.optimize as spo

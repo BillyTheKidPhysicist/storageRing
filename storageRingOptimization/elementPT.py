@@ -14,6 +14,7 @@ import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
 import numba
+from injectionSystemOptimization.HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 
 
 # from profilehooks import profile
@@ -137,6 +138,7 @@ class Element:
         xArr = np.unique(data[:, 0])
         yArr = np.unique(data[:, 1])
         zArr = np.unique(data[:, 2])
+
         numx = xArr.shape[0]
         numy = yArr.shape[0]
         numz = zArr.shape[0]
@@ -877,7 +879,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.check_K0()
             self.dataSeg = None  # to save memory and pickling time
         if self.dataCap is None and self.fileCap is not None:
-            self.fill_Force_Func_Cap()
+            self.fill_Field_Func_Cap()
             Lcap = self.dataCap[:, 2].max() - self.dataCap[:, 2].min() - self.comsolExtraSpace * 2
             if np.round(self.Lcap, 6) != np.round(Lcap, 6):
                 raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
@@ -899,7 +901,7 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             m = np.tan(self.ang / 2)
             self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
 
-    def fill_Force_Func_Cap(self):
+    def fill_Field_Func_Cap(self):
         self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.dataCap)
         self.Fx_Func_Cap = lambda x, y, z: interpFx((x, -z, y))
@@ -1075,24 +1077,25 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return V0
+#,rp,Lm,fringeFrac=2.0
 
-
-class LensSimWithCaps(LensIdeal):
-    def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap):
+class HalbachLensSim(LensIdeal):
+    def __init__(self,PTL, rp,Lm,fringeFracOuter,apFrac):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
-        self.file2D = file2D
-        self.file3D = file3D
-        self.L = L
-        self.ap0 = ap #initial aperture value to keep track of how it scales with changing bore radius
-        self.ap=ap
-        self.Lcap0 = None #the length of the segments from comsol representing the fringle fields. Scaling the radius
-        #will change the cap length so I need to keep track of this
-        self.Lcap=None
-        self.fringeFrac=fringeFrac#multiple of boreRadius added to length ot account for fringe fields to EACH side. So
-        #total is double
-        self.Linner = None
+        self.fringeFracOuter=fringeFracOuter
+        self.L = Lm+2*fringeFracOuter*rp
+        self.Lo=self.L
+        self.rp=rp
+        self.ap=rp*apFrac
+        self.Lm = Lm #hard edge length of magnet
+        self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
+        #can safely be modeled as a magnet "cap" with a 2D model of the interior
+        self.lengthEffective=min(self.fringeFracInnerMin*self.rp,self.Lm) #if the magnet is very long, to save simulation
+        #time use a smaller length that still captures the physics, and then model the inner portion as 2D
+        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
+
         self.data2D = None
         self.data3D = None
         self.Fx_Func_Fringe = None
@@ -1103,60 +1106,45 @@ class LensSimWithCaps(LensIdeal):
         self.Fy_Func_Inner = None
         self.Fz_Func_Inner = None
         self.magnetic_Potential_Func_Inner = None
-        self.BpFact = 1.0
-        self.rp0=None #the value of the initial bore radius from comsol simulation. This is required to hold onto the
-        #original value when the user changes the bore radius
-        self.rpFieldFact=1.0 #factor to modify the force if the bore radius is changed. Force scale as 1/rp**2
-        self.rpScaleFact=1.0 #factor to modify the position in the lens of coordinates when the bore radius is changed.
-        #A larger new bore radius requires the coordinates in the element to be shrunk down to correspond to the previous
-        #values
+        self.BpFact = 1.0 #factor to multiply field values by for tunability
         self.fill_Params()
 
     def fill_Params(self,externalDataProvided=False):
-        if (self.data3D is None and self.file3D is not None) or externalDataProvided==True:  # if data has not been loaded yet
-            if externalDataProvided==False:
-                self.data3D = np.asarray(pd.read_csv(self.file3D, delim_whitespace=True, header=None))
-            self.fill_Force_Func_Cap()
-            self.Lcap0 = self.data3D[:, 2].max() - self.data3D[:, 2].min()
-            self.Lcap=self.Lcap0
-            if self.L is None:
-                self.L=2*self.Lcap0
-            self.rp0 = (self.data3D[:, 0].max() - self.data3D[:, 0].min()) / 2
-            if self.ap is None and self.rp is None:
-                self.ap0 = .7 * self.rp0
-                self.ap = self.ap0
-                self.rp = self.rp0
-            elif self.ap is not None and self.rp is not None:
-                self.ap0=self.ap*(self.rp0/self.rp) #scale the aperture back to
-            elif self.ap is None and self.rp is not None:
-                self.ap=.7*self.rp
-                self.ap0=.7*self.rp0
-            elif self.ap is not None and self.rp is None:
-                raise Exception('Specifying the aperture but not the radius is not implemented')
-            self.rpFieldFact = (self.rp0 / self.rp)  # scale the field by this value. Not squard because the particle's
-            #fractional position goes unchanged, so rp appears only once
-            self.Lcap = self.Lcap0 * (self.rp / self.rp0)  # smaller bore means smaller fringe fields as well
-            self.rpScaleFact = self.rp0 / self.rp  # how much to scale coordinates in the lens up by to account for rpNew
-            if self.ap > self.rp or self.ap0 > self.rp0:
-                raise Exception('Aperture cannot be larger than radius')
-            self.data3D = False
-        if self.data2D is None and self.file2D is not None:  # if data has not been loaded yet
-            self.data2D = np.asarray(pd.read_csv(self.file2D, delim_whitespace=True, header=None))
-            self.fill_Force_Func_2D()
+        #todo: explain reasoning here
+        magnetWidth=self.rp*np.tan(2*np.pi/24)*2
+        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
 
-            self.data2D = False #to save memory
-        if self.L is not None and self.Lcap is not None:
-            self.set_Length(self.L)
+
+        numxy=25 #number of xy data points
+        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numxy) #add a little extra so the interp works correctly
+        if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
+            # portion inside then use a 2D plane to represent the inner portion to save resources
+            planeCoords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
+            BNormGrad=lens.BNorm_Gradient(planeCoords)
+            BNorm=lens.BNorm(planeCoords)
+            self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
+            # [[x,y,z,B0Gx,B0Gy,B0],..]
+            self.fill_Field_Func_2D()
+
+        zMin=0
+        zMax=self.Lcap
+        numz=30 #number of z data points
+        zArr=np.linspace(zMin-1e-6,zMax+1e-6,num=numz) #add a little extra so interp works as expected
+
+        volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
+        #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
+        #input coordinates will be shifted in a wrapper function
+
+        BNormGrad = lens.BNorm_Gradient(volumeCoords)
+        BNorm = lens.BNorm(volumeCoords)
+        self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        self.fill_Field_Func_Cap()
+
     def set_Length(self, L):
         self.L = L
-        self.Linner = L - 2 * self.Lcap
-        if self.Linner < 0:
-            raise Exception('LENSES IS TOO SHORT TO ACCOMODATE FRINGE FIELDS')
         self.Lo = self.L
 
-
-
-    def fill_Force_Func_Cap(self):
+    def fill_Field_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
         # wrap the function in a more convenietly accesed function
         self.Fx_Func_Fringe = lambda x, y, z: interpFz((-z, y, x))
@@ -1164,69 +1152,73 @@ class LensSimWithCaps(LensIdeal):
         self.Fz_Func_Fringe = lambda x, y, z: -interpFx((-z, y, x))
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV((-z, y, x))
 
-    #
-    def fill_Force_Func_2D(self):
+    def fill_Field_Func_2D(self):
+        #Data is provided for lens that points in the positive z, so the force functions need to be rotated
         xArr = np.unique(self.data2D[:, 0])
         yArr = np.unique(self.data2D[:, 1])
         numx = xArr.shape[0]
         numy = yArr.shape[0]
-        interpX = spi.RectBivariateSpline(xArr, yArr, (-self.data2D[:, 2] * self.PTL.u0).reshape(numy, numx, order='F'),
-                                          kx=1, ky=1)
-        interpY = spi.RectBivariateSpline(xArr, yArr, (-self.data2D[:, 3] * self.PTL.u0).reshape(numy, numx, order='F'),
-                                          kx=1, ky=1)
-        interpV = spi.RectBivariateSpline(xArr, yArr, (self.data2D[:, 4] * self.PTL.u0).reshape(numy, numx, order='F'),
-                                          kx=1, ky=1)
+        BGradxMatrix = np.empty((numx, numy))
+        BGradyMatrix = np.empty((numx, numy))
+        B0Matrix = np.zeros((numx, numy))
+        xIndices = np.argwhere(self.data2D[:, 0][:, None] == xArr)[:, 1]
+        yIndices = np.argwhere(self.data2D[:, 1][:, None] == yArr)[:, 1]
+
+        BGradxMatrix[xIndices, yIndices] = self.data2D[:, 2]
+        BGradyMatrix[xIndices, yIndices] = self.data2D[:, 3]
+        B0Matrix[xIndices, yIndices] = self.data2D[:, 4]
+
+
+        interpX = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradxMatrix,kx=1, ky=1)
+        interpY = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradyMatrix,kx=1, ky=1)
+        interpV = spi.RectBivariateSpline(xArr, yArr, self.PTL.u0*B0Matrix,kx=1, ky=1)
         self.Fx_Func_Inner = lambda x, y, z: 0.0
         self.Fy_Func_Inner = lambda x, y, z: interpY(-z, y)[0][0]
         self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)[0][0]
 
     def magnetic_Potential(self, q):
-        qScaled=q*self.rpScaleFact
+        x,y,z=q
         if q[0] <= self.Lcap:
-            x, y, z = qScaled
-            x = self.Lcap0 - x
+            x = self.Lcap - x
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
-        elif self.Lcap < q[0] < self.L - self.Lcap:
-            V0 = self.magnetic_Potential_Func_Inner(*qScaled)
-        elif q[0] < self.L:
-            y, z = qScaled[1:]
-            x = (q[0] - (self.Linner + self.Lcap))*self.rpScaleFact #need to shift x the correct amount then scale
+            # print(self.F)
+        elif self.Lcap < q[0] <= self.L - self.Lcap:
+            V0 = self.magnetic_Potential_Func_Inner(*q)
+        elif q[0] <= self.L: #this one is tricky with the scaling
+            x=self.Lcap-(self.L-x)
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         else:
             print('PARTICLE IS OUTSIDE ELEMENT')
             print('position is', q)
-            V0 = 0
-        V0 = self.BpFact * V0  # modify the magnetic field depending on how the magnet is tuned and the
-        #bore radius. Keep in mind bore radius effect on potential is not same as force! ie it does not change it!
-        return V0
+            V0=0
+        return V0*self.BpFact
 
     def force(self, q):
-        qScaled=q*self.rpScaleFact
+        #todo: why is the self.F being used here?
+        x,y,z=q
         if q[0] <= self.Lcap:
-            x, y, z = qScaled
-            x = self.Lcap0 - x
+            x = self.Lcap - x
             self.F[0] = -self.Fx_Func_Fringe(x, y, z)
             self.F[1] = self.Fy_Func_Fringe(x, y, z)
             self.F[2] = self.Fz_Func_Fringe(x, y, z)
-        elif self.Lcap < q[0] < self.L - self.Lcap:
+            # print(self.F)
+        elif self.Lcap < q[0] <= self.L - self.Lcap:
             self.F[0] = 0.0
-            self.F[1] = self.Fy_Func_Inner(*qScaled)
-            self.F[2] = self.Fz_Func_Inner(*qScaled)
-        elif q[0] < self.L: #this one is tricky with the scaling
-            y, z = qScaled[1:]
-            x = (q[0] - (self.Linner + self.Lcap))*self.rpScaleFact #need to shift x the correct amount then scale
-            self.F[0] = self.Fx_Func_Fringe(x, y, z)
-            self.F[1] = self.Fy_Func_Fringe(x, y, z)
-            self.F[2] = self.Fz_Func_Fringe(x, y, z)
+            self.F[1] = self.Fy_Func_Inner(*q)
+            self.F[2] = self.Fz_Func_Inner(*q)
+        elif q[0] <= self.L: #this one is tricky with the scaling
+            x=self.Lcap-(self.L-x)
+            self.F[0] = self.Fx_Func_Fringe(x,y,z)
+            self.F[1] = self.Fy_Func_Fringe(x,y,z)
+            self.F[2] = self.Fz_Func_Fringe(x,y,z)
         else:
             print('PARTICLE IS OUTSIDE ELEMENT')
             print('position is', q)
             self.F = np.zeros(3)
-        self.F = self.BpFact*self.rpFieldFact * self.F  # modify the forces depending on how much the magnet is tuned
-        return self.F.copy()
+        return self.F.copy()*self.BpFact
 
-class BumpsLensSimWithCaps(LensSimWithCaps):
+class BumpsLensSimWithCaps(HalbachLensSim):
     def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap,sigma):
         super().__init__(PTL, file2D, file3D,fringeFrac, L,rp, ap)
         self.sigma=sigma #the amount of vertical shift for bumping the beam over

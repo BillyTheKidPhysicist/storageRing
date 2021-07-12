@@ -6,8 +6,8 @@ import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,BenderSimSegmentedWithCap,LensSimWithCaps,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
-from ParticleTracer import ParticleTracer
+    ,BenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
+from ParticleTracerClass import ParticleTracer
 import scipy.optimize as spo
 from profilehooks import profile
 import copy
@@ -37,12 +37,7 @@ class ParticleTracerLattice:
         #is also at the origin, but seceeding elements follow along the positive x axis
 
         self.elList=[] #to hold all the lattice elements
-    @staticmethod
-    def compute_Bending_Radius_For_Segmented_Bender(L, rp, yokeWidth, numMagnets, angle, space):
-        # ucAng=angle/(2*numMagnets)
-        rb = (L + 2 * space) / (2 * np.tan(angle / (2 * numMagnets))) + yokeWidth + rp
-        ucAng1=np.arctan(((L+2*space)/2)/(rb-rp-yokeWidth))
-        return rb
+
 
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
@@ -52,8 +47,8 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L, ap=None,rp=None):
-        el=LensSimWithCaps(self, file2D, file3D,fringeFrac, L, rp,ap)
+    def add_Halbach_Lens_Sim(self,rp,Lm,fringeFrac=1.5,apFrac=.8):
+        el=HalbachLensSim(self, rp,Lm,fringeFrac,apFrac)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None):
@@ -181,7 +176,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,trackPotential=False,latticeType='storageRing',
+    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,latticeType='storageRing',
                     surpressWarning=False):
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
@@ -211,9 +206,6 @@ class ParticleTracerLattice:
             self.totalLength=0
             for el in self.elList: #total length of particle's orbit in an element
                 self.totalLength+=el.Lo
-        if trackPotential==False:
-            for el in self.elList:
-                el.magnetic_Potential=lambda x: np.nan
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths

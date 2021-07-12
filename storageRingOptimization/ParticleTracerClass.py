@@ -22,9 +22,10 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
 #this class does the work of tracing the particles through the lattice with timestepping algorithms
 
 class ParticleTracer:
-    def __init__(self,latticeObject):
-        self.latticeElementList = latticeObject.elList  # list containing the elements in the lattice in order from first to last (order added)
-        self.totalLatticeLength=latticeObject.totalLength
+    def __init__(self,lattice):
+        #lattice: ParticleTracerLattice object typically
+        self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.totalLatticeLength=lattice.totalLength
 
 
         self.T=None #total time elapsed
@@ -93,6 +94,7 @@ class ParticleTracer:
             self.particle.finished(totalLatticeLength=0)
             return particle
         self.time_Step_Loop()
+
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl

@@ -1,6 +1,6 @@
 import poisson_disc
 import skopt
-from ParticleTracer import ParticleTracer
+from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm
 import time
