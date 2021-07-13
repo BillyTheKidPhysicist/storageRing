@@ -117,7 +117,7 @@ class RectangularPrism:
         #create a model of a rectangular prism with an array of spheres
         #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
         numSpheresXYDim=self.spherePerDim #number of spheres in the XY dimension without rotation.
-        numSpheresZDim=int(self.length*numSpheresXYDim/self.width)
+        numSpheresZDim=max(1,int(self.length*numSpheresXYDim/self.width)) #no less than 1
         numSpheres=numSpheresXYDim**2*numSpheresZDim
         radius=((self.width**2*self.length/numSpheres)/((4*np.pi/3)))**(1/3) #this is not the actual radius, a virtual
         # print(numSpheres)
@@ -129,6 +129,7 @@ class RectangularPrism:
         zPosArr=np.linspace(-self.length/2+zSpacing/2,self.length/2-zSpacing/2,num=numSpheresZDim)
         rArr=np.asarray(np.meshgrid(xyPosArr,xyPosArr,zPosArr)).T.reshape(-1,3)
         radiusArr=np.ones(rArr.shape[0])*radius
+
         return rArr,radiusArr
 
     def position(self, r=None, phi=None, z=None):
@@ -336,8 +337,10 @@ class Layer:
 
 class HalbachLens:
     # class for a lens object. This is uses the layer object.
-    # The lens will be positioned such that the center layer is at z=0
-    def __init__(self, numLayers, width,rp,length=None,M=1.03e6,spherePerDim=3):
+    # The lens will be positioned such that the center layer is at z=0. Can be tilted though
+
+    def __init__(self, numLayers, width,rp,length=None,M=1.018e6,spherePerDim=3):
+        #note that M is tuned to  for spherePerDim=4
         # numLayers: Number of layers
         # width: Width of each Rectangular Prism in the layer, meter
         #length: the length of each layer, meter. If None, each layer is built of cubes
@@ -356,6 +359,12 @@ class HalbachLens:
         self.layerList=[] #object to hold layers
         self.layerArgs=[] #list of tuples of arguments for each layer
         self.M=M
+        #euler angles. Order of operation is theta and then psi, done in the reference frame of the lens. In reality
+        #the rotations are done to the evaluation point, then the resulting vector is rotated back
+        self.theta=None #rotation, through the y axis
+        self.r0=np.zeros(3) #location of center of magnet
+        self.RInTheta=None #rotation matrix for the evaluation points to generate the final value
+        self.ROutTheta=None #rotation matrix to rotate the vector out of the tilted frame to the original frame
 
         if numLayers==1:
             self.zArr=np.asarray([0])
@@ -364,6 +373,17 @@ class HalbachLens:
                                   (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
         if rp is not None:
             self.set_Radius(rp)
+    def position(self,r0):
+        #position the magnet in space
+        #r0: 3d position vector of the center of the magnet
+        self.r0=r0
+    def rotate(self,theta):
+        #rotate the magnet about its center
+        self.theta=theta
+        self.RInTheta=np.asarray([[np.cos(-theta),-np.sin(-theta)],[np.sin(-theta),np.cos(-theta)]]) #to rotate about the
+        #y axis. Since the magnet is rotated by theta, the evaluation points need to be rotated by -theta
+        self.ROutTheta = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]) #to rotate the
+        #vector out after evaluating with the rotated coordinates
     def _build(self):
         #build the lens.
         self.layerList=[]
@@ -384,6 +404,28 @@ class HalbachLens:
         for i in range(self.numLayers):
             self.layerArgs.append((r,r,r))
         self._build()
+    def _transform_r(self,r):
+        #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
+        #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
+        #r: rows of coordinates, shape (N,3). Where N is the number of evaluation points
+        rNew=r.copy()
+        rNew=rNew-np.ones(rNew.shape)*self.r0 #need to move the coordinates towards where the evaluation will take
+        #place
+        if self.theta is not None:
+            for i in range(rNew.shape[0]):
+                rNew[i][[0,2]]=rNew[i][[0,2]]@self.RInTheta
+
+        return rNew
+    def _transform_Vector(self,v):
+        #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
+        #then the vector is rotated back. This function handles the rotation of the evaluated vector
+        #v: rows of vectors, shape (N,3) where N is the number of vectors
+        vNew=v.copy()
+        if self.theta is not None:
+            for i in range(vNew.shape[0]):
+                vNew[i][[0,2]]=vNew[i][[0,2]]@self.ROutTheta
+        return vNew
+
     def B_Vec(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -391,13 +433,16 @@ class HalbachLens:
             rEval=np.asarray([r])
         else:
             rEval=r.copy()
+        rEval=self._transform_r(rEval)
         BArr=np.zeros(rEval.shape)
         for layer in self.layerList:
             BArr+=layer.B(rEval)
+        BArr=self._transform_Vector(BArr)
         if len(r.shape)==1:
             return BArr[0]
         else:
             return BArr
+
     def BNorm(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -459,18 +504,52 @@ class DoubeLayerHalbachLens:
        return HalbachLens.BNorm(self,r)
     def BNorm_Gradient(self,r):
         return HalbachLens.BNorm_Gradient(self,r)
+
+
+class SegmentedBenderSandwichedHalbach:
+    #a model of three lenses to represent the symmetry of the segmented bender.
+    def __init__(self,rp,rb,UCAngle,separation):
+        self.rp=rp #radius of bore of magnet, ie to the pole
+        self.rb=rb #bending radius
+        self.UCAngle=UCAngle #unit cell angle of a single magnet, ie the bending angle of a single magnet.
+        self.separation=separation #distance between two adjacent magnets at the inner edge. A feature of the engineering
+        #of the model
+
+# import scipy.optimize as spo
+# numSpheresArr=np.asarray([1,2,3,4,5])
+# costList=[]
+# for numSpheres in numSpheresArr:
+#     print('---------',numSpheres)
+#     def cost(M):
+#         lens=HalbachLens(1,.0254,.05,4*.05,M=M[0],spherePerDim=numSpheres)
+#         BArr=lens.BNorm(particleCoords)
+#         error=1e2*np.sum(np.abs(BArr-vals))/np.sum(vals)
+#         # print(M[0],error)
+#         return error
+#     sol=spo.minimize(cost,np.asarray([1e6]))
+#     print(sol)
+#     costList.append(sol.fun)
 #
-# rp=.01
-# magnetWidth=rp*np.tan(2*np.pi/24)*2
-# num=100
-# lens=HalbachLens(1,magnetWidth,rp,length=4*rp)
-# xyArr=np.linspace(-rp,rp,num=num)/2
-# coords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
-# BNorm=lens.BNorm(coords).reshape(num,num)
-# plt.imshow(BNorm)
+# plt.title("Model accuracy compared to COMSOL versus sphere number")
+# plt.xlabel('Number of spheres along xy dimensions')
+# plt.ylabel('Percent error')
+# plt.semilogy(numSpheresArr,costList)
+# plt.grid()
 # plt.show()
-#
-#
+
+# lens=HalbachLens(1,.0254,.05,4*.05)
+# MArr=np.linspace(.95,1.05,num=30)*1e6
+# errorList=[]
+# for M in MArr:
+#     lens=HalbachLens(1,.0254,.05,4*.05,M=M)
+#     BArr=lens.BNorm(particleCoords)
+#     error=1e2*np.sum(np.abs(BArr-vals))/np.sum(vals)
+#     errorList.append(error)
+#     print(BArr.sum(),vals.sum())
+# plt.plot(MArr,errorList)
+# plt.show()
+
+
 #
 # L0=.5
 # lens=HalbachLens(1,.0254,.05,length=L0)

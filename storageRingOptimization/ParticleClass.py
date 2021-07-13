@@ -128,9 +128,9 @@ class Particle:
         self._TList.append(np.sum(self.p**2)/2.0)
         if currentEl is not None:
             qel=currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
-            self._qoList.append(currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength))
+            self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength))
             self._VList.append(currentEl.magnetic_Potential(qel))
-    def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,currentEl):
+    def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,driftEl):
         #log the parameters when the particle has traveled in a straight line inside a drift region
         #qi: initial position
         #pi: initial momentum
@@ -150,14 +150,20 @@ class Particle:
         pElArr=pElArr[1:]
         qList=[]
         pList=[]
+        if self.currentEl!=driftEl: #the particle has entered the next element, and since I am recycling that algorithm
+            #it has the uninteded side effect of updating the cumulative length, which I do not want yet because it
+            #also includes the drift region
+            cumulativeLength=self.cumulativeLength-driftEl.Lo
+        else:
+            cumulativeLength=self.cumulativeLength
         for i in range(qElArr.shape[0]):
-            qList.append(currentEl.transform_Element_Coords_Into_Lab_Frame(qElArr[i]))
-            pList.append(currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pElArr[i]))
+            qList.append(driftEl.transform_Element_Coords_Into_Lab_Frame(qElArr[i]))
+            self._qoList.append(driftEl.transform_Lab_Coords_Into_Global_Orbit_Frame(qList[-1],cumulativeLength))
+            pList.append(driftEl.transform_Element_Frame_Vector_Into_Lab_Frame(pElArr[i]))
         #now fill the lists that log parameters
         self._qList.extend(qList)
         self._pList.extend(pList)
         self._TList.extend(list(np.sum(pElArr**2/2.0,axis=1)))
-        self._qoList.extend(qList)
         self._VList.extend([0]*len(qList)) #python list creation trick
     def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
@@ -180,7 +186,7 @@ class Particle:
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
-                qo=self.currentEl.transform_Lab_Coords_Into_Orbit_Frame(self.q, self.cumulativeLength)
+                qo=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength)
                 self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
     def plot_Energies(self):

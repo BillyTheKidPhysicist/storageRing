@@ -70,7 +70,7 @@ class SwarmTracer:
         if sameSeed==True:
             np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
         return swarm
-    def initalize_Random_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
+    def initalize_PseudoRandom_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
                                               cornerPoints=True, apetureRadius=None):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to

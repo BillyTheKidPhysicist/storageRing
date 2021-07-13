@@ -121,6 +121,7 @@ class ParticleTracer:
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
         driftEl=self.currentEl #to  record the drift element for logging params
+        self.particle.currentEl=driftEl
         pi=self.pEl.copy() #position at beginning of drift in drift frame
         qi=self.qEl.copy() #momentum at begining of drift in drift frame
         pf=pi
@@ -155,8 +156,10 @@ class ParticleTracer:
                 el=self.which_Element(qEl+1e-10) #put the particle just on the other side
                 exitLoop=self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el) #reuse the code here. This steps alos logs
                 #the time!!
-                if exitLoop==True and el is None:
-                    self.qEl=qEl
+                if exitLoop==True:
+                    self.particle.currentEl=self.currentEl
+                    if el is None:
+                        self.qEl=qEl
             else:
                 self.T += dt
                 self.qEl=qi+pi*dt

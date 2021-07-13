@@ -86,10 +86,11 @@ class Element:
         # Function that returns the magnetic potential in the element's frame
         return 0.0
 
-    def transform_Lab_Coords_Into_Orbit_Frame(self, q, cumulativeLength):
-        # Change the lab coordinates into the particle's orbit frame.
+    def transform_Lab_Coords_Into_Global_Orbit_Frame(self, q, cumulativeLength):
+        # Change the lab coordinates into the particle's orbit frame in the lab. This frame cumulatively grows with
+        #revolutions.
         q = self.transform_Lab_Coords_Into_Element_Frame(q)  # first change lab coords into element frame
-        qo = self.transform_Element_Coords_Into_Orbit_Frame(q)  # then element frame into orbit frame
+        qo = self.transform_Element_Coords_Into_Local_Orbit_Frame(q)  # then element frame into orbit frame
         qo[0] = qo[0] + cumulativeLength  # orbit frame is in the element's frame, so the preceding length needs to be
         # accounted for
         return qo
@@ -98,8 +99,9 @@ class Element:
         # this is overwridden by all other elements
         pass
 
-    def transform_Element_Coords_Into_Orbit_Frame(self, q):
-        # for straight elements (lens and drift), element and orbit frame are identical
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
+        # for straight elements (lens and drift), element and orbit frame are identical. This is the local orbit frame.
+        #does not grow with growing revolution
         # q: 3D coordinates in element frame
         return q.copy()
 
@@ -292,7 +294,7 @@ class BenderIdeal(Element):
         qNew=qNew+self.r0
         return qNew
 
-    def transform_Element_Coords_Into_Orbit_Frame(self, q):
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # q: element coords
         # returns a 3d vector in the orbit frame. First component is distance along trajectory, second is radial displacemnt
         # from the nominal orbit computed with centrifugal force, and the third is the z axis displacemnt.
@@ -335,7 +337,6 @@ class BenderIdeal(Element):
                 return True
         else:
             return False
-
 
 class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
@@ -443,7 +444,7 @@ class CombinerIdeal(Element):
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
 
-    def transform_Element_Coords_Into_Orbit_Frame(self, q):
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # NOTE: THIS NOT GOING TO BE CORRECT IN GENERALY BECAUSE THE TRAJECTORY IS NOT SMOOTH AND I HAVE NOT WORKED IT OUT
         # YET
         qo = q.copy()
@@ -654,7 +655,7 @@ class BenderIdealSegmented(BenderIdeal):
         vec[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
         return vec
 
-    def transform_Element_Coords_Into_Orbit_Frame(self, q):
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         qo = q.copy()
         phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
@@ -759,7 +760,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                 raise Exception('DIMENSIONS OF BENDER ARE OUTSIDE OF ACCEPTABLE BOUNDS')
             self.Lo = self.ro * self.ang + 2 * self.Lcap
 
-    def transform_Element_Coords_Into_Orbit_Frame(self, q):
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # q: element coordinates (x,y,z)
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
         qo = q.copy()
@@ -823,28 +824,32 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                                                                              self.rb, self.Lcap)
 
 
-class BenderSimSegmented(BenderIdealSegmented):
-    def __init__(self, PTL, fileName, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap, fillParams=True):
-        super().__init__(PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, ap, fillParams=False)
-        self.fileName = fileName
-        raise Exception('NOT IMPLEMENTED')
 
 
-class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
-    def __init__(self, PTL, fileSeg, fileCap, fileInternalFringe, Lm, Lcap, rp, K0, numMagnets, rb, extraSpace,
-                 yokeWidth, rOffsetFact, ap):
-        raise Exception('GET RID OF THE 1E-3 BS')
-        super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
-                         fillParams=False)
+
+class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
+    #this element is a model of a bending magnet constructed of segments. There are three models required to construct
+    #the element
+    #1:  A model of the repeating segments of magnets that compose the bulk of the bender. A magnet, centered at the
+    #bending radius, sandwiched by other magnets (at the appropriate angle) to generate the symmetry. The central magnet
+    #is position with z=0, and field values are extracted from z=0-1e-6 to some value that extends slightly past
+    #the tilted edge. See docs/images/HalbachBenderSimSegmentedWithCapImage1.png
+    def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
+        # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
+        #                  fillParams=False)
+        fringeFieldCapFact=3 #length of magnet that forms the cap as multiple of bore radius
         self.sim = True
-
-        self.fileSeg = fileSeg
-        self.fileCap = fileCap
-        self.fileInternalFringe = fileInternalFringe
+        self.PTL=PTL
+        self.rb=rb
+        self.space=extraSpace
+        self.Lm=Lm
+        self.Lcap=self.rp*fringeFieldCapFact
+        self.rOffsetFact=rOffsetFact
+        self.magnetWidth = rp * np.tan(2 * np.pi / 24) * 2
         self.numMagnets = numMagnets
-        self.yokeWidth = yokeWidth
-        self.ap = ap
-        self.K0 = K0
+        self.yokeWidth = self.magnetWidth
+        self.ap = rp*apFrac
+        self.K0 = None #spring constant of field strength to set the offset of the lattice
         self.ucAng = None
         self.dataSeg = None
         self.dataCap = None
@@ -864,42 +869,37 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fill_Params()
 
     def fill_Params(self):
-        if self.ap is None:
-            self.ap = self.rp * .9
-        elif self.ap > self.rp:
-            raise Exception('APETURE IS LARGER THAN BORE')
         self.Lseg = self.Lm + self.space * 2
-        self.rOffsetFunc = lambda rb: self.rOffsetFact * np.sqrt(
-            rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4  # this accounts for energy loss
-        if self.dataSeg is None and self.fileSeg is not None:
-            self.fill_Force_Func_Seg()
-            rp = (self.dataSeg[:, 0].max() - self.dataSeg[:, 0].min() - 2 * self.comsolExtraSpace) / 2
-            if np.round(rp, 6) != np.round(self.rp, 6):
-                raise Exception('BORE RADIUS FROM FIELD FILE DOES NOT MATCH')
-            self.check_K0()
-            self.dataSeg = None  # to save memory and pickling time
-        if self.dataCap is None and self.fileCap is not None:
-            self.fill_Field_Func_Cap()
-            Lcap = self.dataCap[:, 2].max() - self.dataCap[:, 2].min() - self.comsolExtraSpace * 2
-            if np.round(self.Lcap, 6) != np.round(Lcap, 6):
-                raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
-            self.dataCap = None  # to save memory and pickling time
-        if self.dataInternalFringe is None and self.fileInternalFringe is not None:
-            self.fill_Force_Func_Internal_Fringe()
-            self.dataInternalFringe = None  # to save memory and pickling time
-        if self.numMagnets is not None:
-            D = self.rb - self.rp - self.yokeWidth
-            self.ucAng = np.arctan(self.Lseg / (2 * D))
-            self.ang = 2 * self.numMagnets * self.ucAng
-            self.rOffset = self.rOffsetFunc(self.rb)
-            self.ro = self.rb + self.rOffset
-            self.L = self.ang * self.rb
-            self.Lo = self.ang * self.ro + 2 * self.Lcap
-            self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
-            m = np.tan(self.ucAng)
-            self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
-            m = np.tan(self.ang / 2)
-            self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        # self.rOffsetFunc = lambda rb: self.rOffsetFact * np.sqrt(
+        #     rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K0)) - rb / 4  # this accounts for energy loss
+
+        #fill segment data
+
+
+        self.fill_Force_Func_Seg()
+
+        # if self.dataCap is None and self.fileCap is not None:
+        #     self.fill_Field_Func_Cap()
+        #     Lcap = self.dataCap[:, 2].max() - self.dataCap[:, 2].min() - self.comsolExtraSpace * 2
+        #     if np.round(self.Lcap, 6) != np.round(Lcap, 6):
+        #         raise Exception('CAP LENGTH FROM FIELD FILE DOES NOT MATCH INPUT CAP LENGTH')
+        #     self.dataCap = None  # to save memory and pickling time
+        # if self.dataInternalFringe is None and self.fileInternalFringe is not None:
+        #     self.fill_Force_Func_Internal_Fringe()
+        #     self.dataInternalFringe = None  # to save memory and pickling time
+
+        D = self.rb - self.rp - self.yokeWidth
+        self.ucAng = np.arctan(self.Lseg / (2 * D))
+        self.ang = 2 * self.numMagnets * self.ucAng
+        self.rOffset = self.rOffsetFunc(self.rb)
+        self.ro = self.rb + self.rOffset
+        self.L = self.ang * self.rb
+        self.Lo = self.ang * self.ro + 2 * self.Lcap
+        self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
+        m = np.tan(self.ucAng)
+        self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        m = np.tan(self.ang / 2)
+        self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
 
     def fill_Field_Func_Cap(self):
         self.dataCap = np.asarray(pd.read_csv(self.fileCap, delim_whitespace=True, header=None))
@@ -917,9 +917,8 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Fz_Func_Internal_Fringe = lambda x, y, z: -interpFy((x, -z, y))
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV((x, -z, y))
 
-    def fill_Force_Func_Seg(self):
-        self.dataSeg = np.asarray(pd.read_csv(self.fileSeg, delim_whitespace=True, header=None))
-        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.dataSeg)
+    def fill_Force_Func_Seg(self,dataSeg):
+        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
         self.Fx_Func_Seg = lambda x, y, z: interpFx((x, -z, y))
         self.Fy_Func_Seg = lambda x, y, z: interpFz((x, -z, y))
         self.Fz_Func_Seg = lambda x, y, z: -interpFy((x, -z, y))
@@ -1080,16 +1079,16 @@ class BenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 #,rp,Lm,fringeFrac=2.0
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rp,Lm,fringeFracOuter,apFrac):
+    def __init__(self,PTL, rp,L,fringeFracOuter,apFrac):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
         self.fringeFracOuter=fringeFracOuter
-        self.L = Lm+2*fringeFracOuter*rp
+        self.L=L
+        self.Lm = L-2*fringeFracOuter*rp #hard edge length of magnet
         self.Lo=self.L
         self.rp=rp
         self.ap=rp*apFrac
-        self.Lm = Lm #hard edge length of magnet
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=min(self.fringeFracInnerMin*self.rp,self.Lm) #if the magnet is very long, to save simulation
@@ -1196,8 +1195,8 @@ class HalbachLensSim(LensIdeal):
 
     def force(self, q):
         #todo: why is the self.F being used here?
-        x,y,z=q
         if q[0] <= self.Lcap:
+            x,y,z=q
             x = self.Lcap - x
             self.F[0] = -self.Fx_Func_Fringe(x, y, z)
             self.F[1] = self.Fy_Func_Fringe(x, y, z)
@@ -1208,6 +1207,7 @@ class HalbachLensSim(LensIdeal):
             self.F[1] = self.Fy_Func_Inner(*q)
             self.F[2] = self.Fz_Func_Inner(*q)
         elif q[0] <= self.L: #this one is tricky with the scaling
+            x, y, z = q
             x=self.Lcap-(self.L-x)
             self.F[0] = self.Fx_Func_Fringe(x,y,z)
             self.F[1] = self.Fy_Func_Fringe(x,y,z)

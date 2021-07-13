@@ -6,7 +6,7 @@ import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,BenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
+    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
 from ParticleTracerClass import ParticleTracer
 import scipy.optimize as spo
 from profilehooks import profile
@@ -105,12 +105,10 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Sim_Segmented_With_End_Cap(self,fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb
-                                              ,extraSpace,yokeWidth,rOffsetFact,ap=None):
+    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=1.0,apFrac=.8):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
-        el = BenderSimSegmentedWithCap(self, fileSeg,fileCap,fileInternalFringe,Lm,Lcap,rp,K0,numMagnets,rb,extraSpace,
-                                       yokeWidth,rOffsetFact,ap)
+        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
