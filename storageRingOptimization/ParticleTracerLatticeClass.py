@@ -194,7 +194,7 @@ class ParticleTracerLattice:
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
-        #self.catch_Errors(constrain,buildLattice)
+        # self.catch_Errors(constrain,buildLattice)
         if constrain==True:
             if self.bender1.sim==False: #bender1 and 2 will have same type enorced before
                 self.constrain_Lattice()
@@ -213,9 +213,8 @@ class ParticleTracerLattice:
         self.bender1.ang = phi1
         self.bender2.ang = phi2
         #update benders
-        lens1Index=5
-        #Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
-        #L=L3-Lfringe
+        lens1Index=4
+        # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
         L=L3
         self.elList[lens1Index].set_Length(L)
         self.bender1.fill_Params()
@@ -324,7 +323,6 @@ class ParticleTracerLattice:
         #r1: radius of circle after the combiner
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner.
-
         L1 += -inputOffset / np.tan(inputAng)
         L2 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
 
@@ -395,7 +393,6 @@ class ParticleTracerLattice:
                 q5=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
                 q6 = np.asarray([0, -apL])  # bottom left when theta=0
                 points=[q1,q2,q3,q4,q5,q6]
-
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
                 el.SO=Polygon(points)
@@ -533,25 +530,28 @@ class ParticleTracerLattice:
                         el.r0[0]+=-el.nb[0]*el.Lcap
                         el.r0[1]+=-el.nb[1]*el.Lcap
                 elif el.type=='COMBINER':
-                    el.theta=2*np.pi-el.ang-(np.pi-prevEl.theta)# Tilt the combiner down by el.ang so y=0 is perpindicular
-                    #to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
-                    #np.pi becaus the combiner's input is not at the origin, but faces 'east'
-                    el.theta=el.theta-2*np.pi*(el.theta//(2*np.pi)) #the above logic can cause the element to have to rotate
-                    #more than 360 deg
-                    #to find location of output coords use vector that connects input and output in element frame
-                    #and rotate it. Input is where nominal trajectory particle enters
-                    drx=-(el.Lm+2*el.space)#(el.Lb+(el.La-el.inputOffset*np.sin(el.ang))*np.cos(el.ang))
-                    dry=-(el.inputOffset+np.tan(el.ang) * el.space )#(el.inputOffset+(el.La-el.inputOffset*np.sin(el.ang))*np.sin(el.ang))
-                    #drx = -(el.Lb+el.La *np.cos(el.ang))
-                    #dry = -(el.La*np.sin(el.ang))
+                    el.theta = 2 * np.pi - el.ang - (
+                                np.pi - prevEl.theta)  # Tilt the combiner down by el.ang so y=0 is perpindicular
+                    # to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
+                    # np.pi because the combiner's input is not at the origin, but faces 'east'
+                    el.theta = el.theta - 2 * np.pi * (el.theta // (2 * np.pi))  # the above logic can cause the element
+                    # to have to rotate more than 360 deg
+                    # to find location of output coords use vector that connects input and output in element frame
+                    # and rotate it. Input is where nominal trajectory particle enters
+                    drx = -(el.Lb + (el.La - el.inputOffset * np.sin(el.ang)) * np.cos(el.ang))
+                    dry = -(el.inputOffset + (el.La - el.inputOffset * np.sin(el.ang)) * np.sin(el.ang))
 
 
-                    dr=np.asarray([drx,dry]) #position vector between input and output of element in element frame
+
+                    el.r1El = np.asarray([0, 0])
+                    el.r2El = -np.asarray([drx, dry])
+                    dr = np.asarray([drx, dry])  # position vector between input and output of element in element frame
                     R = np.asarray([[np.cos(el.theta), -np.sin(el.theta)], [np.sin(el.theta), np.cos(el.theta)]])
-                    dr=R@dr #rotate to lab frame
-                    xe,ye=xb+dr[0],yb+dr[1]
-                    el.ne=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #output normal vector
-                    el.nb=np.asarray([np.cos(el.theta+el.ang),np.sin(el.theta+el.ang)]) #input normal vector
+                    dr = R @ dr  # rotate to lab frame
+                    xe, ye = xb + dr[0], yb + dr[1]
+                    el.ne = -np.asarray([np.cos(el.theta), np.sin(el.theta)])  # output normal vector
+                    el.nb = np.asarray([np.cos(el.theta + el.ang), np.sin(el.theta + el.ang)])  # input normal vector
+
 
                 else:
                     raise Exception('No correct element name provided')
@@ -576,7 +576,7 @@ class ParticleTracerLattice:
 
             if i==len(self.elList)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
-                if el.type=='BEND' or el.type=='COMBINER':
+                if el.type=='BEND':
                     reo[1]-=el.rOffset
             i+=1
         #check that the last point matchs the first point within a small number.

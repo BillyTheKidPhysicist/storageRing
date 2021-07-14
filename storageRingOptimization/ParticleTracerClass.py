@@ -266,7 +266,7 @@ class ParticleTracer:
         if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
             #with shapely
             return self.currentEl
-        else: #if not defintely inside current element, search everywhere and more carefully (and slowly) with shapely
+        else: #if not defintely inside current element, search everywhere
             q=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
             el = self.which_Element_Slow(q)
             return el
@@ -289,7 +289,6 @@ class ParticleTracer:
             isInside = el.is_Coord_Inside(qel)
             if isInside==True:
                 return el
-
         #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
         #but can happen. First compute roughly the center of the ring.
         #add up all the beginnings and end of elements and average them
@@ -298,10 +297,8 @@ class ParticleTracer:
             #qualitatively correct
             center+=el.r1[:-1]+el.r2[:-1]
         center=center/(2 * len(self.latticeElementList))
-
         #relative position vector
         r=center-q[:-1]
-
         #now rotate this and add the difference to our original vector. rotate by a small amount
         dphi=-1e-9 #need a clock wise rotation. 1 nanoradian
         R=np.array([[np.cos(dphi),-np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
@@ -310,9 +307,8 @@ class ParticleTracer:
         qNew=q.copy()
         qNew[:-1]=qNew[:-1]+dr
         el=self.which_Element_Shapely(qNew)
-
         if el is not None:
-            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
+            qel = el.transform_Lab_Coords_Into_Element_Frame(qNew)
             isInside = el.is_Coord_Inside(qel)
             if isInside == True:
                 return el

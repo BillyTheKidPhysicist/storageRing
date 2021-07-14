@@ -13,7 +13,7 @@ import numpy.linalg as npl
 from storageRingOptimization.ParticleClass import  Swarm,Particle
 # import storageRingOptimization.elementPT
 from storageRingOptimization.ParticleTracerLatticeClass import ParticleTracerLattice
-from storageRingOptimization.SwarmTracer import SwarmTracer
+from storageRingOptimization.SwarmTracerClass import SwarmTracer
 from shapely.geometry import LineString
 # from profilehooks import profile
 

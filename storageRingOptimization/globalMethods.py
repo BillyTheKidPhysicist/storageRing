@@ -12,7 +12,7 @@ lattice = None
 
 def solve(optimizer,numParticles=3000):
     #this method solves a mode matching problem using scipy differential evolution in parallel
-    from SwarmTracer import SwarmTracer
+    from SwarmTracerClass import SwarmTracer
     import numpy as np
     import scipy.optimize as spo
     swarmTracer = SwarmTracer(lattice)

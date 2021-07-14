@@ -271,6 +271,7 @@ class BenderIdeal(Element):
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro = self.rb + self.rOffset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
+
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
@@ -481,6 +482,10 @@ class CombinerIdeal(Element):
                 return True
             else:
                 return False
+    def transform_Element_Coords_Into_Lab_Frame(self,q):
+        qNew=q.copy()
+        qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
+        return qNew
 
 
 class CombinerSim(CombinerIdeal):

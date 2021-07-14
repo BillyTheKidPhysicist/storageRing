@@ -3,7 +3,7 @@ import time
 import numpy.linalg as npl
 from injectionOptimizer import ApetureOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracer import SwarmTracer
+from SwarmTracerClass import SwarmTracer
 import scipy.interpolate as spi
 import numpy as np
 from ParaWell import ParaWell

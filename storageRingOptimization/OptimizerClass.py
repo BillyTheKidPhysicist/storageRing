@@ -7,7 +7,7 @@ import time
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from ParaWell import ParaWell
-from SwarmTracer import SwarmTracer
+from SwarmTracerClass import SwarmTracer
 import globalMethods as gm
 
 
