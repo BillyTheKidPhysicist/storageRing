@@ -2,6 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import pathos as pa
+import numba
 import sys
 from shapely.geometry import Polygon,Point
 import numpy.linalg as npl
@@ -47,8 +48,8 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,fringeFrac=1.5,apFrac=.8):
-        el=HalbachLensSim(self, rp,Lm,fringeFrac,apFrac)
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8):
+        el=HalbachLensSim(self, rp,Lm,apFrac)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None):
@@ -94,7 +95,7 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap=None):
+    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact=1.0,ap=None):
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp
@@ -105,7 +106,7 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=1.0,apFrac=.8):
+    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=1.001,apFrac=.8):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
@@ -196,8 +197,7 @@ class ParticleTracerLattice:
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
         # self.catch_Errors(constrain,buildLattice)
         if constrain==True:
-            if self.bender1.sim==False: #bender1 and 2 will have same type enorced before
-                self.constrain_Lattice()
+            self.constrain_Lattice()
         if buildLattice==True:
             self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice,surpressWarning=surpressWarning)
             self.make_Geometry()
@@ -209,17 +209,20 @@ class ParticleTracerLattice:
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
         params=self.solve_Combiner_Constraints()
-        phi1,phi2,L3=params
-        self.bender1.ang = phi1
-        self.bender2.ang = phi2
-        #update benders
-        lens1Index=4
-        # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
-        L=L3
-        self.elList[lens1Index].set_Length(L)
-        self.bender1.fill_Params()
-        self.bender2.fill_Params()
-        self.elList[lens1Index].fill_Params()
+        if self.bender1.segmented==True:
+            rb1, rb2, numMagnets1, numMagnets2, Lm3=params
+        else:
+            phi1,phi2,L3=params
+            self.bender1.ang = phi1
+            self.bender2.ang = phi2
+            #update benders
+            lens1Index=4
+            # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
+            L=L3
+            self.elList[lens1Index].set_Length(L)
+            self.bender1.fill_Params()
+            self.bender2.fill_Params()
+            self.elList[lens1Index].fill_Params()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
@@ -245,7 +248,7 @@ class ParticleTracerLattice:
         else:
             params=self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, self.bender1.ro, self.bender2.ro)
         # need to account for length of caps in bender
-        params[-1]-=(self.bender1.Lcap+self.bender2.Lcap)
+        params[-1]-=(self.bender1.Lcap+self.bender2.Lcap) #remove spurious length from straight section
         return params
 
     def solve_Implicit_Segmented_Triangle_Problem( self, inputAng, inputOffset, L1, L2,tol=1e-12):
@@ -270,6 +273,7 @@ class ParticleTracerLattice:
         D = rp + yokeWidth
         r10 = self.bender1.rb #nominal bending radius without including offset, ie center of bender
         r20 = self.bender2.rb #nominal bending radius without including offset, ie center of bender
+
         def cost(args,returnParams=False):
             r1,r2 = args
             r1Offset=self.bender1.rOffsetFunc(r1) #must include offset in geometry calculation
@@ -291,17 +295,12 @@ class ParticleTracerLattice:
                 cost=np.sqrt(cost1**2+cost2**2)
                 return cost
 
-        difFrac=2e-3  # fractional difference in bending radii from target radii
+        difFrac=10e-3  # fractional difference in bending radii from target radii
         up=1+difFrac
         low=1-difFrac
         ranges=[(low*r10,up*r10),(low*r20,up*r20)]
 
-
-        #sol=spo.minimize(cost,x0,bounds=ranges,method='TNC')#,'xtol':1e-12})#,options={'ftol':1e-12})
-        sol=spo.differential_evolution(cost,ranges,mutation=1.5,popsize=50)
-
-
-
+        sol=spo.differential_evolution(cost,ranges)
 
         params = cost(sol.x, returnParams=True)
         params[2]=int(np.round(params[2]))
@@ -311,6 +310,7 @@ class ParticleTracerLattice:
         return params
 
     @staticmethod
+    @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64,numba.float64,numba.float64,numba.float64))
     def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. The geometry of the combiner requires an additional step because the orbit
@@ -338,7 +338,7 @@ class ParticleTracerLattice:
         tau = np.arctan((r2 - r1) / L3)
         theta1 = 2 * np.pi - np.pi / 2 - c - alpha - tau
         theta2 = 2 * np.pi - inputAng - theta1
-        params=[theta1,theta2,L3]
+        params=np.asarray([theta1,theta2,L3])
         return params
 
     def make_Geometry(self):
@@ -465,8 +465,6 @@ class ParticleTracerLattice:
                 yb=self.elList[i-1].r2[1]#set beginning coordinates to end of last
                 prevEl = self.elList[i - 1]
                 if el.sigma is not None:  # a bump element, need to ad transverse displacement
-                    if prevEl.ang!=0:
-                        raise Exception('Bump element is not applicable here')
                     yb += el.sigma
                 #set end coordinates
                 if el.type=='STRAIGHT':

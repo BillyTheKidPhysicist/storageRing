@@ -14,7 +14,6 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
     #ucAng=angle/(2*numMagnets)
     rb=(L+2*space)/(2*np.tan(angle/(2*numMagnets)))+yokeWidth+rp
     #ucAng1=np.arctan((L/2)/(rb-rp-yokeWidth))
-
     return rb
 
 
@@ -94,7 +93,6 @@ class ParticleTracer:
             self.particle.finished(totalLatticeLength=0)
             return particle
         self.time_Step_Loop()
-
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
@@ -102,6 +100,10 @@ class ParticleTracer:
         return self.particle
     def time_Step_Loop(self):
         while (True):
+            # self.currentEl.calculate_Steps_To_Collision(self.qEl,self.pEl,self.h)
+            # if self.T>0:
+            #     self.multi_Step_Verlet(10000)
+            #     break
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
@@ -117,6 +119,23 @@ class ParticleTracer:
                     self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 self.T+=self.h
                 self.particle.T=self.T
+                self.test.append(npl.norm(self.forceLast))
+    def multi_Step_Verlet(self,steps):
+        for _ in range(steps):
+            qEl = self.qEl  # q old or q sub n
+            pEl = self.pEl  # p old or p sub n
+            F = self.forceLast
+            # a = F # acceleration old or acceleration sub n
+            qEl_n = self.fast_qNew(qEl, F, pEl, self.h)  # q new or q sub n+1
+            F_n = self.currentEl.force(qEl_n)
+            # a_n = F_n  # acceleration new or acceleration sub n+1
+            pEl_n = self.fast_pNew(pEl, F, F_n, self.h)
+            self.qEl = qEl_n
+            self.pEl = pEl_n
+            self.forceLast = F_n  # record the force to be recycled
+            self.T += self.h
+
+
     def handle_Drift_Region(self):
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
@@ -202,6 +221,7 @@ class ParticleTracer:
     @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
     def fast_pNew(p,F,F_n,h):
         return p+.5*(F+F_n)*h
+
     def time_Step_Verlet(self):
         #the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
         #possible
@@ -213,7 +233,6 @@ class ParticleTracer:
             F=self.forceLast
         else: #the last force is invalid because the particle is at a new position
             F=self.currentEl.force(qEl)
-
         #a = F # acceleration old or acceleration sub n
         qEl_n=self.fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
         el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
@@ -223,7 +242,6 @@ class ParticleTracer:
         if exitLoop==True:
             return
         F_n=self.currentEl.force(qEl_n)
-
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=self.fast_pNew(pEl,F,F_n,self.h)
         self.qEl=qEl_n

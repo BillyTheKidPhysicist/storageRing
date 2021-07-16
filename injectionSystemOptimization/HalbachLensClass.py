@@ -52,7 +52,7 @@ class RectangularPrism:
         self.width = width
         self.length=length
         self.M=M
-        self.spherePerDim=spherePerDim
+        self.numSpherePerDim=spherePerDim
         if MVec[0]==0 and MVec[1]==0:
             self.Mpsi=0
         else:
@@ -116,7 +116,7 @@ class RectangularPrism:
     def generate_Positions_And_Radii_Ver2(self):
         #create a model of a rectangular prism with an array of spheres
         #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
-        numSpheresXYDim=self.spherePerDim #number of spheres in the XY dimension without rotation.
+        numSpheresXYDim=self.numSpherePerDim #number of spheres in the XY dimension without rotation.
         numSpheresZDim=max(1,int(self.length*numSpheresXYDim/self.width)) #no less than 1
         numSpheres=numSpheresXYDim**2*numSpheresZDim
         radius=((self.width**2*self.length/numSpheres)/((4*np.pi/3)))**(1/3) #this is not the actual radius, a virtual
@@ -155,6 +155,7 @@ class RectangularPrism:
 
 
     def B(self, r):
+        assert len(r.shape)==2 and r.shape[1]==3
         BVec = np.zeros(r.shape)
         for sphere in self.sphereList:
             BVec += sphere.B(r)
@@ -245,7 +246,7 @@ class Sphere:
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True)
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True, planeReflection=True)
         return arr
-
+    #3.71
     @staticmethod
     @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:]))
     def B_NUMBA(r, r0, m):
@@ -277,7 +278,6 @@ class Sphere:
         xSym = npl.norm(self.r0[:2]) * np.cos(phiSym)
         ySym = npl.norm(self.r0[:2]) * np.sin(phiSym)
         rSym = np.asarray([xSym, ySym, self.r0[2]])
-
         mSym = self.m.copy()
         if fixedDipoleDirection == False:
             # rotate the dipole moment.
@@ -305,7 +305,7 @@ class Layer:
         self.width=width
         self.length=length
         self.M=M
-        self.spherePerDim=spherePerDim
+        self.numSpherePerDim=spherePerDim
         self.r1 = None  # radius values for the 3 kinds of magnets in each layer
         self.r2 = None  # radius values for the 3 kinds of magnets in each layer
         self.r3 = None  # radius values for the 3 kinds of magnets in each layer
@@ -314,16 +314,16 @@ class Layer:
     def build(self, r1, r2, r3):
         # shape the layer. Create new RectangularPrisms for each reshpaing adds negligeable performance hit
         RectangularPrism1 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.spherePerDim)
+                                             ,spherePerDim=self.numSpherePerDim)
         RectangularPrism1.position(r=r1, phi=0, z=self.z)
 
         RectangularPrism2 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.spherePerDim)
+                                             ,spherePerDim=self.numSpherePerDim)
         RectangularPrism2.position(r=r2, phi=np.pi / 6, z=self.z)
         RectangularPrism2.orient(psi=(2*np.pi/3))
 
         RectangularPrism3 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.spherePerDim)
+                                             ,spherePerDim=self.numSpherePerDim)
         RectangularPrism3.position(r=r3, phi=-np.pi / 6, z=self.z)
         RectangularPrism3.orient(psi=-2*np.pi/3)
 
@@ -339,7 +339,7 @@ class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
 
-    def __init__(self, numLayers, width,rp,length=None,M=1.018e6,spherePerDim=3):
+    def __init__(self, numLayers, width,rp,length=None,M=1.018e6,numSpherePerDim=2):
         #note that M is tuned to  for spherePerDim=4
         # numLayers: Number of layers
         # width: Width of each Rectangular Prism in the layer, meter
@@ -351,7 +351,7 @@ class HalbachLens:
         #a factor
         self.numLayers=numLayers
         self.width=width
-        self.spherePerDim=spherePerDim
+        self.numSpherePerDim=numSpherePerDim
         if length is None:
             self.length=width
         else:
@@ -388,7 +388,7 @@ class HalbachLens:
         #build the lens.
         self.layerList=[]
         for i in range(self.numLayers):
-            layer=Layer(self.zArr[i],self.width,self.length,M=self.M,spherePerDim=self.spherePerDim)
+            layer=Layer(self.zArr[i],self.width,self.length,M=self.M,spherePerDim=self.numSpherePerDim)
             layer.build(*self.layerArgs[i])
             self.layerList.append(layer)
     def update(self,layerArgs):
@@ -455,28 +455,35 @@ class HalbachLens:
             return npl.norm(BVec)
         else:
             return npl.norm(BVec,axis=1)
-    def BNorm_Gradient(self,r):
-        #Return the gradient of the norm of the B field. use central difference theorom
+    def BNorm_Gradient(self,r,returnNorm=False,dr=1e-7):
+        #Return the gradient of the norm of the B field. use forward difference theorom
         #r: (N,3) vector of coordinates or (3) vector of coordinates.
+        #returnNorm: Wether to return the norm as well as the gradient.
+        #dr: step size
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
         if len(r.shape)==1:
             rEval=np.asarray([r])
         else:
             rEval=r.copy()
+        BNormCenter=self.BNorm(rEval)
         def grad(index):
-            dr=1e-6 #step size to find the derivative
             coordb = rEval.copy()  # upper step
             coordb[:, index] += dr
-            coorda = rEval.copy()  # lower step
-            coorda[:, index] += -dr
-            return (self.BNorm(coordb)-self.BNorm(coorda))/(2*dr)
-        BGradx=grad(0)
-        BGrady=grad(1)
-        BGradz=grad(2)
+            BNormB=self.BNorm(coordb)
+            return (BNormB-BNormCenter)/dr
+        BNormGradx=grad(0)
+        BNormGrady=grad(1)
+        BNormGradz=grad(2)
         if len(r.shape)==1:
-            return np.asarray([BGradx[0],BGrady[0],BGradz[0]])
+            if returnNorm == True:
+                return np.asarray([BNormGradx[0], BNormGrady[0], BNormGradz[0]]),BNormCenter[0]
+            else:
+                return np.asarray([BNormGradx[0],BNormGrady[0],BNormGradz[0]])
         else:
-            return np.column_stack((BGradx,BGrady,BGradz))
+            if returnNorm==True:
+                return np.column_stack((BNormGradx, BNormGrady, BNormGradz)),BNormCenter
+            else:
+                return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
 class DoubeLayerHalbachLens:
     #model of a halbach lens that is composed of two layers. Here they are taken to have the same magnets for the
     #inner and outer layer. This is simply modeled as two concentric halbach lenses
@@ -506,14 +513,100 @@ class DoubeLayerHalbachLens:
         return HalbachLens.BNorm_Gradient(self,r)
 
 
-class SegmentedBenderSandwichedHalbach:
-    #a model of three lenses to represent the symmetry of the segmented bender.
-    def __init__(self,rp,rb,UCAngle,separation):
+class SegmentedBenderHalbach(HalbachLens):
+    #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
+    #symmetric field
+    def __init__(self,rp,rb,UCAngle,Lm,numLenses=3,magnetWidth=None,M=1.03e6,inputOnly=False):
         self.rp=rp #radius of bore of magnet, ie to the pole
         self.rb=rb #bending radius
-        self.UCAngle=UCAngle #unit cell angle of a single magnet, ie the bending angle of a single magnet.
-        self.separation=separation #distance between two adjacent magnets at the inner edge. A feature of the engineering
-        #of the model
+        self.UCAngle=UCAngle #unit cell angle of a HALF single magnet, ie HALF the bending angle of a single magnet. It
+        #is called the unit cell because obviously one only needs to use half the magnet and can use symmetry to
+        #solve the rest
+        self.Lm=Lm #length of single magnet
+        self.M=M #magnetization, SI
+        self.inputOnly=inputOnly #wether to model only the input of the bender, ie no magnets being added below the z=0
+        #line, except for the magnet right at z=0
+        if magnetWidth==None:
+            self.magnetWidth=rp * np.tan(2 * np.pi / 24) * 2 #set to size that exactly fits
+        else:
+            self.magnetWidth=magnetWidth
+        self.numLenses=numLenses #number of lenses in the model
+        self.lensList=None #list to hold lenses
+        self._build()
+    def _build(self):
+        self.lensList=[]
+        if self.numLenses==1:
+            angleArr=np.asarray([0.0])
+        else:
+            angleArr=np.linspace(-2*self.UCAngle*(self.numLenses-1)/2,2*self.UCAngle*(self.numLenses-1)/2,num=self.numLenses)
+        if self.inputOnly==True:
+            angleArr=angleArr[(self.numLenses-1)//2:]
+        for i in range(angleArr.shape[0]):
+            lens=HalbachLens(1,self.magnetWidth,self.rp,length=self.Lm,M=self.M)
+            x=self.rb*np.cos(angleArr[i]) #x coordinate of center of lens
+            z=self.rb*np.sin(angleArr[i]) #z coordinate of center of lense
+            r0=np.asarray([x,0,z])
+            theta=angleArr[i]
+            lens.rotate(-theta) #my angle convention is unfortunately opposite what it should be here. positive theta
+            #is clockwise about y axis in the xz plane looking from the negative side of y
+            lens.position(r0)
+            self.lensList.append(lens)
+
+    def B_Vec(self,r):
+        #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
+        #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
+        if len(r.shape)==1:
+            rEval0=np.asarray([r])
+        else:
+            rEval0=r.copy()
+        BArr=np.zeros(rEval0.shape)
+        for lens in self.lensList:
+            rEval=lens._transform_r(rEval0)
+            for layer in lens.layerList:
+                BArr += lens._transform_Vector(layer.B(rEval))
+        if len(r.shape)==1:
+            return BArr[0]
+        else:
+            return BArr
+
+
+
+
+
+# dxArr=np.logspace(-5,-15,num=30)
+# errorList=[]
+# for dx in dxArr:
+#     lens=HalbachLens(1,.0254,.05,length=.1)
+#     testArr=npl.norm(lens.BNorm_Gradient(coords,dr=dx,method=1),axis=1)
+#     error=1e2*np.sum(np.abs(testArr-sampleArr))/np.sum(sampleArr)
+#     errorList.append(error)
+#     print(dx,error)
+#
+# plt.title('Forward difference accuracy compared to central difference \n Central difference stepsize is 1e-6')
+# plt.xlabel('Step size ,m')
+# plt.ylabel("percent difference")
+# plt.loglog(dxArr,errorList,marker='o')
+# plt.grid()
+# plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # import scipy.optimize as spo
 # numSpheresArr=np.asarray([1,2,3,4,5])

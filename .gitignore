@@ -59,7 +59,7 @@ injectionSystemOptimization/lens3D_Injection_MeshFactor2.5.txt
 injectionSystemOptimization/lens3D_Injection_MeshFactor2.txt
 injectionSystemOptimization/lens3D_Injection_MeshFactor3.txt
 injectionSystemOptimization/phaseSpaceCloud.dat
-injectionSystemOptimization/temp.py
+storageRingOptimization/temp.py
 
 paraWellTest.py
 poopaids
