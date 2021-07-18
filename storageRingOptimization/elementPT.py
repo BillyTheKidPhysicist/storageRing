@@ -889,11 +889,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Lseg = self.Lm + self.space * 2
         self.magnetWidth = rp * np.tan(2 * np.pi / 24) * 2
         self.yokeWidth = self.magnetWidth
-        self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
+        self.ucAng = None
         self.rOffsetFact=rOffsetFact #factor to times the theoretic optimal bending radius by
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
-
         self.numMagnets = numMagnets
         self.ap = rp*apFrac
         self.K = None #spring constant of field strength to set the offset of the lattice
@@ -909,13 +908,47 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Fy_Func_Internal_Fringe = None
         self.Fz_Func_Internal_Fringe = None
         self.magnetic_Potential_Func_Fringe = None
-        self.fill_Params()
+        self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
+        #constraint solver
+        if numMagnets is not None:
+            self.fill_Params_Pre_Constraint()
+            self.fill_Params_Post_Constrained()
+        else:
+            self.fill_Params_Pre_Constraint()
 
-    def fill_Params(self):
+
+
+    def fill_Params_Pre_Constraint(self):
+        def find_K(rb):
+            lens = _SegmentedBenderHalbachLensFieldGenerator(.0125, rb, .014, .0254, numLenses=3)
+            xArr = np.linspace(-.003, .003) + rb
+            coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
+            FArr = self.PTL.u0*lens.BNorm_Gradient(coords)[:, 0]
+            xArr -= rb
+            m, b = np.polyfit(xArr, FArr, 1)  # fit to a line y=m*x+b, and only use the m component
+            return m
+        rArr=np.linspace(self.rb*.95,self.rb*1.05,num=10)
+        kList = []
+        for rb in rArr:
+            kList.append(find_K(rb))
+        kArr = np.asarray(kList)
+        a, b, c = np.polyfit(rArr, kArr, 2)
+
+        self.K_Func=lambda r: a * r ** 2 + b * r + c
+        self.rOffsetFunc = lambda r: self.rOffsetFact * np.sqrt(
+            r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4  # this accounts for energy loss
+
+
+
+
+    def fill_Params_Post_Constrained(self):
+        self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
+        stepSize=1e-3 #target step size for spatial field interpolate
+
         #fill periodic segment data
-        numXY=25
-        numZ=15
-        xyArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)/2
+        numXY=2*(int(2*self.rp/stepSize)//2)+1 #to ensure it is odd
+        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.rp)/stepSize)//2)+1
+        xyArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)
         zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
         coords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3)
         coords[:,0]+=self.rb #add the bending radius to the coords
@@ -924,19 +957,22 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(coords,returnNorm=True)
         dataSeg=np.column_stack((coords,BNormGradArr,BNormArr))
         self.fill_Force_Func_Seg(dataSeg)
-        self.K=self.compute_K(dataSeg)
+        self.K=self.K_Func(self.rb)
 
 
+        # #fill first segment magnet that comes before the repeating segments that can be modeled the same
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=3,inputOnly=True)
-        # #fill first segment magnet that comes before the repeating segments that can be modeled the same
-        numXY=25
-        numZ=15
+
         x1=-(self.rp+1.5*(self.rb-self.rp)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
         x2=self.rp+1e-6
-        xArr=np.linspace(x1,x2,num=numXY)+self.rb
-        yArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)
+        numX=2*(int((x2-x1)/stepSize)//2)+1
+        numY=2*(int(2*self.rp//stepSize)//2)+1
+        numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.rp)/stepSize)//2)+1
+        xArr=np.linspace(x1,x2,num=numX)+self.rb
+        yArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numY)
         zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
+
         coords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
         dataCap=np.column_stack((coords,BNormGradArr,BNormArr))
@@ -944,8 +980,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
         #fill the first magnet and its fringe field
-        numXY=25
-        numZ=30
+        lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
+                                                                          numLenses=3,inputOnly=True)
+        numXY=2*(int(2*self.rp/stepSize)//2)+1
+        numZ=2*(int(self.Lcap/stepSize)//2)+1
         xyArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)
         zArr=np.linspace(1e-6,-self.Lcap-1e-6,num=numZ)
         coords = np.asarray(np.meshgrid(xyArr,xyArr, zArr)).T.reshape(-1, 3)
@@ -953,15 +991,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
         dataFringe=np.column_stack((coords,BNormGradArr,BNormArr))
         self.fill_Field_Func_Cap(dataFringe)
-        self.rOffsetFunc = lambda rb: self.rOffsetFact * np.sqrt(
-            rb ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K)) - rb / 4  # this accounts for energy loss
+
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro = self.rb + self.rOffset
-
-        if self.numMagnets is not None: #then the system is not need to be constrained, and thus is already constrained
-            self.fill_Params_Post_Constrained()
-    def fill_Params_Post_Constrained(self):
-        #some parameters can only be filled after the system is constrained, or if it is initialized constrained
         self.ang = 2 * self.numMagnets * self.ucAng
         self.L = self.ang * self.rb
         self.Lo = self.ang * self.ro + 2 * self.Lcap
@@ -987,20 +1019,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def fill_Force_Func_Seg(self,dataSeg):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
+
         self.Fx_Func_Seg = lambda x, y, z: interpFx((x, -z, y))
         self.Fy_Func_Seg = lambda x, y, z: interpFz((x, -z, y))
         self.Fz_Func_Seg = lambda x, y, z: -interpFy((x, -z, y))
         self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV((x, -z, y))
 
-    def compute_K(self,dataSeg):
-        # use the fit to the gradient of the magnetic field to find the k value in F=-k*x
-        xFit = np.linspace(-self.rp / 2, self.rp / 2, num=10000) + dataSeg[:, 0].mean()
-        yFit = []
-        for x in xFit:
-            yFit.append(self.Fx_Func_Seg(x, 0, 0))
-        xFit = xFit - dataSeg[:, 0].mean()
-        K = -np.polyfit(xFit, yFit, 1)[0]  # fit to a line y=m*x+b, and only use the m component
-        return K
+
 
     def force(self, q):
         # force at point q in element frame

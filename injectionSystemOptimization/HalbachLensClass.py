@@ -569,8 +569,8 @@ class SegmentedBenderHalbach(HalbachLens):
         else:
             return BArr
 
-
-
+# lensFringe = SegmentedBenderHalbachLensFieldGenerator(.01, 1.0, self.ucAng, self.Lm,
+#                                                                           numLenses=3,inputOnly=True)
 
 
 # dxArr=np.logspace(-5,-15,num=30)

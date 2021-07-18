@@ -119,7 +119,6 @@ class ParticleTracer:
                     self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 self.T+=self.h
                 self.particle.T=self.T
-                self.test.append(npl.norm(self.forceLast))
     def multi_Step_Verlet(self,steps):
         for _ in range(steps):
             qEl = self.qEl  # q old or q sub n

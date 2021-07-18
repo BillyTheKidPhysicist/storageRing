@@ -209,20 +209,26 @@ class ParticleTracerLattice:
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
         params=self.solve_Combiner_Constraints()
+        lensIndex=4
         if self.bender1.segmented==True:
             rb1, rb2, numMagnets1, numMagnets2, Lm3=params
+            self.bender1.rb=rb1
+            self.bender1.numMagnets=numMagnets1
+            self.bender2.rb=rb2
+            self.bender2.numMagnets=numMagnets2
+            self.elList[lensIndex].set_Length(Lm3)
+            self.bender1.fill_Params_Post_Constrained()
+            self.bender2.fill_Params_Post_Constrained()
         else:
-            phi1,phi2,L3=params
+            phi1,phi2,Lm3=params
             self.bender1.ang = phi1
             self.bender2.ang = phi2
             #update benders
-            lens1Index=4
             # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
-            L=L3
-            self.elList[lens1Index].set_Length(L)
+            self.elList[lensIndex].set_Length(Lm3)
             self.bender1.fill_Params()
             self.bender2.fill_Params()
-            self.elList[lens1Index].fill_Params()
+            self.elList[lensIndex].fill_Params()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
@@ -300,8 +306,8 @@ class ParticleTracerLattice:
         low=1-difFrac
         ranges=[(low*r10,up*r10),(low*r20,up*r20)]
 
-        sol=spo.differential_evolution(cost,ranges)
 
+        sol=spo.differential_evolution(cost,ranges,polish=False,mutation=.25)
         params = cost(sol.x, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
