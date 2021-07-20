@@ -292,7 +292,6 @@ class BenderIdeal(Element):
 
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
-
     def magnetic_Potential(self, q):
         # potential energy at provided coordinates
         # q coords in element frame
@@ -582,8 +581,8 @@ class CombinerSim(CombinerIdeal):
         self.angLoad = inputAngleLoad
         self.inputOffsetLoad = inputOffsetLoad
         self.data = None  # to save memory and pickling time
-        print(self.inputOffsetLoad,self.inputOffset)
-        print(self.ang,self.angLoad)
+        # print(self.inputOffsetLoad,self.inputOffset)
+        # print(self.ang,self.angLoad)
 
     def compute_Trajectory_Length(self, qTracedArr):
         # TODO: CHANGE THAT X DOESN'T START AT ZERO
@@ -661,8 +660,8 @@ class BenderIdealSegmented(BenderIdeal):
 
     def fill_Params(self):
         super().fill_Params()
-        self.rOffsetFunc = lambda rb: self.rOffsetFact * np.sqrt(
-            rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
+        self.rOffsetFunc = lambda rb: self.rOffsetFact * (np.sqrt(
+            rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2)
         self.rOffset = self.rOffsetFunc(self.rb)
         self.Lseg = self.Lm + 2 * self.space
         if self.numMagnets is not None:
@@ -798,7 +797,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         # q: element coordinates (x,y,z)
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
         qo = q.copy()
-        angle = np.arctan2(qo[1], qo[0])
+        angle = fast_Arctan2(qo)#np.arctan2(qo[1], qo[0])
         if angle < 0:  # restrict range to between 0 and 2pi
             angle += 2 * np.pi
 
@@ -894,6 +893,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
+        self.BpFact=1.0
         self.ap = rp*apFrac
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.Fx_Func_Seg = None
@@ -916,7 +916,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         else:
             self.fill_Params_Pre_Constraint()
 
-
+    def set_BpFact(self,BpFact):
+        self.BpFact=BpFact
 
     def fill_Params_Pre_Constraint(self):
         def find_K(rb):
@@ -934,12 +935,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         kArr = np.asarray(kList)
         a, b, c = np.polyfit(rArr, kArr, 2)
 
+
         self.K_Func=lambda r: a * r ** 2 + b * r + c
-        self.rOffsetFunc = lambda r: self.rOffsetFact * np.sqrt(
-            r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4  # this accounts for energy loss
-
-
-
+        self.rOffsetFunc = lambda r:  self.rOffsetFact*(np.sqrt(
+            r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
 
     def fill_Params_Post_Constrained(self):
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
@@ -993,6 +992,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fill_Field_Func_Cap(dataFringe)
 
         self.rOffset = self.rOffsetFunc(self.rb)
+
         self.ro = self.rb + self.rOffset
         self.ang = 2 * self.numMagnets * self.ucAng
         self.L = self.ang * self.rb
@@ -1076,7 +1076,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 else:  # if not in either cap
                     warnings.warn('PARTICLE IS OUTSIDE LATTICE')
                     self.F = np.zeros(3)
-        return self.F.copy()
+        return self.F.copy()*self.BpFact
 
     def force_First_And_Last(self, q, position):
         qNew = q.copy()
@@ -1140,7 +1140,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 else:  # if not in either cap
                     warnings.warn('PARTICLE IS OUTSIDE LATTICE')
                     self.F = np.zeros(3)
-        return V0
+        return V0*self.BpFact
 
     def magnetic_Potential_First_And_Last(self, q, position):
         qNew = q.copy()
@@ -1164,15 +1164,15 @@ class HalbachLensSim(LensIdeal):
         super().__init__(PTL, None, None, rp, None, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L
-        self.Lm = L-2*self.fringeFracOuter*rp #hard edge length of magnet
-        self.Lo=self.L
+        self.Lm = None#L-2*self.fringeFracOuter*rp #hard edge length of magnet
+        self.Lo=None
         self.rp=rp
         self.ap=rp*apFrac
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
-        self.lengthEffective=min(self.fringeFracInnerMin*self.rp,self.Lm) #if the magnet is very long, to save simulation
+        self.lengthEffective=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
-        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
+        self.Lcap=None
 
         self.data2D = None
         self.data3D = None
@@ -1185,10 +1185,21 @@ class HalbachLensSim(LensIdeal):
         self.Fz_Func_Inner = None
         self.magnetic_Potential_Func_Inner = None
         self.BpFact = 1.0 #factor to multiply field values by for tunability
-        self.fill_Params()
+        if self.L is not None:
+            self.fill_Params()
 
+    def set_Length(self,L):
+        self.L=L
+        self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
         #todo: explain reasoning here
+        self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
+        self.Lo=self.L
+        self.lengthEffective=min(self.fringeFracInnerMin*self.rp,
+                                 self.Lm)  #if the magnet is very long, to save simulation
+        #time use a smaller length that still captures the physics, and then model the inner portion as 2D
+        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
+
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
 
@@ -1218,9 +1229,6 @@ class HalbachLensSim(LensIdeal):
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
 
-    def set_Length(self, L):
-        self.L = L
-        self.Lo = self.L
 
     def fill_Field_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
@@ -1254,7 +1262,8 @@ class HalbachLensSim(LensIdeal):
         self.Fy_Func_Inner = lambda x, y, z: interpY(-z, y)[0][0]
         self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)[0][0]
-
+    def set_BpFact(self,BpFact):
+        self.BpFact=BpFact
     def magnetic_Potential(self, q):
         x,y,z=q
         if q[0] <= self.Lcap:

@@ -26,7 +26,7 @@ class SwarmTracer:
         # to the west. The transverse plane is the yz plane.
         # qMax: absolute value maximum position in the transverse direction
         # qMax: absolute value maximum position in the transverse momentum
-        # num: number of samples along each axis in phase space
+        # num: number of samples along each axis in phase space. Total is num^4
         # upperSymmetry: if this is true, exploit the symmetry between +/-z and ignore coordinates below z=0
         qArr = np.linspace(-qMax, qMax, num=num)
         pArr = np.linspace(-pMax, pMax, num=num)

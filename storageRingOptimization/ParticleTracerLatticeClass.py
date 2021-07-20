@@ -12,7 +12,45 @@ from ParticleTracerClass import ParticleTracer
 import scipy.optimize as spo
 from profilehooks import profile
 import copy
+class SimpleLocalMinimizer:
+    #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
+    #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
+    #find the minimum in a system that has no global minimum, but is rather more like a lumpy mattress. I would prefer
+    #to have used a vanilla newton methods or gradient descent, but from scipy I was not able to select the appropriate
+    #step size. Assumes the cost function goes to zero.
+    def __init__(self,function):
+        self.function=function
+    def gradient(self,q0, dq):
+        #find gradeint of the function
+        x, y = q0
+        dfx = (self.function(np.asarray([x + dq, y]))- self.function(np.asarray([x - dq, y]))) / (2*dq)
+        dfy = (self.function(np.asarray([x, y + dq]))- self.function(np.asarray([x, y - dq]))) / (2*dq)
+        return np.asarray([dfx, dfy])
 
+    def estimate_Step_Size_Gradient(self,q0, fracReduction, eps=1e-10):
+        #simple method that uses the gradient to make a tiny step in the direction of reduction of the cost function,
+        #then uses that information to figure out how big the step should be to get to zero. Basically newton's method
+        #without matrix inversion, and assuming that the cost function goes to zero.
+        funcVal0 = self.function(q0)
+        grad = self.gradient(q0, eps)
+        grad = grad / npl.norm(grad)
+        dqEps = -grad * eps  # tiny step size
+        funcValNew = self.function(q0 - dqEps)  # look backwareds for the slope
+        dFracFuncVal = -(funcValNew - funcVal0) / funcVal0
+        dq = dqEps * fracReduction / np.abs(dFracFuncVal)
+        return dq
+    def solve(self,X0,tol=1e-10,maxIter=100):
+        X = X0.copy()
+        error = self.function(X0)
+        i = 0
+        while (error > tol):
+            dq = self.estimate_Step_Size_Gradient(X, .5)
+            X = X + dq
+            error = self.function(X)
+            i += 1
+            if i > maxIter:
+                break
+        return X,error
 
 class ParticleTracerLattice:
     def __init__(self,v0Nominal):
@@ -106,9 +144,11 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=1.001,apFrac=.8):
+    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=.675,apFrac=.8):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
+        #rOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
+        #modeling shows that ~.675 is ideal
         el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
@@ -257,7 +297,7 @@ class ParticleTracerLattice:
         params[-1]-=(self.bender1.Lcap+self.bender2.Lcap) #remove spurious length from straight section
         return params
 
-    def solve_Implicit_Segmented_Triangle_Problem( self, inputAng, inputOffset, L1, L2,tol=1e-12):
+    def solve_Implicit_Segmented_Triangle_Problem( self, inputAng, inputOffset, L1, L2,tol=1e-10):
         #this method solves the solve_Triangle_Problem subject to the constraint that the benders are made of segments
         #of magnets rather than one continuous extrusion. This confines the solution to a limited number of configurations.
         # This is done by creating a cost function that goes to zero when for a given configuration the integer number
@@ -279,7 +319,6 @@ class ParticleTracerLattice:
         D = rp + yokeWidth
         r10 = self.bender1.rb #nominal bending radius without including offset, ie center of bender
         r20 = self.bender2.rb #nominal bending radius without including offset, ie center of bender
-
         def cost(args,returnParams=False):
             r1,r2 = args
             r1Offset=self.bender1.rOffsetFunc(r1) #must include offset in geometry calculation
@@ -298,17 +337,11 @@ class ParticleTracerLattice:
             else:
                 cost1=np.round(N1)-N1
                 cost2=np.round(N2)-N2
-                cost=np.sqrt(cost1**2+cost2**2)
+                cost3=1#np.sqrt((r1-r10)**2+(r2-r20)**2)
+                cost=np.sqrt(cost1**2+cost2**2)*cost3
                 return cost
-
-        difFrac=10e-3  # fractional difference in bending radii from target radii
-        up=1+difFrac
-        low=1-difFrac
-        ranges=[(low*r10,up*r10),(low*r20,up*r20)]
-
-
-        sol=spo.differential_evolution(cost,ranges,polish=False,mutation=.25)
-        params = cost(sol.x, returnParams=True)
+        X,error=SimpleLocalMinimizer(cost).solve(np.asarray([r10,r20]))
+        params = cost(X, returnParams=True)
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         if cost(params[:2])>tol:
