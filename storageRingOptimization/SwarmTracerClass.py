@@ -20,6 +20,7 @@ import skopt
 class SwarmTracer:
     def __init__(self,lattice):
         self.lattice=lattice
+        self.particleTracer = ParticleTracer(self.lattice)
         self.helper = ParaWell()  # custom class to help with parallelization
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -463,7 +464,6 @@ class SwarmTracer:
     def compute_Survival_Through_Injector(self, Lo,Li, LOffset,testNextElement=True,parallel=True):
         qMax, pMax, numParticles=3e-3,10.0,9
         swarm = self.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, qMax, pMax, numParticles,parallel=parallel)
-        particleTracer=ParticleTracer(self.lattice)
         parallel=False
         if testNextElement==True:
             elNext=self.lattice.elList[self.lattice.combinerIndex+1]
@@ -474,10 +474,10 @@ class SwarmTracer:
                 for i in range(swarm.num_Particles()):
                     particle=swarm.particles[i]
                     particle.q=particle.q+particle.p*1e-10 #scoot particle into next element
-                    swarm.particles[i]=particleTracer.trace(particle,h,T,fastMode=True)
+                    swarm.particles[i]=self.particleTracer.trace(particle,h,T,fastMode=True)
             else:
                 def wrapper(particle):
-                    return particleTracer.trace(particle, h, T, fastMode=True)
+                    return self.particleTracer.trace(particle, h, T, fastMode=True)
                 results=self.helper.parallel_Chunk_Problem(wrapper,swarm.particles)
                 for i in range(len(results)):
                     swarm.particles[i]=results[i][1]
@@ -491,17 +491,17 @@ class SwarmTracer:
             swarmNew=swarm.copy()
         else:
             swarmNew=swarm
-        particleTracer = ParticleTracer(self.lattice)
+
         if parallel==True:
             def func(particle):
-                return particleTracer.trace(particle, h, T,fastMode=fastMode)
+                return self.particleTracer.trace(particle, h, T,fastMode=fastMode)
             results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]
         else:
             for i in range(swarmNew.num_Particles()):
-                swarmNew.particles[i]=particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
+                swarmNew.particles[i]=self.particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
 
 
         return swarmNew

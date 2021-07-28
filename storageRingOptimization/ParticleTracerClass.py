@@ -136,7 +136,7 @@ class ParticleTracer:
                 self.T+=self.h
                 self.particle.T=self.T
     def multi_Step_Verlet(self):
-        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h)
+        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.BpFact)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n) #it doesn't quite make sense
@@ -154,17 +154,17 @@ class ParticleTracer:
     def generate_Multi_Step_Verlet(self,forceFunc):
         func=self._multi_Step_Verlet
         @numba.jit()
-        def wrap(qEl,pEl,T,T0,h):
-            return func(qEl,pEl,T,T0,h,forceFunc)
+        def wrap(qEl,pEl,T,T0,h,forceFact):
+            return func(qEl,pEl,T,T0,h,forceFact,forceFunc)
         test=np.empty(3)
         test[:]=np.nan
-        wrap(test,test,0.0,0.0,0.0) #force numba to compile
+        wrap(test,test,0.0,0.0,0.0,0.0) #force numba to compile
         return wrap
 
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEl,pEl,T,T0,h,force):
-        F=force(qEl)
+    def _multi_Step_Verlet(qEl,pEl,T,T0,h,forceFact,force):
+        F=force(qEl)*forceFact
         if math.isnan(F[0]) == True:
             particleOutside = True
             return qEl, qEl, pEl, T, particleOutside
@@ -173,7 +173,7 @@ class ParticleTracer:
             if T>=T0:
                 break
             qEl_n = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
-            F_n = force(qEl_n)
+            F_n = force(qEl_n)*forceFact
             if math.isnan(F_n[0])==True:
                 particleOutside=True
                 return qEl_n,qEl,pEl,T,particleOutside

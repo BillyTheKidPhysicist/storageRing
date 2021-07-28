@@ -86,6 +86,7 @@ class Element:
         self.sigma=None # the transverse translational. Only applicable to bump lenses now
         self.sim = None  # wether the field values are from simulations
         self.F = np.zeros(3)  # object to hold the force to prevent constantly making new force vectors
+        self.BpFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
     def compile_Fast_Numba_Force_Function(self):
@@ -183,7 +184,7 @@ class LensIdeal(Element):
         self.L = L  # lenght of magnet
         self.ap = ap  # size of apeture radially
         self.type = 'STRAIGHT'  # The element's geometry
-        self.BpFact=1.0 #factor to modify field values everywhere in space by, including force
+
         if fillParams == True:
             self.fill_Params()
     def set_BpFact(self,BpFact):
@@ -888,7 +889,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
-        self.BpFact=1.0
         self.ap = rp*apFrac
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.Fx_Func_Seg = None
@@ -1039,10 +1039,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        return fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
+        F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
                 self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
                                                                           ,self.Force_Func_Cap)
-
+        return self.BpFact*F
     def compile_Fast_Numba_Force_Function(self):
         ang=self.ang
         ucAng=self.ucAng
@@ -1064,28 +1064,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
         self.fast_Numba_Force_Function(np.zeros(3))
 
-    def force_First_And_Last(self, q, position):
-        qNew = q.copy()
-        F=np.zeros(3)
-        if position == 'FIRST':
-            qx = qNew[0]
-            qy = qNew[1]
-            qNew[0] = self.M_ang[0, 0] * qx + self.M_ang[0, 1] * qy
-            qNew[1] = self.M_ang[1, 0] * qx + self.M_ang[1, 1] * qy
-            F[0] = self.Fx_Func_Internal_Fringe(*qNew)
-            F[1] = self.Fy_Func_Internal_Fringe(*qNew)
-            F[2] = self.Fz_Func_Internal_Fringe(*qNew)
-            Fx = F[0]
-            Fy = F[1]
-            F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
-            F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
-        elif position == 'LAST':
-            F[0] = self.Fx_Func_Internal_Fringe(*qNew)
-            F[1] = self.Fy_Func_Internal_Fringe(*qNew)
-            F[2] = self.Fz_Func_Internal_Fringe(*qNew)
-        else:
-            F=np.asarray([np.nan])
-        return F
 
     def magnetic_Potential(self, q):
         # magnetic potential at point q in element frame
@@ -1138,7 +1116,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             V0 = self.magnetic_Potential_Func_Fringe(*qNew)
         else:
             raise Exception('INVALID POSITION SUPPLIED')
-        return V0
+        return V0*self.BpFact
 
 class HalbachLensSim(LensIdeal):
     def __init__(self,PTL, rp,L,apFrac):
@@ -1271,23 +1249,24 @@ class HalbachLensSim(LensIdeal):
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         else:
             V0=0
-        return V0
+        return V0*self.BpFact
 
 
 
     def force(self, q):
-        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.force_Func_Inner
+        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.ap,self.force_Func_Inner
                                                                   ,self.force_Func_Outer)
-        return F
+        return self.BpFact*F
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
         Lcap=self.Lcap
         L=self.L
+        ap=self.ap
         force_Func_Inner=self.force_Func_Inner
         force_Func_Outer=self.force_Func_Outer
         @numba.njit(numba.float64[:](numba.float64[:]))
         def force_NUMBA_Wrapper(q):
-            return forceNumba(q,Lcap,L,force_Func_Inner,force_Func_Outer)
+            return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
         self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
