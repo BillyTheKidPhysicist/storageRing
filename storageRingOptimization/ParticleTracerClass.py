@@ -64,7 +64,7 @@ class ParticleTracer:
 
     def initialize(self):
         # prepare for a single particle to be traced
-        self.T=0
+        self.T=0.0
         if self.particle.clipped is not None:
             self.particle.clipped=False
         dl=self.particle.v0*self.h #approximate stepsize
@@ -97,7 +97,7 @@ class ParticleTracer:
             return self.particle
         self.fastMode=fastMode
         self.h=h
-        self.T0=T0
+        self.T0=float(T0)
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
