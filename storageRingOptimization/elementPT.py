@@ -1,18 +1,21 @@
 import numpy as np
 import pyximport;
-
+from math import sqrt
 pyximport.install(language_level=3, setup_args={'include_dirs': np.get_include()})
 import cythonFunc
 import numpy.linalg as npl
 import warnings
+import fastElementNUMBAFunctions
 import scipy.ndimage as spimg
 from interp3d import interp_3d
-import scipy.interpolate as spi
+from InterpFunction import generate_3DInterp_Function_NUMBA, generate_2DInterp_Function_NUMBA
+# import scipy.interpolate as spi
 import pandas as pd
 import time
 import numpy.linalg as npl
 import sys
 import matplotlib.pyplot as plt
+import scipy.interpolate as spi
 import numba
 from injectionSystemOptimization.HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from injectionSystemOptimization.HalbachLensClass import SegmentedBenderHalbach\
@@ -83,7 +86,12 @@ class Element:
         self.sigma=None # the transverse translational. Only applicable to bump lenses now
         self.sim = None  # wether the field values are from simulations
         self.F = np.zeros(3)  # object to hold the force to prevent constantly making new force vectors
-
+        self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
+        #arguments at the time of calling the function compile_Fast_Numba_Force_Function
+    def compile_Fast_Numba_Force_Function(self):
+        #function that generates the fast_Numba_Force_Function based on existing parameters. It compiles it as well
+        #by passing dummy arguments
+        pass
     def magnetic_Potential(self, q):
         # Function that returns the magnetic potential in the element's frame
         return 0.0
@@ -157,10 +165,10 @@ class Element:
         BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
         BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
         B0Matrix[xIndices, yIndices, zIndices] = data[:, 6]
-        interpFx = interp_3d.Interp3D(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
-        interpFy = interp_3d.Interp3D(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
-        interpFz = interp_3d.Interp3D(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
-        interpV = interp_3d.Interp3D(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
+        interpFx = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
+        interpFy = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
+        interpFz = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
+        interpV = generate_3DInterp_Function_NUMBA(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
         return interpFx, interpFy, interpFz, interpV
 
 
@@ -197,7 +205,7 @@ class LensIdeal(Element):
         else:
             return 0.0
     def calculate_Steps_To_Collision(self,q,p,h):
-        #based on the currenty position and trajectory, in the element frame, how many timesteps would be required
+        #based on the current position and trajectory, in the element frame, how many timesteps would be required
         # to have a collision
         r0=self.ap
         y,z=q[1:]
@@ -223,9 +231,23 @@ class LensIdeal(Element):
 
     def force(self, q):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        self.F[1] = -self.K * q[1]
-        self.F[2] = -self.K * q[2]
-        return self.F.copy()
+        if 0 <= q[0] <= self.L and q[1] ** 2 + q[2] ** 2 < self.ap**2:
+            self.F[1] = -self.K * q[1]
+            self.F[2] = -self.K * q[2]
+            return self.F.copy()
+        else:
+            return np.asarray([np.nan])
+    def compile_Fast_Numba_Force_Function(self):
+        L = self.L
+        ap = self.ap
+        K = self.K
+        forceNumba = fastElementNUMBAFunctions.lens_Ideal_Force_NUMBA
+        @numba.njit(numba.float64[:](numba.float64[:]))
+        def force_NUMBA_Wrapper(q):
+            return forceNumba(q, L, ap, K)
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3))
+
 
     def set_Length(self, L):
         # this is used typically for setting the length after satisfying constraints
@@ -327,40 +349,34 @@ class BenderIdeal(Element):
         return qo
 
     def force(self, q):
-        return self.force_NUMBA(q,self.ang,self.rb,self.K)
-    @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:],numba.float64,numba.float64,numba.float64))
-    def force_NUMBA(q,ang,rb,K):
         # force at point q in element frame
         # q: particle's position in element frame
-        F=np.zeros(3)
+        F = np.zeros(3)
         phi = fast_Arctan2(q)
-        if phi < ang:
+        if phi < self.ang:
             r = np.sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
-            F0 = -K * (r - rb)  # force in x y plane
+            F0 = -self.K * (r - self.rb)  # force in x y plane
             F[0] = np.cos(phi) * F0
             F[1] = np.sin(phi) * F0
-            F[2] = -K * q[2]
+            F[2] = -self.K * q[2]
         else:
             F = np.zeros(3)
         return F
     def is_Coord_Inside(self, q):
-        return self.is_Coord_Inside_NUMBA(q,self.ang,self.rb,self.ap)
-    @staticmethod
-    @numba.njit(numba.boolean(numba.float64[:],numba.float64,numba.float64,numba.float64))
-    def is_Coord_Inside_NUMBA(q,ang,rb,ap):
-        phi = fast_Arctan2(q)#np.arctan2(q[1], q[0])
+        phi = fast_Arctan2(q)
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
-        if phi < ang:  # if particle is in bending segment
-            rh = np.sqrt(q[0] ** 2 + q[1] ** 2) - rb  # horizontal radius
+        if phi < self.ang:  # if particle is in bending segment
+            rh = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.rb  # horizontal radius
             r = np.sqrt(rh ** 2 + q[2] ** 2)  # particle displacement from center of apeture
-            if r > ap:
+            if r > self.ap:
                 return False
             else:
                 return True
         else:
             return False
+
+
 class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
@@ -420,14 +436,11 @@ class CombinerIdeal(Element):
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
         # #of orbit.
-        # xList=[]
-        # yList=[]
-        # test=[]
 
         if lowField == True:
-            force = self.force
+            force =lambda x: self.force(x,searchIsCoordInside=False)
         else:
-            force = lambda x: -self.force(x)
+            force = lambda x: -self.force(x,searchIsCoordInside=False)
         limit = self.Lm + 2 * self.space
 
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
@@ -446,17 +459,10 @@ class CombinerIdeal(Element):
                 q = q + p * dt
                 coordList.append(q)
                 break
-            # test.append(npl.norm(F))#self.magnetic_Potential(q))
-            # xList.append(q[0])
-            # yList.append(q[1])
-
             q = q_n
             p = p_n
             forcePrev = F_n
             coordList.append(q)
-        # plt.plot(xList,test)
-        # plt.grid()
-        # plt.show()
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
         return outputAngle, outputOffset, np.asarray(coordList)
@@ -475,9 +481,12 @@ class CombinerIdeal(Element):
         qo[1] = 0  # qo[1]
         return qo
 
-    def force(self, q):
+    def force(self, q,searchIsCoordInside=True):
         # force at point q in element frame
         # q: particle's position in element frame
+        if searchIsCoordInside==True:
+            if self.is_Coord_Inside(q) is False:
+                return np.asarray([np.nan])
         F = np.zeros(3)  # force vector starts out as zero
         if 0<q[0] < self.Lb:
             B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
@@ -539,9 +548,7 @@ class CombinerSim(CombinerIdeal):
 
         self.data = None
         self.combinerFile = combinerFile
-        self.FxFunc = None
-        self.FyFunc = None
-        self.FzFunc = None
+        self.force_Func=None
         self.magnetic_Potential_Func = None
         self.fill_Params()
 
@@ -553,13 +560,15 @@ class CombinerSim(CombinerIdeal):
         self.data[:, 3:6] = self.data[:, 3:6] / self.sizeScale  # scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        funcGradx, funcGrady, funcGradz, funcV = self.make_Interp_Functions(self.data)
-
-        # self.magnetic_Potential=lambda x, y, z: funcGradx((x, y, z))
-        self.FxFunc = lambda x, y, z: funcGradx((x, y, z))
-        self.FyFunc = lambda x, y, z: funcGrady((x, y, z))
-        self.FzFunc = lambda x, y, z: funcGradz((x, y, z))
-        self.magnetic_Potential_Func = lambda x, y, z: funcV((x, y, z))
+        interpFx,interpFy, interpFz, funcV = self.make_Interp_Functions(self.data)
+        @numba.njit()
+        def force_Func(x,y,z):
+            Fx=interpFx(x,y,z)
+            Fy=interpFy(x,y,z)
+            Fz=interpFz(x,y,z)
+            return np.asarray([Fx,Fy,Fz])
+        self.force_Func=force_Func
+        self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
 
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()  # 0.07891892567413786
@@ -581,6 +590,7 @@ class CombinerSim(CombinerIdeal):
         self.angLoad = inputAngleLoad
         self.inputOffsetLoad = inputOffsetLoad
         self.data = None  # to save memory and pickling time
+        self.compile_Fast_Numba_Force_Function()
         # print(self.inputOffsetLoad,self.inputOffset)
         # print(self.ang,self.angLoad)
 
@@ -598,27 +608,34 @@ class CombinerSim(CombinerIdeal):
         Lo = np.sum(dLArr)
         return Lo
 
-    def force(self, q):
-        # this function uses the symmetry of the combiner to extract the force everywhere.
-        qNew = q.copy()
-        xFact = 1  # value to modify the force based on symmetry
-        zFact = 1
-        if 0 <= qNew[0] <= (self.Lm / 2 + self.space):  # if the particle is in the first half of the magnet
-            if qNew[2] < 0:  # if particle is in the lower plane
-                qNew[2] = -qNew[2]  # flip position to upper plane
-                zFact = -1  # z force is opposite in lower half
-        elif (self.Lm / 2 + self.space) < qNew[0]:  # if the particle is in the last half of the magnet
-            qNew[0] = (self.Lm / 2 + self.space) - (
-                        qNew[0] - (self.Lm / 2 + self.space))  # use the reflection of the particle
-            xFact = -1  # x force is opposite in back plane
-            if qNew[2] < 0:  # if in the lower plane, need to use symmetry
-                qNew[2] = -qNew[2]
-                zFact = -1  # z force is opposite in lower half
-        self.F[0] = xFact * self.FxFunc(*qNew)
-        self.F[1] = self.FyFunc(*qNew)
-        self.F[2] = zFact * self.FzFunc(*qNew)
 
-        return self.F
+
+
+    def force(self, q,searchIsCoordInside=True):
+        # this function uses the symmetry of the combiner to extract the force everywhere.
+        #I believe there are some redundancies here that could be trimmed to save time.
+        if searchIsCoordInside==False:
+            La=0.0
+        else:
+            La=self.La
+        return fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+                                            self.apz,self.apL,self.apR,searchIsCoordInside,self.force_Func)
+    def compile_Fast_Numba_Force_Function(self):
+        forceNumba = fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA
+        La=self.La
+        Lb=self.Lb
+        Lm=self.Lm
+        space=self.space
+        ang=self.ang
+        apz=self.apz
+        apL=self.apL
+        apR=self.apR
+        force_Func=self.force_Func
+        @numba.njit(numba.float64[:](numba.float64[:]))
+        def force_NUMBA_Wrapper(q):
+            return forceNumba(q,La,Lb,Lm,space,ang,apz,apL,apR,True,force_Func)
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
     def magnetic_Potential(self, q):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
@@ -682,7 +699,7 @@ class BenderIdealSegmented(BenderIdeal):
 
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
         # vec: 3D vector in lab frame to rotate into element frame
-        vecx = vec[0];
+        vecx = vec[0]
         vecy = vec[1]
         vec[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
         vec[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
@@ -722,33 +739,9 @@ class BenderIdealSegmented(BenderIdeal):
         # F: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
         FNew = F.copy()  # copy input vector to not modify the original
-        return cythonFunc.transform_Unit_Cell_Force_Into_Element_Frame(FNew, q, self.M_uc, self.ucAng)
+        return fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, self.M_uc, self.ucAng)
 
-    @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:, :], numba.float64))
-    def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, M_uc, ucAng):
-        # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
-        # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
-        # or leaving the element interface as mirror images of each other.
-        # FNew: Force to be rotated out of unit cell frame
-        # q: particle's position in the element frame where the force is acting
 
-        phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
-        # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
-        cellNum = int(phi // ucAng) + 1  # cell number that particle is in, starts at one
-        if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
-            rotAngle = 2 * (cellNum // 2) * ucAng
-        else:  # otherwise it needs to be reflected. This is the algorithm for reflections
-            Fx = FNew[0]
-            Fy = FNew[1]
-            FNew[0] = M_uc[0, 0] * Fx + M_uc[0, 1] * Fy
-            FNew[1] = M_uc[1, 0] * Fx + M_uc[1, 1] * Fy
-            rotAngle = 2 * ((cellNum - 1) // 2) * ucAng
-        Fx = FNew[0]
-        Fy = FNew[1]
-        FNew[0] = Fx * np.cos(rotAngle) - Fy * np.sin(rotAngle)
-        FNew[1] = Fx * np.sin(rotAngle) + Fy * np.cos(rotAngle)
-        return FNew
 
     # @profile()
     def transform_Element_Coords_Into_Unit_Cell_Frame(self, q):
@@ -757,23 +750,12 @@ class BenderIdealSegmented(BenderIdeal):
         # q: particle coords in element frame
         # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
         # used for including unit cell fringe fields
-        qNew = q.copy()
-        return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTHON(qNew, self.ang, self.ucAng)
-        # return self.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew,self.ang,self.ucAng)
+        # return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTH(qNew, self.ang, self.ucAng)
+        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q,self.ang,self.ucAng)
 
-    @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:], numba.float64, numba.float64))
-    def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(qNew, ang, ucAng):
-        phi = ang - np.arctan2(qNew[1], qNew[0])
-        revs = int(phi // ucAng)  # number of revolutions through unit cell
-        if revs % 2 == 0:  # if even
-            theta = phi - ucAng * revs
-        else:  # if odd
-            theta = ucAng - (phi - ucAng * revs)
-        r = np.sqrt(qNew[0] ** 2 + qNew[1] ** 2)
-        qNew[0] = r * np.cos(theta)  # cartesian coords in unit cell frame
-        qNew[1] = r * np.sin(theta)  # cartesian coords in unit cell frame
-        return qNew
+
+    def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(self,q):
+        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q,self.ang,self.ucAng)
 
 
 class BenderIdealSegmentedWithCap(BenderIdealSegmented):
@@ -852,12 +834,25 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
 
     # @profile()
     def is_Coord_Inside(self, q):
-        # wrapper for faster cython version
-        return cythonFunc.is_Coord_Inside_CYTHON_BenderIdealSegmentedWithCap(q, self.RIn_Ang, self.ap, self.ang,
-                                                                             self.rb, self.Lcap)
-
-
-
+        # q: particle's position in element frame
+        phi = fast_Arctan2(q)  # calling a fast numba version that is global
+        if phi < self.ang:  # if particle is inside bending angle region
+            if sqrt(q[1] ** 2 + q[2] ** 2) < self.ap:
+                return True
+            else:
+                return False
+        else:  # if outside bender's angle range
+            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
+                # eastward side
+                return True
+            else:
+                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (self.rb - self.ap < qTestx < self.rb + self.ap) and (
+                        self.Lcap > qTesty > 0):  # if on the westwards side
+                    return True
+                else:  # if not in either cap, then outside the bender
+                    return False
 
 
 class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
@@ -899,14 +894,17 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Fx_Func_Seg = None
         self.Fy_Func_Seg = None
         self.Fz_Func_Seg = None
+        self.Force_Func_Seg=None
         self.magnetic_Potential_Func_Seg = None
         self.Fx_Func_Cap = None
         self.Fy_Func_Cap = None
         self.Fz_Func_Cap = None
+        self.Force_Func_Cap=None
         self.magnetic_Potential_Func_Cap = None
         self.Fx_Func_Internal_Fringe = None
         self.Fy_Func_Internal_Fringe = None
         self.Fz_Func_Internal_Fringe = None
+        self.Force_Func_Internal_Fringe=None
         self.magnetic_Potential_Func_Fringe = None
         self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
         #constraint solver
@@ -1002,105 +1000,92 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        self.compile_Fast_Numba_Force_Function()
 
     def fill_Field_Func_Cap(self,dataCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataCap)
-        self.Fx_Func_Cap = lambda x, y, z: interpFx((x, -z, y))
-        self.Fy_Func_Cap = lambda x, y, z: interpFz((x, -z, y))
-        self.Fz_Func_Cap = lambda x, y, z: -interpFy((x, -z, y))
-        self.magnetic_Potential_Func_Cap = lambda x, y, z: interpV((x, -z, y))
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        def Force_Func_Cap_Wrap(x,y,z):
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return np.asarray([Fx,Fy,Fz])
+        self.Force_Func_Cap=Force_Func_Cap_Wrap
+        self.magnetic_Potential_Func_Cap = lambda x, y, z: interpV(x, -z, y)
 
     def fill_Force_Func_Internal_Fringe(self,dataFringe):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataFringe)
-        self.Fx_Func_Internal_Fringe = lambda x, y, z: interpFx((x, -z, y))
-        self.Fy_Func_Internal_Fringe = lambda x, y, z: interpFz((x, -z, y))
-        self.Fz_Func_Internal_Fringe = lambda x, y, z: -interpFy((x, -z, y))
-        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV((x, -z, y))
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        def force_Internal_Wrap(x,y,z):
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return np.asarray([Fx,Fy,Fz])
+        self.Force_Func_Internal_Fringe=force_Internal_Wrap
+        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(x, -z, y)
 
     def fill_Force_Func_Seg(self,dataSeg):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
-
-        self.Fx_Func_Seg = lambda x, y, z: interpFx((x, -z, y))
-        self.Fy_Func_Seg = lambda x, y, z: interpFz((x, -z, y))
-        self.Fz_Func_Seg = lambda x, y, z: -interpFy((x, -z, y))
-        self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV((x, -z, y))
-
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        def force_Seg_Wrap(x,y,z):
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return np.asarray([Fx,Fy,Fz])
+        self.Force_Func_Seg=force_Seg_Wrap
+        self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV(x, -z, y)
 
 
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        phi = fast_Arctan2(q)  # calling a fast numba version that is global
-        if phi < self.ang:  # if particle is inside bending angle region
-            revs = int((self.ang - phi) // self.ucAng)  # number of revolutions through unit cell
-            if revs == 0 or revs == 1:
-                position = 'FIRST'
-            elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
-                position = 'LAST'
-            else:
-                position = 'INNER'
-            if position == 'INNER':
-                quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-                self.F[0] = self.Fx_Func_Seg(*quc)
-                self.F[1] = self.Fy_Func_Seg(*quc)
-                self.F[2] = self.Fz_Func_Seg(*quc)
-                self.F = self.transform_Unit_Cell_Force_Into_Element_Frame(self.F,
-                                                                           q)  # transform unit cell coordinates into
-                # element frame
-            elif position == 'FIRST' or position == 'LAST':
-                self.F = self.force_First_And_Last(q, position)
-            else:
-                warnings.warn('PARTICLE IS OUTSIDE LATTICE')
-                self.F = np.zeros(3)
-        elif phi > self.ang:  # if outside bender's angle range
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
-                # eastward side
-                x, y, z = q
-                self.F[0] = self.Fx_Func_Cap(x, y, z)
-                self.F[1] = self.Fy_Func_Cap(x, y, z)
-                self.F[2] = self.Fz_Func_Cap(x, y, z)
-            else:
-                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (self.rb - self.ap < qTestx < self.rb + self.ap) and (
-                        self.Lcap > qTesty > 0):  # if on the westwards side
-                    x, y, z = qTestx, qTesty, q[2]
-                    y = -y
-                    self.F[0] = self.Fx_Func_Cap(x, y, z)
-                    self.F[1] = self.Fy_Func_Cap(x, y, z)
-                    self.F[2] = self.Fz_Func_Cap(x, y, z)
-                    Fx = self.F[0]
-                    Fy = self.F[1]
-                    self.F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
-                    self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
-                else:  # if not in either cap
-                    warnings.warn('PARTICLE IS OUTSIDE LATTICE')
-                    self.F = np.zeros(3)
-        return self.F.copy()*self.BpFact
+        return fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
+                self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
+                                                                          ,self.Force_Func_Cap)
+
+    def compile_Fast_Numba_Force_Function(self):
+        ang=self.ang
+        ucAng=self.ucAng
+        M_uc=self.M_uc
+        numMagnets=self.numMagnets
+        rb=self.rb
+        ap=self.ap
+        M_ang=self.M_ang
+        RIn_Ang=self.RIn_Ang
+        Lcap=self.Lcap
+        Force_Func_Seg=self.Force_Func_Seg
+        Force_Func_Internal_Fringe=self.Force_Func_Internal_Fringe
+        Force_Func_Cap=self.Force_Func_Cap
+        forceNumba = fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA
+        @numba.njit(numba.float64[:](numba.float64[:]))
+        def force_NUMBA_Wrapper(q):
+            return forceNumba(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
+                                     Force_Func_Internal_Fringe, Force_Func_Cap)
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3))
 
     def force_First_And_Last(self, q, position):
         qNew = q.copy()
+        F=np.zeros(3)
         if position == 'FIRST':
             qx = qNew[0]
             qy = qNew[1]
             qNew[0] = self.M_ang[0, 0] * qx + self.M_ang[0, 1] * qy
             qNew[1] = self.M_ang[1, 0] * qx + self.M_ang[1, 1] * qy
-
-            self.F[0] = self.Fx_Func_Internal_Fringe(*qNew)
-            self.F[1] = self.Fy_Func_Internal_Fringe(*qNew)
-            self.F[2] = self.Fz_Func_Internal_Fringe(*qNew)
-
-            Fx = self.F[0]
-            Fy = self.F[1]
-            self.F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
-            self.F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
+            F[0] = self.Fx_Func_Internal_Fringe(*qNew)
+            F[1] = self.Fy_Func_Internal_Fringe(*qNew)
+            F[2] = self.Fz_Func_Internal_Fringe(*qNew)
+            Fx = F[0]
+            Fy = F[1]
+            F[0] = self.M_ang[0, 0] * Fx + self.M_ang[0, 1] * Fy
+            F[1] = self.M_ang[1, 0] * Fx + self.M_ang[1, 1] * Fy
         elif position == 'LAST':
-            self.F[0] = self.Fx_Func_Internal_Fringe(*qNew)
-            self.F[1] = self.Fy_Func_Internal_Fringe(*qNew)
-            self.F[2] = self.Fz_Func_Internal_Fringe(*qNew)
+            F[0] = self.Fx_Func_Internal_Fringe(*qNew)
+            F[1] = self.Fy_Func_Internal_Fringe(*qNew)
+            F[2] = self.Fz_Func_Internal_Fringe(*qNew)
         else:
-            raise Exception('INVALID POSITION SUPPLIED')
-        return self.F.copy()
+            F=np.asarray([np.nan])
+        return F
 
     def magnetic_Potential(self, q):
         # magnetic potential at point q in element frame
@@ -1122,7 +1107,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 V0 = self.magnetic_Potential_First_And_Last(q, position)
             else:
                 warnings.warn('PARTICLE IS OUTSIDE LATTICE')
-                self.F = np.zeros(3)
+                V0=np.nan
         elif phi > self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
                 # eastward side
@@ -1138,8 +1123,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                     y = -y
                     V0 = self.magnetic_Potential_Func_Cap(x, y, z)
                 else:  # if not in either cap
-                    warnings.warn('PARTICLE IS OUTSIDE LATTICE')
-                    self.F = np.zeros(3)
+                    V0=np.nan
         return V0*self.BpFact
 
     def magnetic_Potential_First_And_Last(self, q, position):
@@ -1155,7 +1139,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return V0
-#,rp,Lm,fringeFrac=2.0
 
 class HalbachLensSim(LensIdeal):
     def __init__(self,PTL, rp,L,apFrac):
@@ -1176,13 +1159,11 @@ class HalbachLensSim(LensIdeal):
 
         self.data2D = None
         self.data3D = None
-        self.Fx_Func_Fringe = None
-        self.Fy_Func_Fringe = None
-        self.Fz_Func_Fringe = None
+        self.force_Func_Outer=None #function that returns 3D vector of force values towards the end of the magnet, if
+        #the magent is short, then it returns the values for one half, otherwise symmetry is used  to model interior as
+        #2D
         self.magnetic_Potential_Func_Fringe = None
-        self.Fx_Func_Inner = None
-        self.Fy_Func_Inner = None
-        self.Fz_Func_Inner = None
+        self.force_Func_Inner=None
         self.magnetic_Potential_Func_Inner = None
         self.BpFact = 1.0 #factor to multiply field values by for tunability
         if self.L is not None:
@@ -1192,6 +1173,7 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
+        print('include point seperation system')
         #todo: explain reasoning here
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         self.Lo=self.L
@@ -1228,15 +1210,20 @@ class HalbachLensSim(LensIdeal):
         BNorm = lens.BNorm(volumeCoords)
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
+        self.compile_Fast_Numba_Force_Function()
 
 
     def fill_Field_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
         # wrap the function in a more convenietly accesed function
-        self.Fx_Func_Fringe = lambda x, y, z: interpFz((-z, y, x))
-        self.Fy_Func_Fringe = lambda x, y, z: interpFy((-z, y, x))
-        self.Fz_Func_Fringe = lambda x, y, z: -interpFx((-z, y, x))
-        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV((-z, y, x))
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        def force_Func_Outer(x,y,z):
+            Fx=interpFz(-z, y,x)
+            Fy=interpFy(-z, y,x)
+            Fz=-interpFx(-z, y,x)
+            return np.asarray([Fx,Fy,Fz])
+        self.force_Func_Outer=force_Func_Outer
+        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(-z, y, x)
 
     def fill_Field_Func_2D(self):
         #Data is provided for lens that points in the positive z, so the force functions need to be rotated
@@ -1255,13 +1242,21 @@ class HalbachLensSim(LensIdeal):
         B0Matrix[xIndices, yIndices] = self.data2D[:, 4]
 
 
-        interpX = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradxMatrix,kx=1, ky=1)
-        interpY = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradyMatrix,kx=1, ky=1)
-        interpV = spi.RectBivariateSpline(xArr, yArr, self.PTL.u0*B0Matrix,kx=1, ky=1)
-        self.Fx_Func_Inner = lambda x, y, z: 0.0
-        self.Fy_Func_Inner = lambda x, y, z: interpY(-z, y)[0][0]
-        self.Fz_Func_Inner = lambda x, y, z: -interpX(-z, y)[0][0]
-        self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)[0][0]
+        # interpX = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradxMatrix,kx=1, ky=1)
+        # interpY = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradyMatrix,kx=1, ky=1)
+        # interpV = spi.RectBivariateSpline(xArr, yArr, self.PTL.u0*B0Matrix,kx=1, ky=1)
+
+        interpFx=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradxMatrix,xArr,yArr)
+        interpFy=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradyMatrix,xArr,yArr)
+        interpV=generate_2DInterp_Function_NUMBA(self.PTL.u0*B0Matrix,xArr,yArr)
+
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        def force_Func_Inner(x,y,z):
+            Fy=interpFy(-z, y) #model is rotated in particle tracing frame
+            Fz=-interpFx(-z, y)
+            return np.asarray([0.0,Fy,Fz])
+        self.force_Func_Inner=force_Func_Inner
+        self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)#[0][0]
     def set_BpFact(self,BpFact):
         self.BpFact=BpFact
     def magnetic_Potential(self, q):
@@ -1270,39 +1265,31 @@ class HalbachLensSim(LensIdeal):
             x = self.Lcap - x
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         elif self.Lcap < q[0] <= self.L - self.Lcap:
-            V0 = self.magnetic_Potential_Func_Inner(*q)
+            V0 = self.magnetic_Potential_Func_Inner(x,y,z)
         elif q[0] <= self.L: #this one is tricky with the scaling
             x=self.Lcap-(self.L-x)
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         else:
-            print('PARTICLE IS OUTSIDE ELEMENT')
-            print('position is', q)
             V0=0
-        return V0*self.BpFact
+        return V0
+
+
 
     def force(self, q):
-        #todo: why is the self.F being used here?
-        if q[0] <= self.Lcap:
-            x,y,z=q
-            x = self.Lcap - x
-            self.F[0] = -self.Fx_Func_Fringe(x, y, z)
-            self.F[1] = self.Fy_Func_Fringe(x, y, z)
-            self.F[2] = self.Fz_Func_Fringe(x, y, z)
-        elif self.Lcap < q[0] <= self.L - self.Lcap:
-            self.F[0] = 0.0
-            self.F[1] = self.Fy_Func_Inner(*q)
-            self.F[2] = self.Fz_Func_Inner(*q)
-        elif q[0] <= self.L: #this one is tricky with the scaling
-            x, y, z = q
-            x=self.Lcap-(self.L-x)
-            self.F[0] = self.Fx_Func_Fringe(x,y,z)
-            self.F[1] = self.Fy_Func_Fringe(x,y,z)
-            self.F[2] = self.Fz_Func_Fringe(x,y,z)
-        else:
-            print('PARTICLE IS OUTSIDE ELEMENT')
-            print('position is', q)
-            self.F = np.zeros(3)
-        return self.F.copy()*self.BpFact
+        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.force_Func_Inner
+                                                                  ,self.force_Func_Outer)
+        return F
+    def compile_Fast_Numba_Force_Function(self):
+        forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
+        Lcap=self.Lcap
+        L=self.L
+        force_Func_Inner=self.force_Func_Inner
+        force_Func_Outer=self.force_Func_Outer
+        @numba.njit(numba.float64[:](numba.float64[:]))
+        def force_NUMBA_Wrapper(q):
+            return forceNumba(q,Lcap,L,force_Func_Inner,force_Func_Outer)
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
 class BumpsLensSimWithCaps(HalbachLensSim):
     def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap,sigma):

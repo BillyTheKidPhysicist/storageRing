@@ -70,8 +70,8 @@ class SwarmTracer:
         if sameSeed==True:
             np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
         return swarm
-    def initalize_PseudoRandom_Swarm_In_Phase_Space(self, qyMax, qzMax, pxMax, pyMax, pzMax, num, upperSymmetry=False, sameSeed=True,
-                                              cornerPoints=True, apetureRadius=None):
+    def initalize_PseudoRandom_Swarm_In_Phase_Space(self, qTMax, pTMax, pxMax, num, upperSymmetry=False, sameSeed=True,
+                                              cornerPoints=False, circular=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
@@ -86,20 +86,16 @@ class SwarmTracer:
         # upperSymmetry: wether to exploit lattice symmetry by only using particles in upper half plane
         # sameSeed: wether to use the same seed eveythime in the nump random generator, the number 42, or a new one
         # cornerPonints: wether to add points at the corner of the hypercube
-        # cylindericalApeture: The size of the cylinderical apeture to trim points to. if None don't trim points
-        #return: swarm: a populated swarm object
+        # circular: Wether to model the transvers components as circular, which they are
 
 
-        bounds=np.asarray([[-qyMax,qyMax],[-qzMax,qzMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
-                           [-pyMax,pyMax],[-pzMax,pzMax]])
+        bounds=np.asarray([[-qTMax,qTMax],[-qTMax,qTMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
+                           [-pTMax,pTMax],[-pTMax,pTMax]])
+        if circular is True:
+            frac=(np.pi/4)**2 #the ratio of the are of the circle to the cross section. There is one
+            #factor for momentum and one for position
+            num=int(num/frac)
 
-        if apetureRadius is not None:
-            #one can estimate how many particle will be removed by using the cylinderical apeture. Then add this many
-            #back to the total number to try and hit the desired amount. This probably only works if the apeture is smaller
-            #than qyMax and qzMax
-            frac=np.pi*apetureRadius**2 /(2*qyMax*2*qzMax) #the ratio of the are of the circle to the cross section
-            if frac <1: #only add more if the apeture reduces the total amount
-                num=int(num/frac)
 
         if sameSeed==True:
             np.random.seed(42)
@@ -119,11 +115,8 @@ class SwarmTracer:
                 raise Exception('adding particles at the corners of the hypercube exceeded total amount of allowed'
                                 'particles')
         sampler=skopt.sampler.Sobol()
-        samples=sampler.generate(bounds,num)
-        #jitter coordinates to remove patterns and use them to make particles to add to the swarm
-        for sample in samples:
-            y,z,px,py,pz=sample
-            Xi=np.asarray([y,z,px,py,pz])
+        samples=np.asarray(sampler.generate(bounds,num))
+        for Xi in samples:
             for i in range(Xi.shape[0]): #jitter the sequence to help overcome patterns
                 Xi[i]+=(np.random.rand() - .5) * (bounds[i][1] - bounds[i][0]) / 50.0 #seemed like a good value
                 if Xi[i]<bounds[i][0]:
@@ -132,9 +125,9 @@ class SwarmTracer:
                     Xi[i] = bounds[i][1]-(Xi[i]-bounds[i][1])
             q = np.append(x, Xi[:2])
             p = Xi[2:]
-            if apetureRadius is not None:
-                y,z=Xi[:2]
-                if np.sqrt(y**2+z**2)<apetureRadius:
+            if circular==True:
+                y,z,py,pz=Xi[[0,1,3,4]]
+                if np.sqrt(y**2+z**2)<qTMax and np.sqrt(py**2+pz**2)<pTMax:
                     swarm.add_Particle(qi=q, pi=p)
                 else:
                     pass

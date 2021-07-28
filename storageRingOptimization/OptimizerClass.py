@@ -80,8 +80,6 @@ class LatticeOptimizer:
         self.injectorBounds.append((LiMin,LiMin+1.0)) #Image distance, Li
         self.injectorBounds.append((-self.lattice.combiner.Lo/2,self.lattice.combiner.Lo/2)) #focus offset inside the combiner, LOffset. Keep in mind
         #the signs!!!
-        print('injector bounds')
-        print(self.injectorBounds)
     def update_Lattice(self,X):
         #Update the various paremters in the lattice and injections that are variable
         #X: lattice parameters in the form of an iterable

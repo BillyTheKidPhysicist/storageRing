@@ -2,6 +2,7 @@ import numpy.linalg as npl
 import numba
 import time
 import numpy as np
+import math
 from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
@@ -17,8 +18,18 @@ def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,
     return rb
 
 
+@numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
+def fast_qNew(q,F,p,h):
+    return q+p*h+.5*F*h**2
 
-#this class does the work of tracing the particles through the lattice with timestepping algorithms
+@numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
+def fast_pNew(p,F,F_n,h):
+    return p+.5*(F+F_n)*h
+
+
+#this class does the work of tracing the particles through the lattice with timestepping algorithms.
+#it utilizes fast numba functions that are compiled and saved at the moment that the lattice is passed. If the lattice
+#is changed, then the particle tracer needs to be updated.
 
 class ParticleTracer:
     def __init__(self,lattice):
@@ -26,10 +37,11 @@ class ParticleTracer:
         self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=lattice.totalLength
 
+        self.numbaMultiStepCache=[]
+        self.generate_Multi_Step_Cache()
 
         self.T=None #total time elapsed
         self.h=None #step size
-
 
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step
@@ -86,24 +98,24 @@ class ParticleTracer:
         self.fastMode=fastMode
         self.h=h
         self.T0=T0
-
         self.initialize()
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
             return particle
         self.time_Step_Loop()
+        self.forceLast=None #reset last force to zero
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
         return self.particle
+    def update(self):
+        #call after changing some parameter of the lattice to reflect the change here.
+        #todo: implement
+        pass
     def time_Step_Loop(self):
         while (True):
-            # self.currentEl.calculate_Steps_To_Collision(self.qEl,self.pEl,self.h)
-            # if self.T>0:
-            #     self.multi_Step_Verlet(10000)
-            #     break
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
@@ -112,29 +124,65 @@ class ParticleTracer:
                 if self.particle.clipped==True:
                     break
             else:
-                self.time_Step_Verlet()
-                if self.particle.clipped==True:
+                if self.fastMode==False or self.numbaMultiStepCache[self.currentEl.index] is None: #either recording data at each step
+                    #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
+                    self.time_Step_Verlet()
+                    if self.fastMode is False: #if false, take time to log parameters
+                        self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+                else:
+                    self.multi_Step_Verlet()
+                if self.particle.clipped == True:
                     break
-                if self.fastMode==False:
-                    self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 self.T+=self.h
                 self.particle.T=self.T
-    def multi_Step_Verlet(self,steps):
-        for _ in range(steps):
-            qEl = self.qEl  # q old or q sub n
-            pEl = self.pEl  # p old or p sub n
-            F = self.forceLast
-            # a = F # acceleration old or acceleration sub n
-            qEl_n = self.fast_qNew(qEl, F, pEl, self.h)  # q new or q sub n+1
-            F_n = self.currentEl.force(qEl_n)
-            # a_n = F_n  # acceleration new or acceleration sub n+1
-            pEl_n = self.fast_pNew(pEl, F, F_n, self.h)
-            self.qEl = qEl_n
-            self.pEl = pEl_n
-            self.forceLast = F_n  # record the force to be recycled
-            self.T += self.h
+    def multi_Step_Verlet(self):
+        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h)
+        qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
+        if particleOutside is True:
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n) #it doesn't quite make sense
+            #that I'm doing it like this. The outside the element system could be revamped.
+    def generate_Multi_Step_Cache(self):
+        self.numbaMultiStepCache = []
+        for el in self.latticeElementList:
+            if el.fast_Numba_Force_Function is None:
+                self.numbaMultiStepCache.append(None)
+            else:
+                func = self.generate_Multi_Step_Verlet(el.fast_Numba_Force_Function)
+                self.numbaMultiStepCache.append(func)
 
 
+    def generate_Multi_Step_Verlet(self,forceFunc):
+        func=self._multi_Step_Verlet
+        @numba.jit()
+        def wrap(qEl,pEl,T,T0,h):
+            return func(qEl,pEl,T,T0,h,forceFunc)
+        test=np.empty(3)
+        test[:]=np.nan
+        wrap(test,test,0.0,0.0,0.0) #force numba to compile
+        return wrap
+
+    @staticmethod
+    @numba.njit()
+    def _multi_Step_Verlet(qEl,pEl,T,T0,h,force):
+        F=force(qEl)
+        if math.isnan(F[0]) == True:
+            particleOutside = True
+            return qEl, qEl, pEl, T, particleOutside
+        particleOutside=False
+        while(True):
+            if T>=T0:
+                break
+            qEl_n = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
+            F_n = force(qEl_n)
+            if math.isnan(F_n[0])==True:
+                particleOutside=True
+                return qEl_n,qEl,pEl,T,particleOutside
+            pEl_n = pEl+.5*(F+F_n)*h
+            qEl = qEl_n
+            pEl = pEl_n
+            F = F_n  # record the force to be recycled
+            T += h
+        return qEl_n,qEl,pEl,T,particleOutside
     def handle_Drift_Region(self):
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
@@ -211,15 +259,7 @@ class ParticleTracer:
 
 
 
-    @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
-    def fast_qNew(q,F,p,h):
-        return q+p*h+.5*F*h**2
 
-    @staticmethod
-    @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
-    def fast_pNew(p,F,F_n,h):
-        return p+.5*(F+F_n)*h
 
     def time_Step_Verlet(self):
         #the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
@@ -233,48 +273,42 @@ class ParticleTracer:
         else: #the last force is invalid because the particle is at a new position
             F=self.currentEl.force(qEl)
         #a = F # acceleration old or acceleration sub n
-        qEl_n=self.fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
-        el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
-        #not always checking if the particle is inside the element by looking at how far away it is from and edge and
-        #calculating when I should check again the soonest
-        exitLoop=self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el)  #check if element has changed.
-        if exitLoop==True:
-            return
+        qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
+        # el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
+        # #not always checking if the particle is inside the element by looking at how far away it is from and edge and
+        # #calculating when I should check again the soonest
         F_n=self.currentEl.force(qEl_n)
+        if np.isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n)  #check if element has changed.
+            return
         #a_n = F_n  # acceleration new or acceleration sub n+1
-        pEl_n=self.fast_pNew(pEl,F,F_n,self.h)
+        pEl_n=fast_pNew(pEl,F,F_n,self.h)
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
-    def check_If_Element_Has_Changed_And_Handle_Edge_Event(self, el):
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
         #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
         #None. Most of the time this return false and the leapfrog algorithm continues
         #el: The element to check against
-        exitLoop=False
+        el=self.which_Element(qEl)
         if el is None: #if the particle is outside the lattice, the simulation is over
             self.particle.clipped = True
-            exitLoop=True
-            return exitLoop
         elif el is not self.currentEl:
-            qLab,pLab=self.handle_Element_Edge() #just over the edge of the next element
-            #it's possible that the particle is now outside the lattice, so check which element it's in
+            qLab,pLab=self.handle_Element_Edge() #move the particle just over the edge of the next element.
+            #it's possible that the particle is now outside the lattice after moving, so check which element it's in.
             if self.which_Element_Slow(qLab) is None:
-                exitLoop=True
                 self.particle.clipped=True
-                return exitLoop
             self.particle.cumulativeLength += self.currentEl.Lo #add the previous orbit length
             self.currentEl = el
             self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab) #at the beginning of the next element
             self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab) #at the beginning of the next
             #element
             self.elHasChanged = True
-            exitLoop=True
-        return exitLoop
 
     def which_Element(self,qel):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
