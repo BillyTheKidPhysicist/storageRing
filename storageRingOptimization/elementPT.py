@@ -367,7 +367,7 @@ class BenderIdeal(Element):
         phi = fast_Arctan2(q)
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
-        if phi < self.ang:  # if particle is in bending segment
+        if phi <=self.ang:  # if particle is in bending segment
             rh = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.rb  # horizontal radius
             r = np.sqrt(rh ** 2 + q[2] ** 2)  # particle displacement from center of apeture
             if r > self.ap:
@@ -503,7 +503,7 @@ class CombinerIdeal(Element):
 
     def is_Coord_Inside(self, q):
         # q: coordinate to test in element's frame
-        if not -self.apz < q[2] < self.apz:  # if outside the z apeture (vertical)
+        if not -self.apz <= q[2] <= self.apz:  # if outside the z apeture (vertical)
             return False
         elif 0 <= q[0] <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture

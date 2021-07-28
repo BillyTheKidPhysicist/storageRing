@@ -48,7 +48,7 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
     phi = np.arctan2(q[1], q[0])
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
-    if phi < ang:  # if particle is inside bending angle region
+    if phi <= ang:  # if particle is inside bending angle region
         if np.sqrt((np.sqrt(q[0] ** 2 + q[1] ** 2) - rb) ** 2 + q[2] ** 2) < ap:
             revs = int((ang - phi) // ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
@@ -151,11 +151,11 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
     # I believe there are some redundancies here that could be trimmed to save time.
     qNew = q.copy()
     if searchIsCoordInside == True:
-        if not -apz < q[2] < apz:  # if outside the z apeture (vertical)
+        if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
             return np.asarray([np.nan])
         elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
-            if -apL < q[1] < apR:  # if inside the y (width) apeture
+            if -apL <= q[1] <= apR:  # if inside the y (width) apeture
                 pass
             else:
                 return np.asarray([np.nan])

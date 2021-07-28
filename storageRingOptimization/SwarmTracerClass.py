@@ -491,7 +491,6 @@ class SwarmTracer:
             swarmNew=swarm.copy()
         else:
             swarmNew=swarm
-
         if parallel==True:
             def func(particle):
                 return self.particleTracer.trace(particle, h, T,fastMode=fastMode)

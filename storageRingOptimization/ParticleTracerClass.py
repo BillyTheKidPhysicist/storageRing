@@ -71,7 +71,7 @@ class ParticleTracer:
         for el in self.latticeElementList:
             if dl>el.Lo/3.0: #have at least a few steps in each element
                 raise Exception('STEP SIZE TOO LARGE')
-        self.currentEl = self.which_Element_Slow(self.particle.q)
+        self.currentEl = self.which_Element_Lab_Coords(self.particle.q)
         self.particle.currentEl=self.currentEl
         if self.currentEl is None:
             self.particle.clipped=True
@@ -288,82 +288,42 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
-    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl):
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
         #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
         #None. Most of the time this return false and the leapfrog algorithm continues
         #el: The element to check against
-        el=self.which_Element(qEl)
-        if el is None: #if the particle is outside the lattice, the simulation is over
-            self.particle.clipped = True
-        elif el is not self.currentEl:
-            qLab,pLab=self.handle_Element_Edge() #move the particle just over the edge of the next element.
-            #it's possible that the particle is now outside the lattice after moving, so check which element it's in.
-            if self.which_Element_Slow(qLab) is None:
-                self.particle.clipped=True
-            self.particle.cumulativeLength += self.currentEl.Lo #add the previous orbit length
-            self.currentEl = el
-            self.qEl=self.currentEl.transform_Lab_Coords_Into_Element_Frame(qLab) #at the beginning of the next element
-            self.pEl=self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pLab) #at the beginning of the next
-            #element
-            self.elHasChanged = True
 
-    def which_Element(self,qel):
+        #todo: there are some issues here with element edges
+        el=self.which_Element(qEl_n)
+        if el is None: #if outside the lattice
+            self.particle.clipped = True
+        elif el is not self.currentEl: #element has changed
+            self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
+            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n)
+            pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
+            self.currentEl=el
+            self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
+            self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
+            # element
+            self.elHasChanged = True
+    def which_Element_Lab_Coords(self,qLab):
+        for el in self.latticeElementList:
+            if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:
+                return el
+        return None
+    def which_Element(self,qEl):
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
-        isInside=self.currentEl.is_Coord_Inside(qel)
+        isInside=self.currentEl.is_Coord_Inside(qEl)
         if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
             #with shapely
             return self.currentEl
-        else: #if not defintely inside current element, search everywhere
-            q=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
-            el = self.which_Element_Slow(q)
-            return el
-
-
-    def which_Element_Shapely(self,q):
-        # Use shapely to find where the element is. If the object is exaclty on the edge, this will return None. This
-        #is slower than using simple geometry and should be avoided. It does not account for vertical (z) apetures
-        point = Point([q[0], q[1]])
-        for el in self.latticeElementList:
-            if el.SO.contains(point) == True:
-                return el  # return the element the particle is in
-        return None #if no element found, or particle exactly on an edge
-    def which_Element_Slow(self,q):
-        #find which element the particle is in. First try with shapely. If that fails, maybe the particle landed right on
-        #or between two element. So try scooting the particle on a tiny bit and try again.
-        el=self.which_Element_Shapely(q)
-        if el is not None:
-            qel = el.transform_Lab_Coords_Into_Element_Frame(q)
-            isInside = el.is_Coord_Inside(qel)
-            if isInside==True:
-                return el
-        #try scooting the particle along a tiny amount in case it landed in between elements, which is very rare
-        #but can happen. First compute roughly the center of the ring.
-        #add up all the beginnings and end of elements and average them
-        center=np.zeros(2)
-        for el in self.latticeElementList: #find the geometric center of the lattice. This won't be it exactly, but should be
-            #qualitatively correct
-            center+=el.r1[:-1]+el.r2[:-1]
-        center=center/(2 * len(self.latticeElementList))
-        #relative position vector
-        r=center-q[:-1]
-        #now rotate this and add the difference to our original vector. rotate by a small amount
-        dphi=-1e-9 #need a clock wise rotation. 1 nanoradian
-        R=np.array([[np.cos(dphi),-np.sin(dphi)],[np.sin(dphi),np.cos(dphi)]])
-        dr=R@(q[:-1]-r)-(q[:-1]-r)
-        #add that to the position and try once more
-        qNew=q.copy()
-        qNew[:-1]=qNew[:-1]+dr
-        el=self.which_Element_Shapely(qNew)
-        if el is not None:
-            qel = el.transform_Lab_Coords_Into_Element_Frame(qNew)
-            isInside = el.is_Coord_Inside(qel)
-            if isInside == True:
-                return el
-            else:
-                return None
-        else:
+        else: #if not defintely inside current element, search everywhere.
+            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+            for el in self.latticeElementList:
+                if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
+                    return el
             return None
