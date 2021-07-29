@@ -941,13 +941,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def fill_Params_Post_Constrained(self):
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
-        stepSize=1e-3 #target step size for spatial field interpolate
+        spatialStepSize=1e-3 #target step size for spatial field interpolate
 
         #fill periodic segment data
-        numXY=2*(int(2*self.rp/stepSize)//2)+1 #to ensure it is odd
-        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.rp)/stepSize)//2)+1
-        xyArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)
-        zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
+        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
+        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
+        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
+        zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
         coords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3)
         coords[:,0]+=self.rb #add the bending radius to the coords
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, numLenses=3)
@@ -962,14 +962,14 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=3,inputOnly=True)
 
-        x1=-(self.rp+1.5*(self.rb-self.rp)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
-        x2=self.rp+1e-6
-        numX=2*(int((x2-x1)/stepSize)//2)+1
-        numY=2*(int(2*self.rp//stepSize)//2)+1
-        numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.rp)/stepSize)//2)+1
+        x1=-(self.ap+1.5*(self.rb-self.ap)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
+        x2=self.ap+1e-6
+        numX=2*(int((x2-x1)/spatialStepSize)//2)+1
+        numY=2*(int(2*self.ap//spatialStepSize)//2)+1
+        numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
         xArr=np.linspace(x1,x2,num=numX)+self.rb
-        yArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numY)
-        zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
+        yArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numY)
+        zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
 
         coords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
@@ -980,9 +980,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         #fill the first magnet and its fringe field
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=3,inputOnly=True)
-        numXY=2*(int(2*self.rp/stepSize)//2)+1
-        numZ=2*(int(self.Lcap/stepSize)//2)+1
-        xyArr=np.linspace(-self.rp-1e-6,self.rp+1e-6,num=numXY)
+        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1
+        numZ=2*(int(self.Lcap/spatialStepSize)//2)+1
+        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
         zArr=np.linspace(1e-6,-self.Lcap-1e-6,num=numZ)
         coords = np.asarray(np.meshgrid(xyArr,xyArr, zArr)).T.reshape(-1, 3)
         coords[:,0]+=self.rb
@@ -1155,8 +1155,9 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
-        print('include point seperation system')
-        #todo: explain reasoning here
+        spatialStepSize=1e-3 #target step size in space for spatial interpolating grid
+
+
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         self.Lo=self.L
         self.lengthEffective=min(self.fringeFracInnerMin*self.rp,
@@ -1168,8 +1169,8 @@ class HalbachLensSim(LensIdeal):
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
 
 
-        numxy=25 #number of xy data points
-        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numxy) #add a little extra so the interp works correctly
+        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
+        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY) #add a little extra so the interp works correctly
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
             planeCoords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
@@ -1181,8 +1182,8 @@ class HalbachLensSim(LensIdeal):
 
         zMin=0
         zMax=self.Lcap
-        numz=30 #number of z data points
-        zArr=np.linspace(zMin-1e-6,zMax+1e-6,num=numz) #add a little extra so interp works as expected
+        numZ=2*(int(2*(zMax-zMin)/spatialStepSize)//2)+1 #to ensure it is odd
+        zArr=np.linspace(zMin-1e-6,zMax+1e-6,num=numZ) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and

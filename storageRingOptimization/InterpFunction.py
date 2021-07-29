@@ -34,7 +34,7 @@ def generate_3DInterp_Function_NUMBA(v,xData,yData,zData):
             c1 = c01*(1-yd) + c11*yd
             c = c0*(1-zd) + c1*zd
         else:
-            c = np.nan
+            raise Exception('out of bounds')
         return c
     return interp3D
 
@@ -62,6 +62,6 @@ def generate_2DInterp_Function_NUMBA(v,xData,yData):
             c10 = v_c[Y*x0+y1]*(1-xd) + v_c[Y*x1+y1]*xd
             c = c00*(1-yd) + c10*yd
         else:
-            c = np.nan
+            raise Exception('out of bounds')
         return c
     return interp2D
