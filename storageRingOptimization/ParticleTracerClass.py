@@ -314,7 +314,7 @@ class ParticleTracer:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:
                 return el
         return None
-    def which_Element(self,qEl):
+    def which_Element(self,qEl): #.134
         #find which element the particle is in, but check the current element first to see if it's there ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         isInside=self.currentEl.is_Coord_Inside(qEl)
@@ -322,8 +322,18 @@ class ParticleTracer:
             #with shapely
             return self.currentEl
         else: #if not defintely inside current element, search everywhere.
+            #first, start with the element that follows the one that the particle is currently in to save time because
+            #it's likely there
             qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+            if self.currentEl.index+1>=len(self.latticeElementList):
+                nextEl=self.latticeElementList[0]
+            else:
+                nextEl=self.latticeElementList[self.currentEl.index+1]
+            if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True:
+                return nextEl
+
             for el in self.latticeElementList:
-                if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
-                    return el
+                if el is not self.currentEl and el is not nextEl: #don't waste rechecking current element or next element
+                    if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
+                        return el
             return None

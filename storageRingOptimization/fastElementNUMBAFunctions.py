@@ -28,6 +28,7 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, M_uc, ucAng):
 
 @numba.njit(numba.float64[:](numba.float64[:],numba.float64,numba.float64))
 def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
+    quc=np.empty(3)
     phi = ang - np.arctan2(q[1], q[0])
     revs = int(phi // ucAng)  # number of revolutions through unit cell
     if revs % 2 == 0:  # if even
@@ -37,7 +38,10 @@ def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
     r = np.sqrt(q[0] ** 2 + q[1] ** 2)
     x = r * np.cos(theta)  # cartesian coords in unit cell frame
     y = r * np.sin(theta)  # cartesian coords in unit cell frame
-    return np.asarray([x,y,q[2]])
+    quc[0]=x
+    quc[1]=y
+    quc[2]=q[2]
+    return quc
 
 
 @numba.njit()
@@ -114,7 +118,8 @@ def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
     #L: length of lens
     #ap: size of aperture, or bore of vacuum tube, of lens
     #K: the 'spring' constant of the lens
-    F=np.zeros(3)
+    F=np.empty(3)
+    F[0]=0
     if 0 <= q[0] <= L and q[1] ** 2 + q[2] ** 2 < ap**2:
         F[1] = -K * q[1]
         F[2] = -K * q[2]
@@ -144,12 +149,12 @@ def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
 
 
 
-
 @numba.njit()
 def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
-    qNew = q.copy()
+    
+
     if searchIsCoordInside == True:
         if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
             return np.asarray([np.nan])
@@ -170,21 +175,21 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
                 pass
             else:
                 return np.asarray([np.nan])
-
+    x,y,z=q
     xFact = 1  # value to modify the force based on symmetry
     zFact = 1
-    if 0 <= qNew[0] <= (Lm / 2 + space):  # if the particle is in the first half of the magnet
-        if qNew[2] < 0:  # if particle is in the lower plane
-            qNew[2] = -qNew[2]  # flip position to upper plane
+    if 0 <= x <= (Lm / 2 + space):  # if the particle is in the first half of the magnet
+        if z < 0:  # if particle is in the lower plane
+            z = -z  # flip position to upper plane
             zFact = -1  # z force is opposite in lower half
-    elif (Lm / 2 + space) < qNew[0]:  # if the particle is in the last half of the magnet
-        qNew[0] = (Lm / 2 + space) - (
-                qNew[0] - (Lm / 2 + space))  # use the reflection of the particle
+    elif (Lm / 2 + space) < x:  # if the particle is in the last half of the magnet
+        x = (Lm / 2 + space) - (
+                x - (Lm / 2 + space))  # use the reflection of the particle
         xFact = -1  # x force is opposite in back plane
-        if qNew[2] < 0:  # if in the lower plane, need to use symmetry
-            qNew[2] = -qNew[2]
+        if z < 0:  # if in the lower plane, need to use symmetry
+            z = -z
             zFact = -1  # z force is opposite in lower half
-    F=force_Func(qNew[0],qNew[1],qNew[2])
+    F=force_Func(x,y,z)
     F[0] = xFact * F[0]
     F[2] = zFact * F[2]
     return F

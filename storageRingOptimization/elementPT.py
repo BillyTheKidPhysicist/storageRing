@@ -564,10 +564,11 @@ class CombinerSim(CombinerIdeal):
         interpFx,interpFy, interpFz, funcV = self.make_Interp_Functions(self.data)
         @numba.njit()
         def force_Func(x,y,z):
-            Fx=interpFx(x,y,z)
-            Fy=interpFy(x,y,z)
-            Fz=interpFz(x,y,z)
-            return np.asarray([Fx,Fy,Fz])
+            F=np.empty(3)
+            F[0]=interpFx(x,y,z)
+            F[1]=interpFy(x,y,z)
+            F[2]=interpFz(x,y,z)
+            return F
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
 
@@ -1006,10 +1007,11 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataCap)
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def Force_Func_Cap_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
-            return np.asarray([Fx,Fy,Fz])
+            F=np.empty(3)
+            F[0]=interpFx(x, -z, y)
+            F[1]=interpFz(x, -z, y)
+            F[2]=-interpFy(x, -z, y)
+            return F
         self.Force_Func_Cap=Force_Func_Cap_Wrap
         self.magnetic_Potential_Func_Cap = lambda x, y, z: interpV(x, -z, y)
 
@@ -1017,10 +1019,11 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataFringe)
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Internal_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
-            return np.asarray([Fx,Fy,Fz])
+            F=np.empty(3)
+            F[0]=interpFx(x, -z, y)
+            F[1]=interpFz(x, -z, y)
+            F[2]=-interpFy(x, -z, y)
+            return F
         self.Force_Func_Internal_Fringe=force_Internal_Wrap
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(x, -z, y)
 
@@ -1028,10 +1031,11 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Seg_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
-            return np.asarray([Fx,Fy,Fz])
+            F=np.empty(3)
+            F[0]=interpFx(x, -z, y)
+            F[1]=interpFz(x, -z, y)
+            F[2]=-interpFy(x, -z, y)
+            return F
         self.Force_Func_Seg=force_Seg_Wrap
         self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV(x, -z, y)
 
@@ -1196,10 +1200,11 @@ class HalbachLensSim(LensIdeal):
         # wrap the function in a more convenietly accesed function
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Func_Outer(x,y,z):
-            Fx=interpFz(-z, y,x)
-            Fy=interpFy(-z, y,x)
-            Fz=-interpFx(-z, y,x)
-            return np.asarray([Fx,Fy,Fz])
+            F=np.empty(3)
+            F[0]=interpFz(-z, y,x)
+            F[1]=interpFy(-z, y,x)
+            F[2]=-interpFx(-z, y,x)
+            return F
         self.force_Func_Outer=force_Func_Outer
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(-z, y, x)
 
@@ -1230,9 +1235,11 @@ class HalbachLensSim(LensIdeal):
 
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Func_Inner(x,y,z):
-            Fy=interpFy(-z, y) #model is rotated in particle tracing frame
-            Fz=-interpFx(-z, y)
-            return np.asarray([0.0,Fy,Fz])
+            F=np.empty(3)
+            F[0]=0.0
+            F[1]=interpFy(-z, y) #model is rotated in particle tracing frame
+            F[2]=-interpFx(-z, y)
+            return F#np.asarray([0.0,Fy,Fz])
         self.force_Func_Inner=force_Func_Inner
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)#[0][0]
     def set_BpFact(self,BpFact):
