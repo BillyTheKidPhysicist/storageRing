@@ -44,7 +44,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
     return quc
 
 
-@numba.njit()
+@numba.njit(inline='always')
 def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap):
     # force at point q in element frame
@@ -53,8 +53,10 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     if phi <= ang:  # if particle is inside bending angle region
-        if np.sqrt((np.sqrt(q[0]**2+q[1] ** 2)-rb)**2 + q[2] ** 2) < ap:
-            revs = int((ang - phi) // ucAng)  # number of revolutions through unit cell
+        rXYPlane=np.sqrt(q[0]**2+q[1]**2) #radius in xy plane
+        if np.sqrt((rXYPlane-rb)**2 + q[2] ** 2) < ap:
+            psi=ang-phi
+            revs = int(psi // ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
             elif revs == numMagnets * 2 - 1 or revs == numMagnets * 2 - 2:
@@ -63,23 +65,20 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
                 position = 'INNER'
             if position == 'INNER':
                 x,y,z=q
-                phi = ang - np.arctan2(y, x)
-                revs = int(phi // ucAng)  # number of revolutions through unit cell
                 if revs % 2 == 0:  # if even
-                    theta = phi - ucAng * revs
+                    theta = psi - ucAng * revs
                 else:  # if odd
-                    theta = ucAng - (phi - ucAng * revs)
-                r = np.sqrt(x ** 2 + y ** 2)
-                x = r * np.cos(theta)  # cartesian coords in unit cell frame
-                y = r * np.sin(theta)  # cartesian coords in unit cell frame
+                    theta = ucAng - (psi - ucAng * revs)
+                x = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
+                y = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
                 F = Force_Func_Seg(x,y,z)
                 F = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F,q,M_uc,ucAng)  # transform unit cell coordinates into  element frame
             elif position == 'FIRST' or position == 'LAST':
                 if position == 'FIRST':
-                    x0 = q[0]
-                    y0 = q[1]
-                    x = M_ang[0, 0] * x0 + M_ang[0, 1] * y0
-                    y = M_ang[1, 0] * x0 + M_ang[1, 1] * y0
+                    # x0 = q[0]
+                    # y0 = q[1]
+                    x = M_ang[0, 0] * q[0] + M_ang[0, 1] * q[1]
+                    y = M_ang[1, 0] * q[0] + M_ang[1, 1] * q[1]
 
                     F = Force_Func_Internal_Fringe(x, y, q[2])
                     Fx = F[0]

@@ -17,8 +17,8 @@ import sys
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
 import numba
-from injectionSystemOptimization.HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from injectionSystemOptimization.HalbachLensClass import SegmentedBenderHalbach\
+from HalbachLensClassTemp import HalbachLens as _HalbachLensFieldGenerator
+from HalbachLensClassTemp import SegmentedBenderHalbach\
     as _SegmentedBenderHalbachLensFieldGenerator
 
 
@@ -562,7 +562,7 @@ class CombinerSim(CombinerIdeal):
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
         interpFx,interpFy, interpFz, funcV = self.make_Interp_Functions(self.data)
-        @numba.njit()
+        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Func(x,y,z):
             F=np.empty(3)
             F[0]=interpFx(x,y,z)

@@ -156,7 +156,7 @@ class ParticleTracer:
 
     def generate_Multi_Step_Verlet(self,forceFunc):
         func=self._multi_Step_Verlet
-        @numba.jit()
+        @numba.njit()
         def wrap(qEl,pEl,T,T0,h,forceFact):
             return func(qEl,pEl,T,T0,h,forceFact,forceFunc)
         test=np.empty(3)
@@ -167,6 +167,7 @@ class ParticleTracer:
     @staticmethod
     @numba.njit()
     def _multi_Step_Verlet(qEl,pEl,T,T0,h,forceFact,force):
+        qEl_n=qEl.copy()
         F=force(qEl)*forceFact
         if math.isnan(F[0]) == True:
             particleOutside = True
