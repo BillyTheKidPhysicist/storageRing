@@ -53,7 +53,7 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     if phi <= ang:  # if particle is inside bending angle region
-        if np.sqrt((np.sqrt(q[0] ** 2 + q[1] ** 2) - rb) ** 2 + q[2] ** 2) < ap:
+        if np.sqrt((np.sqrt(q[0]**2+q[1] ** 2)-rb)**2 + q[2] ** 2) < ap:
             revs = int((ang - phi) // ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
@@ -91,14 +91,13 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
         else:
             F = np.asarray([np.nan])
     else:  # if outside bender's angle range
-        if (rb - ap < q[0] < rb + ap) and (0 > q[1] > -Lcap):  # If inside the cap on
+        if np.sqrt((q[0]-rb)**2+q[2]**2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
             # eastward side
             F = Force_Func_Cap(q[0],q[1],q[2])
         else:
             qTestx = RIn_Ang[0, 0] * q[0] + RIn_Ang[0, 1] * q[1]
             qTesty = RIn_Ang[1, 0] * q[0] + RIn_Ang[1, 1] * q[1]
-            if (rb - ap < qTestx < rb + ap) and (
-                    Lcap > qTesty > 0):  # if on the westwards side
+            if np.sqrt((qTestx-rb)**2+q[2]**2) <= ap and (Lcap >= qTesty >= 0):  # if on the westwards side
                 x, y, z = qTestx, qTesty, q[2]
                 y = -y
                 F = Force_Func_Cap(x, y, z)

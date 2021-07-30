@@ -37,7 +37,9 @@ class Swarm:
         for particle in self.particles:
             if particle.clipped is None:
                 raise Exception('PARTICLE HAS NOT BEEN TRACED')
-            elif particle.revolutions is not None:
+            if np.isnan(particle.revolutions)==True:
+                raise Exception('Particle revolutions have an issue')
+            if particle.revolutions is not None:
                 revs+=particle.revolutions
 
         meanRevs=revs/self.num_Particles()

@@ -1,3 +1,4 @@
+import numpy.linalg as npl
 import numpy as np
 import numba
 

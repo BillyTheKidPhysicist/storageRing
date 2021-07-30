@@ -839,19 +839,18 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         # q: particle's position in element frame
         phi = fast_Arctan2(q)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
-            if sqrt(q[1] ** 2 + q[2] ** 2) < self.ap:
+            if sqrt((np.sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2) < self.ap:
                 return True
             else:
                 return False
         else:  # if outside bender's angle range
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
+            if np.sqrt((q[0]-self.rb)**2+q[2]**2) <= self.ap and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
                 # eastward side
                 return True
             else:
                 qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
                 qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (self.rb - self.ap < qTestx < self.rb + self.ap) and (
-                        self.Lcap > qTesty > 0):  # if on the westwards side
+                if np.sqrt((qTestx-self.rb)**2+q[2]**2) <= self.ap and (self.Lcap >= qTesty >= 0):  # if on the westwards side
                     return True
                 else:  # if not in either cap, then outside the bender
                     return False
@@ -945,9 +944,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
         #fill periodic segment data
         numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
-        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
+        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.rp)/spatialStepSize)//2)+1
         xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
-        zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
+        zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
         coords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3)
         coords[:,0]+=self.rb #add the bending radius to the coords
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, numLenses=3)
@@ -967,7 +966,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         numX=2*(int((x2-x1)/spatialStepSize)//2)+1
         numY=2*(int(2*self.ap//spatialStepSize)//2)+1
         numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
-        xArr=np.linspace(x1,x2,num=numX)+self.rb
+        xArr=np.linspace(x1,x2,num=numX)*1.2+self.rb
         yArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numY)
         zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
 

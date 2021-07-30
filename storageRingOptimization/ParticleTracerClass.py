@@ -89,6 +89,8 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        # print('---------------------------------------------------------------------------------------')
+        # print(particle.qi[0],particle.qi[1],particle.qi[2],',',particle.pi[0],particle.pi[1],particle.pi[2],self.latticeElementList[2].BpFact,self.latticeElementList[4].BpFact)
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -103,6 +105,7 @@ class ParticleTracer:
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
             return particle
+
         self.time_Step_Loop()
         self.forceLast=None #reset last force to zero
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
