@@ -919,7 +919,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def fill_Params_Pre_Constraint(self):
         def find_K(rb):
-            lens = _SegmentedBenderHalbachLensFieldGenerator(.0125, rb, .014, .0254, numLenses=3)
+            ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
+            #approximation
+            lens = _SegmentedBenderHalbachLensFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3)
             xArr = np.linspace(-.003, .003) + rb
             coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
             FArr = self.PTL.u0*lens.BNorm_Gradient(coords)[:, 0]

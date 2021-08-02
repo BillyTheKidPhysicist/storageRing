@@ -16,12 +16,43 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from ParaWell import ParaWell
 import skopt
-#IMPLEMENT OPTIONAL COPIES
+
+
+
+
+
+
+
+
+
+
 class SwarmTracer:
     def __init__(self,lattice):
         self.lattice=lattice
         self.particleTracer = ParticleTracer(self.lattice)
         self.helper = ParaWell()  # custom class to help with parallelization
+
+    def Rd_Sample(self,n,d=1,seed=.5):
+        # copied and modified from: https://github.com/arvoelke/nengolib
+        #who themselves got it from:  http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+        def gamma(d,n_iter=20):
+            """Newton-Raphson-Method to calculate g = phi_d."""
+            x=1.0
+            for _ in range(n_iter):
+                x-=(x**(d+1)-x-1)/((d+1)*x**d-1)
+            return x
+
+        g=gamma(d)
+        alpha=np.zeros(d)
+        for j in range(d):
+            alpha[j]=(1/g)**(j+1)%1
+
+        z=np.zeros((n,d))
+        z[0]=(seed+alpha)%1
+        for i in range(1,n):
+            z[i]=(z[i-1]+alpha)%1
+
+        return z
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
         # to the west. The transverse plane is the yz plane.
@@ -71,8 +102,8 @@ class SwarmTracer:
         if sameSeed==True:
             np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
         return swarm
-    def initalize_PseudoRandom_Swarm_In_Phase_Space(self, qTMax, pTMax, pxMax, num, upperSymmetry=False, sameSeed=True,
-                                              cornerPoints=False, circular=True):
+    def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,sameSeed=False,
+                                                    cornerPoints=False,circular=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
@@ -92,14 +123,16 @@ class SwarmTracer:
 
         bounds=np.asarray([[-qTMax,qTMax],[-qTMax,qTMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
                            [-pTMax,pTMax],[-pTMax,pTMax]])
-        if circular is True:
-            frac=(np.pi/4)**2 #the ratio of the are of the circle to the cross section. There is one
-            #factor for momentum and one for position
-            num=int(num/frac)
+        # if circular is True:
+        #     frac=(np.pi/4)**2 #the ratio of the are of the circle to the cross section. There is one
+        #     #factor for momentum and one for position
+        #     num=int(num/frac)
 
 
         if sameSeed==True:
             np.random.seed(42)
+        if type(sameSeed) == int:
+            np.random.seed(sameSeed)
         if upperSymmetry==True:
             bounds[1][0]=0.0 #don't let point be generarted below z=0
 
@@ -111,19 +144,23 @@ class SwarmTracer:
                 q = np.append(x, Xi[:2])
                 p = Xi[2:]
                 swarm.add_Particle(q, p)
-            num-=swarm.num_Particles()
-            if num<=0:
+            numParticles-=swarm.num_Particles()
+            if numParticles<=0:
                 raise Exception('adding particles at the corners of the hypercube exceeded total amount of allowed'
                                 'particles')
+
+
+        # samples=self.Rd_Sample(numParticles,len(bounds),seed=np.random.random()) #generate low noise sample
+        # #now need to scale correctly, because returned values are from 0 to 1
+        # for i in range(len(bounds)):
+        #     upper=bounds[i][1]
+        #     lower=bounds[i][0]
+        #     samples[:,i]=samples[:,i]*(upper-lower)+lower #rescale and shift
+
         sampler=skopt.sampler.Sobol()
-        samples=np.asarray(sampler.generate(bounds,num))
+        samples=np.asarray(sampler.generate(bounds,numParticles))
+
         for Xi in samples:
-            for i in range(Xi.shape[0]): #jitter the sequence to help overcome patterns
-                Xi[i]+=(np.random.rand() - .5) * (bounds[i][1] - bounds[i][0]) / 50.0 #seemed like a good value
-                if Xi[i]<bounds[i][0]:
-                    Xi[i]=(bounds[i][0]-Xi[i])+bounds[i][0]
-                if bounds[i][1]<Xi[i]:
-                    Xi[i] = bounds[i][1]-(Xi[i]-bounds[i][1])
             q = np.append(x, Xi[:2])
             p = Xi[2:]
             if circular==True:
@@ -134,7 +171,7 @@ class SwarmTracer:
                     pass
             else:
                 swarm.add_Particle(qi=q,pi=p)
-        if sameSeed==True:
+        if sameSeed==True or type(sameSeed)==int:
             np.random.seed(int(time.time()))  # re randomize
         return swarm
 
@@ -158,6 +195,49 @@ class SwarmTracer:
             particle.q += r2
             particle.p[:2] = particle.p[:2] @ R
             particle.q = particle.q + particle.p * 1e-12  # scoot particle into next element
+        return swarm
+
+    def generate_Probe_Sample(self,v0,seed=None,rpPoints=3,rqPoints=3):
+        # value of 3 for points is a good value from testing to give qualitative results
+        if type(seed)==int:
+            np.random.seed(seed)
+        pMax=10.0
+        numParticlesArr=np.arange(4,4*(rpPoints+1),4)
+        coords=np.asarray([[0,0]])
+        for numParticles in numParticlesArr:
+            r=pMax*numParticles/numParticlesArr.max()
+            phiArr=np.linspace(0,2*np.pi,numParticles,endpoint=False)
+            tempCoords=np.column_stack((r*np.cos(phiArr),r*np.sin(phiArr)))
+            coords=np.row_stack((coords,tempCoords))
+        pSamples=np.column_stack((-np.ones(coords.shape[0])*v0,coords))
+        # plt.scatter(pSamples[:,1],pSamples[:,2])
+        # plt.show()
+
+        # create position samples
+
+        qMax=2.5e-3
+        numParticlesArr=np.arange(4,4*(rqPoints+1),4)
+        coords=np.asarray([[0,0]])
+        for numParticles in numParticlesArr:
+            r=qMax*numParticles/numParticlesArr.max()
+            phiArr=np.linspace(0,np.pi,numParticles,endpoint=True)
+            tempCoords=np.column_stack((r*np.cos(phiArr),r*np.sin(phiArr)))
+            coords=np.row_stack((coords,tempCoords))
+        qSamples=np.column_stack((-np.zeros(coords.shape[0]),coords))
+        # plt.scatter(qSamples[:,1],qSamples[:,2])
+        # plt.show()
+
+        swarm=Swarm()
+        for qCoord in qSamples:
+            for pCoord in pSamples:
+                if qCoord[2]==0 and pCoord[2]<0:  # exploit symmetry along z=0 for momentum by exluding downard
+                    # directed points
+                    pass
+                else:
+                    swarm.add_Particle(qi=qCoord.copy(),pi=pCoord.copy())
+        if type(seed)==int:
+            np.random.seed(int(time.time()))
+        # print('Number of particles generated: ', swarm.num_Particles())
         return swarm
     def move_Swarm_To_Combiner_Output(self,swarm,scoot=True,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
