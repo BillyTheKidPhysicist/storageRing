@@ -44,7 +44,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
     return quc
 
 
-@numba.njit(inline='always')
+@numba.njit()
 def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap):
     # force at point q in element frame
@@ -88,7 +88,7 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
                 elif position == 'LAST':
                     F = Force_Func_Internal_Fringe(q[0], q[1], q[2])
         else:
-            F = np.asarray([np.nan])
+            F = np.asarray([np.nan,np.nan,np.nan])
     else:  # if outside bender's angle range
         if np.sqrt((q[0]-rb)**2+q[2]**2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
             # eastward side
@@ -105,7 +105,7 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
                 F[0] = M_ang[0, 0] * Fx + M_ang[0, 1] * Fy
                 F[1] = M_ang[1, 0] * Fx + M_ang[1, 1] * Fy
             else:  # if not in either cap, then outside the bender
-                F = np.asarray([np.nan])
+                F = np.asarray([np.nan,np.nan,np.nan])
     return F
 
 
@@ -123,7 +123,7 @@ def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
         F[2] = -K * q[2]
         return F
     else:
-        return np.asarray([np.nan])
+        return np.asarray([np.nan,np.nan,np.nan])
     
 
 
@@ -131,7 +131,7 @@ def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
 def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
     x, y, z = q
     if np.sqrt(y**2+z**2)>ap:
-        return np.asarray([np.nan])
+        return np.asarray([np.nan,np.nan,np.nan])
     if q[0] <= Lcap:
         x = Lcap - x
         F = force_Func_Outer(x, y, z)
@@ -142,7 +142,7 @@ def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
         x = Lcap - (L - x)
         F = force_Func_Outer(x, y, z)
     else:
-        F = np.asarray([np.nan])
+        F = np.asarray([np.nan,np.nan,np.nan])
     return F
 
 
@@ -155,15 +155,15 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
 
     if searchIsCoordInside == True:
         if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
-            return np.asarray([np.nan])
+            return np.asarray([np.nan,np.nan,np.nan])
         elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
             if -apL <= q[1] <= apR:  # if inside the y (width) apeture
                 pass
             else:
-                return np.asarray([np.nan])
+                return np.asarray([np.nan,np.nan,np.nan])
         elif q[0] < 0:
-            return np.asarray([np.nan])
+            return np.asarray([np.nan,np.nan,np.nan])
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             m = np.tan(ang)
             Y1 = m * q[0] + (apR - m * Lb)  # upper limit
@@ -172,7 +172,7 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
             if q[1] < Y1 and q[1] < Y2 and q[1] > Y3:
                 pass
             else:
-                return np.asarray([np.nan])
+                return np.asarray([np.nan,np.nan,np.nan])
     x,y,z=q
     xFact = 1  # value to modify the force based on symmetry
     zFact = 1

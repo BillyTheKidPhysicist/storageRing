@@ -922,7 +922,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
             #approximation
             lens = _SegmentedBenderHalbachLensFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3)
-            xArr = np.linspace(-.003, .003) + rb
+            xArr = np.linspace(-self.rp/3, self.rp/3) + rb
             coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
             FArr = self.PTL.u0*lens.BNorm_Gradient(coords)[:, 0]
             xArr -= rb
@@ -1175,8 +1175,7 @@ class HalbachLensSim(LensIdeal):
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
             planeCoords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
-            BNormGrad=lens.BNorm_Gradient(planeCoords)
-            BNorm=lens.BNorm(planeCoords)
+            BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
             self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
             self.fill_Field_Func_2D()
