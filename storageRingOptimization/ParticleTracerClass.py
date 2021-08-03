@@ -167,7 +167,12 @@ class ParticleTracer:
     @staticmethod
     @numba.njit()
     def _multi_Step_Verlet(qEl,pEl,T,T0,h,forceFact,force):
-        qEl_n=qEl.copy()
+        #copy the input arrays to prevent modifying them outside the function
+        qEl_n=np.empty(3)
+        pEl_n=np.empty(3)
+        qEl=qEl.copy()
+        pEl=pEl.copy()
+        F_n=np.empty(3)
         F=force(qEl)*forceFact
         if math.isnan(F[0]) == True:
             particleOutside = True
@@ -176,15 +181,15 @@ class ParticleTracer:
         while(True):
             if T>=T0:
                 break
-            qEl_n = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
-            F_n = force(qEl_n)*forceFact
+            qEl_n[:] = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
+            F_n[:] = force(qEl_n)*forceFact
             if math.isnan(F_n[0])==True:
                 particleOutside=True
                 return qEl_n,qEl,pEl,T,particleOutside
-            pEl_n = pEl+.5*(F+F_n)*h
-            qEl = qEl_n
-            pEl = pEl_n
-            F = F_n  # record the force to be recycled
+            pEl_n[:] = pEl+.5*(F+F_n)*h
+            qEl[:] = qEl_n
+            pEl[:] = pEl_n
+            F[:] = F_n  # record the force to be recycled
             T += h
         return qEl_n,qEl,pEl,T,particleOutside
     def handle_Drift_Region(self):

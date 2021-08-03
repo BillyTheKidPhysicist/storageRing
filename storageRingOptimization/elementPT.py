@@ -17,8 +17,8 @@ import sys
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
 import numba
-from HalbachLensClassTemp import HalbachLens as _HalbachLensFieldGenerator
-from HalbachLensClassTemp import SegmentedBenderHalbach\
+from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
+from HalbachLensClass import SegmentedBenderHalbach\
     as _SegmentedBenderHalbachLensFieldGenerator
 
 
