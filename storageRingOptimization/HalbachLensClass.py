@@ -11,30 +11,17 @@ from profilehooks import profile
 u0 = 4 * np.pi * 1e-7
 
 
-def make_Interp_Functions(data):
-    # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
-    # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
-    # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
-    # and the order of points doesn't matter
-    xArr = np.unique(data[:, 0])
-    yArr = np.unique(data[:, 1])
-    zArr = np.unique(data[:, 2])
-    numx = xArr.shape[0]
-    numy = yArr.shape[0]
-    numz = zArr.shape[0]
-    BGradxMatrix = np.empty((numx, numy, numz))
-    BGradyMatrix = np.empty((numx, numy, numz))
-    BGradzMatrix = np.empty((numx, numy, numz))
-    xIndices = np.argwhere(data[:, 0][:, None] == xArr)[:, 1]
-    yIndices = np.argwhere(data[:, 1][:, None] == yArr)[:, 1]
-    zIndices = np.argwhere(data[:, 2][:, None] == zArr)[:, 1]
-    BGradxMatrix[xIndices, yIndices, zIndices] = data[:, 3]
-    BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
-    BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
-    interpFx = interp_3d.Interp3D(BGradxMatrix, xArr, yArr, zArr)
-    interpFy = interp_3d.Interp3D(BGradyMatrix, xArr, yArr, zArr)
-    interpFz = interp_3d.Interp3D(BGradzMatrix, xArr, yArr, zArr)
-    return interpFx, interpFy, interpFz
+@numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:]))
+def B_NUMBA(r,r0,m):
+    r=r-r0  # convert to difference vector
+    rNormTemp=np.sqrt(np.sum(r**2,axis=1))
+    rNorm=np.empty((rNormTemp.shape[0],1))
+    rNorm[:,0]=rNormTemp
+    mrDotTemp=np.sum(m*r,axis=1)
+    mrDot=np.empty((rNormTemp.shape[0],1))
+    mrDot[:,0]=mrDotTemp
+    Bvec=1e-7*(3*r*mrDot/rNorm**5-m/rNorm**3)
+    return Bvec
 
 
 class RectangularPrism:
@@ -233,7 +220,7 @@ class Sphere:
         return Bvec
 
     def B(self, r):
-        return self.B_NUMBA(r, self.r0, self.m)
+        return B_NUMBA(r, self.r0, self.m)
 
     def B_Symmetric(self, r):
         arr = np.zeros(r.shape)
@@ -246,19 +233,6 @@ class Sphere:
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True)
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True, planeReflection=True)
         return arr
-    #3.71
-    @staticmethod
-    @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:]))
-    def B_NUMBA(r, r0, m):
-        r = r - r0  # convert to difference vector
-        rNormTemp = np.sqrt(np.sum(r ** 2, axis=1))
-        rNorm = np.empty((rNormTemp.shape[0], 1))
-        rNorm[:, 0] = rNormTemp
-        mrDotTemp = np.sum(m * r, axis=1)
-        mrDot = np.empty((rNormTemp.shape[0], 1))
-        mrDot[:, 0] = mrDotTemp
-        Bvec = 1e-7 * (3 * r * mrDot / rNorm ** 5 - m / rNorm ** 3)
-        return Bvec
 
     def B_Symetry(self, r, orientation, factors=1, flipDipole=False, angle=np.pi / 2, fixedDipoleDirection=False,
                   planeReflection=False):
@@ -287,7 +261,7 @@ class Sphere:
             mSym = -mSym
         if planeReflection == True:  # another dipole on the other side of the z=0 line
             rSym[2] = -rSym[2]
-        BVecArr = self.B_NUMBA(r, rSym, mSym)
+        BVecArr = B_NUMBA(r, rSym, mSym)
         return BVecArr
 
 

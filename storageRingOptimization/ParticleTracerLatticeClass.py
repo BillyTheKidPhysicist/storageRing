@@ -625,10 +625,10 @@ class ParticleTracerLattice:
             closed=False
         else:
             closed=True
-        if enforceClosedLattice==True and closed==False:
+        if enforceClosedLattice==True and closed==False and self.latticeType!='injector':
             print(deltax, deltay)
             raise Exception('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-        elif enforceClosedLattice==False and closed==False and surpressWarning==False:
+        elif enforceClosedLattice==False and closed==False and surpressWarning==False and self.latticeType!='injector':
             import warnings
             print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')

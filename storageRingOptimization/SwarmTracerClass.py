@@ -123,10 +123,18 @@ class SwarmTracer:
 
         bounds=np.asarray([[-qTMax,qTMax],[-qTMax,qTMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
                            [-pTMax,pTMax],[-pTMax,pTMax]])
-        # if circular is True:
-        #     frac=(np.pi/4)**2 #the ratio of the are of the circle to the cross section. There is one
-        #     #factor for momentum and one for position
-        #     num=int(num/frac)
+        if self.lattice.latticeType=='injector': #lattice is towards positive x instead of towards negative x so need
+            #to flip sign and order of bounds
+            a=-bounds[2][0]
+            b=-bounds[2][1]
+            bounds[2][0]=b
+            bounds[2][1]=a
+
+
+        if circular is True:
+            frac=(np.pi/4)**2 #the ratio of the are of the circle to the cross section. There is one
+            #factor for momentum and one for position
+            numParticles=int(numParticles/frac)
 
 
         if sameSeed==True:
@@ -257,44 +265,6 @@ class SwarmTracer:
             if scoot==True:
                 particle.q+=particle.p*1e-10
         return swarm
-    def send_Swarm_Through_Shaper(self, swarm, Lo, Li, Bp=.5, rp=.03, copySwarm=True):
-        # models particles traveling through an injecting element, which is a simple ideal magnet. This model
-        # has the object at the origin and the lens at y=0 and x>0. Particles end up on the output of the lens
-        # for now a thin lens
-        # swarm: swarm to transform through injector
-        # Lo: object distance for injector
-        # Li: nominal image distance
-        raise Exception('This needs to be improved. The longitdunial positions are not updated, and K should change'
-                        'for each particle. DOUBLE CHECK')
-        if copySwarm == True:
-            swarmNew = swarm.copy()
-        else:
-            swarmNew = swarm
-        K = 2 * self.lattice.u0 * Bp / (rp ** 2 * self.lattice.v0Nominal ** 2)
-        # now find the magnet length that gives Li. Need to parametarize each entry of the transfer matrix.
-        # The transfer matrix is for angles, not velocity
-        CFunc = lambda x: np.cos(np.sqrt(K) * x)
-        SFunc = lambda x: np.sin(np.sqrt(K) * x) / np.sqrt(K)
-        CdFunc = lambda x: -np.sqrt(K) * np.sin(np.sqrt(K) * x)
-        SdFunc = lambda x: np.cos(np.sqrt(K) * x)
-        LiFunc = lambda x: -(CFunc(x) * Lo + SFunc(x)) / (CdFunc(x) * Lo + SdFunc(x))
-        minFunc = lambda x: (LiFunc(x) - Li) ** 2
-        sol = spo.minimize_scalar(minFunc, method='bounded', bounds=(.1, .5))
-        Lm = sol.x
-        MLens = np.asarray([[CFunc(Lm), SFunc(Lm)], [CdFunc(Lm), SdFunc(Lm)]])
-        MLo = np.asarray([[1, Lo], [0, 1]])
-        MTot = MLens @ MLo
-        for particle in swarmNew.particles:
-            qNew = particle.q.copy()
-            pNew = particle.p.copy()
-            # the v0Nominal is present because the matrix is for angles, not velocities
-            qNew[1] = MTot[0, 0] * particle.q[1] + MTot[0, 1] * particle.p[1] / self.lattice.v0Nominal
-            pNew[1] = MTot[1, 0] * particle.q[1] * self.lattice.v0Nominal + MTot[1, 1] * particle.p[1]
-            qNew[2] = MTot[0, 0] * particle.q[2] + MTot[0, 1] * particle.p[2] / self.lattice.v0Nominal
-            pNew[2] = MTot[1, 0] * particle.q[2] * self.lattice.v0Nominal + MTot[1, 1] * particle.p[2]
-            particle.q = qNew
-            particle.p = pNew
-        return swarmNew
 
     def catch_Injection_Errors(self, Li, LOffset):
         deltaL=Li+LOffset-self.lattice.combiner.Lo #distance of magnet from beginning
@@ -478,18 +448,18 @@ class SwarmTracer:
         particle.finished()
         return particle
 
-    def aim_Swarm_At_Combiner(self, swarm, Li, LOffset,copySwarm=True):
+    def aim_Swarm_At_Combiner(self, swarm, seedingDist, LOffset,copySwarm=True):
         # This method takes a swarm in phase space, located at the origin, and moves it in phase space
         # so momentum vectors point at the combiner input. This is done IN THE COMBINER REFERENCE FRAME
         # swarm: swarm of particles in phase space. must be centered at the origin in space
-        # Li: the image length, only makes sense for hard edge model
-        # LiOffset: image offset in combiner. see initialize_Swarm_At_Combiner_Output
+        # seedingDist: Distance between swarm and loading point of combiner. keep in mind seeding point can move by LOffset
+        # LiOffset: distance from combiner output of seeding point. see initialize_Swarm_At_Combiner_Output
         # copySwarm: if True, copy the swarm to prevent modifying the original one
         if copySwarm==True:
             swarm = swarm.copy()  # don't change the original swarm
         inputOffsetLoad = self.lattice.combiner.inputOffsetLoad
         inputAngleLoad = self.lattice.combiner.angLoad
-        dL = Li - self.lattice.combiner.Lo + LOffset #distance from combiner input
+        dL = seedingDist - self.lattice.combiner.Lo + LOffset #distance from combiner input
         dx = self.lattice.combiner.space * 2 + self.lattice.combiner.Lm
         dy = inputOffsetLoad
         dx += dL * np.cos(inputAngleLoad)
@@ -584,5 +554,3 @@ class SwarmTracer:
 
 
         return swarmNew
-# swarmTracer=SwarmTracer(None)
-# swarmTracer.initialize_Observed_Swarm_In_Phase_Space()

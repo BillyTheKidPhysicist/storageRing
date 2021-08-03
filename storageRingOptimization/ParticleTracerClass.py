@@ -78,7 +78,7 @@ class ParticleTracer:
         else:
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.q)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.p)
-        if self.fastMode==False:
+        if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
     def trace(self,particle,h,T0,fastMode=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
@@ -89,8 +89,6 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
-        # print('---------------------------------------------------------------------------------------')
-        # print(particle.qi[0],particle.qi[1],particle.qi[2],',',particle.pi[0],particle.pi[1],particle.pi[2],self.latticeElementList[2].BpFact,self.latticeElementList[4].BpFact)
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -220,23 +218,22 @@ class ParticleTracer:
             xEnd=x0 #particle ends somewhere inside the drift
             clipped=True
             #now place it just at the beginning of the next element
-        dt = (xEnd - qi[0]) / pi[0]  # time to travel to end coordinate
-        if self.T+dt>self.T0: #there is not enough simulation time
+        dt = np.abs((xEnd - qi[0]) / pi[0])  # time to travel to end coordinate. Use absolute to catch if the momentum
+        #is the wrong way
+        if self.T+dt>=self.T0: #there is not enough simulation time
             dt=self.T0-self.T #set to the remaining time available
             self.T=self.T0
             self.qEl=qi+pi*dt
         else:
+            self.T += dt
             if clipped==False:
                 qEl=qi+pi*dt
-                el=self.which_Element(qEl+1e-10) #put the particle just on the other side
-                exitLoop=self.check_If_Element_Has_Changed_And_Handle_Edge_Event(el) #reuse the code here. This steps alos logs
-                #the time!!
-                if exitLoop==True:
-                    self.particle.currentEl=self.currentEl
-                    if el is None:
-                        self.qEl=qEl
+                self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl+pi*1e-10) #put the particle just on the other
+                #side. This is how this is done with other elements, so I am resuing code. really I don't need to do
+                #because I know the particle finished
+                if self.particle.clipped==True:
+                    self.qEl=qEl
             else:
-                self.T += dt
                 self.qEl=qi+pi*dt
                 self.pEl=pf
                 self.particle.clipped=True
@@ -324,25 +321,18 @@ class ParticleTracer:
                 return el
         return None
     def which_Element(self,qEl): #.134
-        #find which element the particle is in, but check the current element first to see if it's there ,which save time
+        #find which element the particle is in, but check the next element first ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
-        isInside=self.currentEl.is_Coord_Inside(qEl)
-        if isInside==True: #if the particle is defintely inside the current element, then we found it! Otherwise, go on to search
-            #with shapely
-            return self.currentEl
-        else: #if not defintely inside current element, search everywhere.
-            #first, start with the element that follows the one that the particle is currently in to save time because
-            #it's likely there
-            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
-            if self.currentEl.index+1>=len(self.latticeElementList):
-                nextEl=self.latticeElementList[0]
-            else:
-                nextEl=self.latticeElementList[self.currentEl.index+1]
-            if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True:
-                return nextEl
-
-            for el in self.latticeElementList:
-                if el is not self.currentEl and el is not nextEl: #don't waste rechecking current element or next element
-                    if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
-                        return el
-            return None
+        qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+        if self.currentEl.index+1>=len(self.latticeElementList):
+            nextEl=self.latticeElementList[0]
+        else:
+            nextEl=self.latticeElementList[self.currentEl.index+1]
+        if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True: #try the next element
+            return nextEl
+        #now instead look everywhere, except the next element we already checked
+        for el in self.latticeElementList:
+            if el is not nextEl: #don't waste rechecking current element or next element
+                if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
+                    return el
+        return None

@@ -2,20 +2,10 @@ import numpy as np
 import pyximport;
 from math import sqrt
 pyximport.install(language_level=3, setup_args={'include_dirs': np.get_include()})
-import cythonFunc
-import numpy.linalg as npl
 import warnings
 import fastElementNUMBAFunctions
-import scipy.ndimage as spimg
-from interp3d import interp_3d
 from InterpFunction import generate_3DInterp_Function_NUMBA, generate_2DInterp_Function_NUMBA
-# import scipy.interpolate as spi
 import pandas as pd
-import time
-import numpy.linalg as npl
-import sys
-import matplotlib.pyplot as plt
-import scipy.interpolate as spi
 import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach\
@@ -237,7 +227,7 @@ class LensIdeal(Element):
             self.F[2] = -self.K * q[2]
             return self.F.copy()
         else:
-            return np.asarray([np.nan])
+            return np.asarray([np.nan,np.nan,np.nan])
     def compile_Fast_Numba_Force_Function(self):
         L = self.L
         ap = self.ap
@@ -278,7 +268,11 @@ class Drift(LensIdeal):
         super().__init__(PTL, L, 0, np.inf, ap)
 
     def force(self, q):
-        return np.zeros(3)
+        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
+        if 0 <= q[0] <= self.L and q[1] ** 2 + q[2] ** 2 < self.ap**2:
+            return np.zeros(3)
+        else:
+            return np.asarray([np.nan,np.nan,np.nan])
 
 
 class BenderIdeal(Element):
@@ -539,6 +533,7 @@ class CombinerSim(CombinerIdeal):
         apR = .025
         fringeSpace = 5 * 1.1e-2
         apz = 6e-3
+        print('fix the issue that the bounds extend to left and right pass the magnet')
         super().__init__(PTL, Lm, np.nan, np.nan, np.nan, sizeScale,
                          fillsParams=False)  # TODO: replace all the Nones with np.nan
         self.sim = True
@@ -546,6 +541,7 @@ class CombinerSim(CombinerIdeal):
         self.apL = apL * self.sizeScale
         self.apR = apR * self.sizeScale
         self.apz = apz * self.sizeScale
+
 
         self.data = None
         self.combinerFile = combinerFile
@@ -587,7 +583,8 @@ class CombinerSim(CombinerIdeal):
 
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False)
+        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False) #find
+        #parameters for atoms being loaded (so they are in low field state)
         self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
         self.angLoad = inputAngleLoad
         self.inputOffsetLoad = inputOffsetLoad

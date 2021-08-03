@@ -70,6 +70,12 @@ class Swarm:
         return (particle for particle in self.particles)
     def copy(self):
         return copy.deepcopy(self)
+    def quick_Copy(self): #only copy the initial conditions. For swarms that havn't been traced or been monkeyed
+        #with at all
+        swarmNew=Swarm()
+        for particle in self.particles:
+            swarmNew.add_Particle(qi=particle.qi,pi=particle.pi)
+        return swarmNew
     def num_Particles(self):
         return len(self.particles)
     def reset(self):
@@ -81,7 +87,7 @@ class Particle:
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
-    def __init__(self,qi=np.asarray([-1e-10, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
+    def __init__(self,qi=np.asarray([0.0, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
         self.q=qi #position, lab frame, meters
         self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
         self.qi=qi.copy()#initial position, lab frame, meters
