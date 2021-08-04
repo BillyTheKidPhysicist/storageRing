@@ -64,15 +64,16 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
             else:
                 position = 'INNER'
             if position == 'INNER':
-                x,y,z=q
+                x, y, z = q
                 if revs % 2 == 0:  # if even
                     theta = psi - ucAng * revs
                 else:  # if odd
                     theta = ucAng - (psi - ucAng * revs)
                 x = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
                 y = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
-                Fx,Fy,Fz = Force_Func_Seg(x,y,z)
-                Fx,Fy,Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx,Fy,Fz,q,M_uc,ucAng)  # transform unit cell coordinates into  element frame
+                Fx, Fy, Fz = Force_Func_Seg(x, y, z)
+                Fx, Fy, Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, q, M_uc,
+                                                                                ucAng)  # transform unit cell coordinates into  element frame
             else:
                 if position == 'FIRST':
                     # x0 = q[0]
@@ -80,32 +81,32 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
                     x = M_ang[0, 0] * q[0] + M_ang[0, 1] * q[1]
                     y = M_ang[1, 0] * q[0] + M_ang[1, 1] * q[1]
 
-                    Fx,Fy,Fz = Force_Func_Internal_Fringe(x, y, q[2])
+                    Fx, Fy, Fz = Force_Func_Internal_Fringe(x, y, q[2])
                     Fx0 = Fx
                     Fy0 = Fy
                     Fx = M_ang[0, 0] * Fx0 + M_ang[0, 1] * Fy0
                     Fy = M_ang[1, 0] * Fx0 + M_ang[1, 1] * Fy0
                 else:
-                    Fx,Fy,Fz=Force_Func_Internal_Fringe(q[0], q[1], q[2])
+                    Fx, Fy, Fz = Force_Func_Internal_Fringe(q[0], q[1], q[2])
         else:
-            Fx,Fy,Fz=np.nan,np.nan,np.nan
+            Fx, Fy, Fz = np.nan, np.nan, np.nan
     else:  # if outside bender's angle range
-        if np.sqrt((q[0]-rb)**2+q[2]**2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
+        if np.sqrt((q[0] - rb) ** 2 + q[2] ** 2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
             # eastward side
-            Fx,Fy,Fz=Force_Func_Cap(q[0],q[1],q[2])
+            Fx, Fy, Fz = Force_Func_Cap(q[0], q[1], q[2])
         else:
             qTestx = RIn_Ang[0, 0] * q[0] + RIn_Ang[0, 1] * q[1]
             qTesty = RIn_Ang[1, 0] * q[0] + RIn_Ang[1, 1] * q[1]
-            if np.sqrt((qTestx-rb)**2+q[2]**2) <= ap and (Lcap >= qTesty >= 0):  # if on the westwards side
+            if np.sqrt((qTestx - rb) ** 2 + q[2] ** 2) <= ap and (Lcap >= qTesty >= 0):  # if on the westwards side
                 x, y, z = qTestx, qTesty, q[2]
                 y = -y
-                Fx,Fy,Fz = Force_Func_Cap(x, y, z)
+                Fx, Fy, Fz = Force_Func_Cap(x, y, z)
                 Fx0 = Fx
                 Fy0 = Fy
                 Fx = M_ang[0, 0] * Fx0 + M_ang[0, 1] * Fy0
                 Fy = M_ang[1, 0] * Fx0 + M_ang[1, 1] * Fy0
             else:  # if not in either cap, then outside the bender
-                Fx,Fy,Fz=np.nan,np.nan,np.nan
+                Fx, Fy, Fz = np.nan, np.nan, np.nan
     return Fx,Fy,Fz
 
 

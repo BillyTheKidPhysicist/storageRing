@@ -166,32 +166,41 @@ class ParticleTracer:
     @numba.njit()
     def _multi_Step_Verlet(qEl,pEl,T,T0,h,forceFact,force):
         #copy the input arrays to prevent modifying them outside the function
-        qEl_n=np.empty(3)
-        pEl_n=np.empty(3)
         qEl=qEl.copy()
         pEl=pEl.copy()
         F_n=np.empty(3)
         F=np.asarray(force(qEl))
         F*=forceFact
-        if math.isnan(F[0]) == True:
+        if math.isnan(F[0]) == True or T>=T0:
             particleOutside = True
             return qEl, qEl, pEl, T, particleOutside
         particleOutside=False
         while(True):
             if T>=T0:
-                break
-            qEl_n[:] = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
-            F_n[:] = force(qEl_n)
+                return qEl,qEl,pEl,T,particleOutside
+            #unfortunately, += and -= is not yet defined in numba and numpy, so to modify in place I must disect the array as
+            #such
+            qEl[0]=qEl[0]+pEl[0]*h+.5*F[0]*h**2
+            qEl[1]=qEl[1]+pEl[1]*h+.5*F[1]*h**2
+            qEl[2]=qEl[2]+pEl[2]*h+.5*F[2]*h**2
+
+            F_n[:] = force(qEl)
             F_n*=forceFact #modifying in place is faster
+
+
             if math.isnan(F_n[0])==True:
+                qEl_o = qEl - (pEl * h + .5 * F * h ** 2)
                 particleOutside=True
-                return qEl_n,qEl,pEl,T,particleOutside
-            pEl_n[:] = pEl+.5*(F+F_n)*h
-            qEl[:] = qEl_n
-            pEl[:] = pEl_n
+                return qEl, qEl_o, pEl, T, particleOutside
+            pEl[0] = pEl[0]+.5*(F[0]+F_n[0])*h
+            pEl[1] = pEl[1]+.5*(F[1]+F_n[1])*h
+            pEl[2] = pEl[2]+.5*(F[2]+F_n[2])*h
+            # qEl[:] = qEl_n
+            # pEl[:] = pEl_n
             F[:] = F_n  # record the force to be recycled
             T += h
-        return qEl_n,qEl,pEl,T,particleOutside
+
+
     def handle_Drift_Region(self):
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
