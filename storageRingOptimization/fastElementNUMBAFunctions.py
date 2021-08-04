@@ -2,8 +2,8 @@ import numba
 import numpy as np
 
 
-@numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.types.Array(numba.types.float64, 2, 'C', readonly=True),numba.float64))
-def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, M_uc, ucAng):
+@numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64,numba.float64[:],numba.types.Array(numba.types.float64, 2, 'C', readonly=True),numba.float64))
+def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx,Fy,Fz, q, M_uc, ucAng):
     # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
     # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
     # or leaving the element interface as mirror images of each other.
@@ -15,18 +15,18 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, M_uc, ucAng):
     if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
         rotAngle = 2 * (cellNum // 2) * ucAng
     else:  # otherwise it needs to be reflected. This is the algorithm for reflections
-        Fx = FNew[0]
-        Fy = FNew[1]
-        FNew[0] = M_uc[0, 0] * Fx + M_uc[0, 1] * Fy
-        FNew[1] = M_uc[1, 0] * Fx + M_uc[1, 1] * Fy
+        Fx0 = Fx
+        Fy0 = Fy
+        Fx = M_uc[0, 0] * Fx0 + M_uc[0, 1] * Fy0
+        Fy = M_uc[1, 0] * Fx0 + M_uc[1, 1] * Fy0
         rotAngle = 2 * ((cellNum - 1) // 2) * ucAng
-    Fx = FNew[0]
-    Fy = FNew[1]
-    FNew[0] = Fx * np.cos(rotAngle) - Fy * np.sin(rotAngle)
-    FNew[1] = Fx * np.sin(rotAngle) + Fy * np.cos(rotAngle)
-    return FNew
+    Fx0 = Fx
+    Fy0 = Fy
+    Fx =  np.cos(rotAngle)*Fx0 - np.sin(rotAngle)*Fy0
+    Fy =  np.sin(rotAngle)*Fx0 + np.cos(rotAngle)*Fy0
+    return Fx,Fy,Fz
 
-@numba.njit(numba.float64[:](numba.float64[:],numba.float64,numba.float64))
+@numba.njit()
 def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
     quc=np.empty(3)
     phi = ang - np.arctan2(q[1], q[0])
@@ -71,59 +71,58 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
                     theta = ucAng - (psi - ucAng * revs)
                 x = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
                 y = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
-                F = Force_Func_Seg(x,y,z)
-                F = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F,q,M_uc,ucAng)  # transform unit cell coordinates into  element frame
-            elif position == 'FIRST' or position == 'LAST':
+                Fx,Fy,Fz = Force_Func_Seg(x,y,z)
+                Fx,Fy,Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx,Fy,Fz,q,M_uc,ucAng)  # transform unit cell coordinates into  element frame
+            else:
                 if position == 'FIRST':
                     # x0 = q[0]
                     # y0 = q[1]
                     x = M_ang[0, 0] * q[0] + M_ang[0, 1] * q[1]
                     y = M_ang[1, 0] * q[0] + M_ang[1, 1] * q[1]
 
-                    F = Force_Func_Internal_Fringe(x, y, q[2])
-                    Fx = F[0]
-                    Fy = F[1]
-                    F[0] = M_ang[0, 0] * Fx + M_ang[0, 1] * Fy
-                    F[1] = M_ang[1, 0] * Fx + M_ang[1, 1] * Fy
-                elif position == 'LAST':
-                    F = Force_Func_Internal_Fringe(q[0], q[1], q[2])
+                    Fx,Fy,Fz = Force_Func_Internal_Fringe(x, y, q[2])
+                    Fx0 = Fx
+                    Fy0 = Fy
+                    Fx = M_ang[0, 0] * Fx0 + M_ang[0, 1] * Fy0
+                    Fy = M_ang[1, 0] * Fx0 + M_ang[1, 1] * Fy0
+                else:
+                    Fx,Fy,Fz=Force_Func_Internal_Fringe(q[0], q[1], q[2])
         else:
-            F = np.asarray([np.nan,np.nan,np.nan])
+            Fx,Fy,Fz=np.nan,np.nan,np.nan
     else:  # if outside bender's angle range
         if np.sqrt((q[0]-rb)**2+q[2]**2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
             # eastward side
-            F = Force_Func_Cap(q[0],q[1],q[2])
+            Fx,Fy,Fz=Force_Func_Cap(q[0],q[1],q[2])
         else:
             qTestx = RIn_Ang[0, 0] * q[0] + RIn_Ang[0, 1] * q[1]
             qTesty = RIn_Ang[1, 0] * q[0] + RIn_Ang[1, 1] * q[1]
             if np.sqrt((qTestx-rb)**2+q[2]**2) <= ap and (Lcap >= qTesty >= 0):  # if on the westwards side
                 x, y, z = qTestx, qTesty, q[2]
                 y = -y
-                F = Force_Func_Cap(x, y, z)
-                Fx = F[0]
-                Fy = F[1]
-                F[0] = M_ang[0, 0] * Fx + M_ang[0, 1] * Fy
-                F[1] = M_ang[1, 0] * Fx + M_ang[1, 1] * Fy
+                Fx,Fy,Fz = Force_Func_Cap(x, y, z)
+                Fx0 = Fx
+                Fy0 = Fy
+                Fx = M_ang[0, 0] * Fx0 + M_ang[0, 1] * Fy0
+                Fy = M_ang[1, 0] * Fx0 + M_ang[1, 1] * Fy0
             else:  # if not in either cap, then outside the bender
-                F = np.asarray([np.nan,np.nan,np.nan])
-    return F
+                Fx,Fy,Fz=np.nan,np.nan,np.nan
+    return Fx,Fy,Fz
 
 
-@numba.njit(numba.float64[:](numba.float64[:] ,numba.float64 ,numba.float64 ,numba.float64))
+@numba.njit()
 def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
     #fast numba function for idea lens. Simple hard edge model
     #q: 3d coordinates in element frame
     #L: length of lens
     #ap: size of aperture, or bore of vacuum tube, of lens
     #K: the 'spring' constant of the lens
-    F=np.empty(3)
-    F[0]=0
     if 0 <= q[0] <= L and q[1] ** 2 + q[2] ** 2 < ap**2:
-        F[1] = -K * q[1]
-        F[2] = -K * q[2]
-        return F
+        Fx=0
+        Fy = -K * q[1]
+        Fz = -K * q[2]
+        return Fx,Fy,Fz
     else:
-        return np.asarray([np.nan,np.nan,np.nan])
+        return np.nan,np.nan,np.nan
     
 
 
@@ -131,19 +130,19 @@ def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
 def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
     x, y, z = q
     if np.sqrt(y**2+z**2)>ap:
-        return np.asarray([np.nan,np.nan,np.nan])
-    if q[0] <= Lcap:
+        return np.nan,np.nan,np.nan
+    elif q[0] <= Lcap:
         x = Lcap - x
-        F = force_Func_Outer(x, y, z)
-        F[0]=-F[0]
+        Fx,Fy,Fz= force_Func_Outer(x, y, z)
+        Fx=-Fx
     elif Lcap < q[0] <= L - Lcap:
-        F = force_Func_Inner(x,y,z)
+        Fx,Fy,Fz = force_Func_Inner(x,y,z)
     elif q[0] <= L:
         x = Lcap - (L - x)
-        F = force_Func_Outer(x, y, z)
+        Fx,Fy,Fz = force_Func_Outer(x, y, z)
     else:
-        F = np.asarray([np.nan,np.nan,np.nan])
-    return F
+        return np.nan,np.nan,np.nan
+    return Fx,Fy,Fz
 
 
 
@@ -151,19 +150,18 @@ def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
 def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
-    
 
     if searchIsCoordInside == True:
         if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
-            return np.asarray([np.nan,np.nan,np.nan])
+            return np.nan,np.nan,np.nan
         elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
             if -apL <= q[1] <= apR:  # if inside the y (width) apeture
                 pass
             else:
-                return np.asarray([np.nan,np.nan,np.nan])
+                return np.nan,np.nan,np.nan
         elif q[0] < 0:
-            return np.asarray([np.nan,np.nan,np.nan])
+            return np.nan,np.nan,np.nan
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             m = np.tan(ang)
             Y1 = m * q[0] + (apR - m * Lb)  # upper limit
@@ -173,7 +171,7 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
                 #negative or positive tilt, the abs takes care of that
                 pass
             else:
-                return np.asarray([np.nan,np.nan,np.nan])
+                return np.nan,np.nan,np.nan
     x,y,z=q
     xFact = 1  # value to modify the force based on symmetry
     zFact = 1
@@ -188,9 +186,9 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
         if z < 0:  # if in the lower plane, need to use symmetry
             z = -z
             zFact = -1  # z force is opposite in lower half
-    F=force_Func(x,y,z)
-    F[0] = xFact * F[0]
-    F[2] = zFact * F[2]
-    return F
+    Fx,Fy,Fz=force_Func(x,y,z)
+    Fx = xFact * Fx
+    Fz = zFact * Fz
+    return Fx,Fy,Fz
 
 

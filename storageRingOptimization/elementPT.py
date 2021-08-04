@@ -561,13 +561,12 @@ class CombinerSim(CombinerIdeal):
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
         interpFx,interpFy, interpFz, funcV = self.make_Interp_Functions(self.data)
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func(x,y,z):
-            F=np.empty(3)
-            F[0]=interpFx(x,y,z)
-            F[1]=interpFy(x,y,z)
-            F[2]=interpFz(x,y,z)
-            return F
+            Fx=interpFx(x,y,z)
+            Fy=interpFy(x,y,z)
+            Fz=interpFz(x,y,z)
+            return Fx,Fy,Fz
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
 
@@ -618,8 +617,10 @@ class CombinerSim(CombinerIdeal):
             La=0.0
         else:
             La=self.La
-        return self.fieldFact*fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+        F=fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
                                             self.apz,self.apL,self.apR,searchIsCoordInside,self.force_Func)
+        F=self.fieldFact*np.asarray(F)
+        return F
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA
         La=self.La
@@ -631,7 +632,7 @@ class CombinerSim(CombinerIdeal):
         apL=self.apL
         apR=self.apR
         force_Func=self.force_Func
-        @numba.njit(numba.float64[:](numba.float64[:]))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64[:]))
         def force_NUMBA_Wrapper(q):
             return forceNumba(q,La,Lb,Lm,space,ang,apz,apL,apR,True,force_Func)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
@@ -1004,37 +1005,34 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def fill_Field_Func_Cap(self,dataCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataCap)
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def Force_Func_Cap_Wrap(x,y,z):
-            F=np.empty(3)
-            F[0]=interpFx(x, -z, y)
-            F[1]=interpFz(x, -z, y)
-            F[2]=-interpFy(x, -z, y)
-            return F
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return Fx,Fy,Fz
         self.Force_Func_Cap=Force_Func_Cap_Wrap
         self.magnetic_Potential_Func_Cap = lambda x, y, z: interpV(x, -z, y)
 
     def fill_Force_Func_Internal_Fringe(self,dataFringe):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataFringe)
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Internal_Wrap(x,y,z):
-            F=np.empty(3)
-            F[0]=interpFx(x, -z, y)
-            F[1]=interpFz(x, -z, y)
-            F[2]=-interpFy(x, -z, y)
-            return F
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return Fx,Fy,Fz
         self.Force_Func_Internal_Fringe=force_Internal_Wrap
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(x, -z, y)
 
     def fill_Force_Func_Seg(self,dataSeg):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Seg_Wrap(x,y,z):
-            F=np.empty(3)
-            F[0]=interpFx(x, -z, y)
-            F[1]=interpFz(x, -z, y)
-            F[2]=-interpFy(x, -z, y)
-            return F
+            Fx=interpFx(x, -z, y)
+            Fy=interpFz(x, -z, y)
+            Fz=-interpFy(x, -z, y)
+            return Fx,Fy,Fz
         self.Force_Func_Seg=force_Seg_Wrap
         self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV(x, -z, y)
 
@@ -1060,7 +1058,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         Force_Func_Internal_Fringe=self.Force_Func_Internal_Fringe
         Force_Func_Cap=self.Force_Func_Cap
         forceNumba = fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA
-        @numba.njit(numba.float64[:](numba.float64[:]))
+        @numba.njit()#numba.float64[:](numba.float64[:]))
         def force_NUMBA_Wrapper(q):
             return forceNumba(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap)
@@ -1197,13 +1195,12 @@ class HalbachLensSim(LensIdeal):
     def fill_Field_Func_Cap(self):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
         # wrap the function in a more convenietly accesed function
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func_Outer(x,y,z):
-            F=np.empty(3)
-            F[0]=interpFz(-z, y,x)
-            F[1]=interpFy(-z, y,x)
-            F[2]=-interpFx(-z, y,x)
-            return F
+            Fx=interpFz(-z, y,x)
+            Fy=interpFy(-z, y,x)
+            Fz=-interpFx(-z, y,x)
+            return Fx,Fy,Fz
         self.force_Func_Outer=force_Func_Outer
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(-z, y, x)
 
@@ -1223,21 +1220,15 @@ class HalbachLensSim(LensIdeal):
         BGradyMatrix[xIndices, yIndices] = self.data2D[:, 3]
         B0Matrix[xIndices, yIndices] = self.data2D[:, 4]
 
-
-        # interpX = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradxMatrix,kx=1, ky=1)
-        # interpY = spi.RectBivariateSpline(xArr, yArr, -self.PTL.u0*BGradyMatrix,kx=1, ky=1)
-        # interpV = spi.RectBivariateSpline(xArr, yArr, self.PTL.u0*B0Matrix,kx=1, ky=1)
-
         interpFx=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradxMatrix,xArr,yArr)
         interpFy=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradyMatrix,xArr,yArr)
         interpV=generate_2DInterp_Function_NUMBA(self.PTL.u0*B0Matrix,xArr,yArr)
-        @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func_Inner(x,y,z):
-            F=np.empty(3)
-            F[0]=0.0
-            F[1]=interpFy(-z, y) #model is rotated in particle tracing frame
-            F[2]=-interpFx(-z, y)
-            return F#np.asarray([0.0,Fy,Fz])
+            Fx=0.0
+            Fy=interpFy(-z, y) #model is rotated in particle tracing frame
+            Fz=-interpFx(-z, y)
+            return Fx,Fy,Fz
         self.force_Func_Inner=force_Func_Inner
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)#[0][0]
     def set_BpFact(self,BpFact):
@@ -1261,7 +1252,7 @@ class HalbachLensSim(LensIdeal):
     def force(self, q):
         F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.ap,self.force_Func_Inner
                                                                   ,self.force_Func_Outer)
-        return self.fieldFact*F
+        return np.asarray(self.fieldFact*F)
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
         Lcap=self.Lcap
@@ -1269,7 +1260,7 @@ class HalbachLensSim(LensIdeal):
         ap=self.ap
         force_Func_Inner=self.force_Func_Inner
         force_Func_Outer=self.force_Func_Outer
-        @numba.njit(numba.float64[:](numba.float64[:]))
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64[:]))
         def force_NUMBA_Wrapper(q):
             return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper

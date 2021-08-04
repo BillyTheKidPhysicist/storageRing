@@ -171,7 +171,8 @@ class ParticleTracer:
         qEl=qEl.copy()
         pEl=pEl.copy()
         F_n=np.empty(3)
-        F=force(qEl)*forceFact
+        F=np.asarray(force(qEl))
+        F*=forceFact
         if math.isnan(F[0]) == True:
             particleOutside = True
             return qEl, qEl, pEl, T, particleOutside
@@ -180,7 +181,8 @@ class ParticleTracer:
             if T>=T0:
                 break
             qEl_n[:] = qEl+pEl*h+.5*F*h**2  # q new or q sub n+1
-            F_n[:] = force(qEl_n)*forceFact
+            F_n[:] = force(qEl_n)
+            F_n*=forceFact #modifying in place is faster
             if math.isnan(F_n[0])==True:
                 particleOutside=True
                 return qEl_n,qEl,pEl,T,particleOutside
