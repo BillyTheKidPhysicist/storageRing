@@ -570,7 +570,6 @@ class CombinerSim(CombinerIdeal):
             return F
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
-        print('investigate why 3 line trick doesnt work')
 
         if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
             lowField=False
