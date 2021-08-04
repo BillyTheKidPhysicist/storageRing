@@ -1,17 +1,10 @@
-import time
 import numpy as np
 import matplotlib.pyplot as plt
-import pathos as pa
 import numba
-import sys
-from shapely.geometry import Polygon,Point
+from shapely.geometry import Polygon
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
-from ParticleTracerClass import ParticleTracer
-import scipy.optimize as spo
-from profilehooks import profile
-import copy
 class SimpleLocalMinimizer:
     #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
     #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
@@ -53,7 +46,12 @@ class SimpleLocalMinimizer:
         return X,error
 
 class ParticleTracerLattice:
-    def __init__(self,v0Nominal):
+    def __init__(self,v0Nominal,latticeType='storageRing'):
+        if latticeType!='storageRing' and latticeType!='injector':
+            raise Exception('invalid lattice type provided')
+        self.latticeType=latticeType#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
+        #input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
+        #is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
         self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
@@ -71,17 +69,14 @@ class ParticleTracerLattice:
         self.bender2=None #bender element object
         self.combiner=None #combiner element object
 
-        self.latticeType=None#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
-        #input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
-        #is also at the origin, but seceeding elements follow along the positive x axis
+
 
         self.elList=[] #to hold all the lattice elements
 
 
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
-
-        el = CombinerSim(self,file,sizeScale=sizeScale)
+        el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner=el
         self.combinerIndex=el.index
@@ -140,7 +135,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=BenderIdealSegmentedWithCap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,ap)
+        el=BenderIdealSegmentedWithCap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -208,14 +203,14 @@ class ParticleTracerLattice:
         #if La<minLa:
         #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el=CombinerIdeal(self, Lm, c1, c2, ap,sizeScale) #create a combiner element object
+        el=CombinerIdeal(self, Lm, c1, c2, ap,self.latticeType,sizeScale) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner = el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
 
-    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,latticeType='storageRing',
+    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,
                     surpressWarning=False):
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
@@ -229,9 +224,7 @@ class ParticleTracerLattice:
         #track potential. Wether to have enable the element function that returns magnetic pontential at a given point.
         #there is a cost to keeping this enabled because of pickling time
         #latticeType: Wether lattice is 'storageRing' type or 'injector' type.
-        if latticeType!='storageRing' and latticeType!='injector':
-            raise Exception('invalid lattice type provided')
-        self.latticeType=latticeType
+
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
@@ -434,9 +427,19 @@ class ParticleTracerLattice:
                 points=[q1,q2,q3,q4,q5,q6]
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
+                
+                # xArr=np.linspace(q2[0],q3[0])
+                # xArrDense=np.linspace(q2[0],q3[0],num=1000)
+                # m = np.tan(el.ang)
+                # Y1 = m * xArr + (el.apR - m * el.Lb)  # upper limit
+                # Y2 = (-1 / m) * xArrDense + el.La * np.sin(el.ang) + (el.Lb + el.La * np.cos(el.ang)) / m
+                # Y3 = m * xArr + (-el.apL - m * el.Lb)
                 el.SO=Polygon(points)
                 # plt.plot(*el.SO.exterior.xy)
-                # plt.scatter(.297, 0.011996368601029202)
+                # plt.plot(xArr,Y1,marker='x')
+                # plt.plot(xArrDense[Y2>q4[1]],Y2[Y2>q4[1]],marker='x')
+                # plt.plot(xArr,Y3,marker='x')
+                # plt.scatter(0.2969999800531941 ,-0.01085597011934949)
                 # plt.grid()
                 # plt.show()
             else:
@@ -491,10 +494,10 @@ class ParticleTracerLattice:
                 yb=0.0#set beginning coords
                 if el.sigma is not None:
                     raise Exception('First element cannot be bump element')
-                if self.latticeType=='storageRing':
+                if self.latticeType=='storageRing' or self.latticeType=='injector':
                     el.theta=np.pi #first element is straight. It can't be a bender
                 else:
-                    el.theta=0
+                    el.theta=0.0
                 xe=el.L*np.cos(el.theta) #set ending coords
                 ye=el.L*np.sin(el.theta) #set ending coords
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input

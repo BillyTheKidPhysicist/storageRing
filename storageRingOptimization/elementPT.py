@@ -76,7 +76,7 @@ class Element:
         self.sigma=None # the transverse translational. Only applicable to bump lenses now
         self.sim = None  # wether the field values are from simulations
         self.F = np.zeros(3)  # object to hold the force to prevent constantly making new force vectors
-        self.BpFact = 1.0  # factor to modify field values everywhere in space by, including force
+        self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
     def compile_Fast_Numba_Force_Function(self):
@@ -180,10 +180,10 @@ class LensIdeal(Element):
     def set_BpFact(self,BpFact):
         #update the magnetic field multiplication factor. This is used to simulate changing field values, or making
         #the bore larger
-        self.BpFact=BpFact
-        self.K = self.BpFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
+        self.fieldFact=BpFact
+        self.K = self.fieldFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
     def fill_Params(self):
-        self.K = self.BpFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
+        self.K = self.fieldFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
 
@@ -376,9 +376,10 @@ class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
-    def __init__(self, PTL, Lm, c1, c2, ap, sizeScale, fillsParams=True):
+    def __init__(self, PTL, Lm, c1, c2, ap, mode,sizeScale, fillsParams=True):
         super().__init__(PTL)
         self.sim = False
+        self.mode = mode
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
         # use sizeScale=2.0
         self.ap = ap * self.sizeScale
@@ -395,24 +396,24 @@ class CombinerIdeal(Element):
         self.type = 'COMBINER'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
-        self.inputOffsetLoad = None  # same as inputOffset, but for high field seekers being loaded into the ring
-        self.angLoad = None  # bending angle of combiner for particles being loaded into the ring
-        self.LoLoad = None  # trajectory length for particles being loaded into the ring in the combiner
         if fillsParams == True:
             self.fill_Params()
 
     def fill_Params(self):
-        self.Lb = self.Lm  # length of segment after kink after the inlet
+        print('change name of BpFact everywhre')
+        print('investigae why 3 line trick doesnt work')
 
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+        self.Lb = self.Lm  # length of segment after kink after the inlet
+        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
+            lowField=False
+            self.fieldFact=-1.0 #reverse field to model high field seeker
+        else:
+            lowField=True
+
+        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=lowField)
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
-
-        inputAngleLoad, inputOffsetLoad, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=False)
-        self.LoLoad = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
-        self.angLoad = inputAngleLoad
-        self.inputOffsetLoad = inputOffsetLoad
 
         self.apz = self.ap / 2
         self.La = self.ap * np.sin(self.ang)
@@ -432,10 +433,8 @@ class CombinerIdeal(Element):
         coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
         # #of orbit.
 
-        if lowField == True:
-            force =lambda x: self.force(x,searchIsCoordInside=False)
-        else:
-            force = lambda x: -self.force(x,searchIsCoordInside=False)
+
+        force = lambda x: self.force(x,searchIsCoordInside=False)
         limit = self.Lm + 2 * self.space
 
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
@@ -487,7 +486,7 @@ class CombinerIdeal(Element):
             B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
             F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
             F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
-        return F
+        return F*self.fieldFact
     def magnetic_Potential(self, q):
         V0=0
         if 0<q[0] < self.Lb:
@@ -510,7 +509,8 @@ class CombinerIdeal(Element):
             Y1 = m * q[0] + (self.apR - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * q[0] + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
             Y3 = m * q[0] + (-self.apL - m * self.Lb)
-            if q[1] < Y1 and q[1] < Y2 and q[1] > Y3:
+            if q[1] < Y1 and q[1] < np.abs(Y2) and q[1] > Y3: #needs to be bounded by lines. The rules change if the line has
+                #negative or positive tilt, the abs takes care of that
                 return True
             else:
                 return False
@@ -521,22 +521,25 @@ class CombinerIdeal(Element):
 
 
 class CombinerSim(CombinerIdeal):
-    def __init__(self, PTL, combinerFile, sizeScale=1.0):
+    def __init__(self, PTL, combinerFile, mode,sizeScale=1.0):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
         # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
         # quadrant, ie the portion with z>0 and x< length/2
+        #mode: wether the combiner is functioning as a loader, or a circulator.
         # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         # doubling dimensions halves the gradient
+        assert mode == 'injector' or mode == 'storageRing'
         Lm = .187
         apL = .015
         apR = .025
         fringeSpace = 5 * 1.1e-2
         apz = 6e-3
         print('fix the issue that the bounds extend to left and right pass the magnet')
-        super().__init__(PTL, Lm, np.nan, np.nan, np.nan, sizeScale,
+        super().__init__(PTL, Lm, np.nan, np.nan, np.nan,mode, sizeScale,
                          fillsParams=False)  # TODO: replace all the Nones with np.nan
         self.sim = True
+
         self.space = fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
         self.apL = apL * self.sizeScale
         self.apR = apR * self.sizeScale
@@ -567,9 +570,16 @@ class CombinerSim(CombinerIdeal):
             return F
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
+        print('investigate why 3 line trick doesnt work')
 
+        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
+            lowField=False
+            self.fieldFact=-1.0
+        else:
+            lowField=True
+        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=lowField)
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()  # 0.07891892567413786
+         # 0.07891892567413786
         # to find the length
         self.Lo = self.compute_Trajectory_Length(
             qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -581,13 +591,7 @@ class CombinerSim(CombinerIdeal):
         theta = inputAngle
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
 
-        self.inputOffset = inputOffset - np.tan(
-            inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        inputAngleLoad, inputOffsetLoad, qTracedArrLoad = self.compute_Input_Angle_And_Offset(lowField=False) #find
-        #parameters for atoms being loaded (so they are in low field state)
-        self.LoLoad = self.compute_Trajectory_Length(qTracedArrLoad)
-        self.angLoad = inputAngleLoad
-        self.inputOffsetLoad = inputOffsetLoad
+        self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.data = None  # to save memory and pickling time
         self.compile_Fast_Numba_Force_Function()
         # print(self.inputOffsetLoad,self.inputOffset)
@@ -599,25 +603,23 @@ class CombinerSim(CombinerIdeal):
         # length
         x = qTracedArr[:, 0]
         y = qTracedArr[:, 1]
-        xDelta = np.append(x[0],
-                           x[1:] - x[:-1])  # have to add the first value to the length of difference because it starts
-        # at zero
+        xDelta = np.append(x[0],x[1:] - x[:-1])  # have to add the first value to the length of difference because
+        # it starts at zero
         yDelta = np.append(y[0], y[1:] - y[:-1])
         dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
         Lo = np.sum(dLArr)
         return Lo
 
 
-
-
     def force(self, q,searchIsCoordInside=True):
         # this function uses the symmetry of the combiner to extract the force everywhere.
         #I believe there are some redundancies here that could be trimmed to save time.
-        if searchIsCoordInside==False:
+        if searchIsCoordInside==False: # the inlet length of the combiner, La, can only be computed after tracing
+            #through the combiner. Thus, it should be set to zero to use the force function for tracing purposes
             La=0.0
         else:
             La=self.La
-        return fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+        return self.fieldFact*fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
                                             self.apz,self.apL,self.apR,searchIsCoordInside,self.force_Func)
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA
@@ -912,7 +914,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.fill_Params_Pre_Constraint()
 
     def set_BpFact(self,BpFact):
-        self.BpFact=BpFact
+        self.fieldFact=BpFact
 
     def fill_Params_Pre_Constraint(self):
         def find_K(rb):
@@ -1044,7 +1046,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
                 self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
                                                                           ,self.Force_Func_Cap)
-        return self.BpFact*F
+        return self.fieldFact*F
     def compile_Fast_Numba_Force_Function(self):
         ang=self.ang
         ucAng=self.ucAng
@@ -1104,7 +1106,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                     V0 = self.magnetic_Potential_Func_Cap(x, y, z)
                 else:  # if not in either cap
                     V0=np.nan
-        return V0*self.BpFact
+        return V0*self.fieldFact
 
     def magnetic_Potential_First_And_Last(self, q, position):
         qNew = q.copy()
@@ -1118,7 +1120,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             V0 = self.magnetic_Potential_Func_Fringe(*qNew)
         else:
             raise Exception('INVALID POSITION SUPPLIED')
-        return V0*self.BpFact
+        return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
     def __init__(self,PTL, rp,L,apFrac):
@@ -1145,7 +1147,7 @@ class HalbachLensSim(LensIdeal):
         self.magnetic_Potential_Func_Fringe = None
         self.force_Func_Inner=None
         self.magnetic_Potential_Func_Inner = None
-        self.BpFact = 1.0 #factor to multiply field values by for tunability
+        self.fieldFact = 1.0 #factor to multiply field values by for tunability
         if self.L is not None:
             self.fill_Params()
 
@@ -1230,7 +1232,6 @@ class HalbachLensSim(LensIdeal):
         interpFx=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradxMatrix,xArr,yArr)
         interpFy=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradyMatrix,xArr,yArr)
         interpV=generate_2DInterp_Function_NUMBA(self.PTL.u0*B0Matrix,xArr,yArr)
-
         @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64))
         def force_Func_Inner(x,y,z):
             F=np.empty(3)
@@ -1241,7 +1242,7 @@ class HalbachLensSim(LensIdeal):
         self.force_Func_Inner=force_Func_Inner
         self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)#[0][0]
     def set_BpFact(self,BpFact):
-        self.BpFact=BpFact
+        self.fieldFact=BpFact
     def magnetic_Potential(self, q):
         x,y,z=q
         if q[0] <= self.Lcap:
@@ -1254,14 +1255,14 @@ class HalbachLensSim(LensIdeal):
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
         else:
             V0=0
-        return V0*self.BpFact
+        return V0*self.fieldFact
 
 
 
     def force(self, q):
         F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.ap,self.force_Func_Inner
                                                                   ,self.force_Func_Outer)
-        return self.BpFact*F
+        return self.fieldFact*F
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
         Lcap=self.Lcap

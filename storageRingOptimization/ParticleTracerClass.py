@@ -137,7 +137,7 @@ class ParticleTracer:
                 self.T+=self.h
                 self.particle.T=self.T
     def multi_Step_Verlet(self):
-        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.BpFact)
+        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n) #it doesn't quite make sense
