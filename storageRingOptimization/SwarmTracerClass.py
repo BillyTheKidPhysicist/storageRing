@@ -103,7 +103,7 @@ class SwarmTracer:
             np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
         return swarm
     def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,sameSeed=False,
-                                                    cornerPoints=False,circular=True):
+                                                    circular=True,smallXOffset=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
@@ -123,12 +123,6 @@ class SwarmTracer:
 
         bounds=np.asarray([[-qTMax,qTMax],[-qTMax,qTMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
                            [-pTMax,pTMax],[-pTMax,pTMax]])
-        if self.lattice.latticeType=='injector': #lattice is towards positive x instead of towards negative x so need
-            #to flip sign and order of bounds
-            a=-bounds[2][0]
-            b=-bounds[2][1]
-            bounds[2][0]=b
-            bounds[2][1]=a
 
 
         if circular is True:
@@ -144,32 +138,17 @@ class SwarmTracer:
         if upperSymmetry==True:
             bounds[1][0]=0.0 #don't let point be generarted below z=0
 
-        x=0.0 #all particles have same x position of 0,0
         swarm = Swarm()
-        if cornerPoints==True: #placing points at corner of hypercube
-            XiArr=np.asarray(np.meshgrid(*bounds)).T.reshape(-1,bounds.shape[0])
-            for Xi in XiArr:
-                q = np.append(x, Xi[:2])
-                p = Xi[2:]
-                swarm.add_Particle(q, p)
-            numParticles-=swarm.num_Particles()
-            if numParticles<=0:
-                raise Exception('adding particles at the corners of the hypercube exceeded total amount of allowed'
-                                'particles')
-
-
-        # samples=self.Rd_Sample(numParticles,len(bounds),seed=np.random.random()) #generate low noise sample
-        # #now need to scale correctly, because returned values are from 0 to 1
-        # for i in range(len(bounds)):
-        #     upper=bounds[i][1]
-        #     lower=bounds[i][0]
-        #     samples[:,i]=samples[:,i]*(upper-lower)+lower #rescale and shift
 
         sampler=skopt.sampler.Sobol()
         samples=np.asarray(sampler.generate(bounds,numParticles))
+        if smallXOffset==True:
+            x0=-1e-10 #to push negative
+        else:
+            x0=0.0
 
         for Xi in samples:
-            q = np.append(x, Xi[:2])
+            q = np.append(x0, Xi[:2])
             p = Xi[2:]
             if circular==True:
                 y,z,py,pz=Xi[[0,1,3,4]]

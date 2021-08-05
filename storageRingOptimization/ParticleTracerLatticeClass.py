@@ -427,21 +427,7 @@ class ParticleTracerLattice:
                 points=[q1,q2,q3,q4,q5,q6]
                 for i in range(len(points)):
                     points[i]=el.ROut@points[i]+el.r2[:2]
-                
-                # xArr=np.linspace(q2[0],q3[0])
-                # xArrDense=np.linspace(q2[0],q3[0],num=1000)
-                # m = np.tan(el.ang)
-                # Y1 = m * xArr + (el.apR - m * el.Lb)  # upper limit
-                # Y2 = (-1 / m) * xArrDense + el.La * np.sin(el.ang) + (el.Lb + el.La * np.cos(el.ang)) / m
-                # Y3 = m * xArr + (-el.apL - m * el.Lb)
                 el.SO=Polygon(points)
-                # plt.plot(*el.SO.exterior.xy)
-                # plt.plot(xArr,Y1,marker='x')
-                # plt.plot(xArrDense[Y2>q4[1]],Y2[Y2>q4[1]],marker='x')
-                # plt.plot(xArr,Y3,marker='x')
-                # plt.scatter(0.2969999800531941 ,-0.01085597011934949)
-                # plt.grid()
-                # plt.show()
             else:
                 raise Exception('No correct element provided')
     def catch_Errors(self,constrain,builLattice):

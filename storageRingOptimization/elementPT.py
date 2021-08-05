@@ -75,7 +75,6 @@ class Element:
         # constructed in particleTracerLattice
         self.sigma=None # the transverse translational. Only applicable to bump lenses now
         self.sim = None  # wether the field values are from simulations
-        self.F = np.zeros(3)  # object to hold the force to prevent constantly making new force vectors
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
@@ -222,10 +221,11 @@ class LensIdeal(Element):
 
     def force(self, q):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
+        F=np.zeros(3)
         if 0 <= q[0] <= self.L and q[1] ** 2 + q[2] ** 2 < self.ap**2:
-            self.F[1] = -self.K * q[1]
-            self.F[2] = -self.K * q[2]
-            return self.F.copy()
+            F[1] = -self.K * q[1]
+            F[2] = -self.K * q[2]
+            return F
         else:
             return np.asarray([np.nan,np.nan,np.nan])
     def compile_Fast_Numba_Force_Function(self):
@@ -509,11 +509,13 @@ class CombinerIdeal(Element):
             Y1 = m * q[0] + (self.apR - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * q[0] + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
             Y3 = m * q[0] + (-self.apL - m * self.Lb)
-            if q[1] < Y1 and q[1] < np.abs(Y2) and q[1] > Y3: #needs to be bounded by lines. The rules change if the line has
-                #negative or positive tilt, the abs takes care of that
+            if np.sign(m)<0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3): #if the inlet is tilted 'down'
+                return True
+            elif np.sign(m)>0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3): #if the inlet is tilted 'up'
                 return True
             else:
                 return False
+
     def transform_Element_Coords_Into_Lab_Frame(self,q):
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
@@ -1043,7 +1045,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
                 self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
                                                                           ,self.Force_Func_Cap)
-        return self.fieldFact*F
+        return self.fieldFact*np.asarray(F)
     def compile_Fast_Numba_Force_Function(self):
         ang=self.ang
         ucAng=self.ucAng
@@ -1252,7 +1254,7 @@ class HalbachLensSim(LensIdeal):
     def force(self, q):
         F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.ap,self.force_Func_Inner
                                                                   ,self.force_Func_Outer)
-        return np.asarray(self.fieldFact*F)
+        return self.fieldFact*np.asarray(F)
     def compile_Fast_Numba_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
         Lcap=self.Lcap
@@ -1260,7 +1262,7 @@ class HalbachLensSim(LensIdeal):
         ap=self.ap
         force_Func_Inner=self.force_Func_Inner
         force_Func_Outer=self.force_Func_Outer
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64[:]))
+        @numba.njit()
         def force_NUMBA_Wrapper(q):
             return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper

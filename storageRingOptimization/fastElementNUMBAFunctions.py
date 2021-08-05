@@ -129,16 +129,16 @@ def lens_Ideal_Force_NUMBA(q ,L ,ap ,K):
 
 @numba.njit()
 def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
-    x, y, z = q
+    x,y,z=q
     if np.sqrt(y**2+z**2)>ap:
         return np.nan,np.nan,np.nan
-    elif q[0] <= Lcap:
+    elif 0<=x <= Lcap:
         x = Lcap - x
         Fx,Fy,Fz= force_Func_Outer(x, y, z)
         Fx=-Fx
-    elif Lcap < q[0] <= L - Lcap:
+    elif Lcap < x <= L - Lcap:
         Fx,Fy,Fz = force_Func_Inner(x,y,z)
-    elif q[0] <= L:
+    elif 0<=q[0] <= L:
         x = Lcap - (L - x)
         Fx,Fy,Fz = force_Func_Outer(x, y, z)
     else:

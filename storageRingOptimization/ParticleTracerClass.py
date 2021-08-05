@@ -111,10 +111,6 @@ class ParticleTracer:
         self.particle.currentEl=self.currentEl
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
         return self.particle
-    def update(self):
-        #call after changing some parameter of the lattice to reflect the change here.
-        #todo: implement
-        pass
     def time_Step_Loop(self):
         while (True):
             if self.T >= self.T0: #if out of time
