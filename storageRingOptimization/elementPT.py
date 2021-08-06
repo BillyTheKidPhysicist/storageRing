@@ -400,8 +400,6 @@ class CombinerIdeal(Element):
             self.fill_Params()
 
     def fill_Params(self):
-        print('change name of BpFact everywhre')
-        print('investigae why 3 line trick doesnt work')
 
         self.Lb = self.Lm  # length of segment after kink after the inlet
         if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
@@ -555,6 +553,11 @@ class CombinerSim(CombinerIdeal):
         self.fill_Params()
 
     def fill_Params(self):
+        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
+            lowField=False
+            self.fieldFact=-1.0
+        else:
+            lowField=True
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
@@ -570,13 +573,8 @@ class CombinerSim(CombinerIdeal):
             Fz=interpFz(x,y,z)
             return Fx,Fy,Fz
         self.force_Func=force_Func
-        self.magnetic_Potential_Func = lambda x, y, z: funcV(x, y, z)
+        self.magnetic_Potential_Func = lambda x, y, z: self.fieldFact*funcV(x, y, z)
 
-        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
-            lowField=False
-            self.fieldFact=-1.0
-        else:
-            lowField=True
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=lowField)
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
          # 0.07891892567413786
@@ -1177,6 +1175,14 @@ class HalbachLensSim(LensIdeal):
             self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
             self.fill_Field_Func_2D()
+        else:
+            #still need to make the force function
+            @numba.njit()
+            def force_Func_Inner(x, y, z):
+                return 0.0,0.0,0.0
+            self.force_Func_Inner = force_Func_Inner
+            self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
+
 
         zMin=0
         zMax=self.Lcap

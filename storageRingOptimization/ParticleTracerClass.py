@@ -76,6 +76,7 @@ class ParticleTracer:
         if self.currentEl is None:
             self.particle.clipped=True
         else:
+            self.particle.clipped=False
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.q)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.p)
         if self.fastMode==False and self.particle.clipped == False:
@@ -308,16 +309,17 @@ class ParticleTracer:
         #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
         #None. Most of the time this return false and the leapfrog algorithm continues
         #el: The element to check against
-
         #todo: there are some issues here with element edges
-        el=self.which_Element(qEl_n)
+        el=self.which_Element(qEl_n) #
         if el is None: #if outside the lattice
             self.particle.clipped = True
         elif el is not self.currentEl: #element has changed
+            elNew=el
             self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
-            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n)
-            pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
-            self.currentEl=el
+            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n) #use the old  element for transform
+            pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl) #use the old  element for transform
+            self.currentEl=elNew
+            self.particle.currentEl=elNew 
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
             # element

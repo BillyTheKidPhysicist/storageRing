@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import time
+import numpy.linalg as npl
 import numpy as np
 import copy
 class Swarm:
@@ -115,6 +116,7 @@ class Particle:
         self._VList=[] #potential energy list
         #array versions
         self.pArr=None
+        self.p0Arr=None #array of norm of momentum.
         self.qArr=None 
         self.qoArr=None 
         self.TArr=None 
@@ -129,6 +131,7 @@ class Particle:
         #this records value like position and momentum
         #qel: element position coordinate
         #pel: momentum position coordinate
+        # print(qel,self.cumulativeLength)
         self.q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
         self.p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
         self._qList.append(self.q.copy())
@@ -158,9 +161,10 @@ class Particle:
         pElArr=pElArr[1:]
         qList=[]
         pList=[]
-        if self.currentEl!=driftEl: #the particle has entered the next element, and since I am recycling that algorithm
-            #it has the uninteded side effect of updating the cumulative length, which I do not want yet because it
-            #also includes the drift region
+
+        if self.currentEl!=driftEl: #the particle has entered the next element before getting here, and since I am
+            # recycling that algorithm it has the uninteded side effect of updating the cumulative length,
+            # which I do not want yet because it also includes the drift region
             cumulativeLength=self.cumulativeLength-driftEl.Lo
         else:
             cumulativeLength=self.cumulativeLength
@@ -184,6 +188,8 @@ class Particle:
         self._pList = []  
         self.qoArr = np.asarray(self._qoList)
         self._qoList = []
+        if self.pArr.shape[0]!=0:
+            self.p0Arr=npl.norm(self.pArr,axis=1)
 
 
         self.TArr = np.asarray(self._TList)

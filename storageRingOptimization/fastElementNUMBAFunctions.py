@@ -168,8 +168,9 @@ def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInsi
             Y1 = m * q[0] + (apR - m * Lb)  # upper limit
             Y2 = (-1 / m) * q[0] + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
             Y3 = m * q[0] + (-apL - m * Lb)
-            if q[1] < Y1 and q[1] < np.abs(Y2) and q[1] > Y3: #needs to be bounded by lines. The rules change if the line has
-                #negative or positive tilt, the abs takes care of that
+            if np.sign(m)<0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3): #if the inlet is tilted 'down'
+                pass
+            elif np.sign(m)>0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3): #if the inlet is tilted 'up'
                 pass
             else:
                 return np.nan,np.nan,np.nan
