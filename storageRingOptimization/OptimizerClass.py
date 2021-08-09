@@ -1,8 +1,8 @@
-import poisson_disc
 import skopt
 from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm
+import scipy.optimize as spo
 import time
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
@@ -61,39 +61,14 @@ class LatticeOptimizer:
         self.swarmTracer=SwarmTracer(self.lattice)
         self.latticePhaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
-        self.stepsLens1=None #number of steps between min and max value to explore in parameter space
-        self.stepsLens2=None # for lens 2
-        self.hardEvals=0 #number of evaluations of the lattice particle tracing function so far
-        self.skoptModel=None #skopt model for use gaussian process minimization
-        self.numInit=None #initial number of lattice tracing evaluations before asking the model for points
-        self.xi=None #the value for skoptmodel to use to choose the next point. The next point must give this much
-        #improvement
-        self.modulation=None # a string describing which configuration to vary
-        self.xiResetCounter=0 #if the value xi was changed to search for new points, this is used to count to
-        #resetting back the original value to promote for exploration after getting bogged down
-        self.randomSampleList=[] ##list of random samples generated with low discrepancy method for searching paramter
-        #space
-        self.minCombinerShaperDistance=.1 #minimum distance between the combiner and the shaper magnet
-        self.injectorBounds=[] #list of bounds for the injection system, Lo, Li, LOffset
-        self.injectorBounds.append((.1,.25)) #Object distance, Lo
-        LiMin=self.lattice.combiner.Lo*1.5+self.minCombinerShaperDistance
-        self.injectorBounds.append((LiMin,LiMin+1.0)) #Image distance, Li
-        self.injectorBounds.append((-self.lattice.combiner.Lo/2,self.lattice.combiner.Lo/2)) #focus offset inside the combiner, LOffset. Keep in mind
+        self.elementIndices=None
+        # self.minCombinerShaperDistance=.1 #minimum distance between the combiner and the shaper magnet
+        # self.injectorBounds=[] #list of bounds for the injection system, Lo, Li, LOffset
+        # self.injectorBounds.append((.1,.25)) #Object distance, Lo
+        # LiMin=self.lattice.combiner.Lo*1.5+self.minCombinerShaperDistance
+        # self.injectorBounds.append((LiMin,LiMin+1.0)) #Image distance, Li
+        # self.injectorBounds.append((-self.lattice.combiner.Lo/2,self.lattice.combiner.Lo/2)) #focus offset inside the combiner, LOffset. Keep in mind
         #the signs!!!
-    def update_Lattice(self,X):
-        #Update the various paremters in the lattice and injections that are variable
-        #X: lattice parameters in the form of an iterable
-        if self.modulation=='01': #modulate lens 0 and 1
-            self.lattice.elList[0].BpFact = X[0]
-            self.lattice.elList[2].BpFact = X[1]
-        elif self.modulation=='12': #modulate lens 1 and 2
-            self.lattice.elList[2].BpFact = X[0]
-            self.lattice.elList[4].BpFact = X[1]
-        elif self.modulation=='02':#modulate lens 0 and 2
-            self.lattice.elList[0].BpFact = X[0]
-            self.lattice.elList[4].BpFact = X[1]
-        else:
-            raise Exception('not a valid selection')
     def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
         #return a function that returns a value for number of revolutions at a given point in phase space. The phase
         #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
@@ -113,7 +88,6 @@ class LatticeOptimizer:
             Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum (y,z,px,py,pz)
             phaseSpacePoints.append(Xi)
             revolutions.append(swarmTraced.particles[i].revolutions)
-        print(swarmTraced.survival_Rev(),swarmTraced.longest_Particle_Life_Revolutions())
         apeture=self.lattice.elList[self.lattice.combinerIndex+1].ap #apeture of next element
         latticePhaseSpaceFunc=phaseSpaceInterpolater(np.asarray(phaseSpacePoints), revolutions,apeture)
         return latticePhaseSpaceFunc
@@ -220,254 +194,98 @@ class LatticeOptimizer:
         if showPlot==True:
             plt.show()
 
-    def generate_Next_Point(self):
-        #generate the next point to test. This generator first iterates over the initial random values, and then uses
-        #the model to propose new values. It uses a low discrepancy poission disc sampler to evenly explore the space.
-        # this is done by first initializing points, shuffling them, and workig through them. When the list is depleted
-        #more are generated. Has to be generated in a batch though, and the amount generated is variable, it is not a
-        #repeatable process. self.evals is used to keep track of number of expensive evaluations. An expensize evaluation
-        #is an evaluation in a stable region, these take far longer than evaluation the stability. This method also prevents
-        #duplicate points from being suggested (seems like scikit-optimize should do this, but it doesn't). When a duplicate
-        #point is suggested this usually indicates the model is getting bogged down so I change the selection criteria to
-        #search more then after xiReset evaluation it goes back to the orignial value
+    def optimize_Grid(self,coords0Arr,val0Arr,bounds,maxIter):
+        # np.random.seed(int.from_bytes(os.urandom(4),byteorder='little'))
+        newCoords=coords0Arr.copy()
+        newVals=val0Arr.copy()
+        plt.scatter(newCoords[:, 0], newCoords[:, 1])
+        fitFunc=None
+        jitterAmplitude=[]
+        for bound in bounds:
+            jitterAmplitude.append(1e-3*(bound[1]-bound[0]))
+        jitterAmplitude=np.asarray(jitterAmplitude)
+        for i in range(maxIter):
+            print('------',i)
+            fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=1e-6) #a little bit of smooth helps
+            def minFunc(X):
+                return 1/np.abs(fitFunc([X])[0])
+            probeVals=[]
+            probeCoords=[]
+            for j in range(10):
+                sol=spo.differential_evolution(minFunc,bounds,mutation=1.5)
+                probeVals.append(1/sol.fun)
+                probeCoords.append(sol.x)
+            bestProbeCoords=probeCoords[np.argmax(np.asarray(probeVals))]
+            if i != maxIter-1: #if the last one don't jitter
+                bestProbeCoords=bestProbeCoords+ jitterAmplitude*2*(np.random.rand(len(bounds))-.5) #add a small amount
+                #of jitter to overcome small chance of getting stuck at a peak. Also, if the coords aren't improving
+                #more than this jitter, that's a good sign we're done
+            newVal=self.revFunc(bestProbeCoords,parallel=True)
+            print(newVal,bestProbeCoords)
+            newCoords=np.row_stack((newCoords,bestProbeCoords))
+            plt.scatter(*bestProbeCoords,marker='x',c='r')
+            newVals=np.append(newVals,newVal)
+        print('initial value:',np.round(np.max(val0Arr),2),'new value: ',np.round(np.max(newVals),2))
+        num=250
+        xPlot=np.linspace(0,1,num=num)
+        coords=np.asarray(np.meshgrid(xPlot,xPlot)).T.reshape(-1,2)
+        image=fitFunc(coords).reshape(num,num)
 
-
-        #todo: catch duplicating random points
-        xiReset=5 #this many evaluations after a duplicate point before resetting to a lower value
-        if self.hardEvals <= self.numInit - 1:  # if still initializing the model
-            if len(self.randomSampleList)==0: #if the low discrepancy list has been exhausted
-                XSample=list(np.random.rand(2))
-                XSample[0]=int(XSample[0]*self.stepsLens1)
-                XSample[1] = int(XSample[1]*self.stepsLens2)
-            else:
-                XSample=list(self.randomSampleList.pop()) #pop a value off the list. The value is removed and the list is
-                # shorter. model.tell requires a list so need to cast
+        plt.imshow(np.flip(image,axis=0),extent=[0,1.0,0,1.0])
+        plt.show()
+        return newCoords[np.argmin(newVals)]
+    def project_Swarm(self,swarm0,h,T,checkStability,copy=True):
+        #project a swarm through the lattice.
+        pass
+    def revFunc(self,X,h=1e-5,T=1.0,numParticles=1000, parallel=False):
+        self.update_Lattice(X)
+        minRevs = 5.0  # test particle must achieve at least this many revolutions
+        swarmTest=self.swarmTracer.initialize_Stablity_Testing_Swarm(1e-3)
+        swarmTestNew = self.swarmTracer.trace_Swarm_Through_Lattice(swarmTest, h,
+                                                               1.5 * minRevs * self.lattice.totalLength / 200.0,
+                                                               parallel=parallel)
+        t=time.time()
+        for i in range(10):
+            swarm0=self.swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(2.5e-3,5.0,1.0,numParticles,sameSeed=True)
+            swarm0=self.swarmTracer.move_Swarm_To_Combiner_Output(swarm0)
+        print((time.time()-t)/10)
+        stable = False
+        for particle in swarmTestNew:
+            if particle.revolutions > minRevs:
+                stable = True
+        if stable == False:
+            return 0.0
         else:
-            XSample = self.skoptModel.ask()
-        if self.hardEvals > self.numInit - 1:  # check if the optimizer is suggesting
-            # duplicate points, but only if have asked it, not a random value
-            loops = 0
-            while (loops < 10):  # try to force the optimizer to pick another point if there are duplicates
-                if np.any(np.sum((np.asarray(self.skoptModel.Xi) - np.asarray(XSample)) ** 2, axis=1) == 0):  # if any duplicate
-                    # points
-                    print('DUPLICATE POINT', XSample)
-                    self.skoptModel.acq_func_kwargs['xi'] = self.skoptModel.acq_func_kwargs['xi'] * 2 #increase the required
-                    #improvement. Eventually this will force the model to make a more random guess
-                    self.skoptModel.update_next()
-                    XSample = self.skoptModel.ask()
-                    loops += 1
-                    self.xiResetCounter=0 #set the counter that will count up to xiReset before resetting xi
-                    print('NEW POINT',XSample)
-                else: #if no duplicates move on
-                    break
-            if loops == 9: #failed
-                raise Exception('COULD NOT STEER MODEL TO A NEW POINT')
-            if self.skoptModel.acq_func_kwargs['xi'] != self.xi: #only increment if the value is different (has been
-                #changed)
-                self.xiResetCounter+=1
-                if self.xiResetCounter==xiReset:
-                    self.skoptModel.acq_func_kwargs['xi'] = self.xi
-                    self.xiResetCounter=0
-        return XSample
-    def generate_Monte_Carlo_Bounds(self,numPoints=250,numParticles=5000,survivalFrac=.95,sameSeed=True):
-        #this function generates the 5 bounds for the monte carlo integration of tracing particles through the lattice.
-        #it is crucial to have the bounds of the integration encompass the particl'es that will be mode matched. However,
-        #having too much integration volume rapidly becomes computationally expensive. Thus, this method minimizes the required
-        #limits. This is done by finding the limits of numPoints of configurations of the injection system with a cloud
-        #of numParticles. To avoid wasing resources on outlier, the integreation bound that captures survivalFrac of particles
-        #is used. The limit of integration is calculated for each configuration and that largest is used.
-        #the position values are given by simple geometry, however the velocity limits are more complicated and require
-        #this method. Remember that the monte carlo integration has square limits
-        #numPonts: Number of configurations to test
-        #numParticles: Number of particles to test each configuration with
-        #survivalFrac: Fraction of particles that corresponds to the limit. This is to prevent wasted resources with outliers
-        #sameSeed: Wether the use the same seed to get repeatable results. Otherwise the sobol seuqnece uses the numpy random
-        #generator
-        if sameSeed==True:
-            np.random.seed(42)
+            swarm = self.swarmTracer.trace_Swarm_Through_Lattice(swarm0, h, T, parallel=parallel, fastMode=True)
+            # self.lattice.show_Lattice(swarm=swarm,trueAspectRatio=False,showTraceLines=True)
+            return swarm.survival_Rev()
+    def update_Lattice(self,X):
+        for i in range(len(X)):
+            self.lattice.elList[self.elementIndices[i]].fieldFact=X[i]
+    def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10):
+        # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
+        #system over a grid, then using a non parametric model to find the optimum.
+        #elementIndices: tuple of indices of elements to tune the field strength
+        #bounds: list of tuples of (min,max) for tuning
+        #maxIter: maximum number of optimization iterations with non parametric optimizer
+        assert np.unique(np.asarray(elementIndices)).shape[0]==len(elementIndices) #ensure no duplicates
+        assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
+        print('here')
+        self.elementIndices=elementIndices
+        BArrList=[]
+        for bound in bounds:
+            BArrList.append(np.linspace(bound[0], bound[1], num0))
+        coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
+        # gridResults=[]
+        # for coord in coordsArr:
+        #     gridResults.append(self.revFunc(coord))
+        # gridResults=np.asarray(gridResults)
+        # print(np.max(gridResults))
+        # plt.plot(tem)
+        # plt.show()
+        gridResults = np.asarray(self.helper.parallel_Problem(self.revFunc, coordsArr, onlyReturnResults=True))
+        return self.optimize_Grid(coordsArr,gridResults,bounds,maxIter)
 
-        def wrapper(args):
-            #this does all the wrangling of unpacking the results and finding the survivalFrac cutoff values
-            Lo, Li, LOffset = args
-            swarm = self.swarmTracer.initialize_Swarm_At_Combiner_Output(Lo, Li, LOffset, labFrame=False,
-                                                                    clipForNextApeture=True,
-                                                                    numParticles=numParticles, fastMode=True)  # 5000
-            qVec, pVec = swarm.vectorize(onlyUnclipped=True)
-            pxArr = pVec[:, 0] + self.lattice.v0Nominal #set the pxArr to an offset from the nominal value (not necesarily
-            #the mean though)
-            pyArr = pVec[:, 1]
-            pzArr = pVec[:, 2]
-            #I'm avoiding using 3 different loops here. Kind of iffy if this actuall saves space honestly.
-            #The value that allows survivalFrac is found by creating an array of limits then looping through the array
-            #and counting the number of particles with absolute value less than that limit for each coordinate.
-            valMaxList = [pxArr.max(), pyArr.max(), pzArr.max()]
-            arrList = [pxArr, pyArr, pzArr]
-            integrationMaxList = [] #the result that corresponds to 95% survival
-            for i in range(len(valMaxList)): #loop over the three dimensions we're testing (px,py,pz)
-                arr = arrList[i]
-                valMax = valMaxList[i]
-                valArr = np.linspace(valMax, 0)
-                for val in valArr: #loop through and test the cutoff
-                    frac = np.sum(np.abs(arr) < val) / arr.shape[0]
-                    if frac <= survivalFrac:
-                        integrationMaxList.append(val)
-                        break #move onto the next dimension
-            return integrationMaxList
-
-        bounds=self.injectorBounds
-        sampler = skopt.sampler.Sobol() #low discrepancy sampling
-        samples = sampler.generate(bounds, numPoints)
-        argList = samples
-        results = self.helper.parallel_Problem(wrapper, argList, onlyReturnResults=True)
-        pxList = []
-        pyList = []
-        pzList = []
-        for result in results:
-            pxList.append(result[0])
-            pyList.append(result[1])
-            pzList.append(result[2])
-
-        pxLimit=np.max(np.asarray(pxList)) #the momentum limits of integration
-        pyLimit=np.max(np.asarray(pyList))#the momentum limits of integration
-        pzLimit=np.max(np.asarray(pzList))#the momentum limits of integration
-        #use the limits of the combiner and the next element as the limits of the integration
-        #remember there is no x limit. All particles are assumed to start at x=0
-        qyLimit=self.lattice.elList[self.lattice.combinerIndex+1].ap*1.01 #the position limits of integration
-        qzLimit=self.lattice.combiner.apz*1.01#the position limits of integration
-        if sameSeed==True:
-            np.random.seed(int(time.time()))#reset the seed, kind of
-        return qyLimit,qzLimit,pxLimit,pyLimit,pzLimit
-    def maximize_Suvival_Through_Lattice(self, h, T, modulation='01',numParticles=30000, maxHardsEvals=100, bounds=None, precision=10e-3):
-        #This function uses bayesian optimization with guassian process to maximise the curvival thorugh the lattice.
-        #this is done by varying lattice paramters, as of now only field strength of two components, then doing a
-        #monte carlo integratino at that point, then using that integration result to optimize an injection system.
-        #h: timestep
-        #T: total time for the monte carlo integration at each point
-        #modulation: The lattice configuration to modulate.
-        #numParticle: Number of particles to use in the monte carlo integration
-        #maxHardEvals: Maximum number of expensive evaluations. Many configuration will be unstable and so very fast
-        #to evaluate
-        #bounds: The region to explore for the monte carlo optimization.
-        #precision: The minimum seperation between paramters from bounds. This is to represent the fact that I can
-        #only tune the knobs of my actual experiment so much, and thus don't want to waste time simulating stuff I can't
-        #actually vary
-        self.h=h
-        self.T=T
-        self.modulation=modulation
-
-        print('generating monte carlo bounds')
-        qyLimit,qzLimit,pxLimit,pyLimit,pzLimit=self.generate_Monte_Carlo_Bounds()
-        print('done generating monte carlo bounds')
-        swarmInitial=self.swarmTracer.initalize_Random_Swarm_In_Phase_Space(qyLimit, qzLimit, pxLimit, pyLimit, pzLimit, numParticles)
-        swarmCombiner=self.swarmTracer.move_Swarm_To_Combiner_Output(swarmInitial)
-
-
-        if bounds is None:
-            bounds=[(0.0, .5), (0.0, .5)]
-        class Solution:
-            #because I renormalize bounds and function values, I used this solution class to easily access the more
-            #familiar values that I am interested in
-            def __init__(self):
-                self.skoptSol=None #to hold the skopt solutiob object
-                self.x=None #list for real paremters values
-                self.fun=None #for real solution value
-
-        self.stepsLens1=int((bounds[0][1]-bounds[0][0])/precision)
-        self.stepsLens2 = int((bounds[1][1] - bounds[1][0]) / precision)
-        if self.stepsLens1+self.stepsLens2<=1:
-            raise Exception('THERE ARE NOT ENOUGH POINTS IN SPACE TO EXPLORE, MUST BE MORE THAN 1')
-        boundsNorm = [(0, self.stepsLens1), (0, self.stepsLens2)]
-        print('bounds',boundsNorm)
-
-
-        def min_Func(X):
-            XNew = X.copy()
-            for i in range(len(X)):  # change normalized bounds to actual
-                XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
-            print(XNew)
-            print('start lattice tracing')
-            t=time.time()
-            func = self.compute_Phase_Space_Map_Function(XNew,swarmCombiner)
-            print('done lattice tracing',time.time()-t)
-            gm.lattice=self.lattice
-            gm.func=func
-            t=time.time()
-            print('start mode match')
-            survival = -gm.solve(self)
-            print('done mode match',time.time()-t)
-            print('survival',survival)
-            # self.update_Lattice(XNew)
-            # swarm=self.swarmTracer.trace_Swarm_Through_Lattice(swarmCombiner, self.h, self.T, fastMode=True)
-            # survival=swarm.survival_Rev()
-            Tsurvival = survival * self.lattice.totalLength / self.lattice.v0Nominal
-            cost = -Tsurvival / T  # cost scales from 0 to -1.0
-            print('cost',cost)
-            return cost
-
-        stabilityFunc = self.get_Stability_Function(numParticlesPerDim=1, cutoff=8.0,h=5e-6)
-
-        def stability_Func_Wrapper(X):
-            XNew = X.copy()
-            for i in range(len(X)):  # change normalized bounds to actual
-                XNew[i] = ((bounds[i][1] - bounds[i][0]) * float(X[i])/float(boundsNorm[i][1]-boundsNorm[i][0]) + bounds[i][0])
-            return stabilityFunc(XNew)
-
-        self.numInit = int(maxHardsEvals * .5)  # 50% is just random
-        #generate random sample list. This really needs to be improved, I liked the feature where I added one point
-        #at a time but that requires using random numbers when this is exhausted
-        points = 5 * self.numInit +int((np.random.rand()-.5)*10) # from experience I know that at least this amount is requied based on how sparse
-        # expensive evaluations are. Add random numbers to shake things up
-        r = np.sqrt(2 * (1.0 / points) / np.pi)  # this is used to get near the required amount of points with
-        # poission disc method, which does not give an exact number of points
-        samples = poisson_disc.Bridson_sampling(dims=np.asarray([1.0, 1.0]), k=100, radius=r)
-        np.random.shuffle(samples)  # shuffle array in place
-        # convert to the integer value that the skopt model requires
-        samples[:, 0] = samples[:, 0] * self.stepsLens1
-        samples[:, 1] = samples[:, 1] * self.stepsLens2
-        samples = samples.astype(int)
-        self.randomSampleList = list(samples)
-
-        unstableCost = -1.5 * (self.lattice.totalLength / self.lattice.v0Nominal) / T  # typically unstable regions return an average
-        # of 1 to 2 revolution
-        xiRevs = 1.0  # search for the next points that returns an imporvement of at least this many revs
-        self.xi = (xiRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
-        noiseRevs =1e-2 #small amount of noise to account for variability of results and encourage a smooth fit
-        noise = (noiseRevs * (self.lattice.totalLength / self.lattice.v0Nominal)) / T
-
-
-        self.skoptModel = skopt.Optimizer(boundsNorm, n_initial_points=self.numInit, acq_func='EI', acq_optimizer='sampling',
-                                          acq_func_kwargs={"xi": self.xi, 'noise': noise}, n_jobs=-1)
-
-
-
-        self.hardEvals = 0
-        t = time.time()
-
-        print('starting')
-        while (self.hardEvals < maxHardsEvals):
-            print(self.hardEvals)
-            XSample=self.generate_Next_Point()
-            print(XSample)
-            if stability_Func_Wrapper(XSample) == True:  # possible solution
-                print('stable')
-                cost = min_Func(XSample)
-                self.skoptModel.tell(XSample, cost)
-                self.hardEvals += 1
-
-            else:  # not possible solution
-                self.skoptModel.tell(XSample, unstableCost+np.random.rand()*noiseRevs) #add a little random noise to help
-                #with stability. Doesn't work well when all the points are the same sometimes
-
-
-        print(time.time() - t)
-        sol = self.skoptModel.get_result()
-        print(sol)
-        solution = Solution()
-        solution.skoptSol = sol
-        x = [0, 0]
-        for i in range(len(sol.x)):  # change normalized bounds to actual
-            x[i] = ((bounds[i][1] - bounds[i][0]) * float(sol.x[i]) / float(boundsNorm[i][1] - boundsNorm[i][0]) +
-                    bounds[i][0])
-        solution.x = x
-        solution.fun = -sol.fun * T * self.lattice.v0Nominal / self.lattice.totalLength
-        return solution
+#
+# test=LatticeOptimizer(None)
+# test.optimize_Magnetic_Field((1,2,3),[(0,1),(0,1),(0,1)],30,10)

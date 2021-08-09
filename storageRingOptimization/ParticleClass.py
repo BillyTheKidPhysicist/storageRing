@@ -203,7 +203,7 @@ class Particle:
                 qo=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength)
                 self.revolutions=qo[0]/totalLatticeLength
             self.currentEl=None # to save memory
-    def plot_Energies(self):
+    def plot_Energies(self,showOnlyTotalEnergy=False):
         if self.EArr.shape[0]==0:
             raise Exception('PARTICLE HAS NO LOGGED POSITION')
         EArr = self.EArr
@@ -213,8 +213,9 @@ class Particle:
         plt.close('all')
         plt.title('Particle energies vs position. \n Total initial energy is '+str(np.round(EArr[0],1)) +' energy units')
         plt.plot(qoArr[:,0],EArr-EArr[0],label='E')
-        plt.plot(qoArr[:, 0], TArr - TArr[0],label='T')
-        plt.plot(qoArr[:, 0], VArr - VArr[0],label='V')
+        if showOnlyTotalEnergy==False:
+            plt.plot(qoArr[:, 0], TArr - TArr[0],label='T')
+            plt.plot(qoArr[:, 0], VArr - VArr[0],label='V')
         plt.ylabel("Energy")
         plt.xlabel('Meters')
         plt.legend()

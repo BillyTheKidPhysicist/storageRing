@@ -53,6 +53,14 @@ class SwarmTracer:
             z[i]=(z[i-1]+alpha)%1
 
         return z
+    def initialize_Stablity_Testing_Swarm(self,qMax):
+        swarmTest = Swarm()
+        swarmTest.add_Particle(qi=np.asarray([-1e-10,0.0,0.0]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax, 0]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax, 0]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, 0, -qMax]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, 0, qMax]))
+        return swarmTest
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
         # to the west. The transverse plane is the yz plane.
@@ -227,7 +235,6 @@ class SwarmTracer:
                     swarm.add_Particle(qi=qCoord.copy(),pi=pCoord.copy())
         if type(seed)==int:
             np.random.seed(int(time.time()))
-        # print('Number of particles generated: ', swarm.num_Particles())
         return swarm
     def move_Swarm_To_Combiner_Output(self,swarm,scoot=True,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
@@ -271,6 +278,4 @@ class SwarmTracer:
         else:
             for i in range(swarmNew.num_Particles()):
                 swarmNew.particles[i]=self.particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode)
-
-
         return swarmNew

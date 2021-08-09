@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import numpy.linalg as npl
-from interp3d import interp_3d
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -391,6 +390,7 @@ class HalbachLens:
 
         return rNew
     def _transform_Vector(self,v):
+        #todo: something seems wrong here with the matrix multiplixation
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
@@ -525,7 +525,6 @@ class SegmentedBenderHalbach(HalbachLens):
             #is clockwise about y axis in the xz plane looking from the negative side of y
             lens.position(r0)
             self.lensList.append(lens)
-
     def B_Vec(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -542,182 +541,3 @@ class SegmentedBenderHalbach(HalbachLens):
             return BArr[0]
         else:
             return BArr
-
-# lensFringe = SegmentedBenderHalbachLensFieldGenerator(.01, 1.0, self.ucAng, self.Lm,
-#                                                                           numLenses=3,inputOnly=True)
-
-
-# dxArr=np.logspace(-5,-15,num=30)
-# errorList=[]
-# for dx in dxArr:
-#     lens=HalbachLens(1,.0254,.05,length=.1)
-#     testArr=npl.norm(lens.BNorm_Gradient(coords,dr=dx,method=1),axis=1)
-#     error=1e2*np.sum(np.abs(testArr-sampleArr))/np.sum(sampleArr)
-#     errorList.append(error)
-#     print(dx,error)
-#
-# plt.title('Forward difference accuracy compared to central difference \n Central difference stepsize is 1e-6')
-# plt.xlabel('Step size ,m')
-# plt.ylabel("percent difference")
-# plt.loglog(dxArr,errorList,marker='o')
-# plt.grid()
-# plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# import scipy.optimize as spo
-# numSpheresArr=np.asarray([1,2,3,4,5])
-# costList=[]
-# for numSpheres in numSpheresArr:
-#     print('---------',numSpheres)
-#     def cost(M):
-#         lens=HalbachLens(1,.0254,.05,4*.05,M=M[0],spherePerDim=numSpheres)
-#         BArr=lens.BNorm(particleCoords)
-#         error=1e2*np.sum(np.abs(BArr-vals))/np.sum(vals)
-#         # print(M[0],error)
-#         return error
-#     sol=spo.minimize(cost,np.asarray([1e6]))
-#     print(sol)
-#     costList.append(sol.fun)
-#
-# plt.title("Model accuracy compared to COMSOL versus sphere number")
-# plt.xlabel('Number of spheres along xy dimensions')
-# plt.ylabel('Percent error')
-# plt.semilogy(numSpheresArr,costList)
-# plt.grid()
-# plt.show()
-
-# lens=HalbachLens(1,.0254,.05,4*.05)
-# MArr=np.linspace(.95,1.05,num=30)*1e6
-# errorList=[]
-# for M in MArr:
-#     lens=HalbachLens(1,.0254,.05,4*.05,M=M)
-#     BArr=lens.BNorm(particleCoords)
-#     error=1e2*np.sum(np.abs(BArr-vals))/np.sum(vals)
-#     errorList.append(error)
-#     print(BArr.sum(),vals.sum())
-# plt.plot(MArr,errorList)
-# plt.show()
-
-
-#
-# L0=.5
-# lens=HalbachLens(1,.0254,.05,length=L0)
-# num=40
-# rMax=.04
-# posArr=np.linspace(-rMax,rMax,num=num)
-# coordsList=[]
-# for x in posArr:
-#     for y in posArr:
-#         if np.sqrt(x**2+y**2)<rMax:
-#             coordsList.append([x,y])
-# coords=np.asarray(coordsList)
-# planeCoords=np.column_stack((coords,np.zeros(coords.shape[0])))
-# zArr=np.linspace(3*.05,L0/2+5*.05,num=30)
-# resList=[]
-# sumList=[]
-# for z in zArr:
-#     planeCoords[:,2]=z
-#     BSum = npl.norm(lens.BNorm_Gradient(planeCoords), axis=1).sum()
-#     resList.append(BSum)
-#     print(z,sum(resList))
-#     sumList.append(sum(resList))
-# resArr=np.asarray(sumList)
-# resArr=np.abs(resArr-resArr[-1])
-# resArr=100*resArr/resArr[0]
-# plt.title('PercentField remainig of cumulative sum as a \n function of distance along magnet')
-# plt.semilogy(((zArr-L0/2)/.05)[:-1],resArr[:-1],marker='x')
-# plt.grid()
-# plt.xlabel('Distance from magnet edge, multiple of bore radius')
-# plt.ylabel('Percent of final value')
-# plt.show()
-
-
-
-
-# num=40
-# rMax=.045
-# posArr=np.linspace(-rMax,rMax,num=num)
-# coordsList=[]
-# posArrz=np.linspace(-.1,.1,num=num)
-# for x in posArr:
-#     for y in posArr:
-#         for z in posArrz:
-#             if np.sqrt(x**2+y**2)<rMax:
-#                 coordsList.append([x,y,z])
-# coords=np.asarray(coordsList)
-#
-# sphereNumArr=np.arange(2,12)
-# resList=[]
-# tList=[]
-# for sphereNum in sphereNumArr:
-#     print(sphereNum)
-#     t=time.time()
-#     lens=HalbachLens(1,.0254,.05,length=5*.0254,spherePerDim=sphereNum)
-#     BArr=lens.BNorm(coords)
-#     tList.append(time.time()-t)
-#     resList.append(np.sum(BArr))
-#
-# plt.title('Time to solve')
-# plt.xlabel('Number of spheres along xy dimensions')
-# plt.ylabel('Time,seconds')
-# plt.plot(sphereNumArr,tList,marker='x')
-# plt.show()
-#
-# resArr=np.asarray(resList)
-# resArr=100*np.abs(resArr-resArr[-1])/resArr[-1]
-# plt.title('Error from \'actual\' model. \n percent error from last value over sum of values from test points')
-# plt.grid()
-# plt.xlabel('Number of spheres along xy dimensions')
-# plt.ylabel('Percent error')
-# plt.semilogy(sphereNumArr[:-1],resArr[:-1],marker='x')
-# plt.show()
-#
-#
-# num=40
-# rMax=.04
-# posArr=np.linspace(-rMax,rMax,num=num)
-# coordsList=[]
-# for x in posArr:
-#     for y in posArr:
-#         if np.sqrt(x**2+y**2)<rMax:
-#             coordsList.append([x,y])
-# planeCoords=np.asarray(coordsList)
-# planeCoords=np.column_stack((planeCoords,np.zeros(planeCoords.shape[0])))
-#
-#
-# # FracArr = np.linspace(1, 10, num=25)
-# FracArr=np.arange(1,10.5,.5)
-# FracArr = np.append(FracArr, 30)
-# resList = []
-# rp=.05
-# for Frac in FracArr:
-#     print(Frac)
-#     lens = HalbachLens(1, .0254, rp, length=rp * Frac)
-#     BNorm = npl.norm(lens.BNorm_Gradient(planeCoords),axis=1)
-#     resList.append(np.sum(BNorm))
-# resArr = np.asarray(resList)
-# resArr = 100 * np.abs(resArr[-1] - resArr) / resArr[-1]
-# plt.title('Percent difference of total field values from \'actual\' \n value at z=0')
-# plt.xlabel('Magnet length as multiple of bore radius')
-# plt.ylabel('Percent difference')
-# plt.semilogy(FracArr[:-1], resArr[:-1],marker='x')
-# plt.grid()
-# plt.show()

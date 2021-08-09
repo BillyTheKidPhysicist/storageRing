@@ -11,6 +11,8 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx,Fy,Fz, q, M_uc, ucAng)
     # q: particle's position in the element frame where the force is acting
     phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
     # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
+    if phi < 0:  # restrict range to between 0 and 2pi
+        phi += 2 * np.pi
     cellNum = int(phi // ucAng) + 1  # cell number that particle is in, starts at one
     if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
         rotAngle = 2 * (cellNum // 2) * ucAng
@@ -29,7 +31,10 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx,Fy,Fz, q, M_uc, ucAng)
 @numba.njit()
 def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
     quc=np.empty(3)
-    phi = ang - np.arctan2(q[1], q[0])
+    angle=np.arctan2(q[1], q[0])
+    if angle < 0:  # restrict range to between 0 and 2pi
+        angle += 2 * np.pi
+    phi = ang - angle
     revs = int(phi // ucAng)  # number of revolutions through unit cell
     if revs % 2 == 0:  # if even
         theta = phi - ucAng * revs
@@ -50,7 +55,7 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
     # force at point q in element frame
     # q: particle's position in element frame
     phi = np.arctan2(q[1], q[0])
-    if phi < 0:  # confine phi to be between 0 and 2pi
+    if phi < 0:  # restrict range to between 0 and 2pi
         phi += 2 * np.pi
     if phi <= ang:  # if particle is inside bending angle region
         rXYPlane=np.sqrt(q[0]**2+q[1]**2) #radius in xy plane

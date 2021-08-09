@@ -1,7 +1,5 @@
 import numpy as np
-import pyximport;
 from math import sqrt
-pyximport.install(language_level=3, setup_args={'include_dirs': np.get_include()})
 import warnings
 import fastElementNUMBAFunctions
 from InterpFunction import generate_3DInterp_Function_NUMBA, generate_2DInterp_Function_NUMBA
@@ -334,7 +332,7 @@ class BenderIdeal(Element):
         # returns a 3d vector in the orbit frame. First component is distance along trajectory, second is radial displacemnt
         # from the nominal orbit computed with centrifugal force, and the third is the z axis displacemnt.
         qo = q.copy()
-        phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
+        phi = self.ang - fast_Arctan2(qo)  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
@@ -708,7 +706,7 @@ class BenderIdealSegmented(BenderIdeal):
 
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         qo = q.copy()
-        phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
+        phi = self.ang - fast_Arctan2(q) # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
@@ -779,13 +777,14 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # q: element coordinates (x,y,z)
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
+
         qo = q.copy()
         angle = fast_Arctan2(qo)#np.arctan2(qo[1], qo[0])
         if angle < 0:  # restrict range to between 0 and 2pi
             angle += 2 * np.pi
 
         if angle < self.ang:  # if particle is in the bending angle section. Could still be outside though
-            phi = self.ang - np.arctan2(q[1], q[0])  # angle swept out by particle in trajectory. This is zero
+            phi = self.ang - angle  # angle swept out by particle in trajectory. This is zero
             # when the particle first enters
             qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
             qo[0] = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
@@ -804,7 +803,6 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                     qo[0] = self.Lcap - qTest[1]
                     qo[1] = qTest[0] - self.ro
                 else:  # if in neither then it must be outside
-                    qo = np.empty(3)
                     qo[:] = np.nan
         return qo
 
@@ -1192,7 +1190,6 @@ class HalbachLensSim(LensIdeal):
         volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
-
         BNormGrad = lens.BNorm_Gradient(volumeCoords)
         BNorm = lens.BNorm(volumeCoords)
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
