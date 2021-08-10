@@ -35,7 +35,8 @@ def generate_3DInterp_Function_NUMBA(v,xData,yData,zData):
             c1 = c01*(1-yd) + c11*yd
             c = c0*(1-zd) + c1*zd
         else:
-            raise Exception('out of bounds')
+            c=0.0
+            # raise Exception('out of bounds')
         return c
     return interp3D
 
