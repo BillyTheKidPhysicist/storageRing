@@ -1,3 +1,4 @@
+import sys
 import numpy.linalg as npl
 import skopt
 from ParticleTracerClass import ParticleTracer
@@ -63,16 +64,17 @@ class LatticeOptimizer:
     def generate_Swarms(self):
         qMaxInjector=2.5e-3
         pTransMaxInjector=10.0
-        PxMaxInjector=.5
         numParticlesInjector=1000
-        pxMaxRing=1.0
-        pTransMaxRing=13
-        numParticlesRing=50000
+        PxMaxInjector=.5
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(qMaxInjector,
                                                                 pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=True)
         # self.find_Injector_Mode_Match_Bounds()
+        injectorBounds=[(-0.0077, 0.007642), (-0.005975, 0.005904), (-0.681542, 0.568391), (-9.577788, 9.41937), (-7.757492, 7.658181)]
+        numParticlesRing=30000
+        pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
+        pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
 
         self.swarmRingInitial=self.swarmTracerRing.initalize_PseudoRandom_Swarm_In_Phase_Space(firstApertureRing,pTransMaxRing,
                                                                                         pxMaxRing,numParticlesRing,sameSeed=True)
@@ -91,9 +93,9 @@ class LatticeOptimizer:
             return self.project_Injector_Swarm_To_Combiner_End()
         projectedSwarmsList=self.helper.parallel_Problem(wrapper,coords,onlyReturnResults=True)
         phaseSpaceExtremaList=[]
-        temp=[]
+        # temp=[]
         for swarm in projectedSwarmsList:
-            temp.append(swarm.num_Particles())
+            # temp.append(swarm.num_Particles())
             numParticlesSurvived=swarm.num_Particles()
             if numParticlesSurvived>self.swarmInjectorInitial.num_Particles()//10: #Too few particles is not worth analyzing
                 qVec, pVec = swarm.vectorize()
@@ -106,9 +108,9 @@ class LatticeOptimizer:
                     variableMax=variableArrSorted[int(numParticlesSurvived*fracCutOff)-1]
                     swarmExtrema.extend([variableMin,variableMax])
                 phaseSpaceExtremaList.append(swarmExtrema)
-        temp=np.asarray(temp)
-        plt.imshow(temp.reshape(numGridPointsPerDim,numGridPointsPerDim))
-        plt.show()
+        # temp=np.asarray(temp)
+        # plt.imshow(temp.reshape(numGridPointsPerDim,numGridPointsPerDim))
+        # plt.show()
         phaseSpaceExtremaArr=np.asarray(phaseSpaceExtremaList)
         boundsList=[] #list to hold bounds of swarm to trace in storage ring
         for i in range(phaseSpaceExtremaArr.shape[1]//2): #loop over each coordinate, ie y,z,px etc
@@ -245,23 +247,23 @@ class LatticeOptimizer:
         # np.random.seed(int.from_bytes(os.urandom(4),byteorder='little'))
         newCoords=coords0Arr.copy()
         newVals=val0Arr.copy()
-        plt.scatter(newCoords[:, 0], newCoords[:, 1])
+        # plt.scatter(newCoords[:, 0], newCoords[:, 1])
         fitFunc=None
         def cost(X):
-            swarm=self.revFunc(X,parallel=True)
-            if swarm is None:
-                return 0.0
-            else:
-                return swarm.survival_Rev()
+            return self.mode_Match(X,parallel=True)
         jitterAmplitude=[]
         for bound in bounds:
             jitterAmplitude.append(1e-3*(bound[1]-bound[0]))
         jitterAmplitude=np.asarray(jitterAmplitude)
         for i in range(maxIter):
             print('------',i)
-            fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=1e-6) #a little bit of smooth helps
+            fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=0.0)
             def minFunc(X):
-                return 1/np.abs(fitFunc([X])[0])
+                survival=fitFunc([X])[0]
+                if survival<0:
+                    return np.inf
+                else:
+                    return 1/survival
             probeVals=[]
             probeCoords=[]
             for j in range(10):
@@ -274,47 +276,65 @@ class LatticeOptimizer:
                 #of jitter to overcome small chance of getting stuck at a peak. Also, if the coords aren't improving
                 #more than this jitter, that's a good sign we're done
             newVal=cost(bestProbeCoords)
-            print(newVal,bestProbeCoords)
             newCoords=np.row_stack((newCoords,bestProbeCoords))
             plt.scatter(*bestProbeCoords,marker='x',c='r')
             newVals=np.append(newVals,newVal)
         print('initial value:',np.round(np.max(val0Arr),2),'new value: ',np.round(np.max(newVals),2))
+        fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=0.0)
         num=250
         xPlot=np.linspace(0,1,num=num)
         coords=np.asarray(np.meshgrid(xPlot,xPlot)).T.reshape(-1,2)
         image=fitFunc(coords).reshape(num,num)
 
-        plt.imshow(np.flip(image,axis=0),extent=[0,1.0,0,1.0])
+        plt.imshow(np.flip(np.transpose(image),axis=0),extent=[0,1.0,0,1.0])
         plt.show()
         return newCoords[np.argmin(newVals)]
 
-    def mode_Match(self,XRing):
+    def mode_Match(self,XRing,parallel=False):
         #project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         #configuration
         #todo: continue research in here
 
         self.update_Ring_Lattice(XRing)
-        swarmRingTraced=self.revFunc(parallel=False)
+        swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
             return 0.0
         print('mode matching')
         modeMatchFunc=phaseSpaceInterpolater(swarmRingTraced)
+
         def cost(XInjector):
+            print(XInjector)
             self.update_Injector_Lattice(XInjector)
             swarm=self.project_Injector_Swarm_To_Combiner_End()
             totalRevs=modeMatchFunc(swarm)
             meanRevs=totalRevs/self.swarmInjectorInitial.num_Particles()
             return 1/(meanRevs+1e-10)
-        # xArr=np.linspace(.05,1.0,num=30)
-        # coords=np.asarray(np.meshgrid(xArr,xArr)).T.reshape(-1,2)
-        # vals=np.asarray(self.helper.parallel_Problem(cost,coords,onlyReturnResults=True))
-        # image=vals.reshape(xArr.shape[0],xArr.shape[0])
-        # plt.imshow(image)
-        # plt.show()
+        if parallel==True:
+            num=30
+            xArr=np.linspace(0.05,.5,num)
+            coordsArr=np.asarray(np.meshgrid(xArr,xArr)).T.reshape(-1,2)
+            results=np.asarray(self.helper.parallel_Problem(cost,coordsArr,onlyReturnResults=True))
+            survival=1/results.min()
+        else:
+            import skopt
 
-        sol=spo.differential_evolution(cost,[(0.05,1.0),(0.05,1.0)],disp=False,polish=False)
-        print(XRing,sol.fun)
-        return sol.fun
+            t=time.time()
+            sol=skopt.gp_minimize(cost,[(0.05,.5),(0.05,.5)],n_points=50,initial_point_generator='sobol')
+            print(time.time()-t)
+            print(sol.fun,sol.x)
+
+
+            print('------------diff eveoltuion-----------------------')
+            t=time.time()
+            sol=spo.differential_evolution(cost,[(0.05,.5),(0.05,.5)],disp=False,polish=False)
+            print(time.time()-t)
+            print(sol.fun,sol.x)
+            sys.exit()
+
+            print(sol)
+            survival=1/sol.fun
+        print(XRing,survival)
+        return survival
 
     def update_Injector_Lattice(self,X):
         #modify lengths of drift regions in injector
@@ -375,13 +395,13 @@ class LatticeOptimizer:
         assert np.unique(np.asarray(elementIndices)).shape[0]==len(elementIndices) #ensure no duplicates
         assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
         self.elementIndices=elementIndices
-        self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(2.5e-3,5.0,1.0,500)
-        # self.swarmRingInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(,5.0,1.0,500)
         BArrList=[]
         for bound in bounds:
             BArrList.append(np.linspace(bound[0], bound[1], num0))
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
-        gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True))
+        for coord in coordsArr:
+            self.mode_Match(coord)
+        gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True,numWorkers=1))
         return self.optimize_Grid(coordsArr,gridResults,bounds,maxIter)
 
 #

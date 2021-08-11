@@ -73,7 +73,31 @@ class ParticleTracerLattice:
 
         self.elList=[] #to hold all the lattice elements
 
-
+    def find_Optimal_Offset_Factor(self,rp,rb,Lm):
+        #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
+        #imperfect segmented bender it needs to be optimized.
+        from ParticleClass import Particle
+        from ParticleTracerClass import ParticleTracer
+        from ParaWell import ParaWell
+        rOffsetFactArr=np.linspace(.9,1.2,num=32*3)
+        numMagnetsHalfBend=int(np.pi*rb/Lm)
+        def errorFunc(rOffsetFact):
+            PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector')
+            PTL_Ring.add_Drift(.05)
+            PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,1e-3,rOffsetFact=rOffsetFact)
+            PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
+            particle=Particle()
+            particleTracer=ParticleTracer(PTL_Ring)
+            particle=particleTracer.trace(particle,1e-5,1.0,fastMode=False)
+            error=np.std(1e6*particle.qoArr[:,1])
+            return error
+        helper=ParaWell()
+        results=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
+        print('optimum is: ', rOffsetFactArr[np.argmin(results)])
+        plt.plot(rOffsetFactArr,results)
+        plt.xlabel('radius offset factor')
+        plt.ylabel('rms oscillations, micrometers')
+        plt.show()
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)

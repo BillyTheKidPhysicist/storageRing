@@ -102,7 +102,6 @@ class Element:
         #does not grow with growing revolution
         # q: 3D coordinates in element frame
         return q.copy()
-
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
         # vec: 3D vector in lab frame to rotate into element frame
         vecNew = vec.copy()  # copying prevents modifying the original value
@@ -406,7 +405,7 @@ class CombinerIdeal(Element):
         else:
             lowField=True
 
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=lowField)
+        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
@@ -415,7 +414,7 @@ class CombinerIdeal(Element):
         self.La = self.ap * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
 
-    def compute_Input_Angle_And_Offset(self, h=1e-7, lowField=True):
+    def compute_Input_Angle_And_Offset(self, h=1e-7):
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -552,10 +551,7 @@ class CombinerSim(CombinerIdeal):
 
     def fill_Params(self):
         if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
-            lowField=False
             self.fieldFact=-1.0
-        else:
-            lowField=True
         self.data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
@@ -572,8 +568,7 @@ class CombinerSim(CombinerIdeal):
             return Fx,Fy,Fz
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: self.fieldFact*funcV(x, y, z)
-
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset(lowField=lowField)
+        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
          # 0.07891892567413786
         # to find the length
@@ -581,7 +576,6 @@ class CombinerSim(CombinerIdeal):
             qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
-
         y0 = inputOffset
         x0 = self.space
         theta = inputAngle
