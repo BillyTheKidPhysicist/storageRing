@@ -85,8 +85,6 @@ class ParticleTracer:
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
-        #qi: initial position coordinates
-        #vi: initial velocity coordinates
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters

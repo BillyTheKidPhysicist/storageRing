@@ -236,7 +236,19 @@ class SwarmTracer:
         if type(seed)==int:
             np.random.seed(int(time.time()))
         return swarm
-    def move_Swarm_To_Combiner_Output(self,swarm,scoot=True,copySwarm=True):
+    def initalize_PseudoRandom_Swarm_At_Combiner_Output(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,
+                                                        sameSeed=False,circular=True,smallXOffset=True):
+        swarmAtOrigin=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTMax,pTMax,pxMax,numParticles,upperSymmetry=upperSymmetry,
+                                                               sameSeed=sameSeed,circular=circular,smallXOffset=smallXOffset)
+        swarmAtCombiner=self.move_Swarm_To_Combiner_Output(swarmAtOrigin,copySwarm=False,scoot=True)
+        #now update the initial positions of particles to reflect this move, otherwise initial position would be that of
+        #swarmAtOrigin
+        for particle in swarmAtCombiner:
+            particle.qi=particle.q.copy()
+            particle.pi=particle.p.copy()
+        return swarmAtCombiner
+
+    def move_Swarm_To_Combiner_Output(self,swarm,scoot=False,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
         #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed.
         #swarm: the swarm to move to output
@@ -254,13 +266,6 @@ class SwarmTracer:
             if scoot==True:
                 particle.q+=particle.p*1e-10
         return swarm
-
-    def catch_Injection_Errors(self, Li, LOffset):
-        deltaL=Li+LOffset-self.lattice.combiner.Lo #distance of magnet from beginning
-        #of combiner. Must be greater than at least zero
-        if deltaL<.1: #if the magnet is closer than 10 cm
-            print(Li,LOffset,deltaL,self.lattice.combiner.Lo)
-            raise Exception('Magnet is too close to combiner')
 
     def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True):
         #trace a swarm through the lattice
