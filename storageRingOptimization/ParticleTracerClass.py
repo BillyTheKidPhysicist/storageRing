@@ -99,9 +99,11 @@ class ParticleTracer:
             q = q.copy()
             p = p.copy()
             fast_2D_Mat_Mult(ROutEl1, q)
-            increment_Array_In_Place(q, deltar)
+            increment_Array_In_Place(q, r01)
+            increment_Array_In_Place(q, -r02)
             fast_2D_Mat_Mult(RInEl2, q)
-            fast_2D_Mat_Mult(RTot, p)
+            fast_2D_Mat_Mult(ROutEl1, p)
+            fast_2D_Mat_Mult(RInEl2, p)
             return q, p
         transform_To_Next_Element(np.zeros(3),np.zeros(3)) #force compile
         return transform_To_Next_Element
@@ -143,8 +145,6 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
-        if accelerated==True:
-            raise Exception('Still not implement. some issue with the transform here....')
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -253,8 +253,21 @@ class ParticleTracer:
             # pEl[:] = pEl_n
             F[:] = F_n  # record the force to be recycled
             T += h
-
-
+    @staticmethod
+    @numba.njit(numba.float64(numba.float64[:],numba.float64[:],numba.float64))
+    def compute_Aperture_Collision_Distance(qi,pi,ap):
+        my=pi[1]/pi[0]
+        mz=pi[2]/pi[0]
+        by=qi[1]-my*qi[0]
+        bz=qi[2]-mz*qi[0]
+        #now to find out if the particle is outside the drift region. Assume circular aperture. use simple geometry of
+        #lines
+        if my==0 and mz==0: #no slope then it never clips
+            x0=np.inf
+        else:
+            x0=(np.sqrt((mz*ap)**2+(my*ap)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
+        #that the particle clips the aperture at
+        return x0
     def handle_Drift_Region(self):
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
