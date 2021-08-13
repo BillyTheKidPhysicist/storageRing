@@ -40,6 +40,10 @@ class ParticleTracer:
         self.numbaMultiStepCache=[]
         self.generate_Multi_Step_Cache()
 
+        self.transformToNextElementFuncList=[]
+        self.generate_transformToNextElementFuncList()
+        self.accelerated=None
+
         self.T=None #total time elapsed
         self.h=None #step size
 
@@ -60,7 +64,56 @@ class ParticleTracer:
         self.fastMode=None #wether to log particle positions
         self.T0=None #total time to trace
         self.test=[]
-
+    def generate_transformToNextElementFunc(self,el1,el2):
+        if el1.type=='BEND':
+            r01 = el1.r0
+        elif el1.type=='COMBINER':
+            r01 = el1.r2
+        else:
+            r01 = el1.r1
+        if el2.type=='BEND':
+            r02 = el2.r0
+        elif el2.type=='COMBINER':
+            r02 = el2.r2
+        else:
+            r02 = el2.r1
+        ROutEl1 = el1.ROut
+        RInEl2 = el2.RIn
+        RTot = RInEl2 @ ROutEl1
+        deltar = r01 - r02
+        @numba.njit()
+        def fast_2D_Mat_Mult(M, v):
+            vx0 = v[0]
+            vy0 = v[1]
+            vx = M[0, 0] * vx0 + M[0, 1] * vy0
+            vy = M[1, 0] * vx0 + M[1, 1] * vy0
+            v[0] = vx
+            v[1] = vy
+        @numba.njit()
+        def increment_Array_In_Place(q, dq):
+            q[0] = q[0] + dq[0]
+            q[1] = q[1] + dq[1]
+            q[2] = q[2] + dq[2]
+        @numba.njit()
+        def transform_To_Next_Element(q, p):
+            q = q.copy()
+            p = p.copy()
+            fast_2D_Mat_Mult(ROutEl1, q)
+            increment_Array_In_Place(q, deltar)
+            fast_2D_Mat_Mult(RInEl2, q)
+            fast_2D_Mat_Mult(RTot, p)
+            return q, p
+        transform_To_Next_Element(np.zeros(3),np.zeros(3)) #force compile
+        return transform_To_Next_Element
+    def generate_transformToNextElementFuncList(self):
+        for i in range(len(self.latticeElementList)):
+            if i+1==len(self.latticeElementList): #we're at the last element, so need to wrap around
+                el1 = self.latticeElementList[-1] #use the last element
+                el2 = self.latticeElementList[0] #use the first now
+            else:
+                el1=self.latticeElementList[i]
+                el2=self.latticeElementList[i+1]
+            self.transformToNextElementFuncList.append(self.generate_transformToNextElementFunc(el1,el2))
 
     def initialize(self):
         # prepare for a single particle to be traced
@@ -81,13 +134,17 @@ class ParticleTracer:
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.p)
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-    def trace(self,particle,h,T0,fastMode=False):
+    def trace(self,particle,h,T0,fastMode=False,accelerated=False):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
+        #qi: initial position coordinates
+        #vi: initial velocity coordinates
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        if accelerated==True:
+            raise Exception('Still not implement. some issue with the transform here....')
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -98,6 +155,7 @@ class ParticleTracer:
         self.h=h
         self.T0=float(T0)
         self.initialize()
+        self.accelerated=accelerated
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(totalLatticeLength=0)
@@ -108,6 +166,7 @@ class ParticleTracer:
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
+        # print('fast mode fails with accelerated on')
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
         return self.particle
     def time_Step_Loop(self):
@@ -308,33 +367,53 @@ class ParticleTracer:
         #None. Most of the time this return false and the leapfrog algorithm continues
         #el: The element to check against
         #todo: there are some issues here with element edges
-        el=self.which_Element(qEl_n) #
-        if el is None: #if outside the lattice
-            self.particle.clipped = True
-        elif el is not self.currentEl: #element has changed
-            elNew=el
-            self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
-            qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n) #use the old  element for transform
-            pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl) #use the old  element for transform
-            self.currentEl=elNew
-            self.particle.currentEl=elNew 
-            self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
-            self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
-            # element
-            self.elHasChanged = True
+        if self.accelerated==True:
+            nextEl = self.get_Next_Element()
+            q_nextEl,p_nextEl=self.transformToNextElementFuncList[self.currentEl.index](qEl_n,self.pEl)
+            if nextEl.is_Coord_Inside(q_nextEl)==False:
+                self.particle.clipped=True
+                return
+            else:
+                self.particle.cumulativeLength+=self.currentEl.Lo  # add the previous orbit length
+                self.currentEl=nextEl
+                self.particle.currentEl=nextEl
+                self.qEl=q_nextEl
+                self.pEl=p_nextEl
+                self.elHasChanged = True
+                return
+        else:
+            el=self.which_Element(qEl_n) #
+            if el is None: #if outside the lattice
+                self.particle.clipped = True
+                return
+            elif el is not self.currentEl: #element has changed
+                nextEl=el
+                self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
+                qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n) #use the old  element for transform
+                pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl) #use the old  element for transform
+                self.currentEl=nextEl
+                self.particle.currentEl=nextEl
+                self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
+                self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
+                # element
+                self.elHasChanged = True
+                return
     def which_Element_Lab_Coords(self,qLab):
         for el in self.latticeElementList:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:
                 return el
         return None
-    def which_Element(self,qEl): #.134
-        #find which element the particle is in, but check the next element first ,which save time
-        #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
-        qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+    def get_Next_Element(self):
         if self.currentEl.index+1>=len(self.latticeElementList):
             nextEl=self.latticeElementList[0]
         else:
             nextEl=self.latticeElementList[self.currentEl.index+1]
+        return nextEl
+    def which_Element(self,qEl): #.134
+        #find which element the particle is in, but check the next element first ,which save time
+        #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
+        qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+        nextEl=self.get_Next_Element()
         if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True: #try the next element
             return nextEl
         #now instead look everywhere, except the next element we already checked

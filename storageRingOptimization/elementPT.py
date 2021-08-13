@@ -182,6 +182,7 @@ class LensIdeal(Element):
         self.K = self.fieldFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
+        self.compile_Fast_Numba_Force_Function()
 
     def magnetic_Potential(self, q):
         # potential energy at provided coordinates
@@ -230,7 +231,7 @@ class LensIdeal(Element):
         ap = self.ap
         K = self.K
         forceNumba = fastElementNUMBAFunctions.lens_Ideal_Force_NUMBA
-        @numba.njit(numba.float64[:](numba.float64[:]))
+        @numba.njit()
         def force_NUMBA_Wrapper(q):
             return forceNumba(q, L, ap, K)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
@@ -352,7 +353,7 @@ class BenderIdeal(Element):
             F[1] = np.sin(phi) * F0
             F[2] = -self.K * q[2]
         else:
-            F = np.zeros(3)
+            F = np.asarray([np.nan,np.nan,np.nan])
         return F
     def is_Coord_Inside(self, q):
         phi = fast_Arctan2(q)
@@ -803,13 +804,16 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame (x,y,z)
+        if self.is_Coord_Inside(q)==False:
+            return np.asarray([np.nan,np.nan,np.nan])
+        F=np.zeros(3)
         phi = fast_Arctan2(q)  # numba version
         if phi < self.ang:  # if inside the bbending segment
             return super().force(q)
         elif phi > self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
                 # the eastward side
-                self.F[0] = -self.K * (q[0] - self.rb)
+                F[0] = -self.K * (q[0] - self.rb)
             else:  # if in the westward segment maybe
                 qTest = q.copy()
                 qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
@@ -818,12 +822,12 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                         self.Lcap > qTest[1] > 0):  # definitely in the
                     # westard segment
                     forcex = -self.K * (qTest[0] - self.rb)
-                    self.F[0] = self.RIn_Ang[0, 0] * forcex
-                    self.F[1] = -self.RIn_Ang[1, 0] * forcex
+                    F[0] = self.RIn_Ang[0, 0] * forcex
+                    F[1] = -self.RIn_Ang[1, 0] * forcex
                 else:
-                    self.F = np.zeros(3)
+                    F = np.zeros(3)
                     warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
-        return self.F.copy()
+        return F
 
     # @profile()
     def is_Coord_Inside(self, q):
