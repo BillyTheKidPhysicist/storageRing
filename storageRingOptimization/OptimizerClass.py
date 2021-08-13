@@ -50,7 +50,7 @@ class LatticeOptimizer:
         self.swarmInjectorInitial=None #object to hold the injector swarm object
         self.swarmRingInitial=None #object to hold the ring swarm object that will generate the mode match function
         self.h=1e-5 #timestep size
-        self.T=None #maximum particle tracing time
+        self.T=10.0
         self.swarmTracerRing=SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
@@ -69,7 +69,9 @@ class LatticeOptimizer:
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(qMaxInjector,
                                                                 pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=sameSeed)
         # self.find_Injector_Mode_Match_Bounds()
-        injectorBounds=[(-0.0077, 0.0076), (-0.006, 0.006), (-0.7, 0.6), (-9.8, 9.1), (-7.8, 7.9)]
+        injectorBounds10=[(-0.0077, 0.0076), (-0.006, 0.006), (-0.7, 0.6), (-9.8, 9.1), (-7.8, 7.9)]
+        injectorBounds5=[(-0.007786, 0.007794), (-0.005983, 0.005913), (-0.533335, 0.564433), (-7.310422, 7.264382), (-7.140295, 6.992844)]
+        injectorBounds=injectorBounds5
         numParticlesRing=50000
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
@@ -121,28 +123,6 @@ class LatticeOptimizer:
             #i because there are 2 columns per variable, a min and a max
         print('y','z','px','py','pz')
         print(boundsList)
-    def compute_Phase_Space_Map_Function(self,X,swarmCombiner):
-        #return a function that returns a value for number of revolutions at a given point in phase space. The phase
-        #space is in the combiner's reference frame with the x component zero so the coordinates looke like (y,x,px,py,pz)
-        #so the swarm is centered at the origin in the combiner
-        #X: arguments to parametarize lattice
-        #swarmInitial: swarm to trace through lattice that is initialized in phase space and centered at (0,0,0). This is
-        #used as the coordinates for creating the phase space func. You would think to use the swarmCombiner, but I want
-        #the coordinates centered at (0,0,0) and swarmInitial is identical to swarmCombiner transformed to (0,0,0)!
-
-        self.update_Ring_Lattice(X)
-        phaseSpacePoints=[] #holds the coordinates of the particles in phase space at the combiner output
-        revolutions=[] #values of revolution for each particle in swarm
-        swarmTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmCombiner,self.h,self.T,fastMode=True)
-        for i in range(swarmTraced.num_Particles()):
-            q = swarmTraced.particles[i].qi.copy()[1:] #only y and z. x is the same all (0)
-            p = swarmTraced.particles[i].pi.copy()
-            Xi = np.append(q, p)  # phase space coords are 2 position values and 3 momentum (y,z,px,py,pz)
-            phaseSpacePoints.append(Xi)
-            revolutions.append(swarmTraced.particles[i].revolutions)
-        apeture=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap #apeture of next element
-        latticePhaseSpaceFunc=phaseSpaceInterpolater(np.asarray(phaseSpacePoints), revolutions,apeture)
-        return latticePhaseSpaceFunc
 
 
     def get_Stability_Function(self,qMax=.5e-3,numParticlesPerDim=2,cutoff=8.0,funcType='bool'):
@@ -174,7 +154,7 @@ class LatticeOptimizer:
             self.update_Ring_Lattice(X)
             revolutionsList=[]
             for particle in swarm:
-                particle=self.particleTracerRing.trace(particle.copy(),h,T,fastMode=True)
+                particle=self.particleTracerRing.trace(particle.copy(),self.h,T,fastMode=True)
                 revolutionsList.append(particle.revolutions)
                 if revolutionsList[-1]>cutoff:
                     if funcType=='bool':
@@ -359,12 +339,12 @@ class LatticeOptimizer:
             if particle.revolutions>minRevs:
                 stable=True
         return stable
-    def revFunc(self,T=1.0, parallel=False):
+    def revFunc(self, parallel=False):
         stable=self.test_Stability()
         if stable == False:
             return None
         else:
-            swarm = self.swarmTracerRing.trace_Swarm_Through_Lattice(self.swarmRingInitial.quick_Copy(), self.h, T,
+            swarm = self.swarmTracerRing.trace_Swarm_Through_Lattice(self.swarmRingInitial.quick_Copy(), self.h, self.T,
                                                                      parallel=parallel, fastMode=True,copySwarm=False)
             # self.latticeRing.show_Lattice(swarm=swarm,trueAspectRatio=False,showTraceLines=True)
             return swarm
