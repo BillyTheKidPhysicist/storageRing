@@ -11,11 +11,6 @@ from shapely.geometry import Polygon,Point
 import elementPT
 
 
-def Compute_Bending_Radius_For_Segmented_Bender(L,rp,yokeWidth,numMagnets,angle,space=0.0):
-    #ucAng=angle/(2*numMagnets)
-    rb=(L+2*space)/(2*np.tan(angle/(2*numMagnets)))+yokeWidth+rp
-    #ucAng1=np.arctan((L/2)/(rb-rp-yokeWidth))
-    return rb
 
 
 @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
@@ -25,6 +20,23 @@ def fast_qNew(q,F,p,h):
 @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
 def fast_pNew(p,F,F_n,h):
     return p+.5*(F+F_n)*h
+
+
+@numba.njit()
+def fast_2D_Mat_Mult(M,v):
+    vx0=v[0]
+    vy0=v[1]
+    vx=M[0,0]*vx0+M[0,1]*vy0
+    vy=M[1,0]*vx0+M[1,1]*vy0
+    v[0]=vx
+    v[1]=vy
+
+
+@numba.njit()
+def increment_Array_In_Place(q,dq):
+    q[0]=q[0]+dq[0]
+    q[1]=q[1]+dq[1]
+    q[2]=q[2]+dq[2]
 
 
 #this class does the work of tracing the particles through the lattice with timestepping algorithms.
@@ -81,19 +93,7 @@ class ParticleTracer:
         RInEl2 = el2.RIn
         RTot = RInEl2 @ ROutEl1
         deltar = r01 - r02
-        @numba.njit()
-        def fast_2D_Mat_Mult(M, v):
-            vx0 = v[0]
-            vy0 = v[1]
-            vx = M[0, 0] * vx0 + M[0, 1] * vy0
-            vy = M[1, 0] * vx0 + M[1, 1] * vy0
-            v[0] = vx
-            v[1] = vy
-        @numba.njit()
-        def increment_Array_In_Place(q, dq):
-            q[0] = q[0] + dq[0]
-            q[1] = q[1] + dq[1]
-            q[2] = q[2] + dq[2]
+
         @numba.njit()
         def transform_To_Next_Element(q, p):
             q = q.copy()
@@ -116,7 +116,6 @@ class ParticleTracer:
                 el1=self.latticeElementList[i]
                 el2=self.latticeElementList[i+1]
             self.transformToNextElementFuncList.append(self.generate_transformToNextElementFunc(el1,el2))
-
     def initialize(self):
         # prepare for a single particle to be traced
         self.T=0.0
@@ -128,6 +127,7 @@ class ParticleTracer:
                 raise Exception('STEP SIZE TOO LARGE')
         self.currentEl = self.which_Element_Lab_Coords(self.particle.q)
         self.particle.currentEl=self.currentEl
+        self.particle.logged= not self.fastMode #if using fast mode, there will NOT be logging
         if self.currentEl is None:
             self.particle.clipped=True
         else:
@@ -166,7 +166,7 @@ class ParticleTracer:
         self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
-        # print('fast mode fails with accelerated on')
+
         self.particle.finished(totalLatticeLength=self.totalLatticeLength)
         return self.particle
     def time_Step_Loop(self):
@@ -275,19 +275,7 @@ class ParticleTracer:
         self.particle.currentEl=driftEl
         pi=self.pEl.copy() #position at beginning of drift in drift frame
         qi=self.qEl.copy() #momentum at begining of drift in drift frame
-        pf=pi
-        my=pi[1]/pi[0]
-        mz=pi[2]/pi[0]
-        by=qi[1]-my*qi[0]
-        bz=qi[2]-mz*qi[0]
-        #now to find out if the particle is outside the drift region. Assume circular aperture. use simple geometry of
-        #lines
-        r0=self.currentEl.ap #aperture, radial
-        if my==0 and mz==0: #no slope then it never clips
-            x0=np.inf
-        else:
-            x0=(np.sqrt((mz*r0)**2+(my*r0)**2+2*by*bz*my*mz-(bz*my)**2-(by*mz)**2)-(by*my+bz*mz))/(my**2+mz**2) #x value
-        #that the particle clips the aperture at
+        x0=self.compute_Aperture_Collision_Distance(qi,pi,self.currentEl.ap)
         if x0>driftEl.Lo: #if particle clips the aperture at a x position past the end of the drift element,
             #then it has not clipped
             clipped=False
@@ -296,7 +284,7 @@ class ParticleTracer:
             xEnd=x0 #particle ends somewhere inside the drift
             clipped=True
             #now place it just at the beginning of the next element
-        dt = np.abs((xEnd - qi[0]) / pi[0])  # time to travel to end coordinate. Use absolute to catch if the momentum
+        dt = abs((xEnd - qi[0]) / pi[0])  # time to travel to end coordinate. Use absolute to catch if the momentum
         #is the wrong way
         if self.T+dt>=self.T0: #there is not enough simulation time
             dt=self.T0-self.T #set to the remaining time available
@@ -313,7 +301,7 @@ class ParticleTracer:
                     self.qEl=qEl
             else:
                 self.qEl=qi+pi*dt
-                self.pEl=pf
+                self.pEl=self.pEl
                 self.particle.clipped=True
         if self.fastMode==False: #need to log the parameters
             qf = qi + pi * dt  # the final position of the particle. Either at the end, or at some place where it

@@ -365,20 +365,27 @@ class LatticeOptimizer:
         for bound in bounds:
             BArrList.append(np.linspace(bound[0], bound[1], num0))
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
+        print('beginning grid search')
         gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True))
-        import skopt
+        print('grid optimum over')
         def skopt_Cost(XRing):
             survival=self.mode_Match(XRing,parallel=True)
             return 1/(survival+1)
         minimizedGridResults=list(1/(gridResults+1))
+        if np.std(minimizedGridResults)/np.mean(minimizedGridResults)<1e-6:
+            print(np.max(gridResults),np.min(gridResults))
+            raise Exception('Initial grid search yielded results that are too similiar')
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))
+        import skopt
+        print('beginning gaussian process')
         sol=skopt.gp_minimize(skopt_Cost,[(0.0,1.0),(0.0,1.0)],n_initial_points=0,x0=coordsList,y0=minimizedGridResults,n_calls=10)
         survivalMax=1/sol.fun
         survivalMaxCoords=sol.x
-        print('model done')
-        print(survivalMax,survivalMaxCoords)
+        return survivalMax,survivalMaxCoords
+        # print('model done')
+        # print(survivalMax,survivalMaxCoords)
 
 #
 # test=LatticeOptimizer(None)

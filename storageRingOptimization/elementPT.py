@@ -187,7 +187,7 @@ class LensIdeal(Element):
     def magnetic_Potential(self, q):
         # potential energy at provided coordinates
         # q coords in element frame
-        r = np.sqrt(q[1] ** 2 + +q[2] ** 2)
+        r = sqrt(q[1] ** 2 + +q[2] ** 2)
         if r < self.ap:
             return .5*self.K * r ** 2
         else:
@@ -199,7 +199,7 @@ class LensIdeal(Element):
         y,z=q[1:]
         vy,vz=p[1:]
         #time to collision with wall transversally
-        dtT=(-vy*y - vz*z + np.sqrt(r0**2*vy**2 + r0**2*vz**2 - vy**2*z**2 + 2*vy*vz*y*z - vz**2*y**2))/(vy**2 + vz**2)
+        dtT=(-vy*y - vz*z + sqrt(r0**2*vy**2 + r0**2*vz**2 - vy**2*z**2 + 2*vy*vz*y*z - vz**2*y**2))/(vy**2 + vz**2)
         dtL=(-self.r2[0]-q[0])/p[0] #longitudinal time to collision
         dt=min(dtT,dtL)
         return dt/h
@@ -251,7 +251,7 @@ class LensIdeal(Element):
         if not 0 <= q[0] <= self.L:
             return False
         else:
-            if np.sqrt(q[1] ** 2 + q[2] ** 2) < self.ap:
+            if q[1] ** 2 + q[2] ** 2 < self.ap**2:
                 return True
             else:
                 return False
@@ -300,7 +300,7 @@ class BenderIdeal(Element):
 
     def fill_Params(self):
         self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
-        self.rOffsetFunc = lambda rb: np.sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
+        self.rOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro = self.rb + self.rOffset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
@@ -310,9 +310,9 @@ class BenderIdeal(Element):
     def magnetic_Potential(self, q):
         # potential energy at provided coordinates
         # q coords in element frame
-        r = np.sqrt(q[0] ** 2 + +q[1] ** 2)
+        r = sqrt(q[0] ** 2 + +q[1] ** 2)
         if self.rb + self.rp > r > self.rb - self.rp and np.abs(q[2]) < self.ap:
-            rNew = np.sqrt((r - self.rb) ** 2 + q[2] ** 2)
+            rNew = sqrt((r - self.rb) ** 2 + q[2] ** 2)
             return self.Bp * self.PTL.u0 * rNew ** 2 / self.rp ** 2
         else:
             return 0.0
@@ -336,7 +336,7 @@ class BenderIdeal(Element):
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
-        qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
+        qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
         qo[0] = qos
         qo[1] = qox
         return qo
@@ -347,7 +347,7 @@ class BenderIdeal(Element):
         F = np.zeros(3)
         phi = fast_Arctan2(q)
         if phi < self.ang:
-            r = np.sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
+            r = sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
             F0 = -self.K * (r - self.rb)  # force in x y plane
             F[0] = np.cos(phi) * F0
             F[1] = np.sin(phi) * F0
@@ -360,8 +360,8 @@ class BenderIdeal(Element):
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
         if phi <=self.ang:  # if particle is in bending segment
-            rh = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.rb  # horizontal radius
-            r = np.sqrt(rh ** 2 + q[2] ** 2)  # particle displacement from center of apeture
+            rh = sqrt(q[0] ** 2 + q[1] ** 2) - self.rb  # horizontal radius
+            r = sqrt(rh ** 2 + q[2] ** 2)  # particle displacement from center of apeture
             if r > self.ap:
                 return False
             else:
@@ -479,14 +479,14 @@ class CombinerIdeal(Element):
                 return np.asarray([np.nan])
         F = np.zeros(3)  # force vector starts out as zero
         if 0<q[0] < self.Lb:
-            B0 = np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
+            B0 = sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
             F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
             F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
         return F*self.fieldFact
     def magnetic_Potential(self, q):
         V0=0
         if 0<q[0] < self.Lb:
-            V0 = self.PTL.u0*np.sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
+            V0 = self.PTL.u0*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
         return V0
 
 
@@ -671,7 +671,7 @@ class BenderIdealSegmented(BenderIdeal):
 
     def fill_Params(self):
         super().fill_Params()
-        self.rOffsetFunc = lambda rb: self.rOffsetFact * (np.sqrt(
+        self.rOffsetFunc = lambda rb: self.rOffsetFact * (sqrt(
             rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2)
         self.rOffset = self.rOffsetFunc(self.rb)
         self.Lseg = self.Lm + 2 * self.space
@@ -705,7 +705,7 @@ class BenderIdealSegmented(BenderIdeal):
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
-        qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
+        qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
         qo[0] = qos
         qo[1] = qox
         return qo
@@ -781,7 +781,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         if angle < self.ang:  # if particle is in the bending angle section. Could still be outside though
             phi = self.ang - angle  # angle swept out by particle in trajectory. This is zero
             # when the particle first enters
-            qox = np.sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
+            qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
             qo[0] = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
             qo[1] = qox
         else:  # if particle is outside of the bending segment angle so it could be in the caps, or elsewhere
@@ -834,18 +834,18 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         # q: particle's position in element frame
         phi = fast_Arctan2(q)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
-            if sqrt((np.sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2) < self.ap:
+            if (sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2 < self.ap**2:
                 return True
             else:
                 return False
         else:  # if outside bender's angle range
-            if np.sqrt((q[0]-self.rb)**2+q[2]**2) <= self.ap and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
+            if (q[0]-self.rb)**2+q[2]**2 <= self.ap**2 and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
                 # eastward side
                 return True
             else:
                 qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
                 qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if np.sqrt((qTestx-self.rb)**2+q[2]**2) <= self.ap and (self.Lcap >= qTesty >= 0):  # if on the westwards side
+                if (qTestx-self.rb)**2+q[2]**2 <= self.ap**2 and (self.Lcap >= qTesty >= 0):  # if on the westwards side
                     return True
                 else:  # if not in either cap, then outside the bender
                     return False
@@ -932,7 +932,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
         self.K_Func=lambda r: a * r ** 2 + b * r + c
-        self.rOffsetFunc = lambda r:  self.rOffsetFact*(np.sqrt(
+        self.rOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
 
     def fill_Params_Post_Constrained(self):

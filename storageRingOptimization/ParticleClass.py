@@ -3,6 +3,7 @@ import time
 import numpy.linalg as npl
 import numpy as np
 import copy
+from math import sqrt
 class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
@@ -95,7 +96,7 @@ class Particle:
         self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
-        self.v0=np.sqrt(np.sum(pi**2)) #initial speed
+        self.v0=sqrt(pi[0]**2+pi[1]**2+pi[2]**2) #initial speed
         self.color=None #color that can be added to each particle for plotting
 
 
@@ -107,6 +108,8 @@ class Particle:
         #the particle leaves an element by adding that elements length (particle trajectory length that is)
         self.revolutions=0 #revolutions particle makd around lattice. Initially zero
         self.clipped=None #wether particle clipped an apeture
+        self.logged=None #wether the particle is loggin parameters such as position and energy. This will typically be
+        #false when fastmode is being used in the particle tracer class
         #these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         #they are converted into arrays
         self._pList=[] #List of momentum vectors
@@ -182,21 +185,20 @@ class Particle:
         #totalLaticeLength: total length of periodic lattice
         self.traced=True
         self.force=None
-        self.qArr=np.asarray(self._qList)
-        self._qList = []  # save memory
-        self.pArr = np.asarray(self._pList)
-        self._pList = []  
-        self.qoArr = np.asarray(self._qoList)
-        self._qoList = []
-        if self.pArr.shape[0]!=0:
-            self.p0Arr=npl.norm(self.pArr,axis=1)
-
-
-        self.TArr = np.asarray(self._TList)
-        self._TList = []
-        self.VArr = np.asarray(self._VList)
-        self._VList = []
-        self.EArr=self.TArr+self.VArr
+        if self.logged==True:
+            self.qArr=np.asarray(self._qList)
+            self._qList = []  # save memory
+            self.pArr = np.asarray(self._pList)
+            self._pList = []
+            self.qoArr = np.asarray(self._qoList)
+            self._qoList = []
+            if self.pArr.shape[0]!=0:
+                self.p0Arr=npl.norm(self.pArr,axis=1)
+            self.TArr = np.asarray(self._TList)
+            self._TList = []
+            self.VArr = np.asarray(self._VList)
+            self._VList = []
+            self.EArr=self.TArr+self.VArr
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:

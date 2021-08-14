@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numba
 from shapely.geometry import Polygon
+import scipy.interpolate as spi
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
@@ -79,25 +80,30 @@ class ParticleTracerLattice:
         from ParticleClass import Particle
         from ParticleTracerClass import ParticleTracer
         from ParaWell import ParaWell
-        rOffsetFactArr=np.linspace(.9,1.2,num=32*3)
         numMagnetsHalfBend=int(np.pi*rb/Lm)
+
         def errorFunc(rOffsetFact):
             PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector')
             PTL_Ring.add_Drift(.05)
-            PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,1e-3,rOffsetFact=rOffsetFact)
+            PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=rOffsetFact)
             PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,1e-5,1.0,fastMode=False)
             error=np.std(1e6*particle.qoArr[:,1])
             return error
+
+        rOffsetFactArr=np.linspace(.5,1.5,30)
         helper=ParaWell()
-        results=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
-        print('optimum is: ', rOffsetFactArr[np.argmin(results)])
-        plt.plot(rOffsetFactArr,results)
-        plt.xlabel('radius offset factor')
-        plt.ylabel('rms oscillations, micrometers')
-        plt.show()
+        vals=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
+        fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],vals)
+        rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],1000)
+        newVals=fit(rOffsetFactArrDense[:,np.newaxis])
+        # plt.plot(rOffsetFactArr,vals,marker='x')
+        # plt.plot(rOffsetFactArrDense,newVals)
+        # plt.show()
+        return rOffsetFactArrDense[np.argmin(newVals)]  #optimal rOffsetFactor
+
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
