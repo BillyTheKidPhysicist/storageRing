@@ -225,80 +225,36 @@ class LatticeOptimizer:
         if showPlot==True:
             plt.show()
 
-    def optimize_Grid(self,coords0Arr,val0Arr,bounds,maxIter):
-        # np.random.seed(int.from_bytes(os.urandom(4),byteorder='little'))
-        newCoords=coords0Arr.copy()
-        newVals=val0Arr.copy()
-        # plt.scatter(newCoords[:, 0], newCoords[:, 1])
-        fitFunc=None
-        def cost(X):
-            return self.mode_Match(X,parallel=True)
-        jitterAmplitude=[]
-        for bound in bounds:
-            jitterAmplitude.append(1e-3*(bound[1]-bound[0]))
-        jitterAmplitude=np.asarray(jitterAmplitude)
-        for i in range(maxIter):
-            print('------',i)
-            fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=0.0)
-            def minFunc(X):
-                survival=fitFunc([X])[0]
-                if survival<0:
-                    return np.inf
-                else:
-                    return 1/survival
-            probeVals=[]
-            probeCoords=[]
-            for j in range(10):
-                sol=spo.differential_evolution(minFunc,bounds,mutation=1.5)
-                probeVals.append(1/sol.fun)
-                probeCoords.append(sol.x)
-            bestProbeCoords=probeCoords[np.argmax(np.asarray(probeVals))]
-            if i != maxIter-1: #if the last one don't jitter
-                bestProbeCoords=bestProbeCoords+ jitterAmplitude*2*(np.random.rand(len(bounds))-.5) #add a small amount
-                #of jitter to overcome small chance of getting stuck at a peak. Also, if the coords aren't improving
-                #more than this jitter, that's a good sign we're done
-            newVal=cost(bestProbeCoords)
-            newCoords=np.row_stack((newCoords,bestProbeCoords))
-            plt.scatter(*bestProbeCoords,marker='x',c='r')
-            newVals=np.append(newVals,newVal)
-        print('initial value:',np.round(np.max(val0Arr),2),'new value: ',np.round(np.max(newVals),2))
-        fitFunc=spi.RBFInterpolator(newCoords,newVals,smoothing=0.0)
-        num=250
-        xPlot=np.linspace(0,1,num=num)
-        coords=np.asarray(np.meshgrid(xPlot,xPlot)).T.reshape(-1,2)
-        image=fitFunc(coords).reshape(num,num)
-
-        plt.imshow(np.flip(np.transpose(image),axis=0),extent=[0,1.0,0,1.0])
-        plt.show()
-        return newCoords[np.argmin(newVals)]
-
     def mode_Match(self,XRing,parallel=False):
         #project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         #configuration
-        #todo: include only inner 98% of particles in each dimension to eliminate outliers
         self.update_Ring_Lattice(XRing)
         swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
             return 0.0
         modeMatchFunc=phaseSpaceInterpolater(swarmRingTraced)
-        def cost(XInjector):
+        def cost_To_Minimize(XInjector):
             self.update_Injector_Lattice(XInjector)
             swarm=self.trace_And_Project_Injector_Swarm_To_Combiner_End()
             totalRevs=modeMatchFunc(swarm)
             meanRevs=totalRevs/self.swarmInjectorInitial.num_Particles()
-            return 1/(meanRevs+1e-10)
+        bounds=[(0.025,.5),(0.025,.5)]
+        num=10
+        dx=(bounds[0][1]-bounds[0][0])/(num)
+        xArr=np.linspace(bounds[0][0]+dx,bounds[0][1]-dx,num)
+        coordsArr=np.asarray(np.meshgrid(xArr,xArr)).T.reshape(-1,2)
         if parallel==True:
-            num=30
-            xArr=np.linspace(0.05,.5,num)
-            coordsArr=np.asarray(np.meshgrid(xArr,xArr)).T.reshape(-1,2)
-            results=np.asarray(self.helper.parallel_Problem(cost,coordsArr,onlyReturnResults=True))
-            survival=1/results.min()
+            costArr=np.asarray(self.helper.parallel_Problem(cost_To_Minimize,coordsArr,onlyReturnResults=True))
+            solverCoordInitial=coordsArr[np.argmin(costArr)]
         else:
-            import skopt
-            # sol=skopt.gp_minimize(cost,[(0.01,.5),(0.01,.5)],n_calls=100,n_initial_points=25,initial_point_generator='sobol',
-            #                       n_jobs=1,acq_optimizer='lbfgs')
-            sol=spo.differential_evolution(cost,[(0.01,.5),(0.01,.5)])
-            survival=1/sol.fun
+            costList=[]
+            for coord in coordsArr:
+                costList.append(cost_To_Minimize(coord))
+            costArr=np.asarray(costList)
+            solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
+
+        sol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
+        survival=1/sol.fun
         return survival
 
     def update_Injector_Lattice(self,X):
@@ -351,6 +307,13 @@ class LatticeOptimizer:
     def update_Ring_Lattice(self,X):
         for i in range(len(X)):
             self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
+    def compute_Swarm_Survival_Percentage(self,swarmTraced):
+        totalRevolutions=0
+        for particle in swarmTraced:
+            totalRevolutions+=particle.revolutions
+        maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0/self.latticeRing.totalLength
+        return 1e2*totalRevolutions/maximumRevs
+
     def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10):
         # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
         #system over a grid, then using a non parametric model to find the optimum.
@@ -365,22 +328,26 @@ class LatticeOptimizer:
         for bound in bounds:
             BArrList.append(np.linspace(bound[0], bound[1], num0))
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
-        print('beginning grid search')
-        gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True))
-        print('grid optimum over')
+        # print('beginning grid search')
+        def mode_Match_Wrapper(X):
+            return self.mode_Match(X)
+        gridResults = np.asarray(self.helper.parallel_Problem(mode_Match_Wrapper, coordsArr, onlyReturnResults=True))
+        # print('grid optimum over: ', np.max(gridResults))
         def skopt_Cost(XRing):
             survival=self.mode_Match(XRing,parallel=True)
             return 1/(survival+1)
         minimizedGridResults=list(1/(gridResults+1))
-        if np.std(minimizedGridResults)/np.mean(minimizedGridResults)<1e-6:
-            print(np.max(gridResults),np.min(gridResults))
-            raise Exception('Initial grid search yielded results that are too similiar')
+        averageRevolutionsForRelevance=1e-3
+        if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
+            print('no viable solution')
+            return 0.0
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))
         import skopt
-        print('beginning gaussian process')
-        sol=skopt.gp_minimize(skopt_Cost,[(0.0,1.0),(0.0,1.0)],n_initial_points=0,x0=coordsList,y0=minimizedGridResults,n_calls=10)
+        # print('beginning gaussian process')
+        sol=skopt.gp_minimize(skopt_Cost,[(0.0,1.0),(0.0,1.0)],n_initial_points=0,x0=coordsList,y0=minimizedGridResults
+                              ,n_calls=maxIter)
         survivalMax=1/sol.fun
         survivalMaxCoords=sol.x
         return survivalMax,survivalMaxCoords

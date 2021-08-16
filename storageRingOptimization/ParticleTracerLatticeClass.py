@@ -97,7 +97,7 @@ class ParticleTracerLattice:
         helper=ParaWell()
         vals=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
         fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],vals)
-        rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],1000)
+        rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],10000)
         newVals=fit(rOffsetFactArrDense[:,np.newaxis])
         # plt.plot(rOffsetFactArr,vals,marker='x')
         # plt.plot(rOffsetFactArrDense,newVals)
@@ -169,7 +169,7 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact=1.0,apFrac=.8):
+    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=.8):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #rOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.

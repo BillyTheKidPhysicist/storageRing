@@ -44,7 +44,7 @@ def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
         condition=(np.all(np.abs(q-qTest)<eps) and np.all(np.abs(p-pTest)<eps) and np.abs(revs-revsTest)<eps)
         if fastMode==False: #include energy considerations
             EFinalTraced=tracedSwarm.particles[i].EArr[-1]
-            condition=condition and np.abs(EFinalTest<EFinalTraced)<eps
+            condition=condition and np.abs(EFinalTest-EFinalTraced)<eps
         assert condition,'Failed on particle: '+str(i)
 def generate_Lattice(configuration):
     if configuration=='1':
