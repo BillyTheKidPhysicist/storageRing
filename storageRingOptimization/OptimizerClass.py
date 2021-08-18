@@ -63,15 +63,15 @@ class LatticeOptimizer:
         qMaxInjector=2.5e-3
         pTransMaxInjector=10.0
         numParticlesInjector=1000
-        PxMaxInjector=.5
+        PxMaxInjector=10.0
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(qMaxInjector,
                                                                 pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=sameSeed)
         # self.find_Injector_Mode_Match_Bounds()
         injectorBounds10=[(-0.0077, 0.0076), (-0.006, 0.006), (-0.7, 0.6), (-9.8, 9.1), (-7.8, 7.9)]
-        injectorBounds5=[(-0.007786, 0.007794), (-0.005983, 0.005913), (-0.533335, 0.564433), (-7.310422, 7.264382), (-7.140295, 6.992844)]
-        injectorBounds=injectorBounds5
+        # injectorBounds5=[(-0.007786, 0.007794), (-0.005983, 0.005913), (-0.533335, 0.564433), (-7.310422, 7.264382), (-7.140295, 6.992844)]
+        injectorBounds=injectorBounds10
         numParticlesRing=50000
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
@@ -236,8 +236,9 @@ class LatticeOptimizer:
         def cost_To_Minimize(XInjector):
             self.update_Injector_Lattice(XInjector)
             swarm=self.trace_And_Project_Injector_Swarm_To_Combiner_End()
-            totalRevs=modeMatchFunc(swarm)
-            meanRevs=totalRevs/self.swarmInjectorInitial.num_Particles()
+            survival=self.compute_Swarm_Survival_Percentage(swarm,modeMatchFunc)
+            return 1/(survival+1e-10)
+
         bounds=[(0.025,.5),(0.025,.5)]
         num=10
         dx=(bounds[0][1]-bounds[0][0])/(num)
@@ -307,14 +308,13 @@ class LatticeOptimizer:
     def update_Ring_Lattice(self,X):
         for i in range(len(X)):
             self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
-    def compute_Swarm_Survival_Percentage(self,swarmTraced):
-        totalRevolutions=0
-        for particle in swarmTraced:
-            totalRevolutions+=particle.revolutions
-        maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0/self.latticeRing.totalLength
-        return 1e2*totalRevolutions/maximumRevs
+    def compute_Swarm_Survival_Percentage(self,swarmTraced,modeMatchFunction):
+        totalRevolutions=modeMatchFunction(swarmTraced)
+        # maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
+        fluxMultiplication=totalRevolutions/swarmTraced.num_Particles()
+        return fluxMultiplication
 
-    def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10):
+    def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10,parallel=True):
         # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
         #system over a grid, then using a non parametric model to find the optimum.
         #elementIndices: tuple of indices of elements to tune the field strength
@@ -328,19 +328,20 @@ class LatticeOptimizer:
         for bound in bounds:
             BArrList.append(np.linspace(bound[0], bound[1], num0))
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
-        # print('beginning grid search')
-        def mode_Match_Wrapper(X):
-            return self.mode_Match(X)
-        gridResults = np.asarray(self.helper.parallel_Problem(mode_Match_Wrapper, coordsArr, onlyReturnResults=True))
-        # print('grid optimum over: ', np.max(gridResults))
+        print('beginning grid search')
+        if parallel==True:
+            gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True))
+        else:
+            gridResults=np.asarray([self.mode_Match(coord) for coord in coordsArr])
+        print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
         def skopt_Cost(XRing):
-            survival=self.mode_Match(XRing,parallel=True)
+            survival=self.mode_Match(XRing,parallel=parallel)
             return 1/(survival+1)
         minimizedGridResults=list(1/(gridResults+1))
         averageRevolutionsForRelevance=1e-3
         if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
             print('no viable solution')
-            return 0.0
+            return 0.0,None
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))

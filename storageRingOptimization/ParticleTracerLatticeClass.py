@@ -74,7 +74,7 @@ class ParticleTracerLattice:
 
         self.elList=[] #to hold all the lattice elements
 
-    def find_Optimal_Offset_Factor(self,rp,rb,Lm):
+    def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.
         from ParticleClass import Particle
@@ -93,9 +93,12 @@ class ParticleTracerLattice:
             error=np.std(1e6*particle.qoArr[:,1])
             return error
 
-        rOffsetFactArr=np.linspace(.5,1.5,30)
-        helper=ParaWell()
-        vals=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
+        rOffsetFactArr=np.linspace(.5,1.5,12)
+        if parallel==True:
+            helper=ParaWell()
+            vals=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
+        else:
+            vals=np.asarray([errorFunc(rOffsetFact) for rOffsetFact in rOffsetFactArr])
         fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],vals)
         rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],10000)
         newVals=fit(rOffsetFactArrDense[:,np.newaxis])
