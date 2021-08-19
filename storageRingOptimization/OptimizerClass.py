@@ -1,3 +1,4 @@
+from shapely.affinity import rotate,translate
 import sys
 import numpy.linalg as npl
 import skopt
@@ -93,7 +94,7 @@ class LatticeOptimizer:
             self.update_Injector_Lattice(X)
             swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(
                 self.swarmInjectorInitial.quick_Copy(),self.h,1.0,
-                parallel=False,fastMode=True,copySwarm=False)
+                parallel=False,fastMode=True,copySwarm=False,accelerated=True)
             swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
             return swarmEnd
         projectedSwarmsList=self.helper.parallel_Problem(wrapper,coords,onlyReturnResults=True)
@@ -123,7 +124,29 @@ class LatticeOptimizer:
             #i because there are 2 columns per variable, a min and a max
         print('y','z','px','py','pz')
         print(boundsList)
-
+    def move_Injector_Shapely_Objects_To_Lab_Frame(self):
+        newShapelyObjectList=[]
+        rotationAngle=self.latticeInjector.combiner.ang+-self.latticeRing.combiner.ang
+        r2Injector=self.latticeInjector.combiner.r2
+        r2Ring=self.latticeRing.combiner.r2
+        for el in self.latticeInjector.elList:
+            SO=el.SO_Outer
+            SO=translate(SO,xoff=-r2Injector[0],yoff=-r2Injector[1])
+            SO=rotate(SO,rotationAngle,use_radians=True,origin=(0,0))
+            SO=translate(SO,xoff=r2Ring[0],yoff=r2Ring[1])
+            newShapelyObjectList.append(SO)
+        return newShapelyObjectList
+    def generate_Shapely_Floor_Plan(self):
+        shapelyObjectList=[]
+        shapelyObjectList.extend([el.SO_Outer for el in self.latticeRing.elList])
+        shapelyObjectList.extend(self.move_Injector_Shapely_Objects_To_Lab_Frame())
+        return shapelyObjectList
+    def show_Floor_Plan(self):
+        shapelyObjectList=self.generate_Shapely_Floor_Plan()
+        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy)
+        plt.gca().set_aspect('equal')
+        plt.grid()
+        plt.show()
 
     def get_Stability_Function(self,qMax=.5e-3,numParticlesPerDim=2,cutoff=8.0,funcType='bool'):
         #return a function that can evaluated at the lattice parameters, X, and return wether True for stable
@@ -236,14 +259,17 @@ class LatticeOptimizer:
         def cost_To_Minimize(XInjector):
             self.update_Injector_Lattice(XInjector)
             swarm=self.trace_And_Project_Injector_Swarm_To_Combiner_End()
-            survival=self.compute_Swarm_Survival_Percentage(swarm,modeMatchFunc)
+            survival=self.compute_Swarm_Survival(swarm,modeMatchFunc)
             return 1/(survival+1e-10)
 
-        bounds=[(0.025,.5),(0.025,.5)]
+        bounds=[(0.1,.5),(0.05,.5)]
         num=10
-        dx=(bounds[0][1]-bounds[0][0])/(num)
-        xArr=np.linspace(bounds[0][0]+dx,bounds[0][1]-dx,num)
-        coordsArr=np.asarray(np.meshgrid(xArr,xArr)).T.reshape(-1,2)
+        coordsForGrid=[]
+        for bound in bounds:
+            dx=(bound[1]-bound[0])/num
+            xArr=np.linspace(bound[0]+dx,bound[1]-dx,num)
+            coordsForGrid.append(xArr)
+        coordsArr=np.asarray(np.meshgrid(*coordsForGrid)).T.reshape(-1,len(bounds))
         if parallel==True:
             costArr=np.asarray(self.helper.parallel_Problem(cost_To_Minimize,coordsArr,onlyReturnResults=True))
             solverCoordInitial=coordsArr[np.argmin(costArr)]
@@ -253,7 +279,6 @@ class LatticeOptimizer:
                 costList.append(cost_To_Minimize(coord))
             costArr=np.asarray(costList)
             solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
-
         sol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
         survival=1/sol.fun
         return survival
@@ -281,7 +306,7 @@ class LatticeOptimizer:
         return swarmEnd
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self):
         swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy(),self.h,1.0,
-                                                                   parallel=False,fastMode=True,copySwarm=False)
+                                                                   parallel=False,fastMode=True,copySwarm=False,accelerated=True)
         swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
         swarmEnd=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd,copySwarm=False)
         return swarmEnd
@@ -308,10 +333,10 @@ class LatticeOptimizer:
     def update_Ring_Lattice(self,X):
         for i in range(len(X)):
             self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
-    def compute_Swarm_Survival_Percentage(self,swarmTraced,modeMatchFunction):
+    def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
         totalRevolutions=modeMatchFunction(swarmTraced)
         # maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
-        fluxMultiplication=totalRevolutions/swarmTraced.num_Particles()
+        fluxMultiplication=totalRevolutions/self.swarmInjectorInitial.num_Particles()
         return fluxMultiplication
 
     def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10,parallel=True):
@@ -345,9 +370,9 @@ class LatticeOptimizer:
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))
-        import skopt
-        # print('beginning gaussian process')
-        sol=skopt.gp_minimize(skopt_Cost,[(0.0,1.0),(0.0,1.0)],n_initial_points=0,x0=coordsList,y0=minimizedGridResults
+        # import skopt
+        print('beginning gaussian process')
+        sol=skopt.gp_minimize(skopt_Cost,bounds,n_initial_points=0,x0=coordsList,y0=minimizedGridResults
                               ,n_calls=maxIter)
         survivalMax=1/sol.fun
         survivalMaxCoords=sol.x

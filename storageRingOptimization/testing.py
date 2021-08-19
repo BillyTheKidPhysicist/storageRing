@@ -92,7 +92,7 @@ def poop_Lattice_Configuration(configuration,saveData):
     else:
         poop_Lattice_Tracing(PTL,False,False,poopName)
         poop_Lattice_Tracing(PTL,True,False,poopName)
-        # poop_Lattice_Tracing(PTL,True,True,poopName)
+        poop_Lattice_Tracing(PTL,True,True,poopName)
 def poop_1(saveData=False):
     #straight lattice
     poop_Lattice_Configuration('1',saveData)

@@ -56,6 +56,11 @@ class Element:
         self.r2 = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
         self.SO = None  # the shapely object for the element. These are used for plotting, and for finding if the coordinates
         # are inside an element that can't be found with simple geometry
+        self.SO_Outer=None #shapely object that represents the outer edge of the element
+        self.outerHalfWidth=None #outer diameter/width of the element, where applicable. For example, outer diam of lens is the
+        #bore radius plus magnets and mount material radial thickness
+        self.fringeFrac=None #the ratio of the extra length added to hard end to account for fringe fields to the radius
+        #of the element
         self.ang = 0  # bending angle of the element. 0 for lenses and drifts
         self.Lm = None  # hard edge length of magnet along line through the bore
         self.L = None  # length of magnet along line through the bore
@@ -1160,7 +1165,8 @@ class HalbachLensSim(LensIdeal):
 
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
-
+        mountThickness=5e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
+        self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
         numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
         xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY) #add a little extra so the interp works correctly

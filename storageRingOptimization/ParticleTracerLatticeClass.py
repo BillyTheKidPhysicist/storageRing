@@ -275,7 +275,8 @@ class ParticleTracerLattice:
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
         params=self.solve_Combiner_Constraints()
-        lensIndex=4
+        lensIndex=5 #todo: Make this automatic
+        assert isinstance(self.elList[lensIndex],HalbachLensSim) or isinstance(self.elList[lensIndex],LensIdeal)
         if self.bender1.segmented==True:
             rb1, rb2, numMagnets1, numMagnets2, Lm3=params
             self.bender1.rb=rb1
@@ -371,6 +372,7 @@ class ParticleTracerLattice:
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         if cost(params[:2])>tol:
+            print(inputAng, inputOffset, L1, L2,r10,r20)
             raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
 
@@ -405,8 +407,8 @@ class ParticleTracerLattice:
         theta2 = 2 * np.pi - inputAng - theta1
         params=np.asarray([theta1,theta2,L3])
         return params
-
     def make_Geometry(self):
+        #todo: refactor this whole thing
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
         #Ideally I would never need to use this to find which particle the elment is in because it's slower.
         #This is all done in the xy plane.
@@ -418,21 +420,34 @@ class ParticleTracerLattice:
             yb=el.r1[1]
             xe=el.r2[0]
             ye=el.r2[1]
-            ap=el.ap
+            halfWidth=el.ap
             theta=el.theta
             if el.type=='STRAIGHT':
-                q1=np.asarray([xb-np.sin(theta)*ap,yb+ap*np.cos(theta)]) #top left when theta=0
-                q2=np.asarray([xe-np.sin(theta)*ap,ye+ap*np.cos(theta)]) #top right when theta=0
-                q3=np.asarray([xe+np.sin(theta)*ap,ye-ap*np.cos(theta)]) #bottom right when theta=0
-                q4=np.asarray([xb+np.sin(theta)*ap,yb-ap*np.cos(theta)]) #bottom left when theta=0
-                el.SO=Polygon([q1,q2,q3,q4])
+                q1Inner=np.asarray([xb-np.sin(theta)*halfWidth,yb+halfWidth*np.cos(theta)]) #top left when theta=0
+                q2Inner=np.asarray([xe-np.sin(theta)*halfWidth,ye+halfWidth*np.cos(theta)]) #top right when theta=0
+                q3Inner=np.asarray([xe+np.sin(theta)*halfWidth,ye-halfWidth*np.cos(theta)]) #bottom right when theta=0
+                q4Inner=np.asarray([xb+np.sin(theta)*halfWidth,yb-halfWidth*np.cos(theta)]) #bottom left when theta=0
+                pointsInner=[q1Inner,q2Inner,q3Inner,q4Inner]
+                if el.outerHalfWidth is None:
+                    pointsOuter=pointsInner.copy()
+                else:
+                    width=el.outerHalfWidth
+                    if False:#el.fringeFrac is not None:
+                        pass
+                    else:
+                        q1Outer=np.asarray([xb-np.sin(theta)*width,yb+width*np.cos(theta)])  #top left when theta=0
+                        q2Outer=np.asarray([xe-np.sin(theta)*width,ye+width*np.cos(theta)])  #top right when theta=0
+                        q3Outer=np.asarray([xe+np.sin(theta)*width,ye-width*np.cos(theta)])  #bottom right when theta=0
+                        q4Outer=np.asarray([xb+np.sin(theta)*width,yb-width*np.cos(theta)])  #bottom left when theta=0
+                        pointsOuter=[q1Outer,q2Outer,q3Outer,q4Outer]
+                    
             elif el.type=='BEND':
                 phiArr=np.linspace(0,-el.ang,num=benderPoints)+theta+np.pi/2 #angles swept out
                 r0=el.r0.copy()
-                xInner=(el.rb-ap)*np.cos(phiArr)+r0[0] #x values for inner bend
-                yInner=(el.rb-ap)*np.sin(phiArr)+r0[1] #y values for inner bend
-                xOuter=np.flip((el.rb+ap)*np.cos(phiArr)+r0[0]) #x values for outer bend
-                yOuter=np.flip((el.rb+ap)*np.sin(phiArr)+r0[1]) #y values for outer bend
+                xInner=(el.rb-halfWidth)*np.cos(phiArr)+r0[0] #x values for inner bend
+                yInner=(el.rb-halfWidth)*np.sin(phiArr)+r0[1] #y values for inner bend
+                xOuter=np.flip((el.rb+halfWidth)*np.cos(phiArr)+r0[0]) #x values for outer bend
+                yOuter=np.flip((el.rb+halfWidth)*np.sin(phiArr)+r0[1]) #y values for outer bend
                 if el.cap==True:
                     xInner=np.append(xInner[0]+el.nb[0]*el.Lcap,xInner)
                     yInner = np.append(yInner[0] + el.nb[1] * el.Lcap, yInner)
@@ -445,24 +460,28 @@ class ParticleTracerLattice:
                     yOuter = np.append(yOuter[0] + el.ne[1] * el.Lcap,yOuter)
                 x=np.append(xInner,xOuter) #list of x values in order
                 y=np.append(yInner,yOuter) #list of y values in order
-
-                el.SO=Polygon(np.column_stack((x,y))) #shape the coordinates and make the object
+                pointsInner=np.column_stack((x,y)) #shape the coordinates and make the object
+                if el.outerHalfWidth is None:
+                    pointsOuter=pointsInner.copy()
             elif el.type=='COMBINER':
                 apR=el.apR #the 'right' apeture. here this confusingly means when looking in the yz plane, ie the place
                 #that the particle would look into as it revolves in the lattice
                 apL=el.apL
-                q1=np.asarray([0,apR]) #top left ( in standard xy plane) when theta=0
-                q2=np.asarray([el.Lb,apR]) #top middle when theta=0
-                q3=np.asarray([el.Lb+(el.La-el.apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-el.apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
-                q4=np.asarray([el.Lb+(el.La+el.apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+el.apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
-                q5=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
-                q6 = np.asarray([0, -apL])  # bottom left when theta=0
-                points=[q1,q2,q3,q4,q5,q6]
-                for i in range(len(points)):
-                    points[i]=el.ROut@points[i]+el.r2[:2]
-                el.SO=Polygon(points)
+                q1Inner=np.asarray([0,apR]) #top left ( in standard xy plane) when theta=0
+                q2Inner=np.asarray([el.Lb,apR]) #top middle when theta=0
+                q3Inner=np.asarray([el.Lb+(el.La-el.apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-el.apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
+                q4Inner=np.asarray([el.Lb+(el.La+el.apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+el.apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
+                q5Inner=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
+                q6Inner = np.asarray([0, -apL])  # bottom left when theta=0
+                pointsInner=[q1Inner,q2Inner,q3Inner,q4Inner,q5Inner,q6Inner]
+                for i in range(len(pointsInner)):
+                    pointsInner[i]=el.ROut@pointsInner[i]+el.r2[:2]
+                if el.outerHalfWidth is None:
+                    pointsOuter=pointsInner.copy()
             else:
                 raise Exception('No correct element provided')
+            el.SO=Polygon(pointsInner)
+            el.SO_Outer=Polygon(pointsOuter)
     def catch_Errors(self,constrain,builLattice):
         #catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         #kinds. This class is not meant to have tons of error handling, so user must be cautious
@@ -534,7 +553,6 @@ class ParticleTracerLattice:
                         # reference frame. This is based on the previous element
                     else:
                         el.theta=prevEl.theta-prevEl.ang
-
                     xe=xb+el.L*np.cos(el.theta)
                     ye=yb+el.L*np.sin(el.theta)
                     el.nb = -np.asarray([np.cos(el.theta), np.sin(el.theta)])  # normal vector to input
