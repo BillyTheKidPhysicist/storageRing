@@ -145,6 +145,9 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        if accelerated==True:
+            raise Exception('Errors still persists when using swarm tracer with accelerated. particularily with '
+                            'injector')
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle

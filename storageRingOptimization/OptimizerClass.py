@@ -60,16 +60,17 @@ class LatticeOptimizer:
         self.generate_Swarms()
 
     def generate_Swarms(self):
-        sameSeed=False
+        sameSeed=True
         qMaxInjector=2.5e-3
         pTransMaxInjector=10.0
-        numParticlesInjector=1000
-        PxMaxInjector=10.0
+        numParticlesInjector=100
+        PxMaxInjector=1.0
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(qMaxInjector,
-                                                                pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=sameSeed)
-        # self.find_Injector_Mode_Match_Bounds()
+                                                pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=sameSeed,upperSymmetry=False)
+        self.find_Injector_Mode_Match_Bounds()
+        sys.exit()
         injectorBounds10=[(-0.0077, 0.0076), (-0.006, 0.006), (-0.7, 0.6), (-9.8, 9.1), (-7.8, 7.9)]
         # injectorBounds5=[(-0.007786, 0.007794), (-0.005983, 0.005913), (-0.533335, 0.564433), (-7.310422, 7.264382), (-7.140295, 6.992844)]
         injectorBounds=injectorBounds10
@@ -94,7 +95,7 @@ class LatticeOptimizer:
             self.update_Injector_Lattice(X)
             swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(
                 self.swarmInjectorInitial.quick_Copy(),self.h,1.0,
-                parallel=False,fastMode=True,copySwarm=False,accelerated=True)
+                parallel=False,fastMode=True,copySwarm=False,accelerated=False)
             swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
             return swarmEnd
         projectedSwarmsList=self.helper.parallel_Problem(wrapper,coords,onlyReturnResults=True)
@@ -306,7 +307,7 @@ class LatticeOptimizer:
         return swarmEnd
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self):
         swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy(),self.h,1.0,
-                                                                   parallel=False,fastMode=True,copySwarm=False,accelerated=True)
+                                                                   parallel=False,fastMode=True,copySwarm=False)
         swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
         swarmEnd=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd,copySwarm=False)
         return swarmEnd
