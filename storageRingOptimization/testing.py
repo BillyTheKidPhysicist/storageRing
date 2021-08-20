@@ -75,7 +75,7 @@ def generate_Lattice(configuration):
         PTL.add_Combiner_Sim('combinerV2.txt')
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
-        PTL.add_Halbach_Lens_Sim(.01,None)
+        PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)
         PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.end_Lattice(enforceClosedLattice=True,constrain=True)
         PTL.elList[0].fieldFact=.3

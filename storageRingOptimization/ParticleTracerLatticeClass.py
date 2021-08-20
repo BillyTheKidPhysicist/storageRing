@@ -69,7 +69,8 @@ class ParticleTracerLattice:
         self.bender1=None #bender element object
         self.bender2=None #bender element object
         self.combiner=None #combiner element object
-
+        self.linearElementToConstraint=None #element whos length will be changed when the lattice is constrained to
+        # satisfy geometry. Can only be one
 
 
         self.elList=[] #to hold all the lattice elements
@@ -106,7 +107,11 @@ class ParticleTracerLattice:
         # plt.plot(rOffsetFactArrDense,newVals)
         # plt.show()
         return rOffsetFactArrDense[np.argmin(newVals)]  #optimal rOffsetFactor
-
+    def set_Constrained_Linear_Element(self,el):
+        if self.linearElementToConstraint is not None:
+            raise Exception('There can only be one linear constrained element')
+        else:
+            self.linearElementToConstraint=el
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
@@ -114,15 +119,17 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8):
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False):
         el=HalbachLensSim(self, rp,Lm,apFrac)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None):
+        if constrain==True: self.set_Constrained_Linear_Element(el)
+    def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None,constrain=False):
         el=BumpsLensSimWithCaps(self, file2D, file3D, fringeFrac,L, rp,ap,sigma)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Ideal(self,L,Bp,rp,ap=None):
+        if constrain==True: self.set_Constrained_Linear_Element(el)
+    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m
         #Bp: field strength at pole face of lens, T
@@ -137,6 +144,7 @@ class ParticleTracerLattice:
         el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
+        if constrain==True: self.set_Constrained_Linear_Element(el)
     def add_Bump_Lens_Ideal(self,L,Bp,rp,sigma,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m
@@ -275,27 +283,28 @@ class ParticleTracerLattice:
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
         params=self.solve_Combiner_Constraints()
-        lensIndex=5 #todo: Make this automatic
-        assert isinstance(self.elList[lensIndex],HalbachLensSim) or isinstance(self.elList[lensIndex],LensIdeal)
+        assert (isinstance(self.linearElementToConstraint,HalbachLensSim) or
+               isinstance(self.linearElementToConstraint,LensIdeal)) and \
+               self.linearElementToConstraint is not None
         if self.bender1.segmented==True:
-            rb1, rb2, numMagnets1, numMagnets2, Lm3=params
+            rb1, rb2, numMagnets1, numMagnets2, L3=params
             self.bender1.rb=rb1
             self.bender1.numMagnets=numMagnets1
             self.bender2.rb=rb2
             self.bender2.numMagnets=numMagnets2
-            self.elList[lensIndex].set_Length(Lm3)
+            self.linearElementToConstraint.set_Length(L3)
             self.bender1.fill_Params_Post_Constrained()
             self.bender2.fill_Params_Post_Constrained()
         else:
-            phi1,phi2,Lm3=params
+            phi1,phi2,L3=params
             self.bender1.ang = phi1
             self.bender2.ang = phi2
             #update benders
             # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
-            self.elList[lensIndex].set_Length(Lm3)
+            self.linearElementToConstraint.set_Length(L3)
             self.bender1.fill_Params()
             self.bender2.fill_Params()
-            self.elList[lensIndex].fill_Params()
+            self.linearElementToConstraint.fill_Params()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves

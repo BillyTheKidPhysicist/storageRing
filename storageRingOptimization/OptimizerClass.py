@@ -345,9 +345,10 @@ class LatticeOptimizer:
             self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
     def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
         totalRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
-        # maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
-        fluxMultiplication=totalRevolutions/self.swarmInjectorInitial.num_Particles()
-        return fluxMultiplication
+        maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
+        # fluxMultiplication=totalRevolutions/self.swarmInjectorInitial.num_Particles()
+        survival=1e2*totalRevolutions/maximumRevs
+        return survival
 
     def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10,parallel=True):
         # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
@@ -372,7 +373,7 @@ class LatticeOptimizer:
         print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
         def skopt_Cost(XRing):
             survival=self.mode_Match(XRing,parallel=parallel)
-            return 1/(survival+1)
+            return 1/(survival+1e-10)
         minimizedGridResults=list(1/(gridResults+1))
         averageRevolutionsForRelevance=1e-3
         if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
@@ -388,9 +389,3 @@ class LatticeOptimizer:
         survivalMax=1/sol.fun
         survivalMaxCoords=sol.x
         return survivalMax,survivalMaxCoords
-        # print('model done')
-        # print(survivalMax,survivalMaxCoords)
-
-#
-# test=LatticeOptimizer(None)
-# test.optimize_Magnetic_Field((1,2,3),[(0,1),(0,1),(0,1)],30,10)
