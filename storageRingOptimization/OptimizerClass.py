@@ -24,17 +24,21 @@ class phaseSpaceInterpolater:
         XiList=[] #list initial coordinates in phase space at the combiner output
         revolutionList=[] #list of total revolutions before striking aperture
         for particle in swarmRingTraced:
-            qi=particle.qi[1:]
+            qi=particle.qi
             pi=particle.pi
             Xi=np.append(qi,pi)
             XiList.append(Xi)
             revolutionList.append(particle.revolutions)
         self.interpolater=spi.NearestNDInterpolator(XiList, revolutionList,rescale=True,tree_options={'copy_data':True})
-    def __call__(self,swarmInjector):
+    def __call__(self,swarmInjector,useUpperSymmetry):
         totalRevs=0
+        zIndex=2
         for particle in swarmInjector:
-            q=particle.q[1:]
-            p=particle.p
+            q=particle.q.copy()
+            p=particle.p.copy()
+            if useUpperSymmetry==True and q[zIndex]<0:
+                p[zIndex]=-p[zIndex] 
+                q[zIndex]=-q[zIndex]
             X=np.append(q,p)
             totalRevs+=self.interpolater(X)[0]
         return totalRevs
@@ -49,41 +53,41 @@ class LatticeOptimizer:
         self.particleTracerInjector=ParticleTracer(latticeInjector)
         self.swarmTracerInjector=SwarmTracer(self.latticeInjector)
         self.swarmInjectorInitial=None #object to hold the injector swarm object
-        self.swarmRingInitial=None #object to hold the ring swarm object that will generate the mode match function
+        self.swarmRingInitialAtCombinerOutput=None #object to hold the ring swarm object that will generate the mode match function
         self.h=1e-5 #timestep size
         self.T=10.0
         self.swarmTracerRing=SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
         self.elementIndices=None
+        self.useLatticeUpperSymmetry=True #exploit the fact that the lattice has symmetry in the z axis to use half
+        #the number of particles. Symmetry is broken if including gravity
+        self.sameSeedForSwarm=True #generate the same swarms every time by seeding the random generator during swarm
+        #generation with the same number, 42
+        self.numParticlesInjector=500
+        self.numParticlesRing=30000
 
-        self.generate_Swarms()
-
-    def generate_Swarms(self):
-        sameSeed=True
+    def generate_Swarms(self,parallel):
         qMaxInjector=2.5e-3
         pTransMaxInjector=10.0
-        numParticlesInjector=100
         PxMaxInjector=1.0
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(qMaxInjector,
-                                                pTransMaxInjector,PxMaxInjector,numParticlesInjector,sameSeed=sameSeed,upperSymmetry=False)
-        self.find_Injector_Mode_Match_Bounds()
-        sys.exit()
-        injectorBounds10=[(-0.0077, 0.0076), (-0.006, 0.006), (-0.7, 0.6), (-9.8, 9.1), (-7.8, 7.9)]
-        # injectorBounds5=[(-0.007786, 0.007794), (-0.005983, 0.005913), (-0.533335, 0.564433), (-7.310422, 7.264382), (-7.140295, 6.992844)]
-        injectorBounds=injectorBounds10
-        numParticlesRing=50000
+                                                pTransMaxInjector,PxMaxInjector,self.numParticlesInjector,
+                                                sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
+
+        injectorBounds=self.find_Injector_Mode_Match_Bounds(parallel)
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
         qMax=1.1*firstApertureRing
 
-        self.swarmRingInitial=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(qMax,pTransMaxRing,
-                                                                            pxMaxRing,numParticlesRing,sameSeed=sameSeed)
+        self.swarmRingInitialAtCombinerOutput=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(qMax,pTransMaxRing,
+                                            pxMaxRing,self.numParticlesRing,
+                                            sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
 
 
-    def find_Injector_Mode_Match_Bounds(self):
+    def find_Injector_Mode_Match_Bounds(self,parallel):
         #todo: use this to set hard limits on output of combiner?
         injectorParamsBounds=(.05,1.0)
         numGridPointsPerDim = 30
@@ -98,7 +102,10 @@ class LatticeOptimizer:
                 parallel=False,fastMode=True,copySwarm=False,accelerated=False)
             swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
             return swarmEnd
-        projectedSwarmsList=self.helper.parallel_Problem(wrapper,coords,onlyReturnResults=True)
+        if parallel==True:
+            projectedSwarmsList=self.helper.parallel_Problem(wrapper,coords,onlyReturnResults=True)
+        else:
+            projectedSwarmsList=[wrapper(coord) for coord in coords]
         phaseSpaceExtremaList=[]
         # temp=[]
         for swarm in projectedSwarmsList:
@@ -123,8 +130,7 @@ class LatticeOptimizer:
         for i in range(phaseSpaceExtremaArr.shape[1]//2): #loop over each coordinate, ie y,z,px etc
             boundsList.append((np.round(phaseSpaceExtremaArr[:,2*i].min(),6),np.round(phaseSpaceExtremaArr[:,2*i+1].max(),6))) #need to double
             #i because there are 2 columns per variable, a min and a max
-        print('y','z','px','py','pz')
-        print(boundsList)
+        return boundsList
     def move_Injector_Shapely_Objects_To_Lab_Frame(self):
         newShapelyObjectList=[]
         rotationAngle=self.latticeInjector.combiner.ang+-self.latticeRing.combiner.ang
@@ -215,7 +221,7 @@ class LatticeOptimizer:
         return revolutionFunc
 
     def plot_Stability(self,bounds=None,qMax=1e-4,numParticlesPerDim=2,gridPoints=40,savePlot=False,
-                       plotName='stabilityPlot',cutoff=8.0,h=5e-6,showPlot=True,modulation='01'):
+                       plotName='stabilityPlot',cutoff=8.0,showPlot=True,modulation='01'):
         #bounds: region to search over for instability
         #qMax: maximum dimension in transverse directions for initialized particles
         #numParticlesPerDim: Number of particles along y and z axis so total is numParticlesPerDim**2.
@@ -228,7 +234,8 @@ class LatticeOptimizer:
             bounds = [(0.0, .5), (0.0, .5)]
 
         revolutionFunc=self.compute_Revolution_Func_Over_Grid(bounds=bounds,qMax=qMax,
-                                                             numParticlesPerDim=numParticlesPerDim, gridPoints=gridPoints,cutoff=cutoff,h=h)
+                                                             numParticlesPerDim=numParticlesPerDim,
+                                                              gridPoints=gridPoints,cutoff=cutoff)
         plotxArr=np.linspace(bounds[0][0],bounds[0][1],num=250)
         plotyArr = np.linspace(bounds[1][0], bounds[1][1], num=250)
         image=np.empty((plotxArr.shape[0],plotyArr.shape[0]))
@@ -252,6 +259,8 @@ class LatticeOptimizer:
     def mode_Match(self,XRing,parallel=False):
         #project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         #configuration
+
+        #todo: add list that follows along and records results
         self.update_Ring_Lattice(XRing)
         swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
@@ -327,7 +336,7 @@ class LatticeOptimizer:
         if stable == False:
             return None
         else:
-            swarm = self.swarmTracerRing.trace_Swarm_Through_Lattice(self.swarmRingInitial.quick_Copy(), self.h, self.T,
+            swarm = self.swarmTracerRing.trace_Swarm_Through_Lattice(self.swarmRingInitialAtCombinerOutput.quick_Copy(), self.h, self.T,
                                                                      parallel=parallel, fastMode=True,copySwarm=False)
             # self.latticeRing.show_Lattice(swarm=swarm,trueAspectRatio=False,showTraceLines=True)
             return swarm
@@ -335,7 +344,7 @@ class LatticeOptimizer:
         for i in range(len(X)):
             self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
     def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
-        totalRevolutions=modeMatchFunction(swarmTraced)
+        totalRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
         # maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
         fluxMultiplication=totalRevolutions/self.swarmInjectorInitial.num_Particles()
         return fluxMultiplication
@@ -349,6 +358,7 @@ class LatticeOptimizer:
         #num0: number of points in grid of magnetic fields
         assert np.unique(np.asarray(elementIndices)).shape[0]==len(elementIndices) #ensure no duplicates
         assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
+        self.generate_Swarms(parallel)
         self.elementIndices=elementIndices
         BArrList=[]
         for bound in bounds:
