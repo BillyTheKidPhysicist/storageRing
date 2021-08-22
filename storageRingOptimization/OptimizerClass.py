@@ -13,7 +13,18 @@ from ParaWell import ParaWell
 from SwarmTracerClass import SwarmTracer
 import globalMethods as gm
 
-
+class Solution:
+    #class to hold onto results of each solution
+    def __init__(self):
+        self.xInjector=np.nan
+        self.xRing=np.nan
+        self.func=np.nan
+    def __str__(self): #method that gets called when you do print(Solution())
+        string='----------Solution-----------'
+        string+='injector element spacing optimum configuration: '+str(self.xInjector)+'\n '
+        string+='storage ring magnetic field optimum configuration: '+str(self.xRing)+'\n '
+        string+='optmum result: '+str(self.func)
+        return string
 
 
 class phaseSpaceInterpolater:
@@ -59,11 +70,14 @@ class LatticeOptimizer:
         self.swarmTracerRing=SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
+        self.solutionList=[] #list to hold solution objects the track coordsinates and function values for injector
+        #and ring paramters
         self.elementIndices=None
         self.useLatticeUpperSymmetry=True #exploit the fact that the lattice has symmetry in the z axis to use half
         #the number of particles. Symmetry is broken if including gravity
         self.sameSeedForSwarm=True #generate the same swarms every time by seeding the random generator during swarm
         #generation with the same number, 42
+        self.sameSeedForSearch=True #wether to use the same seed, 42, for the search process
         self.numParticlesInjector=500
         self.numParticlesRing=30000
 
@@ -261,10 +275,13 @@ class LatticeOptimizer:
         #configuration
 
         #todo: add list that follows along and records results
+        solution=Solution()
+        solution.xRing=XRing
         self.update_Ring_Lattice(XRing)
         swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
-            return 0.0
+            solution.func=0.0
+            return solution
         modeMatchFunc=phaseSpaceInterpolater(swarmRingTraced)
         def cost_To_Minimize(XInjector):
             self.update_Injector_Lattice(XInjector)
@@ -291,7 +308,9 @@ class LatticeOptimizer:
             solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
         sol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
         survival=1/sol.fun
-        return survival
+        solution.xInjector=sol.x
+        solution.func=survival
+        return solution
 
     def update_Injector_Lattice(self,X):
         #modify lengths of drift regions in injector
@@ -349,7 +368,8 @@ class LatticeOptimizer:
         # fluxMultiplication=totalRevolutions/self.swarmInjectorInitial.num_Particles()
         survival=1e2*totalRevolutions/maximumRevs
         return survival
-
+    def best_Solution(self):
+        return self.solutionList[np.nanargmax(np.asarray([sol.func for sol in self.solutionList]))]
     def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10,parallel=True):
         # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
         #system over a grid, then using a non parametric model to find the optimum.
@@ -359,6 +379,8 @@ class LatticeOptimizer:
         #num0: number of points in grid of magnetic fields
         assert np.unique(np.asarray(elementIndices)).shape[0]==len(elementIndices) #ensure no duplicates
         assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
+        if self.sameSeedForSearch==True:
+            np.random.seed(42)
         self.generate_Swarms(parallel)
         self.elementIndices=elementIndices
         BArrList=[]
@@ -367,25 +389,27 @@ class LatticeOptimizer:
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
         print('beginning grid search')
         if parallel==True:
-            gridResults = np.asarray(self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True))
+            self.solutionList=self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True)
         else:
-            gridResults=np.asarray([self.mode_Match(coord) for coord in coordsArr])
+            self.solutionList=[self.mode_Match(coord) for coord in coordsArr]
+        gridResults=np.asarray([solution.func for solution in self.solutionList])
+
         print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
         def skopt_Cost(XRing):
-            survival=self.mode_Match(XRing,parallel=parallel)
+            solution=self.mode_Match(XRing,parallel=parallel)
+            survival=solution.func
             return 1/(survival+1e-10)
+
         minimizedGridResults=list(1/(gridResults+1))
         averageRevolutionsForRelevance=1e-3
         if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
             print('no viable solution')
-            return 0.0,None
+            return Solution()
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))
         # import skopt
         print('beginning gaussian process')
-        sol=skopt.gp_minimize(skopt_Cost,bounds,n_initial_points=0,x0=coordsList,y0=minimizedGridResults
-                              ,n_calls=maxIter)
-        survivalMax=1/sol.fun
-        survivalMaxCoords=sol.x
-        return survivalMax,survivalMaxCoords
+        skopt.gp_minimize(skopt_Cost,bounds,n_initial_points=0,x0=coordsList,y0=minimizedGridResults
+                          ,n_calls=maxIter)
+        return self.best_Solution()

@@ -193,6 +193,7 @@ class ParticleTracer:
                     break
                 self.T+=self.h
                 self.particle.T=self.T
+                self.test.append(npl.norm(self.forceLast))
     def multi_Step_Verlet(self):
         results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results

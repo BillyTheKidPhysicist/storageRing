@@ -490,7 +490,7 @@ class DoubeLayerHalbachLens:
 class SegmentedBenderHalbach(HalbachLens):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
-    def __init__(self,rp,rb,UCAngle,Lm,numLenses=3,magnetWidth=None,M=1.03e6,inputOnly=False):
+    def __init__(self,rp,rb,UCAngle,Lm,numLenses=3,magnetWidth=None,M=1.03e6,positiveAngleMagnetsOnly=False):
         self.rp=rp #radius of bore of magnet, ie to the pole
         self.rb=rb #bending radius
         self.UCAngle=UCAngle #unit cell angle of a HALF single magnet, ie HALF the bending angle of a single magnet. It
@@ -498,8 +498,9 @@ class SegmentedBenderHalbach(HalbachLens):
         #solve the rest
         self.Lm=Lm #length of single magnet
         self.M=M #magnetization, SI
-        self.inputOnly=inputOnly #wether to model only the input of the bender, ie no magnets being added below the z=0
-        #line, except for the magnet right at z=0
+        self.positiveAngleMagnetsOnly=positiveAngleMagnetsOnly #This is used to model the cap amgnet, and the first full
+        #segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
+        #or positive
         if magnetWidth==None:
             self.magnetWidth=rp * np.tan(2 * np.pi / 24) * 2 #set to size that exactly fits
         else:
@@ -510,11 +511,13 @@ class SegmentedBenderHalbach(HalbachLens):
     def _build(self):
         self.lensList=[]
         if self.numLenses==1:
+            if self.positiveAngleMagnetsOnly==True:
+                raise Exception('Not applicable with only 1 magnet')
             angleArr=np.asarray([0.0])
         else:
             angleArr=np.linspace(-2*self.UCAngle*(self.numLenses-1)/2,2*self.UCAngle*(self.numLenses-1)/2,num=self.numLenses)
-        if self.inputOnly==True:
-            angleArr=angleArr[(self.numLenses-1)//2:]
+        if self.positiveAngleMagnetsOnly==True:
+            angleArr+=2*self.UCAngle
         for i in range(angleArr.shape[0]):
             lens=HalbachLens(1,self.magnetWidth,self.rp,length=self.Lm,M=self.M)
             x=self.rb*np.cos(angleArr[i]) #x coordinate of center of lens
