@@ -961,8 +961,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
         # #fill first segment magnet that comes before the repeating segments that can be modeled the same
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=3,inputOnly=True)
-
+                                                                          numLenses=3,positiveAngleMagnetsOnly=True)
         x1=-(self.ap+1.5*(self.rb-self.ap)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
         x2=self.ap+1e-6
         numX=2*(int((x2-x1)/spatialStepSize)//2)+1
@@ -980,7 +979,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
         #fill the first magnet and its fringe field
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=3,inputOnly=True)
+                                                                          numLenses=3,positiveAngleMagnetsOnly=True)
         numXY=2*(int(2*self.ap/spatialStepSize)//2)+1
         numZ=2*(int(self.Lcap/spatialStepSize)//2)+1
         xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
