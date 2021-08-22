@@ -942,8 +942,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def fill_Params_Post_Constrained(self):
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
-        spatialStepSize=1e-3 #target step size for spatial field interpolate
-
+        spatialStepSize=500e-6 #target step size for spatial field interpolate.
+        #500um works very well, but 1mm may be acceptable
+        numModelLenes=3 #3 turns out to be a good number
+        assert numModelLenes%2==1
         #fill periodic segment data
         numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
         numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.rp)/spatialStepSize)//2)+1
@@ -951,7 +953,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
         coords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3)
         coords[:,0]+=self.rb #add the bending radius to the coords
-        lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, numLenses=3)
+        lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
+                                                                          numLenses=numModelLenes+2)
         #using just 3 magnets makes a big difference
         BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(coords,returnNorm=True)
         dataSeg=np.column_stack((coords,BNormGradArr,BNormArr))
@@ -961,7 +964,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
         # #fill first segment magnet that comes before the repeating segments that can be modeled the same
         lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=3,positiveAngleMagnetsOnly=True)
+                                                                          numLenses=numModelLenes,positiveAngleMagnetsOnly=True)
         x1=-(self.ap+1.5*(self.rb-self.ap)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
         x2=self.ap+1e-6
         numX=2*(int((x2-x1)/spatialStepSize)//2)+1
@@ -970,22 +973,17 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         xArr=np.linspace(x1,x2,num=numX)*1.2+self.rb
         yArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numY)
         zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
-
         coords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
         dataCap=np.column_stack((coords,BNormGradArr,BNormArr))
         self.fill_Force_Func_Internal_Fringe(dataCap)
 
 
-        #fill the first magnet and its fringe field
-        lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=3,positiveAngleMagnetsOnly=True)
-        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1
+        #fill the first magnet (the cap) and its fringe field
         numZ=2*(int(self.Lcap/spatialStepSize)//2)+1
-        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
         zArr=np.linspace(1e-6,-self.Lcap-1e-6,num=numZ)
-        coords = np.asarray(np.meshgrid(xyArr,xyArr, zArr)).T.reshape(-1, 3)
-        coords[:,0]+=self.rb
+        coords = np.asarray(np.meshgrid(xArr,yArr, zArr)).T.reshape(-1, 3) #resusing the same x and y array from above
+        #so that the grid points better line up
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
         dataFringe=np.column_stack((coords,BNormGradArr,BNormArr))
         self.fill_Field_Func_Cap(dataFringe)

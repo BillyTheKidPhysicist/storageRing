@@ -517,7 +517,7 @@ class SegmentedBenderHalbach(HalbachLens):
         else:
             angleArr=np.linspace(-2*self.UCAngle*(self.numLenses-1)/2,2*self.UCAngle*(self.numLenses-1)/2,num=self.numLenses)
         if self.positiveAngleMagnetsOnly==True:
-            angleArr+=2*self.UCAngle
+            angleArr=angleArr-angleArr.min()
         for i in range(angleArr.shape[0]):
             lens=HalbachLens(1,self.magnetWidth,self.rp,length=self.Lm,M=self.M)
             x=self.rb*np.cos(angleArr[i]) #x coordinate of center of lens
