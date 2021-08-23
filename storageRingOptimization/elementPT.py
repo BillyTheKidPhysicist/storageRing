@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from math import sqrt
 import warnings
@@ -138,6 +139,9 @@ class Element:
         # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
         # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
         # and the order of points doesn't matter
+
+        #todo: 10-30% of lattice generation time is spent here. I could reduce that to a factor of .25 by condensing
+        #force function into someting that returns 3 scalars at once, and making the magnetic field component optional
         xArr = np.unique(data[:, 0])
         yArr = np.unique(data[:, 1])
         zArr = np.unique(data[:, 2])
@@ -1155,7 +1159,7 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
-        spatialStepSize=1e-3 #target step size in space for spatial interpolating grid
+        spatialStepSize=1000e-6 #target step size in space for spatial interpolating grid
 
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet

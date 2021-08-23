@@ -86,8 +86,6 @@ class ParticleTracerLattice:
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
-        import sys
-        sys.exit()
 
         def errorFunc(rOffsetFact):
             PTL_Ring.elList[1].update_rOffset_Fact(rOffsetFact)
