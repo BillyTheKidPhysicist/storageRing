@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import numba
-from profilehooks import profile
+# from profilehooks import profile
 
 u0 = 4 * np.pi * 1e-7
 
@@ -377,29 +377,51 @@ class HalbachLens:
         for i in range(self.numLayers):
             self.layerArgs.append((r,r,r))
         self._build()
+    # @profile
     def _transform_r(self,r):
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
         #r: rows of coordinates, shape (N,3). Where N is the number of evaluation points
+        return self._transform_r_NUMBA(r,self.r0,self.theta,self.ROutTheta)
+    @staticmethod
+    @numba.njit()
+    def _transform_r_NUMBA(r,r0,theta,ROutTheta):
+        #todo: something is wrong here with the matrix multiplication
         rNew=r.copy()
-        rNew=rNew-np.ones(rNew.shape)*self.r0 #need to move the coordinates towards where the evaluation will take
+        rNew=rNew-np.ones(rNew.shape)*r0 #need to move the coordinates towards where the evaluation will take
         #place
-        if self.theta is not None:
+        if theta is not None:
             for i in range(rNew.shape[0]):
-                rNew[i][[0,2]]=rNew[i][[0,2]]@self.RInTheta
-
+                rx=rNew[i][0]
+                rz=rNew[i][2]
+                rNew[i][0]=ROutTheta[0,0]*rx+ROutTheta[0,1]*rz
+                rNew[i][2]=ROutTheta[1,0]*rx+ROutTheta[1,1]*rz
         return rNew
+    # @profile
     def _transform_Vector(self,v):
         #todo: something seems wrong here with the matrix multiplixation
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
+        return self._transform_Vector_NUMBA(v,self.theta,self.RInTheta)
         vNew=v.copy()
         if self.theta is not None:
             for i in range(vNew.shape[0]):
                 vNew[i][[0,2]]=vNew[i][[0,2]]@self.ROutTheta
         return vNew
-
+    @staticmethod
+    @numba.njit()
+    def _transform_Vector_NUMBA(v,theta,RInTheta):
+        #todo: remove the none catches
+        vNew=v.copy()
+        if theta is not None:
+            for i in range(vNew.shape[0]):
+                vx=vNew[i][0]
+                vz=vNew[i][2]
+                vNew[i][0]=RInTheta[0,0]*vx+RInTheta[0,1]*vz
+                vNew[i][2]=RInTheta[1,0]*vx+RInTheta[1,1]*vz
+                # vNew[i][[0,2]]=RInTheta@vNew[i][[0,2]]
+        return vNew
     def B_Vec(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -416,7 +438,6 @@ class HalbachLens:
             return BArr[0]
         else:
             return BArr
-
     def BNorm(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -544,3 +565,33 @@ class SegmentedBenderHalbach(HalbachLens):
             return BArr[0]
         else:
             return BArr
+# import time
+# lens=SegmentedBenderHalbach(.01,1.0,.03,.01)
+# xArr=np.linspace(-.1,.1,num=40)
+# coords=np.asarray(np.meshgrid(xArr,xArr,xArr)).T.reshape(-1,3)
+# # lens.BNorm_Gradient(coords,returnNorm=True)
+# from profilehooks import profile
+# @profile()
+# def func():
+#     print(np.sum(np.abs(lens.BNorm_Gradient(coords,returnNorm=True)[0]))) #2.596956744685721e-08
+# func()
+'''
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    4.265    4.265 HalbachLensClass.py:574(func)
+        1    0.000    0.000    4.264    4.264 HalbachLensClass.py:453(BNorm_Gradient)
+        4    0.001    0.000    4.262    1.066 HalbachLensClass.py:441(BNorm)
+        4    0.003    0.001    4.255    1.064 HalbachLensClass.py:552(B_Vec)
+       12    0.006    0.000    3.560    0.297 HalbachLensClass.py:304(B)
+       36    0.017    0.000    3.555    0.099 HalbachLensClass.py:150(B_Symmetric)
+      144    0.317    0.002    3.441    0.024 HalbachLensClass.py:143(B)
+     1728    0.017    0.000    3.117    0.002 HalbachLensClass.py:221(B)
+     1728    3.095    0.002    3.099    0.002 HalbachLensClass.py:13(B_NUMBA)
+        3    0.001    0.000    2.531    0.844 HalbachLensClass.py:464(grad)
+        2    0.000    0.000    0.674    0.337 dispatcher.py:402(_compile_for_args)
+      8/2    0.000    0.000    0.674    0.337 dispatcher.py:929(compile)
+      4/2    0.000    0.000    0.673    0.337 dispatcher.py:140(compile)
+      4/2    0.000    0.000    0.673    0.337 dispatcher.py:147(_compile_cached)
+      4/2    0.000    0.000    0.673    0.337 dispatcher.py:162(_compile_core)
+      4/2    0.000    0.000    0.673    0.336 compiler.py:660(compile_extra)
+'''

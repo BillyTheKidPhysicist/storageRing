@@ -130,6 +130,12 @@ class Particle:
     def reset(self):
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi)
+    def __str__(self):
+        string='------particle-------\n'
+        string+='q: '+str(self.q)+'\n'
+        string+='p: '+str(self.p)+'\n'
+        string+='revolution: '+str(self.revolutions)+'\n'
+        return string
     def log_Params(self,currentEl,qel,pel):
         #this records value like position and momentum
         #qel: element position coordinate

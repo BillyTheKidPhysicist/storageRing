@@ -133,7 +133,6 @@ class Element:
 
     def is_Coord_Inside(self, q):
         return None
-
     def make_Interp_Functions(self, data):
         # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
         # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
@@ -939,7 +938,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.K_Func=lambda r: a * r ** 2 + b * r + c
         self.rOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
-
     def fill_Params_Post_Constrained(self):
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
         spatialStepSize=500e-6 #target step size for spatial field interpolate.
@@ -988,19 +986,26 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         dataFringe=np.column_stack((coords,BNormGradArr,BNormArr))
         self.fill_Field_Func_Cap(dataFringe)
 
-        self.rOffset = self.rOffsetFunc(self.rb)
 
-        self.ro = self.rb + self.rOffset
+
         self.ang = 2 * self.numMagnets * self.ucAng
-        self.L = self.ang * self.rb
-        self.Lo = self.ang * self.ro + 2 * self.Lcap
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
         m = np.tan(self.ucAng)
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.compile_Fast_Numba_Force_Function()
-
+        self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+    def fill_rOffset_And_Dependent_Params(self,rOffset):
+        #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
+        #the entire element
+        self.rOffset=rOffset
+        self.ro=self.rb+self.rOffset
+        self.L=self.ang*self.rb
+        self.Lo=self.ang*self.ro+2*self.Lcap
+    def update_rOffset_Fact(self,rOffsetFact):
+        self.rOffsetFact=rOffsetFact
+        self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
     def fill_Field_Func_Cap(self,dataCap):
         interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataCap)
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
@@ -1191,8 +1196,7 @@ class HalbachLensSim(LensIdeal):
         volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
-        BNormGrad = lens.BNorm_Gradient(volumeCoords)
-        BNorm = lens.BNorm(volumeCoords)
+        BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
         self.compile_Fast_Numba_Force_Function()

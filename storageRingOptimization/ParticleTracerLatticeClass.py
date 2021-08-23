@@ -74,7 +74,6 @@ class ParticleTracerLattice:
 
 
         self.elList=[] #to hold all the lattice elements
-
     def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.
@@ -82,12 +81,18 @@ class ParticleTracerLattice:
         from ParticleTracerClass import ParticleTracer
         from ParaWell import ParaWell
         numMagnetsHalfBend=int(np.pi*rb/Lm)
+        #todo: this should be self I think
+        PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector')
+        PTL_Ring.add_Drift(.05)
+        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
+        PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
+        import sys
+        sys.exit()
 
         def errorFunc(rOffsetFact):
-            PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector')
-            PTL_Ring.add_Drift(.05)
-            PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=rOffsetFact)
-            PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
+            PTL_Ring.elList[1].update_rOffset_Fact(rOffsetFact)
+            PTL_Ring.set_Element_Coordinates()
+            PTL_Ring.make_Geometry()
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,1e-5,1.0,fastMode=False)

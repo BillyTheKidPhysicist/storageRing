@@ -39,6 +39,20 @@ def increment_Array_In_Place(q,dq):
     q[2]=q[2]+dq[2]
 
 
+@numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
+                                                     ,numba.float64[:,:],numba.float64[:,:]))
+def transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
+    q=q.copy()
+    p=p.copy()
+    fast_2D_Mat_Mult(ROutEl1,q)
+    increment_Array_In_Place(q,r01)
+    increment_Array_In_Place(q,-r02)
+    fast_2D_Mat_Mult(RInEl2,q)
+    fast_2D_Mat_Mult(ROutEl1,p)
+    fast_2D_Mat_Mult(RInEl2,p)
+    return q,p
+
+
 #this class does the work of tracing the particles through the lattice with timestepping algorithms.
 #it utilizes fast numba functions that are compiled and saved at the moment that the lattice is passed. If the lattice
 #is changed, then the particle tracer needs to be updated.
@@ -52,8 +66,7 @@ class ParticleTracer:
         self.numbaMultiStepCache=[]
         self.generate_Multi_Step_Cache()
 
-        self.transformToNextElementFuncList=[]
-        self.generate_transformToNextElementFuncList()
+
         self.accelerated=None
 
         self.T=None #total time elapsed
@@ -76,7 +89,9 @@ class ParticleTracer:
         self.fastMode=None #wether to log particle positions
         self.T0=None #total time to trace
         self.test=[]
-    def generate_transformToNextElementFunc(self,el1,el2):
+    def transform_To_Next_Element(self,q,p,nextEll):
+        el1=self.currentEl
+        el2=nextEll
         if el1.type=='BEND':
             r01 = el1.r0
         elif el1.type=='COMBINER':
@@ -91,31 +106,7 @@ class ParticleTracer:
             r02 = el2.r1
         ROutEl1 = el1.ROut
         RInEl2 = el2.RIn
-        RTot = RInEl2 @ ROutEl1
-        deltar = r01 - r02
-
-        @numba.njit()
-        def transform_To_Next_Element(q, p):
-            q = q.copy()
-            p = p.copy()
-            fast_2D_Mat_Mult(ROutEl1, q)
-            increment_Array_In_Place(q, r01)
-            increment_Array_In_Place(q, -r02)
-            fast_2D_Mat_Mult(RInEl2, q)
-            fast_2D_Mat_Mult(ROutEl1, p)
-            fast_2D_Mat_Mult(RInEl2, p)
-            return q, p
-        transform_To_Next_Element(np.zeros(3),np.zeros(3)) #force compile
-        return transform_To_Next_Element
-    def generate_transformToNextElementFuncList(self):
-        for i in range(len(self.latticeElementList)):
-            if i+1==len(self.latticeElementList): #we're at the last element, so need to wrap around
-                el1 = self.latticeElementList[-1] #use the last element
-                el2 = self.latticeElementList[0] #use the first now
-            else:
-                el1=self.latticeElementList[i]
-                el2=self.latticeElementList[i+1]
-            self.transformToNextElementFuncList.append(self.generate_transformToNextElementFunc(el1,el2))
+        return transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2)
     def initialize(self):
         # prepare for a single particle to be traced
         self.T=0.0
@@ -145,9 +136,6 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
-        if accelerated==True:
-            print('Errors still persists when using swarm tracer with accelerated. particularily with '
-                            'injector')
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -373,7 +361,7 @@ class ParticleTracer:
         #todo: there are some issues here with element edges
         if self.accelerated==True:
             nextEl = self.get_Next_Element()
-            q_nextEl,p_nextEl=self.transformToNextElementFuncList[self.currentEl.index](qEl_n,self.pEl)
+            q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_n,self.pEl,nextEl)
             if nextEl.is_Coord_Inside(q_nextEl)==False:
                 self.particle.clipped=True
                 return
