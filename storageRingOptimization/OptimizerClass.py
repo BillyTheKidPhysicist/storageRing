@@ -121,7 +121,7 @@ class LatticeOptimizer:
     def find_Injector_Mode_Match_Bounds(self,parallel):
         #todo: use this to set hard limits on output of combiner?
         injectorParamsBounds=(.05,1.0)
-        numGridPointsPerDim = 30
+        numGridPointsPerDim = 50
         xArr = np.linspace(injectorParamsBounds[0], injectorParamsBounds[1], numGridPointsPerDim)
         coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
         fracCutOff=.98 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
@@ -398,7 +398,7 @@ class LatticeOptimizer:
         assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
         if self.sameSeedForSearch==True:
             np.random.seed(42)
-        self.generate_Swarms(parallel)
+        self.generate_Swarms()
         self.elementIndices=elementIndices
         BArrList=[]
         for bound in bounds:
@@ -414,6 +414,7 @@ class LatticeOptimizer:
         print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
         def skopt_Cost(XRing):
             solution=self.mode_Match(XRing,parallel=parallel)
+            self.solutionList.append(solution)
             survival=solution.func
             return 1/(survival+1e-10)
 

@@ -115,8 +115,8 @@ class Particle:
         self._pList=[] #List of momentum vectors
         self._qList=[] #List of position vector
         self._qoList=[] #List of position in orbit frame vectors
-        self._TList=[] #kinetic energy list
-        self._VList=[] #potential energy list
+        self._TList=[] #kinetic energy list. Each entry contains the element index and corresponding energy
+        self._VList=[] #potential energy list. Each entry contains the element index and corresponding energy
         #array versions
         self.pArr=None
         self.p0Arr=None #array of norm of momentum.
@@ -125,6 +125,8 @@ class Particle:
         self.TArr=None 
         self.VArr=None 
         self.EArr=None #total energy
+        self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
+        #element index and energy change
         self.yInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
         self.zInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
     def reset(self):
@@ -141,15 +143,21 @@ class Particle:
         #qel: element position coordinate
         #pel: momentum position coordinate
         # print(qel,self.cumulativeLength)
-        self.q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
-        self.p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
-        self._qList.append(self.q.copy())
-        self._pList.append(self.p.copy())
-        self._TList.append(np.sum(self.p**2)/2.0)
+        q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
+        p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
+        self._qList.append(q.copy())
+        self._pList.append(p.copy())
+        self._TList.append((currentEl.index,np.sum(p**2)/2.0))
         if currentEl is not None:
-            qel=currentEl.transform_Lab_Coords_Into_Element_Frame(self.q)
-            self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength))
-            self._VList.append(currentEl.magnetic_Potential(qel))
+            qel=currentEl.transform_Lab_Coords_Into_Element_Frame(q)
+            elIndex=currentEl.index
+            self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(q, self.cumulativeLength))
+            self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
+    def get_Energy(self,currentEl,qel,pel):
+        V=currentEl.magnetic_Potential(qel)
+        T=npl.norm(pel)
+        return T+V
+
     def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,driftEl):
         #log the parameters when the particle has traveled in a straight line inside a drift region
         #qi: initial position
@@ -184,8 +192,27 @@ class Particle:
         #now fill the lists that log parameters
         self._qList.extend(qList)
         self._pList.extend(pList)
-        self._TList.extend(list(np.sum(pElArr**2/2.0,axis=1)))
-        self._VList.extend([0]*len(qList)) #python list creation trick
+        for pEl in pElArr:
+            self._TList.append((driftEl.index,np.sum(pEl**2/2.0)))
+            self._VList.append((driftEl.index,0.0)) #python list creation trick
+    def fill_Energy_Array_And_Dicts(self):
+        self.TArr=np.asarray([entry[1] for entry in self._TList])
+        self.VArr=np.asarray([entry[1] for entry in self._VList])
+        self.EArr=self.TArr+self.VArr
+
+        elementIndexPrev=self._TList[0][0]
+        EInitial=self.EArr[0]
+        for i in range(len(self._TList)):
+            if self._TList[i][0]!=elementIndexPrev:
+                print(self._TList[i][0],elementIndexPrev)
+                deltaE=self.EArr[i-1]-EInitial
+                self.elDeltaEDict[str(elementIndexPrev)]=deltaE
+                EInitial=self.EArr[i]
+                elementIndexPrev=self._TList[i][0]
+
+        self._TList=[]
+        self._VList=[]
+
     def finished(self,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
@@ -200,11 +227,7 @@ class Particle:
             self._qoList = []
             if self.pArr.shape[0]!=0:
                 self.p0Arr=npl.norm(self.pArr,axis=1)
-            self.TArr = np.asarray(self._TList)
-            self._TList = []
-            self.VArr = np.asarray(self._VList)
-            self._VList = []
-            self.EArr=self.TArr+self.VArr
+            self.fill_Energy_Array_And_Dicts()
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
