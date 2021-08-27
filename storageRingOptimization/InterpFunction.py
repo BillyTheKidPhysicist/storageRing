@@ -1,6 +1,7 @@
 import numpy.linalg as npl
 import numpy as np
 import numba
+from math import floor
 
 def generate_3DInterp_Function_NUMBA(v,xData,yData,zData):
     X, Y, Z = v.shape[0], v.shape[1], v.shape[2]
@@ -17,11 +18,11 @@ def generate_3DInterp_Function_NUMBA(v,xData,yData,zData):
         x = (x-min_x)/delta_x
         y = (y-min_y)/delta_y
         z = (z-min_z)/delta_z
-        x0 = int(x)
+        x0 = int(floor(x))
         x1 = x0 + 1
-        y0 = int(y)
+        y0 = int(floor(y))
         y1 = y0 + 1
-        z0 = int(z)
+        z0 = int(floor(z))
         z1 = z0 + 1
         xd = (x-x0)/(x1-x0)
         yd = (y-y0)/(y1-y0)

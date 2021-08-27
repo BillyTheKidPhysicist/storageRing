@@ -1159,7 +1159,8 @@ class HalbachLensSim(LensIdeal):
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
         spatialStepSize=1000e-6 #target step size in space for spatial interpolating grid
-
+        longitudinalStepSize=1e-3
+        transverseStepSize=500e-6
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         self.Lo=self.L
@@ -1173,7 +1174,7 @@ class HalbachLensSim(LensIdeal):
         mountThickness=5e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
-        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
+        numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
         xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY) #add a little extra so the interp works correctly
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
@@ -1193,7 +1194,7 @@ class HalbachLensSim(LensIdeal):
 
         zMin=0
         zMax=self.Lcap
-        numZ=2*(int(2*(zMax-zMin)/spatialStepSize)//2)+1 #to ensure it is odd
+        numZ=2*(int(2*(zMax-zMin)/longitudinalStepSize)//2)+1 #to ensure it is odd
         zArr=np.linspace(zMin-1e-6,zMax+1e-6,num=numZ) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have

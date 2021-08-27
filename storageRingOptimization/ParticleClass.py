@@ -199,7 +199,7 @@ class Particle:
     def fill_Energy_Array_And_Dicts(self):
         self.TArr=np.asarray([entry[1] for entry in self._TList])
         self.VArr=np.asarray([entry[1] for entry in self._VList])
-        self.EArr=self.TArr+self.VArr
+        self.EArr=self.TArr.copy()+self.VArr.copy()
 
 
         elementIndexPrev=self._TList[0][0]
