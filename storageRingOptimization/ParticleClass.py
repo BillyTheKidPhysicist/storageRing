@@ -121,12 +121,13 @@ class Particle:
         self.pArr=None
         self.p0Arr=None #array of norm of momentum.
         self.qArr=None 
-        self.qoArr=None 
+        self.qoArr=None
+        self.speedArr=None
         self.TArr=None 
         self.VArr=None 
         self.EArr=None #total energy
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
-        #element index and energy change
+        #element index and list of energy changes for each pass
         self.yInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
         self.zInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
     def reset(self):
@@ -200,16 +201,19 @@ class Particle:
         self.VArr=np.asarray([entry[1] for entry in self._VList])
         self.EArr=self.TArr+self.VArr
 
+
         elementIndexPrev=self._TList[0][0]
-        EInitial=self.EArr[0]
+        E_AfterEnteringEl=self.EArr[0]
         for i in range(len(self._TList)):
             if self._TList[i][0]!=elementIndexPrev:
-                print(self._TList[i][0],elementIndexPrev)
-                deltaE=self.EArr[i-1]-EInitial
-                self.elDeltaEDict[str(elementIndexPrev)]=deltaE
-                EInitial=self.EArr[i]
+                E_BeforeLeavingEl=self.EArr[i-1]
+                deltaE=E_BeforeLeavingEl-E_AfterEnteringEl
+                if (str(elementIndexPrev) in self.elDeltaEDict) == False: #need to make a list entry for this element
+                    self.elDeltaEDict[str(elementIndexPrev)]=[deltaE]
+                else:
+                    self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
+                E_AfterEnteringEl=self.EArr[i]
                 elementIndexPrev=self._TList[i][0]
-
         self._TList=[]
         self._VList=[]
 
@@ -222,6 +226,7 @@ class Particle:
             self.qArr=np.asarray(self._qList)
             self._qList = []  # save memory
             self.pArr = np.asarray(self._pList)
+            self.speedArr=npl.norm(self.pArr,axis=1)
             self._pList = []
             self.qoArr = np.asarray(self._qoList)
             self._qoList = []

@@ -16,14 +16,18 @@ import globalMethods as gm
 class Solution:
     #class to hold onto results of each solution
     def __init__(self):
-        self.xInjector=np.nan
-        self.xRing=np.nan
+        self.xInjector_B=np.nan
+        self.xRing_B=np.nan
+        self.xRing_L=np.nan
         self.func=np.nan
     def __str__(self): #method that gets called when you do print(Solution())
         string='----------Solution-----------   \n'
-        string+='injector element spacing optimum configuration: '+str(self.xInjector)+'\n '
-        string+='storage ring magnetic field optimum configuration: '+str(self.xRing)+'\n '
-        string+='optmum result: '+str(self.func)
+        string+='injector element spacing optimum configuration: '+str(self.xInjector_B)+'\n '
+        string+='storage ring magnetic field optimum configuration: '+str(self.xRing_B)+'\n '
+        string+='storage ring spatial optimal optimum configuration: '+str(self.xRing_L)+'\n '
+        
+        string+='optimum result: '+str(self.func)+'\n'
+        string+='----------------------------'
         return string
 
 
@@ -82,7 +86,7 @@ class LatticeOptimizer:
         self.numParticlesRing=30000
 
         self.qMaxInjector=2.5e-3
-        self.pTransMaxInjector=10.0
+        self.pTransMaxInjector=5.0
         self.pxMaxInjector=1.0
 
     def generate_Swarms(self):
@@ -91,7 +95,6 @@ class LatticeOptimizer:
         self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(self.qMaxInjector,
                                                 self.pTransMaxInjector,self.pxMaxInjector,self.numParticlesInjector,
                                                 sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
-
         injectorBounds=self.get_Injector_Swarm_Bounds()
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
@@ -110,16 +113,18 @@ class LatticeOptimizer:
         injectorLenBoreRadius=.025
         numberInjectorElements=4
         injectorBounds=[(-0.007727, 0.007647), (-0.006008, 0.005877), (-1.146266, 1.023455), (-9.265196, 8.804026),
-                        (-8.080922, 7.712291)]
-
+                        (-8.080922, 7.712291)] #10
+        # injectorBounds=[(-0.007887, 0.007902), (-0.006006, 0.005921), (-1.8404, 1.222601), (-7.627025, 7.585079),
+        # (-7.683914, 7.823011)] #5
         if self.latticeInjector.elList[1].L!= injectorLensLength: raise Exception('lens has changed')
         elif self.latticeInjector.elList[1].rp!=injectorLenBoreRadius:  raise Exception('lens has changed')
         elif len(self.latticeInjector.elList)!=numberInjectorElements:  raise Exception('number of element have changed')
-        elif self.pxMaxInjector!=1.0 or self.pTransMaxInjector!=10.0 or self.qMaxInjector!=2.5e-3:
+        elif self.pxMaxInjector!=1.0 or self.pTransMaxInjector!=5.0 or self.qMaxInjector!=2.5e-3:
             raise Exception('Swarm paramters have changed')
         else: return injectorBounds
     def find_Injector_Mode_Match_Bounds(self,parallel):
-        #todo: use this to set hard limits on output of combiner?
+        #todo: this should be set outside of here
+        #todo: maybe improve this by using more particles
         injectorParamsBounds=(.05,1.0)
         numGridPointsPerDim = 50
         xArr = np.linspace(injectorParamsBounds[0], injectorParamsBounds[1], numGridPointsPerDim)
@@ -293,7 +298,7 @@ class LatticeOptimizer:
 
         #todo: add list that follows along and records results
         solution=Solution()
-        solution.xRing=XRing
+        solution.xRing_B=XRing
         self.update_Ring_Lattice(XRing)
         swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
@@ -325,7 +330,7 @@ class LatticeOptimizer:
             solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
         sol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
         survival=1/sol.fun
-        solution.xInjector=sol.x
+        solution.xInjector_B=sol.x
         solution.func=survival
         return solution
 
@@ -422,7 +427,9 @@ class LatticeOptimizer:
         averageRevolutionsForRelevance=1e-3
         if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
             print('no viable solution')
-            return Solution()
+            solution=Solution()
+            solution.func=0.0
+            return solution
         coordsList=[]
         for coord in coordsArr:
             coordsList.append(list(coord))

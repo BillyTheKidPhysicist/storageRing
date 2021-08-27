@@ -541,7 +541,6 @@ class CombinerSim(CombinerIdeal):
         apR = .025
         fringeSpace = 5 * 1.1e-2
         apz = 6e-3
-        print('fix the issue that the bounds extend to left and right pass the magnet')
         super().__init__(PTL, Lm, np.nan, np.nan, np.nan,mode, sizeScale,
                          fillsParams=False)  # TODO: replace all the Nones with np.nan
         self.sim = True
