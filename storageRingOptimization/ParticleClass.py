@@ -134,10 +134,15 @@ class Particle:
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi)
     def __str__(self):
+        np.set_printoptions(precision=None)
         string='------particle-------\n'
-        string+='q: '+str(self.q)+'\n'
+        string+='qi: '+str(self.qi)+'\n'
+        string+='pi: '+str(self.pi)+'\n'
         string+='p: '+str(self.p)+'\n'
+        string+='p: '+str(self.p)+'\n'
+        string+='current element: '+str(self.currentEl)
         string+='revolution: '+str(self.revolutions)+'\n'
+        np.set_printoptions(precision=8) #reset output to default per docs
         return string
     def log_Params(self,currentEl,qel,pel):
         #this records value like position and momentum

@@ -447,16 +447,17 @@ class CombinerIdeal(Element):
             F[2] = 0.0  # exclude z component, ideally zero
             a = F
             q_n = q + p * h + .5 * a * h ** 2
-            F_n = force(q_n)
-            F_n[2] = 0.0
-            a_n = F_n  # accselferation new or accselferation sub n+1
-            p_n = p + .5 * (a + a_n) * h
             if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
                 dr = limit - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
                 coordList.append(q)
                 break
+            F_n=force(q_n)
+            F_n[2]=0.0
+            a_n=F_n  # accselferation new or accselferation sub n+1
+            p_n=p+.5*(a+a_n)*h
+
             q = q_n
             p = p_n
             forcePrev = F_n
@@ -592,8 +593,6 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.data = None  # to save memory and pickling time
         self.compile_Fast_Numba_Force_Function()
-        # print(self.inputOffsetLoad,self.inputOffset)
-        # print(self.ang,self.angLoad)
 
     def compute_Trajectory_Length(self, qTracedArr):
         # TODO: CHANGE THAT X DOESN'T START AT ZERO
@@ -631,10 +630,11 @@ class CombinerSim(CombinerIdeal):
         apz=self.apz
         apL=self.apL
         apR=self.apR
+        searchIsCoordInside=True
         force_Func=self.force_Func
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64[:]))
         def force_NUMBA_Wrapper(q):
-            return forceNumba(q,La,Lb,Lm,space,ang,apz,apL,apR,True,force_Func)
+            return forceNumba(q,La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
         self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
@@ -971,7 +971,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         numX=2*(int((x2-x1)/spatialStepSize)//2)+1
         numY=2*(int(2*self.ap//spatialStepSize)//2)+1
         numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
-        xArr=np.linspace(x1,x2,num=numX)*1.2+self.rb
+        xArr=np.linspace(x1,x2,num=numX)+self.rb
         yArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numY)
         zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
         coords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
@@ -1158,7 +1158,6 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
-        spatialStepSize=1000e-6 #target step size in space for spatial interpolating grid
         longitudinalStepSize=1e-3
         transverseStepSize=500e-6
 

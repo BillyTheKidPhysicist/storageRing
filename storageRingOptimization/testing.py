@@ -45,6 +45,12 @@ def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
         if fastMode==False: #include energy considerations
             EFinalTraced=tracedSwarm.particles[i].EArr[-1]
             condition=condition and np.abs(EFinalTest-EFinalTraced)<eps
+        if condition==False:
+            print('q:',q)
+            print('qTest:',qTest)
+            print('p:',p)
+            print('pTest:',pTest)
+            raise Exception('Failed')
         assert condition,'Failed on particle: '+str(i)
 def generate_Lattice(configuration):
     if configuration=='1':
@@ -60,7 +66,7 @@ def generate_Lattice(configuration):
         PTL.add_Drift(.25)
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Drift(.1)
-        PTL.add_Combiner_Sim('combinerV2.txt')
+        PTL.add_Combiner_Sim('combinerV3.txt')
         PTL.end_Lattice()
     elif configuration=='3':
         PTL=ParticleTracerLattice(200.0,latticeType='storageRing')
@@ -72,7 +78,7 @@ def generate_Lattice(configuration):
     elif configuration=='4':
         PTL=ParticleTracerLattice(200.0,latticeType='storageRing')
         PTL.add_Halbach_Lens_Sim(.01,.5)
-        PTL.add_Combiner_Sim('combinerV2.txt')
+        PTL.add_Combiner_Sim('combinerV3.txt')
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)

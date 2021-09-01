@@ -86,7 +86,7 @@ class LatticeOptimizer:
         self.numParticlesRing=30000
 
         self.qMaxInjector=2.5e-3
-        self.pTransMaxInjector=5.0
+        self.pTransMaxInjector=10.0
         self.pxMaxInjector=1.0
 
     def generate_Swarms(self):
@@ -112,14 +112,16 @@ class LatticeOptimizer:
         injectorLensLength=.2
         injectorLenBoreRadius=.025
         numberInjectorElements=4
-        injectorBounds=[(-0.007727, 0.007647), (-0.006008, 0.005877), (-1.146266, 1.023455), (-9.265196, 8.804026),
-                        (-8.080922, 7.712291)] #10
-        # injectorBounds=[(-0.007887, 0.007902), (-0.006006, 0.005921), (-1.8404, 1.222601), (-7.627025, 7.585079),
+        injectorBounds=[(-0.007843, 0.007638), (-0.006025, 0.005954), (-1.799098, 1.157493), (-9.331894, 8.877898),
+                        (-8.273715, 7.979329)]#10 m/s
+        # injectorBoundsV2=[(-0.007727, 0.007647), (-0.006008, 0.005877), (-1.146266, 1.023455), (-9.265196, 8.804026),
+        #                 (-8.080922, 7.712291)] #10
+        # injectorBoundsV2=[(-0.007887, 0.007902), (-0.006006, 0.005921), (-1.8404, 1.222601), (-7.627025, 7.585079),
         # (-7.683914, 7.823011)] #5
         if self.latticeInjector.elList[1].L!= injectorLensLength: raise Exception('lens has changed')
         elif self.latticeInjector.elList[1].rp!=injectorLenBoreRadius:  raise Exception('lens has changed')
         elif len(self.latticeInjector.elList)!=numberInjectorElements:  raise Exception('number of element have changed')
-        elif self.pxMaxInjector!=1.0 or self.pTransMaxInjector!=5.0 or self.qMaxInjector!=2.5e-3:
+        elif self.pxMaxInjector!=1.0 or self.pTransMaxInjector!=10.0 or self.qMaxInjector!=2.5e-3:
             raise Exception('Swarm paramters have changed')
         else: return injectorBounds
     def find_Injector_Mode_Match_Bounds(self,parallel):
@@ -409,14 +411,14 @@ class LatticeOptimizer:
         for bound in bounds:
             BArrList.append(np.linspace(bound[0], bound[1], num0))
         coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
-        print('beginning grid search')
+        # print('beginning grid search')
         if parallel==True:
             self.solutionList=self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True)
         else:
             self.solutionList=[self.mode_Match(coord) for coord in coordsArr]
         gridResults=np.asarray([solution.func for solution in self.solutionList])
 
-        print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
+        # print('grid optimum over: ', np.max(gridResults),'Number valid',np.sum(gridResults!=0))
         def skopt_Cost(XRing):
             solution=self.mode_Match(XRing,parallel=parallel)
             self.solutionList.append(solution)
@@ -426,7 +428,7 @@ class LatticeOptimizer:
         minimizedGridResults=list(1/(gridResults+1))
         averageRevolutionsForRelevance=1e-3
         if np.max(gridResults)-np.min(gridResults)<averageRevolutionsForRelevance:
-            print('no viable solution')
+            # print('no viable solution')
             solution=Solution()
             solution.func=0.0
             return solution
@@ -434,7 +436,7 @@ class LatticeOptimizer:
         for coord in coordsArr:
             coordsList.append(list(coord))
         # import skopt
-        print('beginning gaussian process')
+        # print('beginning gaussian process')
         skopt.gp_minimize(skopt_Cost,bounds,n_initial_points=0,x0=coordsList,y0=minimizedGridResults
                           ,n_calls=maxIter)
         return self.best_Solution()

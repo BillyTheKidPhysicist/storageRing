@@ -176,7 +176,15 @@ class ParticleTracer:
                     if self.fastMode is False: #if false, take time to log parameters
                         self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 else:
-                    self.multi_Step_Verlet()
+                    try:
+                        self.multi_Step_Verlet()
+                    except:
+                        print('issue encountered')
+                        np.set_printoptions(precision=None)
+                        print(self.qEl)
+                        print(self.pEl)
+                        print(self.currentEl)
+                        sys.exit()
                 if self.particle.clipped == True:
                     break
                 self.T+=self.h
