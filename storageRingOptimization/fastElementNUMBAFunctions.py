@@ -96,13 +96,13 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_
         else:
             Fx, Fy, Fz = np.nan, np.nan, np.nan
     else:  # if outside bender's angle range
-        if np.sqrt((q[0] - rb) ** 2 + q[2] ** 2) <= ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
+        if np.sqrt((q[0] - rb) ** 2 + q[2] ** 2) < ap and (0 >= q[1] >= -Lcap):  # If inside the cap on
             # eastward side
             Fx, Fy, Fz = Force_Func_Cap(q[0], q[1], q[2])
         else:
             qTestx = RIn_Ang[0, 0] * q[0] + RIn_Ang[0, 1] * q[1]
             qTesty = RIn_Ang[1, 0] * q[0] + RIn_Ang[1, 1] * q[1]
-            if np.sqrt((qTestx - rb) ** 2 + q[2] ** 2) <= ap and (Lcap >= qTesty >= 0):  # if on the westwards side
+            if np.sqrt((qTestx - rb) ** 2 + q[2] ** 2) < ap and (Lcap >= qTesty >= 0):  # if on the westwards side
                 x, y, z = qTestx, qTesty, q[2]
                 y = -y
                 Fx, Fy, Fz = Force_Func_Cap(x, y, z)
@@ -156,7 +156,6 @@ def lens_Halbach_Force_NUMBA(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer):
 def combiner_Sim_Force_NUMBA(q, La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
-
     if searchIsCoordInside == True:
         if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
             return np.nan,np.nan,np.nan

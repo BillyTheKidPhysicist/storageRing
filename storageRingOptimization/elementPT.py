@@ -891,7 +891,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
-        self.ap = rp*apFrac
+        self.apFrac=apFrac
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.Fx_Func_Seg = None
         self.Fy_Func_Seg = None
@@ -915,7 +915,18 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.fill_Params_Post_Constrained()
         else:
             self.fill_Params_Pre_Constraint()
-
+    def compute_Aperture(self):
+        #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
+        #use simple geoemtry of the bending radius that touches the top inside corner of a segment
+        vacuumTubeThickness=1e-3
+        radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lseg/2)**2)
+        apMax=self.rb-radiusCorner-vacuumTubeThickness
+        if self.apFrac is None:
+            return apMax
+        else:
+            if self.apFrac*self.rp>apMax:
+                raise Exception('Requested aperture is too large')
+            return self.apFrac*self.rp
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
 
@@ -942,6 +953,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.rOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
     def fill_Params_Post_Constrained(self):
+        self.ap=self.compute_Aperture()
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
         spatialStepSize=500e-6 #target step size for spatial field interpolate.
         #500um works very well, but 1mm may be acceptable
@@ -999,6 +1011,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.compile_Fast_Numba_Force_Function()
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+
     def fill_rOffset_And_Dependent_Params(self,rOffset):
         #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
         #the entire element
