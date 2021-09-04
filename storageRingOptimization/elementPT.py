@@ -32,7 +32,9 @@ def fast_Arctan2(q):
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     return phi
-
+def is_Even(x):
+    assert type(x) is int
+    return True if x%2==0 else False
 
 class Element:
     def __init__(self, PTL):
@@ -892,6 +894,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.apFrac=apFrac
+        self.spatialStepSize=500e-6  #target step size for spatial field interpolate.
+        self.numModelLenses=3 #number of lenses in halbach model to represent repeating system
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.Fx_Func_Seg = None
         self.Fy_Func_Seg = None
@@ -955,52 +959,17 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def fill_Params_Post_Constrained(self):
         self.ap=self.compute_Aperture()
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
-        spatialStepSize=500e-6 #target step size for spatial field interpolate.
         #500um works very well, but 1mm may be acceptable
         numModelLenes=3 #3 turns out to be a good number
         assert numModelLenes%2==1
         #fill periodic segment data
-        numXY=2*(int(2*self.ap/spatialStepSize)//2)+1 #to ensure it is odd
-        numZ=2*(int(np.tan(self.ucAng)*(self.rb+self.rp)/spatialStepSize)//2)+1
-        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY)
-        zArr=np.linspace(-1e-6,np.tan(self.ucAng)*(self.rb+self.rp)+1e-6,num=numZ)
-        coords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3)
-        coords[:,0]+=self.rb #add the bending radius to the coords
-        lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=numModelLenes+2)
-        #using just 3 magnets makes a big difference
-        BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(coords,returnNorm=True)
-        dataSeg=np.column_stack((coords,BNormGradArr,BNormArr))
-        self.fill_Force_Func_Seg(dataSeg)
-        self.K=self.K_Func(self.rb)
-
-
+        self.fill_Force_Func_Seg()
         # #fill first segment magnet that comes before the repeating segments that can be modeled the same
-        lensFringe = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=numModelLenes,positiveAngleMagnetsOnly=True)
-        x1=-(self.ap+1.5*(self.rb-self.ap)*(1-np.cos(2*self.ucAng))) #Inwards enough to account for tilted magnet
-        x2=self.ap+1e-6
-        numX=2*(int((x2-x1)/spatialStepSize)//2)+1
-        numY=2*(int(2*self.ap//spatialStepSize)//2)+1
-        numZ=2*(int(np.tan(2*self.ucAng)*(self.rb+self.ap)/spatialStepSize)//2)+1
-        xArr=np.linspace(x1,x2,num=numX)+self.rb
-        yArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numY)
-        zArr=np.linspace(-1e-6,np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6,num=numZ)
-        coords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
-        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
-        dataCap=np.column_stack((coords,BNormGradArr,BNormArr))
-        self.fill_Force_Func_Internal_Fringe(dataCap)
-
-
+        self.fill_Force_Func_Internal_Fringe()
         #fill the first magnet (the cap) and its fringe field
-        numZ=2*(int(self.Lcap/spatialStepSize)//2)+1
-        zArr=np.linspace(1e-6,-self.Lcap-1e-6,num=numZ)
-        coords = np.asarray(np.meshgrid(xArr,yArr, zArr)).T.reshape(-1, 3) #resusing the same x and y array from above
-        #so that the grid points better line up
-        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(coords,returnNorm=True)
-        dataFringe=np.column_stack((coords,BNormGradArr,BNormArr))
-        self.fill_Field_Func_Cap(dataFringe)
+        self.fill_Field_Func_Cap()
 
+        self.K=self.K_Func(self.rb)
 
 
         self.ang = 2 * self.numMagnets * self.ucAng
@@ -1011,6 +980,19 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.compile_Fast_Numba_Force_Function()
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+    def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize):
+        assert Max>Min
+        num=int(1+(Max-Min)/stepSize)  #to ensure it is odd
+        minReasonablePoints=4
+        assert num>minReasonablePoints
+        num=num if is_Even(num) else num+1
+        return np.linspace(Min,Max,num)
+    def make_Field_Coord_Arr(self,xMin,xMax,yMin,yMax,zMin,zMax,stepSize):
+        xArr=self.make_Grid_Edge_Coord_Arr(xMin,xMax,stepSize)
+        yArr=self.make_Grid_Edge_Coord_Arr(yMin,yMax,stepSize)
+        zArr=self.make_Grid_Edge_Coord_Arr(zMin,zMax,stepSize)
+        gridCoords=np.asarray(np.meshgrid(xArr,yArr,zArr)).T.reshape(-1,3)
+        return gridCoords
 
     def fill_rOffset_And_Dependent_Params(self,rOffset):
         #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
@@ -1022,40 +1004,63 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def update_rOffset_Fact(self,rOffsetFact):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
-    def fill_Field_Func_Cap(self,dataCap):
-        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataCap)
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def Force_Func_Cap_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
-            return Fx,Fy,Fz
-        self.Force_Func_Cap=Force_Func_Cap_Wrap
-        self.magnetic_Potential_Func_Cap = lambda x, y, z: interpV(x, -z, y)
+    def fill_Field_Func_Cap(self):
+        lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
+                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-1e-6
+        xMax=self.rb+self.ap+1e-6
+        yMax=self.ap+1e-6
+        yMin=-yMax
+        zMin=-self.Lcap-1e-6
+        zMax=1e-6
 
-    def fill_Force_Func_Internal_Fringe(self,dataFringe):
-        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataFringe)
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_Internal_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
-            return Fx,Fy,Fz
-        self.Force_Func_Internal_Fringe=force_Internal_Wrap
-        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(x, -z, y)
 
-    def fill_Force_Func_Seg(self,dataSeg):
-        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(dataSeg)
+        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
+        dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
+        self.Force_Func_Cap,self.magnetic_Potential_Func_Cap=self.make_Force_And_Potential_Functions(dataCap)
+
+    def fill_Force_Func_Internal_Fringe(self):
+        lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
+                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+
+        xMax=self.rb+self.ap+1e-6
+        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-1e-6  #inward enough to account for the tilt
+        yMin=-(self.ap+1e-6)
+        yMax=-yMin
+        zMin=-1e-6
+        zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6
+        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
+        dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
+        self.Force_Func_Internal_Fringe,self.magnetic_Potential_Func_Fringe=\
+            self.make_Force_And_Potential_Functions(dataCap)
+
+    def fill_Force_Func_Seg(self):
+        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-1e-6
+        xMax=self.rb+self.ap+1e-6
+        yMax=self.ap+1e-6
+        yMin=-yMax
+        zMin=-1e-6
+        zMax=np.tan(self.ucAng)*(self.rb+self.rp)+1e-6
+        fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
+                                                                          numLenses=self.numModelLenses+2)
+        #using just 3 magnets makes a big difference
+        BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(fieldCoordsPeriodic,returnNorm=True)
+        dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
+        self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
+
+    def make_Force_And_Potential_Functions(self,data):
+        interpFx,interpFy,interpFz,interpV=self.make_Interp_Functions(data)
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Seg_Wrap(x,y,z):
-            Fx=interpFx(x, -z, y)
-            Fy=interpFz(x, -z, y)
-            Fz=-interpFy(x, -z, y)
+            Fx=interpFx(x,-z,y)
+            Fy=interpFz(x,-z,y)
+            Fz=-interpFy(x,-z,y)
             return Fx,Fy,Fz
-        self.Force_Func_Seg=force_Seg_Wrap
-        self.magnetic_Potential_Func_Seg = lambda x, y, z: interpV(x, -z, y)
-
-
+        interpV_Wrap=lambda x,y,z: interpV(x,-z,y)
+        return force_Seg_Wrap,interpV_Wrap
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame

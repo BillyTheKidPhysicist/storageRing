@@ -1,3 +1,4 @@
+from ParticleClass import Particle
 import numpy.linalg as npl
 import numba
 import time
@@ -136,6 +137,8 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        if particle is None:
+            particle=Particle()
         if particle.traced==True:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
@@ -176,15 +179,7 @@ class ParticleTracer:
                     if self.fastMode is False: #if false, take time to log parameters
                         self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 else:
-                    try:
-                        self.multi_Step_Verlet()
-                    except:
-                        print('issue encountered')
-                        np.set_printoptions(precision=None)
-                        print(self.qEl)
-                        print(self.pEl)
-                        print(self.currentEl)
-                        sys.exit()
+                    self.multi_Step_Verlet()
                 if self.particle.clipped == True:
                     break
                 self.T+=self.h
