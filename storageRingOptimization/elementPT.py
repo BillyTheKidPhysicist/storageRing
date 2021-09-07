@@ -902,7 +902,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.numMagnets = numMagnets
         self.apFrac=apFrac
         self.spatialStepSize=500e-6  #target step size for spatial field interpolate.
-        self.numModelLenses=3 #number of lenses in halbach model to represent repeating system
+        self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
+        #this to be optimal
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.Fx_Func_Seg = None
         self.Fy_Func_Seg = None
@@ -1014,7 +1015,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def fill_Field_Func_Cap(self):
         lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
-        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
+        #x and y bounds should match with internal fringe bounds
+        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP
         xMax=self.rb+self.ap+TINY_STEP
         yMin=-(self.ap+TINY_STEP)
         yMax=TINY_STEP
@@ -1030,9 +1032,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def fill_Force_Func_Internal_Fringe(self):
         lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
-
-        xMax=self.rb+self.ap+TINY_STEP
+        #x and y bounds should match with cap bounds
         xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP  #inward enough to account for the tilt
+        xMax=self.rb+self.ap+TINY_STEP
         yMin=-(self.ap+TINY_STEP)
         yMax=TINY_STEP
         zMin=-TINY_STEP
@@ -1041,7 +1043,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
         self.Force_Func_Internal_Fringe,self.magnetic_Potential_Func_Fringe=\
-            self.make_Force_And_Potential_Functions(dataCap)
+        self.make_Force_And_Potential_Functions(dataCap)
 
     def fill_Force_Func_Seg(self):
         xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
@@ -1049,15 +1051,14 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         yMin=-(self.ap+TINY_STEP)
         yMax=TINY_STEP
         zMin=-TINY_STEP
-        zMax=np.tan(self.ucAng)*(self.rb+self.rp)+TINY_STEP
+        zMax=np.tan(self.ucAng)*(self.rb+self.ap)+TINY_STEP
         fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
-        #using just 3 magnets makes a big difference
+
         BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(fieldCoordsPeriodic,returnNorm=True)
         dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
         self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
-
     def make_Force_And_Potential_Functions(self,data):
         interpFx,interpFy,interpFz,interpV=self.make_Interp_Functions(data)
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))

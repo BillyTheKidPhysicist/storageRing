@@ -69,8 +69,8 @@ class LatticeOptimizer:
         self.swarmTracerInjector=SwarmTracer(self.latticeInjector)
         self.swarmInjectorInitial=None #object to hold the injector swarm object
         self.swarmRingInitialAtCombinerOutput=None #object to hold the ring swarm object that will generate the mode match function
-        self.h=1e-5 #timestep size
-        self.T=10.0
+        self.h=5e-6 #timestep size
+        self.T=1.0
         self.swarmTracerRing=SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
@@ -112,8 +112,8 @@ class LatticeOptimizer:
         injectorLensLength=.2
         injectorLenBoreRadius=.025
         numberInjectorElements=4
-        injectorBounds=[(-0.007843, 0.007638), (-0.006025, 0.005954), (-1.799098, 1.157493), (-9.331894, 8.877898),
-                        (-8.273715, 7.979329)]#10 m/s
+        injectorBounds=[(-0.008792, 0.008888), (-0.006007, 0.005917), (-1.182657, 1.069411),(-9.854484, 9.616056),
+            (-8.107871, 7.871643)]#10 m/s
         # injectorBoundsV2=[(-0.007727, 0.007647), (-0.006008, 0.005877), (-1.146266, 1.023455), (-9.265196, 8.804026),
         #                 (-8.080922, 7.712291)] #10
         # injectorBoundsV2=[(-0.007887, 0.007902), (-0.006006, 0.005921), (-1.8404, 1.222601), (-7.627025, 7.585079),
