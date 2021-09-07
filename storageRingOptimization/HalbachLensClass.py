@@ -460,22 +460,28 @@ class HalbachLens:
             rEval=np.asarray([r])
         else:
             rEval=r.copy()
-        BNormCenter=self.BNorm(rEval)
         def grad(index):
             coordb = rEval.copy()  # upper step
             coordb[:, index] += dr
             BNormB=self.BNorm(coordb)
-            return (BNormB-BNormCenter)/dr
+
+            coorda = rEval.copy()  # upper step
+            coorda[:, index] += -dr
+            BNormA=self.BNorm(coorda)
+
+            return (BNormB-BNormA)/(2*dr)
         BNormGradx=grad(0)
         BNormGrady=grad(1)
         BNormGradz=grad(2)
         if len(r.shape)==1:
             if returnNorm == True:
+                BNormCenter=self.BNorm(rEval)
                 return np.asarray([BNormGradx[0], BNormGrady[0], BNormGradz[0]]),BNormCenter[0]
             else:
                 return np.asarray([BNormGradx[0],BNormGrady[0],BNormGradz[0]])
         else:
             if returnNorm==True:
+                BNormCenter=self.BNorm(rEval)
                 return np.column_stack((BNormGradx, BNormGrady, BNormGradz)),BNormCenter
             else:
                 return np.column_stack((BNormGradx,BNormGrady,BNormGradz))

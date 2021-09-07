@@ -1,3 +1,4 @@
+import scipy.interpolate as spi
 import time
 import numpy as np
 from math import sqrt
@@ -25,6 +26,8 @@ from HalbachLensClass import SegmentedBenderHalbach\
 # seems to still give reasonable ansers) and take about 5us per evaluatoin instead of 200us.
 # --There are at least 3 frames of reference. The first is the lab frame, the second is the element frame, and the third
 # which is only found in segmented bender, is the unit cell frame.
+
+TINY_STEP=1e-9
 
 @numba.njit(numba.float64(numba.float64[:]))
 def fast_Arctan2(q):
@@ -165,8 +168,10 @@ class Element:
         interpFx = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
         interpFy = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
         interpFz = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
-        interpV = generate_3DInterp_Function_NUMBA(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
-        return interpFx, interpFy, interpFz, interpV
+        # interpV = generate_3DInterp_Function_NUMBA(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
+        interpV=spi.RegularGridInterpolator((xArr,yArr,zArr),self.PTL.u0*B0Matrix)
+        interpVWrap=lambda x,y,z: interpV((x,y,z))
+        return interpFx, interpFy, interpFz, interpVWrap
 
 
 class LensIdeal(Element):
@@ -841,6 +846,8 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     # @profile()
     def is_Coord_Inside(self, q):
         # q: particle's position in element frame
+        if np.any(np.isnan(q))==True:
+            raise Exception('issue')
         phi = fast_Arctan2(q)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
             if (sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2 < self.ap**2:
@@ -866,7 +873,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     #each dimension may be different.
     #1:  A model of the repeating segments of magnets that compose the bulk of the bender. A magnet, centered at the
     #bending radius, sandwiched by other magnets (at the appropriate angle) to generate the symmetry. The central magnet
-    #is position with z=0, and field values are extracted from z=0-1e-6 to some value that extends slightly past
+    #is position with z=0, and field values are extracted from z=0-TINY_STEP to some value that extends slightly past
     #the tilted edge. See docs/images/HalbachBenderSimSegmentedWithCapImage1.png
     #2: A model of the magnet between the last magnet, and the inner repeating section. This is required becasuse I found
     #that the assumption that I could jump straight from the outwards magnet to the unit cell portion was incorrect,
@@ -1007,12 +1014,12 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def fill_Field_Func_Cap(self):
         lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
-        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-1e-6
-        xMax=self.rb+self.ap+1e-6
-        yMax=self.ap+1e-6
-        yMin=-yMax
-        zMin=-self.Lcap-1e-6
-        zMax=1e-6
+        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
+        xMax=self.rb+self.ap+TINY_STEP
+        yMin=-(self.ap+TINY_STEP)
+        yMax=TINY_STEP
+        zMin=-self.Lcap-TINY_STEP
+        zMax=TINY_STEP
 
 
         fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
@@ -1024,12 +1031,12 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
 
-        xMax=self.rb+self.ap+1e-6
-        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-1e-6  #inward enough to account for the tilt
-        yMin=-(self.ap+1e-6)
-        yMax=-yMin
-        zMin=-1e-6
-        zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+1e-6
+        xMax=self.rb+self.ap+TINY_STEP
+        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP  #inward enough to account for the tilt
+        yMin=-(self.ap+TINY_STEP)
+        yMax=TINY_STEP
+        zMin=-TINY_STEP
+        zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+TINY_STEP
         fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
@@ -1037,12 +1044,12 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             self.make_Force_And_Potential_Functions(dataCap)
 
     def fill_Force_Func_Seg(self):
-        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-1e-6
-        xMax=self.rb+self.ap+1e-6
-        yMax=self.ap+1e-6
-        yMin=-yMax
-        zMin=-1e-6
-        zMax=np.tan(self.ucAng)*(self.rb+self.rp)+1e-6
+        xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
+        xMax=self.rb+self.ap+TINY_STEP
+        yMin=-(self.ap+TINY_STEP)
+        yMax=TINY_STEP
+        zMin=-TINY_STEP
+        zMax=np.tan(self.ucAng)*(self.rb+self.rp)+TINY_STEP
         fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
@@ -1093,6 +1100,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def magnetic_Potential(self, q):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
+        q=q.copy()
+        q[2]=abs(q[2])
         phi = fast_Arctan2(q)  # calling a fast numba version that is global
         V0 = 0.0
         if phi < self.ang:  # if particle is inside bending angle region
@@ -1131,6 +1140,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
     def magnetic_Potential_First_And_Last(self, q, position):
         qNew = q.copy()
+
         if position == 'FIRST':
             qx = qNew[0]
             qy = qNew[1]
@@ -1191,11 +1201,24 @@ class HalbachLensSim(LensIdeal):
         mountThickness=5e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
-        numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
-        xyArr=np.linspace(-self.ap-1e-6,self.ap+1e-6,num=numXY) #add a little extra so the interp works correctly
+        # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
+        # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
+
+
+        numXY=int(2*self.ap/transverseStepSize)//2+1 #to ensure it is odd
+        #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
+        #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
+        #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
+        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP,numXY)
+        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP),TINY_STEP,numXY)
+
+
+
+
+
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
-            planeCoords=np.asarray(np.meshgrid(xyArr,xyArr,0)).T.reshape(-1,3)
+            planeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,0)).T.reshape(-1,3)
             BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
             self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
@@ -1209,12 +1232,12 @@ class HalbachLensSim(LensIdeal):
             self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
 
 
-        zMin=0
-        zMax=self.Lcap
+        zMin=-TINY_STEP
+        zMax=self.Lcap+TINY_STEP
         numZ=2*(int(2*(zMax-zMin)/longitudinalStepSize)//2)+1 #to ensure it is odd
-        zArr=np.linspace(zMin-1e-6,zMax+1e-6,num=numZ) #add a little extra so interp works as expected
+        zArr=np.linspace(zMin,zMax,num=numZ) #add a little extra so interp works as expected
 
-        volumeCoords=np.asarray(np.meshgrid(xyArr,xyArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
+        volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
@@ -1266,6 +1289,8 @@ class HalbachLensSim(LensIdeal):
         self.fieldFact=BpFact
     def magnetic_Potential(self, q):
         x,y,z=q
+        y = abs(y)  # confine to upper right quadrant
+        z = abs(z)
         if q[0] <= self.Lcap:
             x = self.Lcap - x
             V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
@@ -1277,6 +1302,7 @@ class HalbachLensSim(LensIdeal):
         else:
             V0=0
         return V0*self.fieldFact
+
 
 
 

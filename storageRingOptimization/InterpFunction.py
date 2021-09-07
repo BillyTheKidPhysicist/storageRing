@@ -37,6 +37,9 @@ def generate_3DInterp_Function_NUMBA(v,xData,yData,zData):
             c = c0*(1-zd) + c1*zd
         else:
             print(x0,y0,z0)
+            print(xData.min(),xData.max())
+            print(yData.min(),yData.max())
+            print(zData.min(),zData.max())
             raise Exception('out of bounds')
         return c
 
