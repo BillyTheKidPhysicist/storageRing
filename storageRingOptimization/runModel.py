@@ -1,25 +1,36 @@
+import os
+
+os.environ['OPENBLAS_NUM_THREADS']='1'
 import skopt
+import numpy as np
+from ParticleClass import Particle
+from ParticleTracerClass import ParticleTracer
+from skopt.plots import plot_objective,plot_objective_2D
 from OptimizerClass import LatticeOptimizer,Solution
 import dill
 from ParticleTracerLatticeClass import ParticleTracerLattice
 import time
+import scipy.interpolate as spi
 from sendMyselfEmail import send_MySelf_Email
-
+import gc
+from profilehooks import profile
 import matplotlib.pyplot as plt
-import numpy as np
+
 import sys
+
+
 def solve_System(fieldBounds,num,benderMagnetStrength):
     def solve_For_Lattice_Params(X,parallel=False):
-        rp,rpLens,Lm=X
+        rpBend,rpLens,Lm=X
         PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing')
-        rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rp,1.0,Lm,parallel=parallel)  #25% of time here, 1.0138513851385138
+        rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,parallel=parallel)  #25% of time here, 1.0138513851385138
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Combiner_Sim('combinerV3.txt')
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
-        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,None,1.0,rOffsetFact=rOffsetFact)
+        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
-        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,None,1.0,rOffsetFact=rOffsetFact)
+        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
         PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  #17.8 % of time here
         PTL_Ring.elList[4].fieldFact=benderMagnetStrength
         PTL_Ring.elList[6].fieldFact=benderMagnetStrength
@@ -35,49 +46,57 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
         # dill.dump(PTL_Injector,file)
         file=open('injectorFile','rb')
         PTL_Injector=dill.load(file)
-        #
+        # print('done making lattice')
+
         test=LatticeOptimizer(PTL_Ring,PTL_Injector)
         test.generate_Swarms()  #33 % of time here
-        sol=test.optimize_Magnetic_Field((0,3),fieldBounds,30,maxIter=30,parallel=parallel)
+        sol=test.optimize_Magnetic_Field((0,3),fieldBounds,30,maxIter=20,parallel=parallel)
         sol.xRing_L=X
+        sol.description='Pseudorandom search'
         return sol
 
-
-
-
-
-    paramBounds=[(.005,.03),(.005,.03),(.00635,.0254)]
-    import numpy as np
+    paramBounds=[(.005,.03),(.005,.03),(.005,.025)]
     np.random.seed(42)
     initialSampleCoords=skopt.sampler.Sobol().generate(paramBounds,num)
-    # [solve_For_Lattice_Params(coords) for coords in initialSampleCoords] #0.003271260159028122 0.029142468920788363 0.0028566968035615235
     t=time.time()
     from ParaWell import ParaWell
     helper=ParaWell()
-    solutionList=helper.parallel_Problem(solve_For_Lattice_Params,initialSampleCoords,onlyReturnResults=True,numWorkers=31)
-    initialValues=[sol.func for sol in solutionList]
+    solutionList=helper.parallel_Problem(solve_For_Lattice_Params,initialSampleCoords,onlyReturnResults=True,
+                                         numWorkers=31)
+    initialCostValues=[LatticeOptimizer.cost_Function(sol.survival) for sol in solutionList]
     print('Finished random search')
 
     def wrapper(X):
-        sol= solve_For_Lattice_Params(X,parallel=True)
+        sol=solve_For_Lattice_Params(X,parallel=True)
+        sol.description='GP Search'
         solutionList.append(sol)
-        maxVal=sol.func
-        return 1/(maxVal+1)
-    skopt.gp_minimize(wrapper,paramBounds,n_calls=16,n_initial_points=0,x0=initialSampleCoords,y0=initialValues)
-    argMax=np.argmax(np.asarray([sol.func for sol in solutionList]))
+        cost=LatticeOptimizer.cost_Function(sol.survival)
+        return cost
+
+    skoptSol=skopt.gp_minimize(wrapper,paramBounds,n_calls=16,n_initial_points=0,x0=initialSampleCoords,
+                               y0=initialCostValues,model_queue_size=None ,n_jobs=-1,acq_optimizer='lbfgs',
+                               n_points=100000 ,n_restarts_optimizer=32*10)
+
+    argMax=np.argmax(np.asarray([sol.survival for sol in solutionList]))
     solutionOptimal=solutionList[argMax]
     print(solutionOptimal)
-    print("total time: ",time.time()-t) #original is 15600
+    print("total time: ",time.time()-t)  #original is 15600
     emailText=solutionOptimal.__str__()+'\n'
     emailText+='Run time: '+str(int(time.time()-t))+' s \n'
     send_MySelf_Email(emailText)
 
-num=32*4
+    file=open('solutionList1','wb')
+    dill.dump(solutionList,file)
+    plot_objective(skoptSol)
+    plt.show()
+
+
+
+num=32*2
 fieldBounds=[(0.0,1.0),(0.0,1.0)]
 singleLayerStrength=1.0
 solve_System(fieldBounds,num,singleLayerStrength)
-# doubleLayerStrength=1.6
-# solve_System(fieldBounds,num,doubleLayerStrength)
+
 
 
 '''
@@ -89,8 +108,6 @@ injector element spacing optimum configuration: [0.20926595 0.13467041]
  storage ring spatial optimal optimum configuration: [0.01115234375, 0.01134765625, 0.0067220703125]
  optimum result: 39.47804503987378
 ----------------------------
-
-
 
 
 

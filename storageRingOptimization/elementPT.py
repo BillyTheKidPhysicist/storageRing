@@ -147,31 +147,29 @@ class Element:
 
         #todo: 10-30% of lattice generation time is spent here. I could reduce that to a factor of .25 by condensing
         #force function into someting that returns 3 scalars at once, and making the magnetic field component optional
-        xArr = np.unique(data[:, 0])
-        yArr = np.unique(data[:, 1])
-        zArr = np.unique(data[:, 2])
+        xArr=np.unique(data[:,0])
+        yArr=np.unique(data[:,1])
+        zArr=np.unique(data[:,2])
 
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-        BGradxMatrix = np.empty((numx, numy, numz))
-        BGradyMatrix = np.empty((numx, numy, numz))
-        BGradzMatrix = np.empty((numx, numy, numz))
-        B0Matrix = np.zeros((numx, numy, numz))
-        xIndices = np.argwhere(data[:, 0][:, None] == xArr)[:, 1]
-        yIndices = np.argwhere(data[:, 1][:, None] == yArr)[:, 1]
-        zIndices = np.argwhere(data[:, 2][:, None] == zArr)[:, 1]
-        BGradxMatrix[xIndices, yIndices, zIndices] = data[:, 3]
-        BGradyMatrix[xIndices, yIndices, zIndices] = data[:, 4]
-        BGradzMatrix[xIndices, yIndices, zIndices] = data[:, 5]
-        B0Matrix[xIndices, yIndices, zIndices] = data[:, 6]
-        interpFx = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradxMatrix, xArr, yArr, zArr)
-        interpFy = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradyMatrix, xArr, yArr, zArr)
-        interpFz = generate_3DInterp_Function_NUMBA(-self.PTL.u0 * BGradzMatrix, xArr, yArr, zArr)
+        numx=xArr.shape[0]
+        numy=yArr.shape[0]
+        numz=zArr.shape[0]
+        FxMatrix=np.empty((numx,numy,numz))
+        FyMatrix=np.empty((numx,numy,numz))
+        FzMatrix=np.empty((numx,numy,numz))
+        VMatrix=np.zeros((numx,numy,numz))
+        xIndices=np.argwhere(data[:,0][:,None]==xArr)[:,1]
+        yIndices=np.argwhere(data[:,1][:,None]==yArr)[:,1]
+        zIndices=np.argwhere(data[:,2][:,None]==zArr)[:,1]
+        FxMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,3]
+        FyMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,4]
+        FzMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,5]
+        VMatrix[xIndices,yIndices,zIndices]=self.PTL.u0*data[:,6]
+        interpF=generate_3DInterp_Function_NUMBA(FxMatrix,FyMatrix,FzMatrix,xArr,yArr,zArr)
         # interpV = generate_3DInterp_Function_NUMBA(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
-        interpV=spi.RegularGridInterpolator((xArr,yArr,zArr),self.PTL.u0*B0Matrix)
-        interpVWrap=lambda x,y,z: interpV((x,y,z))
-        return interpFx, interpFy, interpFz, interpVWrap
+        interpV=spi.RegularGridInterpolator((xArr,yArr,zArr),VMatrix)
+        interpVWrap=lambda x,y,z:interpV((x,y,z))
+        return interpF,interpVWrap
 
 
 class LensIdeal(Element):
@@ -575,12 +573,11 @@ class CombinerSim(CombinerIdeal):
         self.data[:, 3:6] = self.data[:, 3:6] / self.sizeScale  # scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        interpFx,interpFy, interpFz, funcV = self.make_Interp_Functions(self.data)
+        interpF,funcV=self.make_Interp_Functions(self.data)
+
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func(x,y,z):
-            Fx=interpFx(x,y,z)
-            Fy=interpFy(x,y,z)
-            Fz=interpFz(x,y,z)
+            Fx,Fy,Fz=interpF(x,y,z)
             return Fx,Fy,Fz
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: self.fieldFact*funcV(x, y, z)
@@ -901,7 +898,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.apFrac=apFrac
-        self.spatialStepSize=500e-6  #target step size for spatial field interpolate.
+        self.longitudinalSpatialStepSize=1e-3  #target step size for spatial field interpolate.
+        self.numPointsTransverse=30
         self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
         self.K = None #spring constant of field strength to set the offset of the lattice
@@ -988,17 +986,18 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.compile_Fast_Numba_Force_Function()
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
-    def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize):
-        assert Max>Min
-        num=int(1+(Max-Min)/stepSize)  #to ensure it is odd
-        minReasonablePoints=4
-        assert num>minReasonablePoints
-        num=num if is_Even(num) else num+1
-        return np.linspace(Min,Max,num)
-    def make_Field_Coord_Arr(self,xMin,xMax,yMin,yMax,zMin,zMax,stepSize):
-        xArr=self.make_Grid_Edge_Coord_Arr(xMin,xMax,stepSize)
-        yArr=self.make_Grid_Edge_Coord_Arr(yMin,yMax,stepSize)
-        zArr=self.make_Grid_Edge_Coord_Arr(zMin,zMax,stepSize)
+    def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
+        assert Max>Min and (stepSize is not None or numSteps is not None)
+        if numSteps is None:
+            numSteps=int(1+(Max-Min)/stepSize)  #to ensure it is odd
+        minReasonablePoints=5
+        if numSteps<minReasonablePoints: numSteps=minReasonablePoints
+        numSteps=numSteps if is_Even(numSteps) else numSteps+1
+        return np.linspace(Min,Max,numSteps)
+    def make_Field_Coord_Arr(self,xMin,xMax,yMin,yMax,zMin,zMax):
+        xArr=self.make_Grid_Edge_Coord_Arr(xMin,xMax,numSteps=self.numPointsTransverse)
+        yArr=self.make_Grid_Edge_Coord_Arr(yMin,yMax,numSteps=self.numPointsTransverse)
+        zArr=self.make_Grid_Edge_Coord_Arr(zMin,zMax,stepSize=self.longitudinalSpatialStepSize)
         gridCoords=np.asarray(np.meshgrid(xArr,yArr,zArr)).T.reshape(-1,3)
         return gridCoords
 
@@ -1024,7 +1023,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         zMax=TINY_STEP
 
 
-        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
         self.Force_Func_Cap,self.magnetic_Potential_Func_Cap=self.make_Force_And_Potential_Functions(dataCap)
@@ -1039,7 +1038,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         yMax=TINY_STEP
         zMin=-TINY_STEP
         zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+TINY_STEP
-        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
         self.Force_Func_Internal_Fringe,self.magnetic_Potential_Func_Fringe=\
@@ -1052,7 +1051,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         yMax=TINY_STEP
         zMin=-TINY_STEP
         zMax=np.tan(self.ucAng)*(self.rb+self.ap)+TINY_STEP
-        fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax,self.spatialStepSize)
+        fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
 
@@ -1060,14 +1059,15 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
         self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
     def make_Force_And_Potential_Functions(self,data):
-        interpFx,interpFy,interpFz,interpV=self.make_Interp_Functions(data)
+        interpF,interpV=self.make_Interp_Functions(data)
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Seg_Wrap(x,y,z):
-            Fx=interpFx(x,-z,y)
-            Fy=interpFz(x,-z,y)
-            Fz=-interpFy(x,-z,y)
+            Fx0,Fy0,Fz0=interpF(x,-z,y)
+            Fx=Fx0
+            Fy=Fz0
+            Fz=-Fy0
             return Fx,Fy,Fz
-        interpV_Wrap=lambda x,y,z: interpV(x,-z,y)
+        interpV_Wrap=lambda x,y,z:interpV(x,-z,y)
         return force_Seg_Wrap,interpV_Wrap
     def force(self, q):
         # force at point q in element frame
@@ -1187,8 +1187,10 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
-        longitudinalStepSize=1e-3
-        transverseStepSize=500e-6
+        # longitudinalStepSize=1e-3
+        # transverseStepSize=500e-6
+        numPointsLongitudinal=25
+        numPointsTransverse=30
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         self.Lo=self.L
@@ -1206,7 +1208,7 @@ class HalbachLensSim(LensIdeal):
         # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
 
 
-        numXY=int(2*self.ap/transverseStepSize)//2+1 #to ensure it is odd
+        numXY=int((self.ap/self.rp)*numPointsTransverse) 
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
@@ -1235,8 +1237,7 @@ class HalbachLensSim(LensIdeal):
 
         zMin=-TINY_STEP
         zMax=self.Lcap+TINY_STEP
-        numZ=2*(int(2*(zMax-zMin)/longitudinalStepSize)//2)+1 #to ensure it is odd
-        zArr=np.linspace(zMin,zMax,num=numZ) #add a little extra so interp works as expected
+        zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
@@ -1248,13 +1249,14 @@ class HalbachLensSim(LensIdeal):
 
 
     def fill_Field_Func_Cap(self):
-        interpFx, interpFy, interpFz, interpV = self.make_Interp_Functions(self.data3D)
+        interpF, interpV = self.make_Interp_Functions(self.data3D)
         # wrap the function in a more convenietly accesed function
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func_Outer(x,y,z):
-            Fx=interpFz(-z, y,x)
-            Fy=interpFy(-z, y,x)
-            Fz=-interpFx(-z, y,x)
+            Fx0,Fy0,Fz0=interpF(-z, y,x)
+            Fx=Fz0
+            Fy=Fy0
+            Fz=-Fx0
             return Fx,Fy,Fz
         self.force_Func_Outer=force_Func_Outer
         self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(-z, y, x)
