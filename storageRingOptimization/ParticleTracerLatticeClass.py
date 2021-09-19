@@ -72,7 +72,6 @@ class ParticleTracerLattice:
         self.linearElementToConstraint=None #element whos length will be changed when the lattice is constrained to
         # satisfy geometry. Can only be one
 
-
         self.elList=[] #to hold all the lattice elements
     def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
@@ -89,8 +88,7 @@ class ParticleTracerLattice:
 
         def errorFunc(rOffsetFact):
             PTL_Ring.elList[1].update_rOffset_Fact(rOffsetFact)
-            PTL_Ring.set_Element_Coordinates()
-            PTL_Ring.make_Geometry()
+            PTL_Ring.build_Lattice()
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,1e-5,1.0,fastMode=False)
@@ -276,11 +274,13 @@ class ParticleTracerLattice:
         if constrain==True:
             self.constrain_Lattice()
         if buildLattice==True:
-            self.set_Element_Coordinates(enforceClosedLattice=enforceClosedLattice,surpressWarning=surpressWarning)
-            self.make_Geometry()
+            self.build_Lattice(enforceClosedLattice=enforceClosedLattice,surpressWarning=surpressWarning)
             self.totalLength=0
             for el in self.elList: #total length of particle's orbit in an element
                 self.totalLength+=el.Lo
+    def build_Lattice(self,enforceClosedLattice=True,surpressWarning=False):
+        self.set_Element_Coordinates(enforceClosedLattice,surpressWarning)
+        self.make_Geometry()
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
@@ -527,7 +527,7 @@ class ParticleTracerLattice:
                 raise Exception('BENDER NUMBER OF MAGNETS IS NOT SPECIFIED')
             if type(self.bender1.numMagnets)!=type(self.bender2.numMagnets): #for segmented benders
                 raise Exception('BENDERS BOTH MUST HAVE NUMBER OF MAGNETS SPECIFIED OR BE None')
-    def set_Element_Coordinates(self,enforceClosedLattice=True,surpressWarning=False):
+    def set_Element_Coordinates(self,enforceClosedLattice,surpressWarning):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
         #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element
@@ -684,6 +684,14 @@ class ParticleTracerLattice:
             import warnings
             print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
+    def get_Element_Before_And_After(self,elCenter):
+        if (elCenter.index==len(self.elList)-1 or elCenter.index==0) and self.latticeType=='injector':
+            raise Exception('Element cannot be first or last if lattice is injector type')
+        elBeforeIndex=elCenter.index-1 if elCenter.index!=0 else len(self.elList)-1
+        elAfterIndex=elCenter.index+1 if elCenter.index<len(self.elList)-1 else 0
+        elBefore=self.elList[elBeforeIndex]
+        elAfter=self.elList[elAfterIndex]
+        return elBefore,elAfter
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
                      showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle

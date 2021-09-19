@@ -21,12 +21,15 @@ import sys
 
 def solve_System(fieldBounds,num,benderMagnetStrength):
     def solve_For_Lattice_Params(X,parallel=False):
+        combinerGap=5e-2
+        t=time.time()
         rpBend,rpLens,Lm=X
         PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing')
         rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,parallel=parallel)  #25% of time here, 1.0138513851385138
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Combiner_Sim('combinerV3.txt')
+        PTL_Ring.add_Drift(combinerGap)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
@@ -49,11 +52,17 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
         # print('done making lattice')
 
         test=LatticeOptimizer(PTL_Ring,PTL_Injector)
-        test.generate_Swarms()  #33 % of time here
-        sol=test.optimize_Magnetic_Field((0,3),fieldBounds,30,maxIter=20,parallel=parallel)
+        test.generate_Swarms()  #33 % of time here`
+        sol=test.optimize_Magnetic_Field((0,3),fieldBounds,20,maxIter=20,parallel=parallel)
         sol.xRing_L=X
         sol.description='Pseudorandom search'
         return sol
+    solve_For_Lattice_Params([.01,.01,.01])
+    #test speed
+    t=time.time()
+    solve_For_Lattice_Params([0.0080519553439631, 0.013936147854230443, 0.005370946829484897],parallel=True)
+    print(time.time()-t)
+    exit()
 
     paramBounds=[(.005,.03),(.005,.03),(.005,.025)]
     np.random.seed(42)
@@ -67,6 +76,7 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
     print('Finished random search')
 
     def wrapper(X):
+        print('inside wrapper')
         sol=solve_For_Lattice_Params(X,parallel=True)
         sol.description='GP Search'
         solutionList.append(sol)
@@ -75,7 +85,7 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
 
     skoptSol=skopt.gp_minimize(wrapper,paramBounds,n_calls=16,n_initial_points=0,x0=initialSampleCoords,
                                y0=initialCostValues,model_queue_size=None ,n_jobs=-1,acq_optimizer='lbfgs',
-                               n_points=100000 ,n_restarts_optimizer=32*10)
+                               n_points=100000 ,n_restarts_optimizer=32*10,noise=1e-6)
 
     argMax=np.argmax(np.asarray([sol.survival for sol in solutionList]))
     solutionOptimal=solutionList[argMax]

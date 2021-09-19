@@ -84,6 +84,19 @@ class Swarm:
         #reset the swarm.
         for particle in self.particles:
             particle.reset()
+    def plot(self,yAxis=True,zAxis=False):
+        for particle in self.particles:
+            if yAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,1],c='red')
+            if zAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,2],c='blue')
+        plt.grid()
+        plt.title('ideal orbit displacement. red is y position, blue is z positon. \n total particles: '+
+                  str(len(self.particles)))
+        plt.ylabel('displacement from ideal orbit')
+        plt.xlabel("distance along orbit,m")
+        plt.show()
+
+
+
 class Particle:
     #This object represents a single particle with unit mass. It can track parameters such as position, momentum, and
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was

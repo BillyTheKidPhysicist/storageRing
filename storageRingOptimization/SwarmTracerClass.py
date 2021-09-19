@@ -56,10 +56,10 @@ class SwarmTracer:
     def initialize_Stablity_Testing_Swarm(self,qMax):
         swarmTest = Swarm()
         swarmTest.add_Particle(qi=np.asarray([-1e-10,0.0,0.0]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax, 0]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax, 0]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, 0, -qMax]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, 0, qMax]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax/2, qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax/2, qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax/2, -qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax/2, -qMax/2]))
         return swarmTest
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points

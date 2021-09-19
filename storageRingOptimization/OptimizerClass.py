@@ -1,3 +1,5 @@
+from skopt.plots import plot_objective
+import warnings
 from shapely.affinity import rotate,translate
 import sys
 import numpy.linalg as npl
@@ -11,6 +13,7 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from ParaWell import ParaWell
 from SwarmTracerClass import SwarmTracer
+from elementPT import HalbachLensSim, LensIdeal,Drift
 import globalMethods as gm
 
 class Solution:
@@ -77,19 +80,25 @@ class LatticeOptimizer:
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
         self.solutionList=[] #list to hold solution objects the track coordsinates and function values for injector
         #and ring paramters
-        self.elementIndices=None
+        self.tunedElementList=None
+        self.tuningChoice=None #what type of tuning will occur
         self.useLatticeUpperSymmetry=True #exploit the fact that the lattice has symmetry in the z axis to use half
         #the number of particles. Symmetry is broken if including gravity
         self.sameSeedForSwarm=True #generate the same swarms every time by seeding the random generator during swarm
         #generation with the same number, 42
         self.sameSeedForSearch=True #wether to use the same seed, 42, for the search process
         self.numParticlesInjector=500
-        self.numParticlesRing=30000
+        self.numParticlesRing=50000
 
         self.qMaxInjector=2.5e-3
         self.pTransMaxInjector=10.0
-        self.pxMaxInjector=1.0
-
+        self.pxMaxInjector=3.0
+        fractionalMarginOfError=1.25
+        self.minElementLength=fractionalMarginOfError*self.particleTracerRing.minTimeStepsPerElement*\
+                              (self.latticeRing.v0Nominal+self.pxMaxInjector)*self.h
+        self.tunableTotalLengthList=[] #list to hold initial tunable lengths for when optimizing by tuning element
+        # length. this to prevent any numerical round issues causing the tunable length to change from initial value
+        # if I do many iterations
     def generate_Swarms(self):
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
@@ -100,7 +109,6 @@ class LatticeOptimizer:
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
         qMax=1.1*firstApertureRing
-
         self.swarmRingInitialAtCombinerOutput=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(qMax,pTransMaxRing,
                                             pxMaxRing,self.numParticlesRing,
                                             sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
@@ -113,16 +121,12 @@ class LatticeOptimizer:
         injectorLensLength=.2
         injectorLenBoreRadius=.025
         numberInjectorElements=4
-        injectorBounds=[(-0.008792, 0.008888), (-0.006007, 0.005917), (-1.182657, 1.069411),(-9.854484, 9.616056),
-            (-8.107871, 7.871643)]#10 m/s
-        # injectorBoundsV2=[(-0.007727, 0.007647), (-0.006008, 0.005877), (-1.146266, 1.023455), (-9.265196, 8.804026),
-        #                 (-8.080922, 7.712291)] #10
-        # injectorBoundsV2=[(-0.007887, 0.007902), (-0.006006, 0.005921), (-1.8404, 1.222601), (-7.627025, 7.585079),
-        # (-7.683914, 7.823011)] #5
+        injectorBounds=[(-0.014895, 0.019988), (-0.006007, 0.005975), (-3.111126, 2.984366), (-13.535028, 12.83725)
+            , (-8.042546, 7.964801)]#10 m/s
         if self.latticeInjector.elList[1].L!= injectorLensLength: raise Exception('lens has changed')
         elif self.latticeInjector.elList[1].rp!=injectorLenBoreRadius:  raise Exception('lens has changed')
         elif len(self.latticeInjector.elList)!=numberInjectorElements:  raise Exception('number of element have changed')
-        elif self.pxMaxInjector!=1.0 or self.pTransMaxInjector!=10.0 or self.qMaxInjector!=2.5e-3:
+        elif self.pxMaxInjector!=3.0 or self.pTransMaxInjector!=10.0 or self.qMaxInjector!=2.5e-3:
             raise Exception('Swarm paramters have changed')
         else: return injectorBounds
     def find_Injector_Mode_Match_Bounds(self,parallel):
@@ -334,13 +338,6 @@ class LatticeOptimizer:
         solution.survival=self.inverse_Cost_Function(scipySol.fun)
         return solution
 
-    def update_Injector_Lattice(self,X):
-        #modify lengths of drift regions in injector
-        LDrift1,LDrift2=X
-        self.latticeInjector.elList[0].set_Length(LDrift1)
-        self.latticeInjector.elList[2].set_Length(LDrift2)
-        self.latticeInjector.set_Element_Coordinates()
-        self.latticeInjector.make_Geometry()
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self,swarmInjectorTraced):
         apNextElement=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
         swarmEnd=Swarm()
@@ -364,9 +361,9 @@ class LatticeOptimizer:
     def test_Stability(self,minRevs=5.0):
         swarmTest=self.swarmTracerRing.initialize_Stablity_Testing_Swarm(1e-3)
         swarmTest=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTest)
-        swarmTest=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTest,1e-5,
+        swarmTest=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTest,self.h,
                                                                    1.5*minRevs*self.latticeRing.totalLength/200.0,
-                                                                   parallel=False,accelerated=True)
+                                                                   parallel=False,accelerated=True,fastMode=True)
         stable=False
         for particle in swarmTest:
             if particle.revolutions>minRevs:
@@ -381,9 +378,29 @@ class LatticeOptimizer:
                                                     parallel=parallel, fastMode=True,copySwarm=False,accelerated=True)
             # self.latticeRing.show_Lattice(swarm=swarm,trueAspectRatio=False,showTraceLines=True)
             return swarm
+
+    def update_Injector_Lattice(self,X):
+        #modify lengths of drift regions in injector
+        self.latticeInjector.elList[0].set_Length(X[0])
+        self.latticeInjector.elList[2].set_Length(X[1])
+        self.latticeInjector.build_Lattice()
     def update_Ring_Lattice(self,X):
-        for i in range(len(X)):
-            self.latticeRing.elList[self.elementIndices[i]].fieldFact=X[i]
+        if self.tuningChoice=='field':
+            self.update_Ring_Field_Values(X)
+        else:
+            self.update_Ring_Spacing(X)
+    def update_Ring_Field_Values(self,X):
+        for el,arg in zip(self.tunedElementList,X):
+            el.fieldFact=arg
+    def update_Ring_Spacing(self,X):
+        for elCenter,spaceFracElBefore,totalLength in zip(self.tunedElementList,X,self.tunableTotalLengthList):
+            elBefore,elAfter=self.latticeRing.get_Element_Before_And_After(elCenter)
+            tunableLength=(elBefore.L+elAfter.L)-2*self.minElementLength
+            LBefore=spaceFracElBefore*tunableLength+self.minElementLength
+            LAfter=totalLength-LBefore
+            elBefore.set_Length(LBefore)
+            elAfter.set_Length(LAfter)
+        self.latticeRing.build_Lattice()
     def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
         #survival as percent of particle surviving till the maximum time
         totalRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
@@ -401,36 +418,59 @@ class LatticeOptimizer:
         return -10*np.log(cost)
     def best_Solution(self):
         return self.solutionList[np.nanargmax(np.asarray([sol.survival for sol in self.solutionList]))]
-    def optimize_Magnetic_Field(self,elementIndices,bounds,num0,maxIter=10,parallel=True):
+    def catch_Optimizer_Errors(self,tuningBounds,elementIndices,tuningChoice):
+        if len(self.solutionList)!=0: raise Exception("You cannot call optimize twice")
+        if max(elementIndices)>=len(self.latticeRing.elList)-1: raise Exception("element indices out of bounds")
+        if len(tuningBounds)!=len(elementIndices): raise Exception("Bounds do not match number of tuned elements")
+        if tuningChoice=='field':
+            for el in self.tunedElementList:
+                if (isinstance(el,LensIdeal) and isinstance(el,HalbachLensSim)) != True:
+                    raise Exception("For field tuning elements must be LensIdeal or HalbachLensSim")
+        elif tuningChoice=='spacing':
+            for elIndex in elementIndices:
+                elBefore,elAfter=self.latticeRing.get_Element_Before_And_After(self.latticeRing.elList[elIndex])
+                tunableLength=(elBefore.L+elAfter.L)-2*self.minElementLength
+                if (isinstance(elBefore,Drift) and isinstance(elAfter,Drift))!=True:
+                    raise Exception("For spacing tuning neighboring elements must be Drift elements")
+                if tunableLength<0.0:
+                    raise Exception("Tunable elements are too short for length tuning. Min total length is "
+                                    +str(2*self.minElementLength))
+        else: raise  Exception('No proper tuning choice provided')
+    def make_Tuning_Coords_List(self,tuningBounds,numGridEdge):
+        #gp_minimize requires a list of lists, I make that here
+        meshgridArraysList=[np.linspace(bound[0],bound[1],numGridEdge) for bound in tuningBounds]
+        tuningCoordsArr=np.asarray(np.meshgrid(*meshgridArraysList)).T.reshape(-1,len(self.tunedElementList))
+        tuningCoordsList=[list(tuneCoord) for tuneCoord in tuningCoordsArr]  #must in list format
+        return tuningCoordsList
+    def fill_Initial_Total_Tuning_Elements_Length_List(self):
+        for elCenter in self.tunedElementList:
+            elBefore,elAfter=self.latticeRing.get_Element_Before_And_After(elCenter)
+            self.tunableTotalLengthList.append(elBefore.L+elAfter.L)
+    def initialize_Optimizer(self,elementIndices,tuningChoice):
+        self.tunedElementList=[self.latticeRing.elList[index] for index in elementIndices]
+        self.tuningChoice=tuningChoice
+        if tuningChoice=='spacing':
+            self.fill_Initial_Total_Tuning_Elements_Length_List()
+        if self.sameSeedForSearch==True:
+            np.random.seed(42)
+        self.generate_Swarms()
+
+    def optimize_Magnetic_Field(self,elementIndices,tuningBounds,numGridEdge,tuningChoice,maxIter=10,parallel=True):
         # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
         #system over a grid, then using a non parametric model to find the optimum.
         #elementIndices: tuple of indices of elements to tune the field strength
         #bounds: list of tuples of (min,max) for tuning
         #maxIter: maximum number of optimization iterations with non parametric optimizer
         #num0: number of points in grid of magnetic fields
-        assert np.unique(np.asarray(elementIndices)).shape[0]==len(elementIndices) #ensure no duplicates
-        assert len(bounds)==len(elementIndices) #ensure bounds for each element being swept
-        if self.sameSeedForSearch==True:
-            np.random.seed(42)
-        self.generate_Swarms()
-        self.elementIndices=elementIndices
-        BArrList=[]
-        for bound in bounds:
-            BArrList.append(np.linspace(bound[0], bound[1], num0))
-        coordsArr = np.asarray(np.meshgrid(*BArrList)).T.reshape(-1, len(elementIndices))
-        # print('beginning grid search')
+        self.catch_Optimizer_Errors(tuningBounds,elementIndices,tuningChoice)
+        self.initialize_Optimizer(elementIndices,tuningChoice)
+        tuningCoordsList=self.make_Tuning_Coords_List(tuningBounds,numGridEdge)
         if parallel==True:
-            self.solutionList=self.helper.parallel_Problem(self.mode_Match, coordsArr, onlyReturnResults=True)
+            self.solutionList=self.helper.parallel_Problem(self.mode_Match, tuningCoordsList, onlyReturnResults=True)
         else:
-            self.solutionList=[self.mode_Match(coord) for coord in coordsArr]
+            self.solutionList=[self.mode_Match(tuneCoord) for tuneCoord in tuningCoordsList]
         gridSearchSurvivalResults=[solution.survival for solution in self.solutionList]
 
-
-        def skopt_Cost(XRing):
-            solution=self.mode_Match(XRing,parallel=parallel)
-            self.solutionList.append(solution)
-            cost=self.cost_Function(solution.survival)
-            return cost
 
         survivalForRelevance=1.0 #1% survival for relevance
         if max(gridSearchSurvivalResults)-min(gridSearchSurvivalResults)<survivalForRelevance:
@@ -439,15 +479,20 @@ class LatticeOptimizer:
             solution.survival=0.0
             return solution
         print('viable solution')
-        coordsList=[]
-        for coord in coordsArr:
-            coordsList.append(list(coord))
 
+
+        def skopt_Cost(XRing):
+            solution=self.mode_Match(XRing,parallel=parallel)
+            self.solutionList.append(solution)
+            cost=self.cost_Function(solution.survival)
+            return cost
         gridSearchCostResults=[self.cost_Function(survival) for survival in gridSearchSurvivalResults]
         skoptMimizerJobs=-1 if parallel==True else 1
         t=time.time()
-        skopt.gp_minimize(skopt_Cost,bounds,n_initial_points=0,x0=coordsList,y0=gridSearchCostResults
-                          ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=16,
-                          n_points=50000)
-        print('skopt time inside: ',time.time()-t)
+        skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
+                          ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
+                          n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
+        print('skopt time: ',time.time()-t)
+        # plot_objective(skoptSol)
+        # plt.show()
         return self.best_Solution()

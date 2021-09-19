@@ -72,6 +72,7 @@ class ParticleTracer:
 
         self.T=None #total time elapsed
         self.h=None #step size
+        self.minTimeStepsPerElement=3
 
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step
@@ -113,10 +114,11 @@ class ParticleTracer:
         self.T=0.0
         if self.particle.clipped is not None:
             self.particle.clipped=False
-        dl=self.particle.v0*self.h #approximate stepsize
+        LMin=self.particle.v0*self.h*self.minTimeStepsPerElement
         for el in self.latticeElementList:
-            if dl>el.Lo/3.0: #have at least a few steps in each element
-                raise Exception('STEP SIZE TOO LARGE')
+            if el.L<=LMin: #have at least a few steps in each element
+                print(el,el.L,LMin,self.particle.v0,self.h)
+                raise Exception('element too short for time steps size')
         self.currentEl = self.which_Element_Lab_Coords(self.particle.q)
         self.particle.currentEl=self.currentEl
         self.particle.logged= not self.fastMode #if using fast mode, there will NOT be logging
