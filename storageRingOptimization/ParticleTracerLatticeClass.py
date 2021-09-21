@@ -54,11 +54,11 @@ class ParticleTracerLattice:
         #input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         #is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
-        self.m_Actual = 1.1648E-26  # mass of lithium 7, SI
+        self.mass_Li7 = 1.1648E-26  # mass of lithium 7, SI
         self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
-        #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=m_Actual*m_Adjust where m_Adjust
-        # is 1. Then F=B0'*u0/m_Actual=B0'*u0_Adjust=m_Adjust*a
-        self.u0=self.u0_Actual/self.m_Actual #Adjusted value of bohr magneton, about equal to 800
+        #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=mass_Li7*m_Adjust where m_Adjust
+        # is 1. Then F=B0'*u0/mass_Li7=B0'*u0_Adjust=m_Adjust*a
+        self.u0=self.u0_Actual/self.mass_Li7 #Adjusted value of bohr magneton, about equal to 800
         self.kb = 1.38064852E-23  # boltzman constant, SI
 
         self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees

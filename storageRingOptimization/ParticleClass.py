@@ -141,8 +141,7 @@ class Particle:
         self.EArr=None #total energy
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
         #element index and list of energy changes for each pass
-        self.yInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
-        self.zInterp=None #interpolating function as a function of x or s (where s is orbit trajectory analog of x)
+        self.probability=1.0 #used for swarm behaviour based on probability
     def reset(self):
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi)

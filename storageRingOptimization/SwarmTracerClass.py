@@ -19,9 +19,11 @@ import skopt
 
 
 
-
-
-
+def lorentz_Function(x,gamma):
+    #returns a value of 1.0 for x=0
+    return (gamma/2)**2/(x**2+(gamma/2)**2)
+def normal(v,sigma,v0=0.0):
+    return np.exp(-.5*((v-v0)/sigma)**2)
 
 
 
@@ -83,33 +85,46 @@ class SwarmTracer:
             else:
                 swarm.add_Particle(qi, pi)
         return swarm
-    def initialize_Observed_Swarm_In_Phase_Space(self,numParticles=None,sameSeed=True):
-        #generate a cloud in phase space from observed data from the experiment. This loads saved data because it takes
-        #a while to generate these values. The returned particle are randomly sampled from the full cloud to achieve
-        #the desired number of particles
-        #numParticles: Number of particles sampled. Maximum of about 20000 (depends on the files exact amount). If None
-        #use all
-        #sameSeed: Wether to reuse the same seed for reproducible results
-        #returns an array of particle coordinates as [[x,y,pz,px,py],....]
+    def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam,collectorOutputAngle,numParticles,
+                    gammaSpace=3.5e-3,temperature=.003,sameSeed=False,upperSymmetry=False,equalProbability=False):
+        #this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
+        #swarm that is well spread out in space, then weighitng each particle by it's probability according to the
+        #observed data. The probability is finally rescaled
+        #captureDiam: Diameter of the circle of atoms we wish to collect, meters
+        #collectorOutputAngle: Maximum angle of atoms leaving the collector, radians
+        #numParticles: Number of particles to sample. Will not always equal exactly this
+        #gammaSpace: The FWHM of the lorentz function that models our spatial data, meters
+        #temperature: The temperature of the atoms, kelvin. Decides thermal velocity spread
 
-        fileName= 'phaseSpaceCloud.dat'
-        data=np.loadtxt(fileName)
-        maxParticles=data.shape[0]
-        if numParticles==None:
-            numParticles=maxParticles
-        elif numParticles>maxParticles:
-            raise Exception('You have requested more particles than are available in the file')
-        if sameSeed==True: #use the same seed to get repeatable results
-            np.random.seed(42)
-        np.random.shuffle(data)
-        indexArr=np.random.choice(np.arange(data.shape[0]),size=numParticles)
-        particleCoords=data[indexArr]
-        swarm=Swarm()
-        for coords in particleCoords:
-            swarm.add_Particle(qi=coords[:3],pi=coords[3:])
-        if sameSeed==True:
-            np.random.seed(int(time.time())) #rerandomize the seed (kind of random)
-        return swarm
+        assert 0.0<captureDiam<.1 and 0.0<collectorOutputAngle<.1 and 0.0<gammaSpace<.01\
+               and 0.0<temperature<.1 #reasonable values
+
+        pTransMax=self.lattice.v0Nominal*np.tan(collectorOutputAngle) #transverse velocity dominates thermal velocity,
+        #ie, geometric heating
+        sigmaVelocity=np.sqrt(self.lattice.kb*temperature/self.lattice.mass_Li7) #thermal velocity spread. Used for
+        #longitudinal velocity only because geometric dominates thermal in transverse dimension
+        pLongitudinalMax=2*sigmaVelocity+(1-np.cos(collectorOutputAngle))*self.lattice.v0Nominal #include 2 sigma of
+        #velocity, and geometric spread
+        swarmEvenlySpread=self.initalize_PseudoRandom_Swarm_In_Phase_Space(captureDiam/2.0,pTransMax,pLongitudinalMax,
+                                                            numParticles,sameSeed=sameSeed,upperSymmetry=upperSymmetry)
+        if equalProbability==True: #don't apply the observed swarm characteristicssss
+            return swarmEvenlySpread
+        probabilityList=[]
+        for particle in swarmEvenlySpread:
+            probability=1.0
+            x,y,z=particle.qi
+            r=np.sqrt(y**2+z**2) #remember x is longitudinal
+            px,py,pz=particle.pi
+            probability=probability*lorentz_Function(r,gammaSpace) #spatial probability
+            pTrans=np.sqrt(py**2+pz**2)
+            pxMean=-np.sqrt(self.lattice.v0Nominal**2-pTrans**2)
+            probability=probability*normal(px,sigmaVelocity,v0=pxMean)
+            probabilityList.append(probability)
+        peakProbability=max(probabilityList)
+        for particle,probability in zip(swarmEvenlySpread.particles,probabilityList):
+            particle.probability=probability/peakProbability
+            assert 0.0<=particle.probability<=1.0
+        return swarmEvenlySpread
     def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,sameSeed=False,
                                                     circular=True,smallXOffset=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
@@ -171,28 +186,6 @@ class SwarmTracer:
                 swarm.add_Particle(qi=q,pi=p)
         if sameSeed==True or type(sameSeed)==int:
             np.random.seed(int(time.time()))  # re randomize
-        return swarm
-
-    def initialize_Random_Swarm_At_Combiner_Output(self, qMax, pMax, num, upperSymmetry=False, sameSeed=True,pxMax=None):
-
-        #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube.
-        #A seed can be reused to getrepeatable random results
-        #pxMax: what value to use for longitudinal momentum spread. if None use the nominal value
-        #qMax: maximum dimension in position space of hypercube
-        #pMax: maximum dimension in momentum space of hupercube
-        #num: number of particle in phase space
-        #upperSymmetry: wether to exploit lattice symmetry by only using particles in upper half plane
-        #sameSeed: wether to use the same seed eveythime in the nump random generator, the number 42, or a new one
-        #return: a swarm object
-        swarm = self.initalize_Random_Swarm_In_Phase_Space(qMax, pMax, num, upperSymmetry=upperSymmetry,
-                                                           sameSeed=sameSeed)
-        R = self.lattice.combiner.RIn
-        r2 = self.lattice.combiner.r2
-        for particle in swarm.particles:
-            particle.q[:2] = particle.q[:2] @ R
-            particle.q += r2
-            particle.p[:2] = particle.p[:2] @ R
-            particle.q = particle.q + particle.p * 1e-12  # scoot particle into next element
         return swarm
 
     def generate_Probe_Sample(self,v0,seed=None,rpPoints=3,rqPoints=3):

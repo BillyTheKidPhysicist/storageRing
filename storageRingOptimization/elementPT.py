@@ -134,6 +134,7 @@ class Element:
 
     def set_Length(self, L):
         # this is used typically for setting the length after satisfying constraints
+        assert L>0.0
         self.L = L
         self.Lo = L
 
@@ -253,6 +254,7 @@ class LensIdeal(Element):
 
     def set_Length(self, L):
         # this is used typically for setting the length after satisfying constraints
+        assert L>0.0
         self.L = L
         self.Lo = self.L
 
@@ -1184,6 +1186,7 @@ class HalbachLensSim(LensIdeal):
             self.fill_Params()
 
     def set_Length(self,L):
+        assert L>0.0
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):

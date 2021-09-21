@@ -6,7 +6,7 @@ import numpy.linalg as npl
 import skopt
 from ParticleTracerClass import ParticleTracer
 import numpy as np
-from ParticleClass import Swarm
+from ParticleClass import Swarm,Particle
 import scipy.optimize as spo
 import time
 import scipy.interpolate as spi
@@ -19,16 +19,16 @@ import globalMethods as gm
 class Solution:
     #class to hold onto results of each solution
     def __init__(self):
-        self.xInjector_B=np.nan
-        self.xRing_B=np.nan
-        self.xRing_L=np.nan
+        self.xInjector_TunedParams=np.nan
+        self.xRing_TunedParams1=np.nan #paramters tuned by the 'outer' gp minimize
+        self.xRing_TunedParams2=np.nan #paramters tuned by the 'inner' gp minimize
         self.survival=np.nan
         self.description=None
     def __str__(self): #method that gets called when you do print(Solution())
         string='----------Solution-----------   \n'
-        string+='injector element spacing optimum configuration: '+str(self.xInjector_B)+'\n '
-        string+='storage ring magnetic field optimum configuration: '+str(self.xRing_B)+'\n '
-        string+='storage ring spatial optimal optimum configuration: '+str(self.xRing_L)+'\n '
+        string+='injector element spacing optimum configuration: '+str(self.xInjector_TunedParams)+'\n '
+        string+='storage ring tuned params 1 optimum configuration: '+str(self.xRing_TunedParams1)+'\n '
+        string+='storage ring tuned params 2 optimum configuration: '+str(self.xRing_TunedParams2)+'\n '
 
         string+='optimum result: '+str(self.survival)+'\n'
         string+='----------------------------'
@@ -53,13 +53,15 @@ class phaseSpaceInterpolater:
         totalRevs=0
         zIndex=2
         for particle in swarmInjector:
+            assert 0.0<=particle.probability<=1.0 and particle.traced==True
             q=particle.q.copy()
             p=particle.p.copy()
             if useUpperSymmetry==True and q[zIndex]<0:
                 p[zIndex]=-p[zIndex]
                 q[zIndex]=-q[zIndex]
             X=np.append(q,p)
-            totalRevs+=self.interpolater(X)[0]
+            weightedRevolutions=self.interpolater(X)[0]*particle.probability
+            totalRevs+=weightedRevolutions
         return totalRevs
 class LatticeOptimizer:
     def __init__(self, latticeRing,latticeInjector):
@@ -90,21 +92,21 @@ class LatticeOptimizer:
         self.numParticlesInjector=500
         self.numParticlesRing=50000
 
-        self.qMaxInjector=2.5e-3
-        self.pTransMaxInjector=10.0
-        self.pxMaxInjector=3.0
+        self.spotCaptureDiam=5e-3
+        self.collectorAngleMax=.06
+        self.temperature=3e-3
         fractionalMarginOfError=1.25
         self.minElementLength=fractionalMarginOfError*self.particleTracerRing.minTimeStepsPerElement*\
-                              (self.latticeRing.v0Nominal+self.pxMaxInjector)*self.h
+                              self.latticeRing.v0Nominal*self.h
         self.tunableTotalLengthList=[] #list to hold initial tunable lengths for when optimizing by tuning element
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
     def generate_Swarms(self):
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
-        self.swarmInjectorInitial=self.swarmTracerInjector.initalize_PseudoRandom_Swarm_In_Phase_Space(self.qMaxInjector,
-                                                self.pTransMaxInjector,self.pxMaxInjector,self.numParticlesInjector,
-                                                sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
+        self.swarmInjectorInitial=self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
+            self.spotCaptureDiam, self.collectorAngleMax,self.numParticlesInjector,temperature=self.temperature,
+                                            sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
         injectorBounds=self.get_Injector_Swarm_Bounds()
         pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
         pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
@@ -121,22 +123,22 @@ class LatticeOptimizer:
         injectorLensLength=.2
         injectorLenBoreRadius=.025
         numberInjectorElements=4
-        injectorBounds=[(-0.014895, 0.019988), (-0.006007, 0.005975), (-3.111126, 2.984366), (-13.535028, 12.83725)
-            , (-8.042546, 7.964801)]#10 m/s
+        injectorBounds=[(-0.014673, 0.017421), (-0.005936, 0.005862), (-4.138449, 3.867833), (-11.82795, 11.399882),
+                        (-7.697577, 7.652111)]#10 m/s
         if self.latticeInjector.elList[1].L!= injectorLensLength: raise Exception('lens has changed')
         elif self.latticeInjector.elList[1].rp!=injectorLenBoreRadius:  raise Exception('lens has changed')
         elif len(self.latticeInjector.elList)!=numberInjectorElements:  raise Exception('number of element have changed')
-        elif self.pxMaxInjector!=3.0 or self.pTransMaxInjector!=10.0 or self.qMaxInjector!=2.5e-3:
+        elif self.temperature!=3e-3 or self.collectorAngleMax!=.06 or self.spotCaptureDiam!=5e-3:
             raise Exception('Swarm paramters have changed')
         else: return injectorBounds
     def find_Injector_Mode_Match_Bounds(self,parallel):
         #todo: this should be set outside of here
         #todo: maybe improve this by using more particles
         injectorParamsBounds=(.05,1.0)
-        numGridPointsPerDim = 50
+        numGridPointsPerDim = 100
         xArr = np.linspace(injectorParamsBounds[0], injectorParamsBounds[1], numGridPointsPerDim)
         coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
-        fracCutOff=.98 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
+        fracCutOff=.95 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
         #resources on outliers
         def wrapper(X): # need a wrapper to update lattice before tracing
             self.update_Injector_Lattice(X)
@@ -303,9 +305,8 @@ class LatticeOptimizer:
         #project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         #configuration
 
-
         solution=Solution()
-        solution.xRing_B=XRing
+        solution.xRing_TunedParams2=XRing
         self.update_Ring_Lattice(XRing)
         swarmRingTraced=self.revFunc(parallel=parallel)
         if swarmRingTraced is None: #unstable orbit
@@ -318,7 +319,6 @@ class LatticeOptimizer:
             survival=self.compute_Swarm_Survival(swarm,modeMatchFunc)
             cost=self.cost_Function(survival)
             return cost
-
         bounds=[(0.1,.5),(0.05,.5)]
         gridEdgeNum=10
         coordsForGrid=[]
@@ -333,8 +333,9 @@ class LatticeOptimizer:
         else:
             costArr=np.asarray([cost_To_Minimize(coord) for coord in coordsArr])
             solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
+
         scipySol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
-        solution.xInjector_B=scipySol.x
+        solution.xInjector_TunedParams=scipySol.x
         solution.survival=self.inverse_Cost_Function(scipySol.fun)
         return solution
 
@@ -342,7 +343,7 @@ class LatticeOptimizer:
         apNextElement=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
         swarmEnd=Swarm()
         for particle in swarmInjectorTraced:
-            q=particle.q-self.latticeInjector.combiner.r2
+            q=particle.q.copy()-self.latticeInjector.combiner.r2
             q[:2]=self.latticeInjector.combiner.RIn@q[:2]
             if q[0]<self.h*self.latticeRing.v0Nominal:  #if the particle is within a timestep of the end,
                 # assume it's at the end
@@ -350,7 +351,10 @@ class LatticeOptimizer:
                 p[:2]=self.latticeInjector.combiner.RIn@p[:2]
                 q=q+p*np.abs(q[0]/p[0])
                 if np.sqrt(q[1]**2+q[2]**2)<apNextElement:
-                    swarmEnd.add_Particle(qi=q,pi=p)
+                    particleEnd=particle.copy()
+                    particleEnd.q=q
+                    particleEnd.p=p
+                    swarmEnd.particles.append(particleEnd)
         return swarmEnd
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self):
         swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy(),self.h,np.inf,
@@ -404,8 +408,10 @@ class LatticeOptimizer:
     def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
         #survival as percent of particle surviving till the maximum time
         totalRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
-        maximumRevs=self.swarmInjectorInitial.num_Particles()*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
+        numWeightedParticles=sum([particle.probability for particle in self.swarmInjectorInitial])
+        maximumRevs=numWeightedParticles*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
         survival=1e2*totalRevolutions/maximumRevs
+        assert 0.0<=survival<=100.0
         return survival
     @staticmethod
     def cost_Function(survival):
@@ -490,8 +496,8 @@ class LatticeOptimizer:
         skoptMimizerJobs=-1 if parallel==True else 1
         t=time.time()
         skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
-                          ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
-                          n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
+                                   ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
+                                   n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
         print('skopt time: ',time.time()-t)
         # plot_objective(skoptSol)
         # plt.show()

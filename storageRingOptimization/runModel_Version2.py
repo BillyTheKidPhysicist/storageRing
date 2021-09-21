@@ -17,28 +17,42 @@ from profilehooks import profile
 import matplotlib.pyplot as plt
 
 '''
-This models the storage ring as a system of only permanent magnets, with two permanent magnets being tunable. This
-obviously lacks some physicality
+This models the storage ring as a system of only permanent magnets, with two permanent magnets being moved longitudinally
+for tunability
 '''
 
 
-def solve_System(fieldBounds,num,benderMagnetStrength):
+def solve_System(spacingBounds,num,benderMagnetStrength):
     def solve_For_Lattice_Params(X,parallel=False):
         combinerGap=5e-2
-        rpBend,rpLens,Lm=X
+        tunableDriftGap=5e-2
+        rpBend,Lm=X
+        rpLens=rpBend
         PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing')
         rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,parallel=parallel)  #25% of time here, 1.0138513851385138
+        PTL_Ring.add_Drift(tunableDriftGap/2)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
+        PTL_Ring.add_Drift(tunableDriftGap/2)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
         PTL_Ring.add_Combiner_Sim('combinerV3.txt')
         PTL_Ring.add_Drift(combinerGap)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
+        PTL_Ring.add_Drift(tunableDriftGap/2)
+        PTL_Ring.add_Halbach_Lens_Sim(rpLens,.25)
+        PTL_Ring.add_Drift(tunableDriftGap/2)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
         PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  #17.8 % of time here
         PTL_Ring.elList[4].fieldFact=benderMagnetStrength
         PTL_Ring.elList[6].fieldFact=benderMagnetStrength
+        PTL_Ring.get_Element_Before_And_After(PTL_Ring.elList[1])
+        PTL_Ring.get_Element_Before_And_After(PTL_Ring.elList[8])
+
+        # file=open('ringFile','wb')
+        # dill.dump(PTL_Ring,file)
+        # file=open('ringFile','rb')
+        # PTL_Ring=dill.load(file)
 
         # PTL_Injector=ParticleTracerLattice(200.0,latticeType='injector')
         # PTL_Injector.add_Drift(.1,ap=.025)
@@ -55,11 +69,11 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
 
         test=LatticeOptimizer(PTL_Ring,PTL_Injector)
         test.generate_Swarms()  #33 % of time here
-        sol=test.optimize_Magnetic_Field((0,3),fieldBounds,30,maxIter=20,parallel=parallel)
+        sol=test.optimize_Magnetic_Field((1,8),spacingBounds,20,'spacing',maxIter=20,parallel=parallel)
         sol.xRing_L=X
         sol.description='Pseudorandom search'
         return sol
-    paramBounds=[(.005,.03),(.005,.03),(.005,.025)]
+    paramBounds=[(.005,.03),(.005,.025)]
     np.random.seed(42)
     initialSampleCoords=skopt.sampler.Sobol().generate(paramBounds,num)
     t=time.time()
@@ -97,9 +111,9 @@ def solve_System(fieldBounds,num,benderMagnetStrength):
 
 
 num=32*2
-fieldBounds=[(0.0,1.0),(0.0,1.0)]
+spacingBounds=[(0.0,1.0),(0.0,1.0)]
 singleLayerStrength=1.0
-solve_System(fieldBounds,num,singleLayerStrength)
+solve_System(spacingBounds,num,singleLayerStrength)
 
 
 
