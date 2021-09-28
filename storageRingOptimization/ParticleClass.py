@@ -76,7 +76,11 @@ class Swarm:
         #with at all
         swarmNew=Swarm()
         for particle in self.particles:
-            swarmNew.add_Particle(qi=particle.qi,pi=particle.pi)
+            assert particle.traced==False
+            particleNew=Particle(qi=particle.qi.copy(),pi=particle.pi.copy())
+            particleNew.probability=particle.probability
+            particleNew.color=particle.color
+            swarmNew.particles.append(particleNew)
         return swarmNew
     def num_Particles(self):
         return len(self.particles)
@@ -102,7 +106,11 @@ class Particle:
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
-    def __init__(self,qi=np.asarray([0.0, 0.0, 0.0]),pi=np.asarray([-200.0, 0.0, 0.0])):
+    def __init__(self,qi=None,pi=None):
+        if qi is None:
+            qi=np.zeros(3)
+        if pi is None:
+            pi=np.asarray([-200.0, 0.0, 0.0])
         self.q=qi #position, lab frame, meters
         self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
         self.qi=qi.copy()#initial position, lab frame, meters
@@ -151,7 +159,7 @@ class Particle:
         string+='qi: '+str(self.qi)+'\n'
         string+='pi: '+str(self.pi)+'\n'
         string+='p: '+str(self.p)+'\n'
-        string+='p: '+str(self.p)+'\n'
+        string+='q: '+str(self.q)+'\n'
         string+='current element: '+str(self.currentEl)+' \n '
         string+='revolution: '+str(self.revolutions)+' \n'
         np.set_printoptions(precision=8) #reset output to default per docs

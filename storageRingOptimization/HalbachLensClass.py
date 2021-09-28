@@ -26,7 +26,7 @@ def B_NUMBA(r,r0,m):
 class RectangularPrism:
     #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
     #are equal, but the length, in the z plane, can be anything. not specified a cube is assumed.
-    def __init__(self, width,length,M=1.15E6,MVec=np.asarray([1,0,0]),spherePerDim=6):
+    def __init__(self, width,length,M=1.15E6,MVec=None,spherePerDim=6):
         #width: The width in the x,y plane without rotation, meters
         #lengthI: The length in the z plane without rotation, meters
         #M: magnetization, SI
@@ -35,6 +35,9 @@ class RectangularPrism:
         #a factor
         # theta rotation is clockwise about y in my notation, originating at positive z
         # psi is counter clockwise around z
+        assert width>0.0 and length >0.0 and spherePerDim>0 and M>0
+        if MVec is None:
+            MVec=np.asarray([1,0,0])
         self.width = width
         self.length=length
         self.M=M
@@ -166,6 +169,7 @@ class Sphere:
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         #M: magnetization
+        assert radiusInInches>0 and M>0
         self.angle = None  # angular location of the magnet
         self.radius = radiusInInches * .0254  # meters. RADIUS!!!
         self.volume=(4*np.pi/3)*self.radius**3 #m^3
@@ -274,6 +278,7 @@ class Layer:
         #M: magnetization, SI
         #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         #a factor
+        assert width>0.0 and length> 0.0 and spherePerDim>0.0 and M>0.0
         self.z = z
         self.width=width
         self.length=length
@@ -322,6 +327,8 @@ class HalbachLens:
         #M: magnetization.
         #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         #a factor
+        assert numLayers>0.0 and width>0.0 and rp>0.0 and (length is None or length>0.0) and numSpherePerDim>0.0
+        assert M>0.0
         self.numLayers=numLayers
         self.width=width
         self.numSpherePerDim=numSpherePerDim

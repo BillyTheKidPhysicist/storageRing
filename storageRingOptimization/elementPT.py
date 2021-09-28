@@ -82,7 +82,8 @@ class Element:
         self.apR = None  # apeture on the'right'.
         self.type = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         # constructed in particleTracerLattice
-        self.sigma=None # the transverse translational. Only applicable to bump lenses now
+        self.bumpOffset=None # the transverse translational. Only applicable to bump lenses now
+        self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
         self.sim = None  # wether the field values are from simulations
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
@@ -270,11 +271,6 @@ class LensIdeal(Element):
                 return True
             else:
                 return False
-
-class BumpsLensIdeal(LensIdeal):
-    def __init__(self, PTL, L, Bp, rp,sigma,ap, fillParams=True):
-        super().__init__(PTL, L, Bp, rp, ap, fillParams=True)
-        self.sigma=sigma #the amount of vertical shift for bumping the beam over
 
 class Drift(LensIdeal):
     def __init__(self, PTL, L, ap):
@@ -1157,13 +1153,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rp,L,apFrac):
+    def __init__(self,PTL, rp,L,apFrac,bumpOffset):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L
-        self.Lm = None#L-2*self.fringeFracOuter*rp #hard edge length of magnet
+        self.bumpOffset=bumpOffset
         self.Lo=None
         self.rp=rp
         self.ap=rp*apFrac
@@ -1201,7 +1197,7 @@ class HalbachLensSim(LensIdeal):
                                  self.Lm)  #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
-
+        assert self.Lm>0.0
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
         mountThickness=5e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
@@ -1328,8 +1324,3 @@ class HalbachLensSim(LensIdeal):
             return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
         self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
-
-class BumpsLensSimWithCaps(HalbachLensSim):
-    def __init__(self, PTL, file2D, file3D,fringeFrac, L,rp, ap,sigma):
-        super().__init__(PTL, file2D, file3D,fringeFrac, L,rp, ap)
-        self.sigma=sigma #the amount of vertical shift for bumping the beam over

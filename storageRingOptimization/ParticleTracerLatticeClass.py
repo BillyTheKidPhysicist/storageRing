@@ -5,7 +5,7 @@ from shapely.geometry import Polygon
 import scipy.interpolate as spi
 import numpy.linalg as npl
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,BumpsLensIdeal,BumpsLensSimWithCaps
+    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim
 class SimpleLocalMinimizer:
     #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
     #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
@@ -120,13 +120,8 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False):
-        el=HalbachLensSim(self, rp,Lm,apFrac)
-        el.index = len(self.elList) #where the element is in the lattice
-        self.elList.append(el) #add element to the list holding lattice elements in order
-        if constrain==True: self.set_Constrained_Linear_Element(el)
-    def add_Bump_Lens_Sim_With_Caps(self, file2D, file3D,fringeFrac, L,sigma, ap=None,rp=None,constrain=False):
-        el=BumpsLensSimWithCaps(self, file2D, file3D, fringeFrac,L, rp,ap,sigma)
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None):
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -146,23 +141,6 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
-    def add_Bump_Lens_Ideal(self,L,Bp,rp,sigma,ap=None):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #L: Length of lens, m
-        #Bp: field strength at pole face of lens, T
-        #rp: bore radius of element, m
-        #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius. unitless
-        #sigma: The transverse translation of the element that gives rise to the bumping of the beam
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-        el=BumpsLensIdeal(self, L, Bp, rp,sigma, ap) #create a lens element object
-        el.index = len(self.elList) #where the element is in the lattice
-        self.elList.append(el) #add element to the list holding lattice elements in order
-
     def add_Drift(self,L,ap=.03):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: length of drift element, m
@@ -542,7 +520,7 @@ class ParticleTracerLattice:
             if i==0: #if the element is the first in the lattice
                 xb=0.0#set beginning coords
                 yb=0.0#set beginning coords
-                if el.sigma is not None:
+                if el.bumpOffset is not None:
                     raise Exception('First element cannot be bump element')
                 if self.latticeType=='storageRing' or self.latticeType=='injector':
                     el.theta=np.pi #first element is straight. It can't be a bender
@@ -553,11 +531,21 @@ class ParticleTracerLattice:
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input
                 el.ne=-el.nb
             else: #if element is not the first
+                prevEl = self.elList[i - 1]
+                if el.type!='STRAIGHT' and np.all(el.bumpVector!=0.0):
+                    raise Exception('Bump offset is only allowed on straight elements')
+                if el.bumpOffset is not None:  # a bump element, need to ad transverse displacement
+                    angle=np.arctan2(prevEl.ne[1],prevEl.ne[0])
+                    anglePerp=angle+np.pi/2
+                    el.bumpVector[0]=el.bumpOffset*np.cos(anglePerp)
+                    el.bumpVector[1]=el.bumpOffset*np.sin(anglePerp)
                 xb=self.elList[i-1].r2[0]#set beginning coordinates to end of last
                 yb=self.elList[i-1].r2[1]#set beginning coordinates to end of last
-                prevEl = self.elList[i - 1]
-                if el.sigma is not None:  # a bump element, need to ad transverse displacement
-                    yb += el.sigma
+                xb=xb-prevEl.bumpVector[0] #move element back to trajectory from bump offset of previous
+                yb=yb-prevEl.bumpVector[1] #move element back to trajectory from bump offset of previous
+                xb=xb+el.bumpVector[0] #now add the bump offset of current element
+                yb=yb+el.bumpVector[1] #now add the bump offset of current element
+
                 #set end coordinates
                 if el.type=='STRAIGHT':
                     if prevEl.type=='COMBINER':
@@ -578,7 +566,6 @@ class ParticleTracerLattice:
                         yb+=dr[1]
                         xe+=dr[0]
                         ye+=dr[1]
-
                     el.r0=np.asarray([(xb+xe)/2,(yb+ye)/2,0]) #center of lens or drift is midpoint of line connecting beginning and end
                 elif el.type=='BEND':
                     if prevEl.type=='COMBINER':

@@ -24,12 +24,13 @@ class Solution:
         self.xRing_TunedParams2=np.nan #paramters tuned by the 'inner' gp minimize
         self.survival=np.nan
         self.description=None
+        self.bumpParams=None # List of parameters used in the misalignment testing
     def __str__(self): #method that gets called when you do print(Solution())
         string='----------Solution-----------   \n'
         string+='injector element spacing optimum configuration: '+str(self.xInjector_TunedParams)+'\n '
         string+='storage ring tuned params 1 optimum configuration: '+str(self.xRing_TunedParams1)+'\n '
         string+='storage ring tuned params 2 optimum configuration: '+str(self.xRing_TunedParams2)+'\n '
-
+        string+='bump params: '+str(self.bumpParams)+'\n'
         string+='optimum result: '+str(self.survival)+'\n'
         string+='----------------------------'
         return string
@@ -380,7 +381,6 @@ class LatticeOptimizer:
         else:
             swarm = self.swarmTracerRing.trace_Swarm_Through_Lattice(self.swarmRingInitialAtCombinerOutput.quick_Copy(), self.h, self.T,
                                                     parallel=parallel, fastMode=True,copySwarm=False,accelerated=True)
-            # self.latticeRing.show_Lattice(swarm=swarm,trueAspectRatio=False,showTraceLines=True)
             return swarm
 
     def update_Injector_Lattice(self,X):
@@ -391,8 +391,9 @@ class LatticeOptimizer:
     def update_Ring_Lattice(self,X):
         if self.tuningChoice=='field':
             self.update_Ring_Field_Values(X)
-        else:
+        elif self.tuningChoice=='spacing':
             self.update_Ring_Spacing(X)
+        else: raise Exception('wrong tuning choice')
     def update_Ring_Field_Values(self,X):
         for el,arg in zip(self.tunedElementList,X):
             el.fieldFact=arg
@@ -407,10 +408,10 @@ class LatticeOptimizer:
         self.latticeRing.build_Lattice()
     def compute_Swarm_Survival(self,swarmTraced,modeMatchFunction):
         #survival as percent of particle surviving till the maximum time
-        totalRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
-        numWeightedParticles=sum([particle.probability for particle in self.swarmInjectorInitial])
-        maximumRevs=numWeightedParticles*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
-        survival=1e2*totalRevolutions/maximumRevs
+        totalWeightedRevolutions=modeMatchFunction(swarmTraced,self.useLatticeUpperSymmetry)
+        numWeightedInitialParticles=sum([particle.probability for particle in self.swarmInjectorInitial])
+        maximumRevs=numWeightedInitialParticles*self.T*self.latticeRing.v0Nominal/self.latticeRing.totalLength
+        survival=1e2*totalWeightedRevolutions/maximumRevs
         assert 0.0<=survival<=100.0
         return survival
     @staticmethod
