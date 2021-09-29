@@ -67,6 +67,7 @@ class Element:
         #bore radius plus magnets and mount material radial thickness
         self.fringeFrac=None #the ratio of the extra length added to hard end to account for fringe fields to the radius
         #of the element
+        self.numMagnets=None #number of magnets, typically segments in segmented bending magnet
         self.ang = 0  # bending angle of the element. 0 for lenses and drifts
         self.Lm = None  # hard edge length of magnet along line through the bore
         self.L = None  # length of magnet along line through the bore

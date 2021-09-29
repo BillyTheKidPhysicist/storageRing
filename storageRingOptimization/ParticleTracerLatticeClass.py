@@ -69,8 +69,8 @@ class ParticleTracerLattice:
         self.bender1=None #bender element object
         self.bender2=None #bender element object
         self.combiner=None #combiner element object
-        self.linearElementToConstraint=None #element whos length will be changed when the lattice is constrained to
-        # satisfy geometry. Can only be one
+        self.linearElementsToConstraint=[] #elements whos length will be changed when the lattice is constrained to
+        # satisfy geometry. Must be inside bending region
 
         self.elList=[] #to hold all the lattice elements
     def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
@@ -109,10 +109,8 @@ class ParticleTracerLattice:
         # plt.show()
         return rOffsetFactArrDense[np.argmin(newVals)]  #optimal rOffsetFactor
     def set_Constrained_Linear_Element(self,el):
-        if self.linearElementToConstraint is not None:
-            raise Exception('There can only be one linear constrained element')
-        else:
-            self.linearElementToConstraint=el
+        if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
+        self.linearElementsToConstraint.append(el)
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
@@ -244,11 +242,10 @@ class ParticleTracerLattice:
         #track potential. Wether to have enable the element function that returns magnetic pontential at a given point.
         #there is a cost to keeping this enabled because of pickling time
         #latticeType: Wether lattice is 'storageRing' type or 'injector' type.
-
         if len(self.benderIndices) ==2:
             self.bender1=self.elList[self.benderIndices[0]]   #save to use later
             self.bender2=self.elList[self.benderIndices[1]] #save to use later
-        # self.catch_Errors(constrain,buildLattice)
+        self.catch_Errors(constrain,buildLattice)
         if constrain==True:
             self.constrain_Lattice()
         if buildLattice==True:
@@ -259,21 +256,37 @@ class ParticleTracerLattice:
     def build_Lattice(self,enforceClosedLattice=True,surpressWarning=False):
         self.set_Element_Coordinates(enforceClosedLattice,surpressWarning)
         self.make_Geometry()
+    def set_Linear_Constrained_Element_Lengths(self,L):
+        #right now only supports up to two elements with benders on one side of them and one element between them
+        assert len(self.linearElementsToConstraint)<=2
+        if len(self.linearElementsToConstraint)==1:
+            self.linearElementsToConstraint[0].set_Length(L)
+        else:
+            sharedLength=L
+            for i in range(self.linearElementsToConstraint[0].index+1,len(self.elList)):
+                el=self.elList[i]
+                if el is self.linearElementsToConstraint[1]:
+                    break
+                else:
+                    sharedLength-=el.L
+            for el in self.linearElementsToConstraint: el.set_Length(sharedLength/2)
     def constrain_Lattice(self):
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
         params=self.solve_Combiner_Constraints()
-        assert (isinstance(self.linearElementToConstraint,HalbachLensSim) or
-               isinstance(self.linearElementToConstraint,LensIdeal)) and \
-               self.linearElementToConstraint is not None
+        for linearElementToConstrain in self.linearElementsToConstraint:
+            assert (isinstance(linearElementToConstrain,HalbachLensSim) or
+               isinstance(linearElementToConstrain,LensIdeal)) and linearElementToConstrain is not None
+            assert self.elList[linearElementToConstrain.index-1].type=='BEND' or\
+                   self.elList[linearElementToConstrain.index+1].type=='BEND'
         if self.bender1.segmented==True:
             rb1, rb2, numMagnets1, numMagnets2, L3=params
             self.bender1.rb=rb1
             self.bender1.numMagnets=numMagnets1
             self.bender2.rb=rb2
             self.bender2.numMagnets=numMagnets2
-            self.linearElementToConstraint.set_Length(L3)
+            self.set_Linear_Constrained_Element_Lengths(L3)
             self.bender1.fill_Params_Post_Constrained()
             self.bender2.fill_Params_Post_Constrained()
         else:
@@ -282,10 +295,9 @@ class ParticleTracerLattice:
             self.bender2.ang = phi2
             #update benders
             # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
-            self.linearElementToConstraint.set_Length(L3)
+            self.set_Linear_Constrained_Element_Lengths(L3)
             self.bender1.fill_Params()
             self.bender2.fill_Params()
-            self.linearElementToConstraint.fill_Params()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
@@ -498,13 +510,6 @@ class ParticleTracerLattice:
                     raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
             if self.bender1.segmented != self.bender2.segmented:
                 raise Exception('BENDER MUST BOTH BE SEGMENTED OR BOTH NOT')
-        if builLattice==True and constrain==False:
-            if self.bender1.ang is None or self.bender2.ang is None:
-                raise Exception('BENDER ANGLE IS NOT SPECIFIED')
-            if self.bender1.numMagnets is None and self.bender2.numMagnets is None:
-                raise Exception('BENDER NUMBER OF MAGNETS IS NOT SPECIFIED')
-            if type(self.bender1.numMagnets)!=type(self.bender2.numMagnets): #for segmented benders
-                raise Exception('BENDERS BOTH MUST HAVE NUMBER OF MAGNETS SPECIFIED OR BE None')
     def set_Element_Coordinates(self,enforceClosedLattice,surpressWarning):
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
@@ -598,7 +603,6 @@ class ParticleTracerLattice:
                     el.nb=np.asarray([np.cos(el.theta-np.pi), np.sin(el.theta-np.pi)])  # normal vector to input
                     el.ne=np.asarray([np.cos(el.theta-np.pi+(np.pi-el.ang)), np.sin(el.theta-np.pi+(np.pi-el.ang))])  # normal vector to output
                     el.r0=np.asarray([xb+el.rb*np.sin(el.theta),yb-el.rb*np.cos(el.theta),0]) #coordinates of center of bending
-
                     #section, even with caps
                     if el.cap==True:
                         xe+=-el.nb[0]*el.Lcap+el.ne[0]*el.Lcap

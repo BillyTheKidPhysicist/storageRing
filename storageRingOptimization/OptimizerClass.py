@@ -1,8 +1,10 @@
 from skopt.plots import plot_objective
 import warnings
 from shapely.affinity import rotate,translate
+import black_box as bb
 import sys
 import numpy.linalg as npl
+from profilehooks import profile
 import skopt
 from ParticleTracerClass import ParticleTracer
 import numpy as np
@@ -320,14 +322,15 @@ class LatticeOptimizer:
             survival=self.compute_Swarm_Survival(swarm,modeMatchFunc)
             cost=self.cost_Function(survival)
             return cost
-        bounds=[(0.1,.5),(0.05,.5)]
-        gridEdgeNum=10
+        bounds=[(0.1,.4),(0.05,.4)]
+        gridEdgeNum=4
         coordsForGrid=[]
         for bound in bounds:
             dx=(bound[1]-bound[0])/gridEdgeNum
             xArr=np.linspace(bound[0]+dx,bound[1]-dx,gridEdgeNum)
             coordsForGrid.append(xArr)
         coordsArr=np.asarray(np.meshgrid(*coordsForGrid)).T.reshape(-1,len(bounds))
+        coordsArr=np.row_stack((coordsArr,np.asarray([.15,.15])))
         if parallel==True:
             costArr=np.asarray(self.helper.parallel_Problem(cost_To_Minimize,coordsArr,onlyReturnResults=True))
             solverCoordInitial=coordsArr[np.argmin(costArr)]
@@ -335,24 +338,33 @@ class LatticeOptimizer:
             costArr=np.asarray([cost_To_Minimize(coord) for coord in coordsArr])
             solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
 
-        scipySol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
-        solution.xInjector_TunedParams=scipySol.x
-        solution.survival=self.inverse_Cost_Function(scipySol.fun)
+        useScipy=True
+        if useScipy==True:
+            minimizerSol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
+        else:
+            coordsListForSkopt=coordsArr.tolist()
+            costListForSkopt=costArr.tolist()
+            minimizerSol=skopt.gp_minimize(cost_To_Minimize,bounds,n_calls=20,n_initial_points=0,x0=coordsListForSkopt,
+                                       y0=costListForSkopt,acq_optimizer='sampling',
+                                       n_points=3000,noise=.05)
+        solution.xInjector_TunedParams=minimizerSol.x
+        solution.survival=self.inverse_Cost_Function(minimizerSol.fun)
         return solution
 
-    def move_Survived_Particles_In_Injector_Swarm_To_Origin(self,swarmInjectorTraced):
+    def move_Survived_Particles_In_Injector_Swarm_To_Origin(self,swarmInjectorTraced,copyParticles=False):
         apNextElement=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
         swarmEnd=Swarm()
         for particle in swarmInjectorTraced:
             q=particle.q.copy()-self.latticeInjector.combiner.r2
             q[:2]=self.latticeInjector.combiner.RIn@q[:2]
-            if q[0]<self.h*self.latticeRing.v0Nominal:  #if the particle is within a timestep of the end,
+            if q[0]<=self.h*self.latticeRing.v0Nominal:  #if the particle is within a timestep of the end,
                 # assume it's at the end
                 p=particle.p.copy()
                 p[:2]=self.latticeInjector.combiner.RIn@p[:2]
                 q=q+p*np.abs(q[0]/p[0])
                 if np.sqrt(q[1]**2+q[2]**2)<apNextElement:
-                    particleEnd=particle.copy()
+                    if copyParticles==False: particleEnd=particle
+                    else: particleEnd=particle.copy()
                     particleEnd.q=q
                     particleEnd.p=p
                     swarmEnd.particles.append(particleEnd)
@@ -360,7 +372,7 @@ class LatticeOptimizer:
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self):
         swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy(),self.h,np.inf,
                                                     parallel=False,fastMode=True,copySwarm=False,accelerated=True)
-        swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced)
+        swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced,copyParticles=False)
         swarmEnd=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd,copySwarm=False)
         return swarmEnd
     def test_Stability(self,minRevs=5.0):
@@ -447,7 +459,7 @@ class LatticeOptimizer:
         #gp_minimize requires a list of lists, I make that here
         meshgridArraysList=[np.linspace(bound[0],bound[1],numGridEdge) for bound in tuningBounds]
         tuningCoordsArr=np.asarray(np.meshgrid(*meshgridArraysList)).T.reshape(-1,len(self.tunedElementList))
-        tuningCoordsList=[list(tuneCoord) for tuneCoord in tuningCoordsArr]  #must in list format
+        tuningCoordsList=tuningCoordsArr.tolist()  #must in list format
         return tuningCoordsList
     def fill_Initial_Total_Tuning_Elements_Length_List(self):
         for elCenter in self.tunedElementList:
@@ -495,11 +507,9 @@ class LatticeOptimizer:
             return cost
         gridSearchCostResults=[self.cost_Function(survival) for survival in gridSearchSurvivalResults]
         skoptMimizerJobs=-1 if parallel==True else 1
-        t=time.time()
         skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
                                    ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
                                    n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
-        print('skopt time: ',time.time()-t)
         # plot_objective(skoptSol)
         # plt.show()
         return self.best_Solution()

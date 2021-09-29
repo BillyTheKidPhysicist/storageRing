@@ -62,7 +62,7 @@ class Swarm:
         numSurvived = 0.0
         for particle in self.particles:
             if particle.clipped is None:
-                raise Exception('PARTICLE HAS NOT BEEN TRACED')
+                raise Exception('PARTICLE HAS NO DATA ON SURVIVAL')
             numSurvived += float(not particle.clipped) #if it has NOT clipped then turn that into a 1.0
         if frac == True:
             return numSurvived / len(self.particles)

@@ -1,4 +1,6 @@
 import time
+import warnings
+
 import numpy as np
 import numpy.linalg as npl
 import sys
@@ -331,6 +333,7 @@ class HalbachLens:
         assert M>0.0
         self.numLayers=numLayers
         self.width=width
+        self.rp=rp
         self.numSpherePerDim=numSpherePerDim
         if length is None:
             self.length=width
@@ -353,6 +356,11 @@ class HalbachLens:
                                   (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
         if rp is not None:
             self.set_Radius(rp)
+    def check_Field_For_Reasonable_Values(self,r,BArr):
+        radiusArr=npl.norm(r[:,:2],axis=1)
+        indicesToCheck=radiusArr<.95*self.rp
+        maxReasonableField=1.5 #tesla
+        if BArr[indicesToCheck].max()>maxReasonableField: warnings.warn("Max field is unreasonable")
     def position(self,r0):
         #position the magnet in space
         #r0: 3d position vector of the center of the magnet
@@ -411,11 +419,6 @@ class HalbachLens:
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
         return self._transform_Vector_NUMBA(v,self.theta,self.RInTheta)
-        vNew=v.copy()
-        if self.theta is not None:
-            for i in range(vNew.shape[0]):
-                vNew[i][[0,2]]=vNew[i][[0,2]]@self.ROutTheta
-        return vNew
     @staticmethod
     @numba.njit()
     def _transform_Vector_NUMBA(v,theta,RInTheta):
@@ -441,6 +444,7 @@ class HalbachLens:
         for layer in self.layerList:
             BArr+=layer.B(rEval)
         BArr=self._transform_Vector(BArr)
+        self.check_Field_For_Reasonable_Values(r,BArr)
         if len(r.shape)==1:
             return BArr[0]
         else:
@@ -578,33 +582,3 @@ class SegmentedBenderHalbach(HalbachLens):
             return BArr[0]
         else:
             return BArr
-# import time
-# lens=SegmentedBenderHalbach(.01,1.0,.03,.01)
-# xArr=np.linspace(-.1,.1,num=40)
-# coords=np.asarray(np.meshgrid(xArr,xArr,xArr)).T.reshape(-1,3)
-# # lens.BNorm_Gradient(coords,returnNorm=True)
-# from profilehooks import profile
-# @profile()
-# def func():
-#     print(np.sum(np.abs(lens.BNorm_Gradient(coords,returnNorm=True)[0]))) #2.596956744685721e-08
-# func()
-'''
-
-   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000    4.265    4.265 HalbachLensClass.py:574(func)
-        1    0.000    0.000    4.264    4.264 HalbachLensClass.py:453(BNorm_Gradient)
-        4    0.001    0.000    4.262    1.066 HalbachLensClass.py:441(BNorm)
-        4    0.003    0.001    4.255    1.064 HalbachLensClass.py:552(B_Vec)
-       12    0.006    0.000    3.560    0.297 HalbachLensClass.py:304(B)
-       36    0.017    0.000    3.555    0.099 HalbachLensClass.py:150(B_Symmetric)
-      144    0.317    0.002    3.441    0.024 HalbachLensClass.py:143(B)
-     1728    0.017    0.000    3.117    0.002 HalbachLensClass.py:221(B)
-     1728    3.095    0.002    3.099    0.002 HalbachLensClass.py:13(B_NUMBA)
-        3    0.001    0.000    2.531    0.844 HalbachLensClass.py:464(grad)
-        2    0.000    0.000    0.674    0.337 dispatcher.py:402(_compile_for_args)
-      8/2    0.000    0.000    0.674    0.337 dispatcher.py:929(compile)
-      4/2    0.000    0.000    0.673    0.337 dispatcher.py:140(compile)
-      4/2    0.000    0.000    0.673    0.337 dispatcher.py:147(_compile_cached)
-      4/2    0.000    0.000    0.673    0.337 dispatcher.py:162(_compile_core)
-      4/2    0.000    0.000    0.673    0.336 compiler.py:660(compile_extra)
-'''
