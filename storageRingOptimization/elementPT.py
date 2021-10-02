@@ -1,5 +1,6 @@
 import scipy.interpolate as spi
 import time
+import joblib
 import numpy as np
 from math import sqrt
 import warnings
@@ -878,7 +879,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     # #everything. See docs/images/HalbachBenderSimSegmentedWithCapImage2.png
     #3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
     #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedWithCapImage3.png
-    def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
+    def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac,parallel=False):
         # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
         #                  fillParams=False)
         super().__init__(None,None,None,None,None,None,None,None,None,None,None,fillParams=False)
@@ -888,6 +889,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.space=extraSpace
         self.Lm=Lm
         self.rp=rp
+        self.parallel=parallel
         self.Lseg = self.Lm + self.space * 2
         self.magnetWidth = rp * np.tan(2 * np.pi / 24) * 2
         self.yokeWidth = self.magnetWidth
@@ -1010,8 +1012,22 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def update_rOffset_Fact(self,rOffsetFact):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+    def solve_Coords_Parallel(self,coords,lens,coordSlices=32):
+        if self.parallel==True:njobs=-1
+        else: njobs=1
+        parallelCoords=np.array_split(coords,coordSlices)
+        results=joblib.Parallel(n_jobs=njobs)(joblib.delayed(lens.BNorm_Gradient)(coord,returnNorm=True)
+                                              for coord in parallelCoords)
+        BNormGradList=[]
+        BNormList=[]
+        for result in results:
+            BNormGradList.append(result[0])
+            BNormList.append(result[1])
+        BNormGradArr=np.row_stack(BNormGradList)
+        BNormArr=np.concatenate(BNormList)
+        return BNormGradArr,BNormArr
     def fill_Field_Func_Cap(self):
-        lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
+        lensCap=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
         #x and y bounds should match with internal fringe bounds
         xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP
@@ -1022,9 +1038,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         zMax=TINY_STEP
 
 
-        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
-        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
-        dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
+        fieldCoordsCap=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
+        BNormGradArr,BNormArr=self.solve_Coords_Parallel(fieldCoordsCap,lensCap)
+        # BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
+        dataCap=np.column_stack((fieldCoordsCap,BNormGradArr,BNormArr))
         self.Force_Func_Cap,self.magnetic_Potential_Func_Cap=self.make_Force_And_Potential_Functions(dataCap)
 
     def fill_Force_Func_Internal_Fringe(self):
@@ -1038,7 +1055,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         zMin=-TINY_STEP
         zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+TINY_STEP
         fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
-        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
+        BNormGradArr,BNormArr=self.solve_Coords_Parallel(fieldCoordsInner,lensFringe)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
         self.Force_Func_Internal_Fringe,self.magnetic_Potential_Func_Fringe=\
         self.make_Force_And_Potential_Functions(dataCap)
@@ -1053,8 +1070,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
-
-        BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(fieldCoordsPeriodic,returnNorm=True)
+        BNormGradArr,BNormArr=self.solve_Coords_Parallel(fieldCoordsPeriodic,lensSegmentedSymmetry,coordSlices=64)
         dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
         self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
     def make_Force_And_Potential_Functions(self,data):
@@ -1154,7 +1170,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rp,L,apFrac,bumpOffset):
+    def __init__(self,PTL, rp,L,apFrac,bumpOffset,parallel=False):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
@@ -1164,6 +1180,7 @@ class HalbachLensSim(LensIdeal):
         self.Lo=None
         self.rp=rp
         self.ap=rp*apFrac
+        self.parallel=parallel
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
@@ -1200,8 +1217,8 @@ class HalbachLensSim(LensIdeal):
         self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
         assert self.Lm>0.0
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
-        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective)
-        mountThickness=5e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
+        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=2)
+        mountThickness=3e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
         # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
@@ -1246,7 +1263,20 @@ class HalbachLensSim(LensIdeal):
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
         self.compile_Fast_Numba_Force_Function()
-
+    def solve_Coords_Parallel(self,coords,lens):
+        if self.parallel==True:njobs=-1
+        else: njobs=1
+        parallelCoords=np.array_split(coords,32)
+        results=joblib.Parallel(n_jobs=njobs)(joblib.delayed(lens.BNorm_Gradient)(coord,returnNorm=True)
+                                              for coord in parallelCoords)
+        BNormGradList=[]
+        BNormList=[]
+        for result in results:
+            BNormGradList.append(result[0])
+            BNormList.append(result[1])
+        BNormGradArr=np.row_stack(BNormGradList)
+        BNormArr=np.concatenate(BNormList)
+        return BNormGradArr,BNormArr
 
     def fill_Field_Func_Cap(self):
         interpF, interpV = self.make_Interp_Functions(self.data3D)

@@ -47,7 +47,7 @@ class SimpleLocalMinimizer:
         return X,error
 
 class ParticleTracerLattice:
-    def __init__(self,v0Nominal,latticeType='storageRing'):
+    def __init__(self,v0Nominal,latticeType='storageRing',parallel=False):
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
         self.latticeType=latticeType#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
@@ -60,7 +60,7 @@ class ParticleTracerLattice:
         # is 1. Then F=B0'*u0/mass_Li7=B0'*u0_Adjust=m_Adjust*a
         self.u0=self.u0_Actual/self.mass_Li7 #Adjusted value of bohr magneton, about equal to 800
         self.kb = 1.38064852E-23  # boltzman constant, SI
-
+        self.parallel=parallel
         self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
         #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.combinerIndex=None #the index in the lattice where the combiner is
@@ -81,7 +81,7 @@ class ParticleTracerLattice:
         from ParaWell import ParaWell
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
-        PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector')
+        PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
@@ -119,7 +119,7 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None):
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset)
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,parallel=self.parallel)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -162,7 +162,8 @@ class ParticleTracerLattice:
         #Lcap: Length of element on the end/input of bender
         #rOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
+        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac,
+                                              parallel=self.parallel)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -433,14 +434,14 @@ class ParticleTracerLattice:
                 if el.outerHalfWidth is None:
                     pointsOuter=pointsInner.copy()
                 else:
-                    width=el.outerHalfWidth
+                    halfWidth=el.outerHalfWidth
                     if False:#el.fringeFrac is not None:
                         pass
                     else:
-                        q1Outer=np.asarray([xb-np.sin(theta)*width,yb+width*np.cos(theta)])  #top left when theta=0
-                        q2Outer=np.asarray([xe-np.sin(theta)*width,ye+width*np.cos(theta)])  #top right when theta=0
-                        q3Outer=np.asarray([xe+np.sin(theta)*width,ye-width*np.cos(theta)])  #bottom right when theta=0
-                        q4Outer=np.asarray([xb+np.sin(theta)*width,yb-width*np.cos(theta)])  #bottom left when theta=0
+                        q1Outer=np.asarray([xb-np.sin(theta)*halfWidth,yb+halfWidth*np.cos(theta)])  #top left when theta=0
+                        q2Outer=np.asarray([xe-np.sin(theta)*halfWidth,ye+halfWidth*np.cos(theta)])  #top right when theta=0
+                        q3Outer=np.asarray([xe+np.sin(theta)*halfWidth,ye-halfWidth*np.cos(theta)])  #bottom right when theta=0
+                        q4Outer=np.asarray([xb+np.sin(theta)*halfWidth,yb-halfWidth*np.cos(theta)])  #bottom left when theta=0
                         pointsOuter=[q1Outer,q2Outer,q3Outer,q4Outer]
                     
             elif el.type=='BEND':
@@ -713,6 +714,8 @@ class ParticleTracerLattice:
                 plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
             if showTraceLines==True:
+                if particle.logged!=True:
+                    raise Exception("Particle must have logged results to plot trace lines")
                 if particle.qArr.shape[0]!=0:
                     plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,alpha=traceLineAlpha)
 

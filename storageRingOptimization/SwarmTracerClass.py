@@ -96,8 +96,8 @@ class SwarmTracer:
         #gammaSpace: The FWHM of the lorentz function that models our spatial data, meters
         #temperature: The temperature of the atoms, kelvin. Decides thermal velocity spread
 
-        assert 0.0<captureDiam<.1 and 0.0<collectorOutputAngle<.1 and 0.0<gammaSpace<.01\
-               and 0.0<temperature<.1 #reasonable values
+        assert 0.0<captureDiam<=.1 and 0.0<collectorOutputAngle<=.2 and 0.0<gammaSpace<=.01\
+               and 0.0<temperature<=.1 #reasonable values
 
         pTransMax=self.lattice.v0Nominal*np.tan(collectorOutputAngle) #transverse velocity dominates thermal velocity,
         #ie, geometric heating
