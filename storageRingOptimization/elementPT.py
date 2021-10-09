@@ -1218,7 +1218,7 @@ class HalbachLensSim(LensIdeal):
         assert self.Lm>0.0
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=2)
-        mountThickness=3e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
+        mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
         # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd

@@ -476,7 +476,7 @@ class LatticeOptimizer:
         for elCenter in self.tunedElementList:
             elBefore,elAfter=self.latticeRing.get_Element_Before_And_After(elCenter)
             self.tunableTotalLengthList.append(elBefore.L+elAfter.L)
-    def initialize_Optimizer(self,elementIndices,tuningChoice,parallel):
+    def initialize_Optimizer(self,elementIndices,tuningChoice):
         self.tunedElementList=[self.latticeRing.elList[index] for index in elementIndices]
         self.tuningChoice=tuningChoice
         if tuningChoice=='spacing':
@@ -497,7 +497,7 @@ class LatticeOptimizer:
             solution.survival=0.0
             return solution
         self.catch_Optimizer_Errors(tuningBounds,elementIndices,tuningChoice)
-        self.initialize_Optimizer(elementIndices,tuningChoice,parallel)
+        self.initialize_Optimizer(elementIndices,tuningChoice)
         tuningCoordsList=self.make_Tuning_Coords_List(tuningBounds,numGridEdge)
         if parallel==True:
             self.solutionList=self.helper.parallel_Problem(self.mode_Match, tuningCoordsList, onlyReturnResults=True)
@@ -507,7 +507,7 @@ class LatticeOptimizer:
 
 
         survivalForRelevance=1.0 #1% survival for relevance
-        if max(gridSearchSurvivalResults)-min(gridSearchSurvivalResults)<survivalForRelevance:
+        if max(gridSearchSurvivalResults)<survivalForRelevance:
             print('no viable solution')
             solution=Solution()
             solution.survival=0.0
@@ -525,6 +525,4 @@ class LatticeOptimizer:
         skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
                                    ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
                                    n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
-        # plot_objective(skoptSol)
-        # plt.show()
         return self.best_Solution()

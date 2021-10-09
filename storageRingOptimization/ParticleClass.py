@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import warnings
 import time
 import numpy.linalg as npl
 import numpy as np
@@ -129,7 +130,7 @@ class Particle:
         #the particle leaves an element by adding that elements length (particle trajectory length that is)
         self.revolutions=0 #revolutions particle makd around lattice. Initially zero
         self.clipped=None #wether particle clipped an apeture
-        self.logged=None #wether the particle is loggin parameters such as position and energy. This will typically be
+        self.dataLogging=None #wether the particle is loggin parameters such as position and energy. This will typically be
         #false when fastmode is being used in the particle tracer class
         #these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         #they are converted into arrays
@@ -143,7 +144,6 @@ class Particle:
         self.p0Arr=None #array of norm of momentum.
         self.qArr=None 
         self.qoArr=None
-        self.speedArr=None
         self.TArr=None 
         self.VArr=None 
         self.EArr=None #total energy
@@ -226,19 +226,19 @@ class Particle:
         self.VArr=np.asarray([entry[1] for entry in self._VList])
         self.EArr=self.TArr.copy()+self.VArr.copy()
 
-
-        elementIndexPrev=self._TList[0][0]
-        E_AfterEnteringEl=self.EArr[0]
-        for i in range(len(self._TList)):
-            if self._TList[i][0]!=elementIndexPrev:
-                E_BeforeLeavingEl=self.EArr[i-1]
-                deltaE=E_BeforeLeavingEl-E_AfterEnteringEl
-                if (str(elementIndexPrev) in self.elDeltaEDict) == False: #need to make a list entry for this element
-                    self.elDeltaEDict[str(elementIndexPrev)]=[deltaE]
-                else:
-                    self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
-                E_AfterEnteringEl=self.EArr[i]
-                elementIndexPrev=self._TList[i][0]
+        if self.EArr.shape[0]>1:
+            elementIndexPrev=self._TList[0][0]
+            E_AfterEnteringEl=self.EArr[0]
+            for i in range(len(self._TList)):
+                if self._TList[i][0]!=elementIndexPrev:
+                    E_BeforeLeavingEl=self.EArr[i-1]
+                    deltaE=E_BeforeLeavingEl-E_AfterEnteringEl
+                    if (str(elementIndexPrev) in self.elDeltaEDict) == False: #need to make a list entry for this element
+                        self.elDeltaEDict[str(elementIndexPrev)]=[deltaE]
+                    else:
+                        self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
+                    E_AfterEnteringEl=self.EArr[i]
+                    elementIndexPrev=self._TList[i][0]
         self._TList=[]
         self._VList=[]
 
@@ -247,11 +247,10 @@ class Particle:
         #totalLaticeLength: total length of periodic lattice
         self.traced=True
         self.force=None
-        if self.logged==True:
+        if self.dataLogging==True:
             self.qArr=np.asarray(self._qList)
             self._qList = []  # save memory
             self.pArr = np.asarray(self._pList)
-            self.speedArr=npl.norm(self.pArr,axis=1)
             self._pList = []
             self.qoArr = np.asarray(self._qoList)
             self._qoList = []
@@ -286,8 +285,9 @@ class Particle:
         if plotYAxis!='y' and plotYAxis!='z':
             raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
         if self.qoArr.shape[0]==0:
-            raise Exception('PARTICLE HAS NO LOGGED POSITION')
-        qoArr=self.qoArr
+            warnings.warn('Particle has no logged position values')
+            qoArr=np.zeros((1,3))+np.nan
+        else:qoArr=self.qoArr
         if plotYAxis=='y':
             yPlot=qoArr[:,1]
         else:

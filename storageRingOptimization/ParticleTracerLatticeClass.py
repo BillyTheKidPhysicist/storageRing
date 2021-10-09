@@ -4,6 +4,7 @@ import numba
 from shapely.geometry import Polygon
 import scipy.interpolate as spi
 import numpy.linalg as npl
+from joblib import Parallel,delayed
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim
 class SimpleLocalMinimizer:
@@ -714,7 +715,7 @@ class ParticleTracerLattice:
                 plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
             if showTraceLines==True:
-                if particle.logged!=True:
+                if particle.dataLogging!=True:
                     raise Exception("Particle must have logged results to plot trace lines")
                 if particle.qArr.shape[0]!=0:
                     plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,alpha=traceLineAlpha)

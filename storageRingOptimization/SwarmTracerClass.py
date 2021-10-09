@@ -63,15 +63,15 @@ class SwarmTracer:
         swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax/2, -qMax/2]))
         swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax/2, -qMax/2]))
         return swarmTest
-    def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, num, upperSymmetry=False):
+    def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, numGridEdge, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
         # to the west. The transverse plane is the yz plane.
         # qMax: absolute value maximum position in the transverse direction
         # qMax: absolute value maximum position in the transverse momentum
         # num: number of samples along each axis in phase space. Total is num^4
         # upperSymmetry: if this is true, exploit the symmetry between +/-z and ignore coordinates below z=0
-        qArr = np.linspace(-qMax, qMax, num=num)
-        pArr = np.linspace(-pMax, pMax, num=num)
+        qArr = np.linspace(-qMax, qMax, num=numGridEdge)
+        pArr = np.linspace(-pMax, pMax, num=numGridEdge)
         argsArr = np.asarray(np.meshgrid(qArr, qArr, pArr, pArr)).T.reshape(-1, 4)
         swarm = Swarm()
         for arg in argsArr:

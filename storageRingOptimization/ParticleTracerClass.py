@@ -121,7 +121,7 @@ class ParticleTracer:
                 raise Exception('element too short for time steps size')
         self.currentEl = self.which_Element_Lab_Coords(self.particle.q)
         self.particle.currentEl=self.currentEl
-        self.particle.logged= not self.fastMode #if using fast mode, there will NOT be logging
+        self.particle.dataLogging= not self.fastMode #if using fast mode, there will NOT be logging
         if self.currentEl is None:
             self.particle.clipped=True
         else:
