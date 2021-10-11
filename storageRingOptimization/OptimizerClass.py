@@ -106,6 +106,7 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
     def fill_Swarms_And_Test_For_Feasible_Injector(self,parallel):
+        #todo: this is doing too many things at once right now
         firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
@@ -319,11 +320,11 @@ class LatticeOptimizer:
         solution=Solution()
         solution.xRing_TunedParams2=XRing
         self.update_Ring_Lattice(XRing)
-        swarmRingTraced=self.revFunc(parallel=parallel)
-        if swarmRingTraced is None: #unstable orbit
+        swarmRingTracedFromCombinerOutput=self.revFunc(parallel=parallel)
+        if swarmRingTracedFromCombinerOutput is None: #unstable orbit
             solution.survival=0.0
             return solution
-        modeMatchFunc=phaseSpaceInterpolater(swarmRingTraced)
+        modeMatchFunc=phaseSpaceInterpolater(swarmRingTracedFromCombinerOutput)
         def cost_To_Minimize(XInjector):
             self.update_Injector_Lattice(XInjector)
             if self.is_Floor_Plan_Valid()==False:

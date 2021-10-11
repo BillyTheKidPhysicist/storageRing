@@ -685,6 +685,22 @@ class ParticleTracerLattice:
         elBefore=self.elList[elBeforeIndex]
         elAfter=self.elList[elAfterIndex]
         return elBefore,elAfter
+    def get_Lab_Coords_From_Orbit_Distance(self,xPos):
+        #xPos: distance along ideal orbit
+        assert xPos>=0.0
+        xPos=xPos%self.totalLength #xpos without multiple revolutions
+        xInOrbitFrame=None
+        element=None
+        cumulativeLen=0.0
+        for latticeElement in self.elList:
+            if cumulativeLen+latticeElement.Lo>xPos:
+                element=latticeElement
+                xInOrbitFrame=xPos-cumulativeLen
+                break
+            cumulativeLen+=latticeElement.Lo
+        xLab,yLab,zLab=element.transform_Orbit_Frame_Into_Lab_Frame(np.asarray([xInOrbitFrame,0,0]))
+        return xLab,yLab
+
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
                      showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle

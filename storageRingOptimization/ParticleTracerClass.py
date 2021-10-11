@@ -116,7 +116,7 @@ class ParticleTracer:
             self.particle.clipped=False
         LMin=self.particle.v0*self.h*self.minTimeStepsPerElement
         for el in self.latticeElementList:
-            if el.L<=LMin: #have at least a few steps in each element
+            if el.Lo<=LMin: #have at least a few steps in each element
                 print(el,el.L,LMin,self.particle.v0,self.h)
                 raise Exception('element too short for time steps size')
         self.currentEl = self.which_Element_Lab_Coords(self.particle.q)

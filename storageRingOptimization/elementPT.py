@@ -30,7 +30,7 @@ from HalbachLensClass import SegmentedBenderHalbach\
 
 TINY_STEP=1e-9
 
-@numba.njit(numba.float64(numba.float64[:]))
+# @numba.njit(numba.float64(numba.float64[:]))
 def fast_Arctan2(q):
     phi = np.arctan2(q[1], q[0])
     if phi < 0:  # confine phi to be between 0 and 2pi
@@ -110,7 +110,11 @@ class Element:
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         # this is overwridden by all other elements
         pass
-
+    def transform_Orbit_Frame_Into_Lab_Frame(self,q):
+        qNew=q.copy()
+        qNew[:2]=self.ROut@qNew[:2]
+        qNew+=self.r1
+        return qNew
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # for straight elements (lens and drift), element and orbit frame are identical. This is the local orbit frame.
         #does not grow with growing revolution
@@ -368,6 +372,18 @@ class BenderIdeal(Element):
         else:
             F = np.asarray([np.nan,np.nan,np.nan])
         return F
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
+        #qo: orbit frame coords, [xo,yo,zo]. xo is distance along orbit, yo is displacement perpindicular to orbit and
+        #horizontal. zo is vertical
+        xo,yo,zo=qo
+        phi=self.ang-xo/self.ro
+        xLab=self.ro*np.cos(phi)
+        yLab=self.ro*np.sin(phi)
+        zLab=zo
+        qLab=np.asarray([xLab,yLab,zLab])
+        qLab[:2]=self.ROut@qLab[:2]
+        qLab+=self.r0
+        return qLab
     def is_Coord_Inside(self, q):
         phi = fast_Arctan2(q)
         if phi < 0:  # constraint to between zero and 2pi
@@ -724,17 +740,14 @@ class BenderIdealSegmented(BenderIdeal):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-
+        F=np.zeros(3)
         quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
         if quc[1] < self.Lm / 2:  # if particle is inside the magnet region
-            self.F[0] = -self.K * (quc[0] - self.rb)
-            self.F[2] = -self.K * quc[2]
-            self.F = self.transform_Unit_Cell_Force_Into_Element_Frame(self.F,
-                                                                       q)  # transform unit cell coordinates into
+            F[0] = -self.K * (quc[0] - self.rb)
+            F[2] = -self.K * quc[2]
+            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F,q)  # transform unit cell coordinates into
             # element frame
-        else:
-            self.F = np.zeros(3)
-        return self.F.copy()
+        return F
 
     # @profile() #.497
     def transform_Unit_Cell_Force_Into_Element_Frame(self, F, q):
@@ -743,8 +756,8 @@ class BenderIdealSegmented(BenderIdeal):
         # or leaving the element interface as mirror images of each other.
         # F: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
-        FNew = F.copy()  # copy input vector to not modify the original
-        return fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(FNew, q, self.M_uc, self.ucAng)
+        F= fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F[0],F[1],F[2], q, self.M_uc, self.ucAng)
+        return np.asarray(F)
 
 
 
@@ -774,7 +787,7 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
     def fill_Params(self):
         super().fill_Params()
         if self.numMagnets is not None:
-            if self.ang > 3 * np.pi / 2 or self.ang < np.pi / 2 or self.Lcap > self.rb - self.rp * 2:  # this is done so that finding where the particle is inside the
+            if self.ang > 3 * np.pi / 2 or self.ang < np.pi / 2:  # this is done so that finding where the particle is inside the
                 # bender is not a huge chore. There is almost no chance it would have this shape anyways. Changing this
                 # would affect force, orbit coordinates and isinside at least
                 raise Exception('DIMENSIONS OF BENDER ARE OUTSIDE OF ACCEPTABLE BOUNDS')
@@ -862,7 +875,27 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
                     return True
                 else:  # if not in either cap, then outside the bender
                     return False
-
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
+        #qo: orbit frame coords, [xo,yo,zo]. xo is distance along orbit, yo is displacement perpindicular to orbit and
+        #horizontal. zo is vertical
+        xo,yo,zo=qo
+        if xo<=self.Lcap: #in the beginning cap
+            m=np.tan(self.ang)
+            thetaEnd=np.arctan(-1/m)
+            xLab=self.ro*np.cos(self.ang)-np.cos(thetaEnd)*(self.Lcap-xo)
+            yLab=self.ro*np.sin(self.ang)-np.sin(thetaEnd)*(self.Lcap-xo)
+        elif xo<=self.ang*self.ro+self.Lcap: #in the bending segment
+            phi=self.ang-(xo-self.Lcap)/self.ro
+            xLab=self.ro*np.cos(phi)
+            yLab=self.ro*np.sin(phi)
+        else: #in the ending cap
+            xLab=self.ro
+            yLab=-(xo-(self.Lo-self.Lcap))
+        zLab=zo
+        qLab=np.asarray([xLab,yLab,zLab])
+        qLab[:2]=self.ROut@qLab[:2]
+        qLab+=self.r0
+        return qLab
 
 class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     #this element is a model of a bending magnet constructed of segments. There are three models from which data is
@@ -965,6 +998,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
     def fill_Params_Post_Constrained(self):
         self.ap=self.compute_Aperture()
+        assert self.rb-self.rp-self.yokeWidth>0.0
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
         #500um works very well, but 1mm may be acceptable
         numModelLenes=3 #3 turns out to be a good number
@@ -1210,12 +1244,12 @@ class HalbachLensSim(LensIdeal):
         numPointsTransverse=30
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
+        assert self.Lm>0.0
         self.Lo=self.L
         self.lengthEffective=min(self.fringeFracInnerMin*self.rp,
                                  self.Lm)  #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
-        assert self.Lm>0.0
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
         lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=2)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp

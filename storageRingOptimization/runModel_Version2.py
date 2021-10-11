@@ -40,19 +40,17 @@ def mine_Solutions_Work_Around(function,argumentsList):
         shut_Down_Joblib_Process_To_Save_Memory()
     return solutionList
 
-def reject_Invalid_Injector(X):
+def is_Invalid_Injector(X):
     injectorFactor,rpInjectorFactor=X
     LInjector=.15/injectorFactor
-    rpInjector=rpInjectorFactor*.02/injectorFactor
+    rpInjector=rpInjectorFactor*.02
     BpLens=.7
     injectorLensPhase=np.sqrt((2*800.0/200**2)*BpLens/rpInjector**2)*LInjector
     if injectorLensPhase>np.pi:
         print('bad lens phase')
-        sol=Solution()
-        sol.xRing_TunedParams1=X
-        sol.survival=0.0
-        sol.description='Pseudorandom search'
-        return sol
+        return False
+    else:
+        return True
 def generate_Ring_Lattice(X,parallel=False):
     combinerGap=5e-2
     tunableDriftGap=5e-2
@@ -82,7 +80,9 @@ def generate_Ring_Lattice(X,parallel=False):
     PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  #17.8 % of time here
     return PTL_Ring
 def generate_Injector_Lattice(X,parallel=False):
-    rpInjector,LInjector=X
+    injectorFactor,rpInjectorFactor=X
+    LInjector=.15/injectorFactor
+    rpInjector=rpInjectorFactor*.02
     PTL_Injector=ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
     PTL_Injector.add_Drift(.1,ap=.025)
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)
@@ -103,7 +103,14 @@ def solve_System(spacingBounds,numInitial):
         rpLens,Lm,LLens,injectorFactor,rpInjectorFactor=X
         XInjector=injectorFactor,rpInjectorFactor
         XRing=rpLens,Lm,LLens
-        reject_Invalid_Injector(XInjector)
+        if is_Invalid_Injector(XInjector)==True:
+            pass
+        else:
+            sol=Solution()
+            sol.xRing_TunedParams1=X
+            sol.survival=0.0
+            sol.description='Pseudorandom search'
+            return sol
         PTL_Ring=generate_Ring_Lattice(XRing,parallel=parallel)
         PTL_Injector=generate_Injector_Lattice(XInjector,parallel=parallel)
 
