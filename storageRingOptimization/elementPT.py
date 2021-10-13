@@ -546,6 +546,12 @@ class CombinerIdeal(Element):
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
         return qNew
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
+        qNew=qo.copy()
+        qNew[0]=-qNew[0]
+        qNew[:2]=self.ROut@qNew[:2]
+        qNew+=self.r1
+        return qNew
 
 
 class CombinerSim(CombinerIdeal):
@@ -1022,8 +1028,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.compile_Fast_Numba_Force_Function()
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
-        assert Max>Min and (stepSize is not None or numSteps is not None)
-        if numSteps is None:
+        assert Max>Min and Max-Min>TINY_STEP
+        assert (not (stepSize is not None and numSteps is not None)) and (stepSize is not None or numSteps is not None)
+        if stepSize is not None:
+            assert stepSize>=TINY_STEP
             numSteps=int(1+(Max-Min)/stepSize)  #to ensure it is odd
         minReasonablePoints=5
         if numSteps<minReasonablePoints: numSteps=minReasonablePoints

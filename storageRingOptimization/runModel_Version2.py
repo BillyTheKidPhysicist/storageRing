@@ -12,37 +12,24 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 import time
 import scipy.interpolate as spi
 from sendMyselfEmail import send_MySelf_Email
-from joblib import Parallel,delayed
-from math import ceil
-from profilehooks import profile
+import multiprocess
 import matplotlib.pyplot as plt
 
 '''
 This models the storage ring as a system of only permanent magnets, with two permanent magnets being moved longitudinally
 for tunability
 '''
-def shut_Down_Joblib_Process_To_Save_Memory():
-    from joblib.externals.loky import get_reusable_executor
-    get_reusable_executor().shutdown(wait=True)
-    print('processes restart')
-def mine_Solutions_Work_Around(function,argumentsList):
-    #need to circumvent the fact that numba has a bug wherein compiled solutions persists in memory
-    maxBatchSizeForMemory=32*5
-    numBatches=int(ceil(len(argumentsList)/maxBatchSizeForMemory))
-    solutionList=[]
-    print(numBatches)
-    for i in range(numBatches):
-        batchArgs=argumentsList[i*maxBatchSizeForMemory:(i+1)*maxBatchSizeForMemory]
-        print(len(batchArgs))
-        tempSolutionList=Parallel(n_jobs=-1,batch_size=1)(delayed(function)(arg) for arg in batchArgs)
-        for result in tempSolutionList: assert isinstance(result,Solution)
-        solutionList.extend(tempSolutionList)
-        shut_Down_Joblib_Process_To_Save_Memory()
+def mine_In_Parallel(function,argumentsList):
+    #need to circumvent the fact that numba has a bug wherein compiled solutions persists in memory by limiting
+    ###tasks per child
+    pool = multiprocess.Pool(processes=None,maxtasksperchild=2)
+    solutionList=pool.map(function,argumentsList) #8.01
+    pool.close()
     return solutionList
 
 def is_Invalid_Injector(X):
     injectorFactor,rpInjectorFactor=X
-    LInjector=.15/injectorFactor
+    LInjector=injectorFactor*.15
     rpInjector=rpInjectorFactor*.02
     BpLens=.7
     injectorLensPhase=np.sqrt((2*800.0/200**2)*BpLens/rpInjector**2)*LInjector
@@ -81,7 +68,7 @@ def generate_Ring_Lattice(X,parallel=False):
     return PTL_Ring
 def generate_Injector_Lattice(X,parallel=False):
     injectorFactor,rpInjectorFactor=X
-    LInjector=.15/injectorFactor
+    LInjector=injectorFactor*.15
     rpInjector=rpInjectorFactor*.02
     PTL_Injector=ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
     PTL_Injector.add_Drift(.1,ap=.025)
@@ -98,7 +85,7 @@ def generate_Injector_Lattice(X,parallel=False):
 
 
 def solve_System(spacingBounds,numInitial):
-    def solve_For_Lattice_Params(X,parallel=False):
+    def solve_For_Lattice_Params(X,parallel=False,numGridSearchEdge=10):
         t=time.time()
         rpLens,Lm,LLens,injectorFactor,rpInjectorFactor=X
         XInjector=injectorFactor,rpInjectorFactor
@@ -114,18 +101,18 @@ def solve_System(spacingBounds,numInitial):
         PTL_Ring=generate_Ring_Lattice(XRing,parallel=parallel)
         PTL_Injector=generate_Injector_Lattice(XInjector,parallel=parallel)
 
-        test=LatticeOptimizer(PTL_Ring,PTL_Injector)
-        sol=test.optimize_Magnetic_Field((1,8),spacingBounds,10,'spacing',maxIter=20,parallel=parallel)
+        optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
+        sol=optimizer.optimize_Magnetic_Field((1,8),spacingBounds,numGridSearchEdge,'spacing',maxIter=20,parallel=parallel)
         sol.xRing_TunedParams1=X
         sol.description='Pseudorandom search'
         print(sol)
         print(time.time()-t)
         return sol
-    paramBounds=[(.005,.03),(.005,.025),(.1,.3),(.5,1.5),(.75,1.25)]
+    paramBounds=[(.005,.03),(.005,.025),(.1,.3),(.75,1.25),(.75,1.25)]
     initialSampleCoords=skopt.sampler.Sobol().generate(paramBounds,numInitial)
-    np.random.seed(42)
+    # np.random.seed(42)
     t=time.time()
-    solutionList=mine_Solutions_Work_Around(solve_For_Lattice_Params,initialSampleCoords)
+    solutionList=mine_In_Parallel(solve_For_Lattice_Params,initialSampleCoords)
     initialCostValues=[LatticeOptimizer.cost_Function(sol.survival) for sol in solutionList]
     print('Finished random search')
 
@@ -154,5 +141,20 @@ def solve_System(spacingBounds,numInitial):
     plt.show()
 
 
-def run(numInitial,spacingBounds):
+def run(numInitial):
+    spacingBounds=[(.2,.8),(.2,.8)]
     solve_System(spacingBounds,numInitial)
+# run(32*10)
+
+
+'''
+
+yes viable solution
+----------Solution-----------   
+injector element spacing optimum configuration: [0.10095484210380992, 0.2770761911138699]
+ storage ring tuned params 1 optimum configuration: [0.011381501322762834, 0.005, 0.25655570903830643, 1.1932851004294265, 1.073627788624332]
+ storage ring tuned params 2 optimum configuration: [0.8, 0.2666666666666667]
+ bump params: None
+optimum result: 25.66739760407623
+
+'''

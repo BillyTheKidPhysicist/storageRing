@@ -1,19 +1,8 @@
-import skopt
-import numba
-# from profilehooks import profile
+from joblib import Parallel,delayed
 from ParticleTracerClass import ParticleTracer
-#import black_box as bb
-import numpy.linalg as npl
-#import matplotlib.pyplot as plt
-import sys
-import multiprocess as mp
-from ParticleTracerLatticeClass import ParticleTracerLattice
 import numpy as np
 from ParticleClass import Swarm
-import scipy.optimize as spo
 import time
-import scipy.interpolate as spi
-import matplotlib.pyplot as plt
 from ParaWell import ParaWell
 import skopt
 
@@ -123,29 +112,43 @@ class SwarmTracer:
         peakProbability=max(probabilityList)
         for particle,probability in zip(swarmEvenlySpread.particles,probabilityList):
             particle.probability=probability/peakProbability
-            assert 0.0<=particle.probability<=1.0
+            assert 0.0<particle.probability<=1.0
         return swarmEvenlySpread
-    def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,sameSeed=False,
-                                                    circular=True,smallXOffset=True):
+    def _make_PseudoRandom_Swarm_Bounds_List(self,qTBounds,pTBounds,pxBounds,upperSymmetry=False):
+        if isinstance(qTBounds,float):
+            assert qTBounds>0.0
+            if upperSymmetry==False: qTBounds=[(-qTBounds,qTBounds),(-qTBounds,qTBounds)]
+            else: qTBounds=[(-qTBounds,qTBounds),(0.0,qTBounds)] #restrict to top half
+        else: assert len(qTBounds)==2 and len(qTBounds[0])==2 and len(qTBounds[1])==2
+        if isinstance(pTBounds,float):
+            assert pTBounds>0.0
+            pTBounds=[(-pTBounds,pTBounds),(-pTBounds,pTBounds)]
+        else: assert len(pTBounds)==2 and len(pTBounds[0])==2 and len(pTBounds[1])==2
+        if isinstance(pxBounds,float):
+            assert pxBounds>0.0
+            pxBounds=(-pxBounds-self.lattice.v0Nominal,pxBounds-self.lattice.v0Nominal)
+        else:
+            assert len(pxBounds)==2
+            pxBounds=(pxBounds[0]-self.lattice.v0Nominal,pxBounds[1]-self.lattice.v0Nominal)
+        generatorBounds=qTBounds.copy()
+        generatorBounds.append(pxBounds)
+        generatorBounds.extend(pTBounds)
+        pxMin,pxMax=generatorBounds[2]
+        assert len(generatorBounds)==5 and pxMin<-self.lattice.v0Nominal<pxMax
+        return generatorBounds
+
+    def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=False,
+                                                    sameSeed=False,circular=True,smallXOffset=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
         #each corner exactly and midpoints between corners if desired
         #NOTE: it's not guaranteed that there will be exactly num particles.
-
-
-        # qxMax and qyMax: x and y maximum dimension in position space of hypercube
-        # pxMax and pyMax: px and py maximum dimension in momentum space of hupercube
-        # pxMax: what value to use for longitudinal momentum spread. if None use the nominal value
-        # num: number of particle in phase space
-        # upperSymmetry: wether to exploit lattice symmetry by only using particles in upper half plane
-        # sameSeed: wether to use the same seed eveythime in the nump random generator, the number 42, or a new one
-        # cornerPonints: wether to add points at the corner of the hypercube
-        # circular: Wether to model the transvers components as circular, which they are
-
-
-        bounds=np.asarray([[-qTMax,qTMax],[-qTMax,qTMax],[-self.lattice.v0Nominal-pxMax,-self.lattice.v0Nominal+pxMax],
-                           [-pTMax,pTMax],[-pTMax,pTMax]])
+        if circular==True:
+            assert isinstance(qTBounds,float) and qTBounds>0.0 and isinstance(pTBounds,float) and pTBounds>0.0
+            qTransMax=qTBounds
+            pTransMax=pTBounds
+        generatorBounds=self._make_PseudoRandom_Swarm_Bounds_List(qTBounds,pTBounds,pxBounds,upperSymmetry=upperSymmetry)
 
 
         if circular is True:
@@ -157,13 +160,10 @@ class SwarmTracer:
             np.random.seed(42)
         if type(sameSeed) == int:
             np.random.seed(sameSeed)
-        if upperSymmetry==True:
-            bounds[1][0]=0.0 #don't let point be generarted below z=0
 
         swarm = Swarm()
-
         sampler=skopt.sampler.Sobol()
-        samples=np.asarray(sampler.generate(bounds,int(numParticles*numParticlesfrac)))
+        samples=np.asarray(sampler.generate(generatorBounds,int(numParticles*numParticlesfrac)))
         np.random.shuffle(samples)
 
         if smallXOffset==True:
@@ -177,7 +177,7 @@ class SwarmTracer:
             p = Xi[2:]
             if circular==True:
                 y,z,py,pz=Xi[[0,1,3,4]]
-                if np.sqrt(y**2+z**2)<qTMax and np.sqrt(py**2+pz**2)<pTMax:
+                if np.sqrt(y**2+z**2)<qTransMax and np.sqrt(py**2+pz**2)<pTransMax:
                     swarm.add_Particle(qi=q, pi=p)
                     particleCount+=1
                 if particleCount==numParticles:
@@ -229,9 +229,9 @@ class SwarmTracer:
         if type(seed)==int:
             np.random.seed(int(time.time()))
         return swarm
-    def initalize_PseudoRandom_Swarm_At_Combiner_Output(self,qTMax,pTMax,pxMax,numParticles,upperSymmetry=False,
+    def initalize_PseudoRandom_Swarm_At_Combiner_Output(self,qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=False,
                                                         sameSeed=False,circular=True,smallXOffset=True):
-        swarmAtOrigin=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTMax,pTMax,pxMax,numParticles,upperSymmetry=upperSymmetry,
+        swarmAtOrigin=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=upperSymmetry,
                                                                sameSeed=sameSeed,circular=circular,smallXOffset=smallXOffset)
         swarmAtCombiner=self.move_Swarm_To_Combiner_Output(swarmAtOrigin,copySwarm=False,scoot=True)
         #now update the initial positions of particles to reflect this move, otherwise initial position would be that of
@@ -269,7 +269,7 @@ class SwarmTracer:
         if parallel==True:
             def func(particle):
                 return self.particleTracer.trace(particle, h, T,fastMode=fastMode,accelerated=accelerated)
-            results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
+            results = self.helper.parallel_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]

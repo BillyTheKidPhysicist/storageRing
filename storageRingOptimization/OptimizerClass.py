@@ -46,6 +46,9 @@ class phaseSpaceInterpolater:
     def __init__(self,swarmRingTraced):
         XiList=[] #list initial coordinates in phase space at the combiner output
         revolutionList=[] #list of total revolutions before striking aperture
+        self.XMaxima=None #array of maxima x values
+        self.XMinima=None #Array of minimia x values
+        self.numParticles=swarmRingTraced.num_Particles()
         for particle in swarmRingTraced:
             qi=particle.qi
             pi=particle.pi
@@ -53,9 +56,13 @@ class phaseSpaceInterpolater:
             XiList.append(Xi)
             revolutionList.append(particle.revolutions)
         self.interpolater=spi.NearestNDInterpolator(XiList, revolutionList,rescale=True,tree_options={'copy_data':True})
+        XiArr=np.asarray(XiList)
+        self.XMaxima=np.max(XiArr,axis=0)
+        self.XMinima=np.min(XiArr,axis=0)
     def __call__(self,swarmInjector,useUpperSymmetry):
         totalRevs=0
         zIndex=2
+        numParticlesExcluded=0
         for particle in swarmInjector:
             assert 0.0<=particle.probability<=1.0 and particle.traced==True
             q=particle.q.copy()
@@ -64,8 +71,15 @@ class phaseSpaceInterpolater:
                 p[zIndex]=-p[zIndex]
                 q[zIndex]=-q[zIndex]
             X=np.append(q,p)
-            weightedRevolutions=self.interpolater(X)[0]*particle.probability
+            if not (np.all(X<self.XMaxima)==True and np.all(X>self.XMinima)==True):
+                numParticlesExcluded+=1
+                weightedRevolutions=0.0
+            else:
+                weightedRevolutions=self.interpolater(X)[0]*particle.probability
             totalRevs+=weightedRevolutions
+        percentParticlesExcluded=np.round(100*numParticlesExcluded/self.numParticles,1)
+        if percentParticlesExcluded>1:
+            warnings.warn(str(percentParticlesExcluded)+' % particles excluded in count')
         return totalRevs
 class LatticeOptimizer:
     def __init__(self, latticeRing,latticeInjector):
@@ -80,7 +94,7 @@ class LatticeOptimizer:
         self.swarmInjectorInitial=None #object to hold the injector swarm object
         self.swarmRingInitialAtCombinerOutput=None #object to hold the ring swarm object that will generate the mode match function
         self.h=5e-6 #timestep size
-        self.T=1.0
+        self.T=10.0
         self.swarmTracerRing=SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc=None #function that returns the number of revolutions of a particle at a given
         #point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
@@ -107,21 +121,26 @@ class LatticeOptimizer:
         # if I do many iterations
     def fill_Swarms_And_Test_For_Feasible_Injector(self,parallel):
         #todo: this is doing too many things at once right now
-        firstApertureRing=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
             self.spotCaptureDiam, self.collectorAngleMax,self.numParticlesInjector,temperature=self.temperature,
                                             sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
-        injectorBounds=self.find_Injector_Mode_Match_Bounds(parallel)
+        injectorBounds=self.get_Injector_Mode_Match_Bounds(parallel)
         if injectorBounds is None:
             print('not a feasible injector configuration')
             return False
-        pxMaxRing=1.1*max(np.abs(injectorBounds[2][1]),np.abs(injectorBounds[2][0]))
-        pTransMaxRing=1.1*max(np.abs(injectorBounds[3][1]),np.abs(injectorBounds[3][0]))
-        qMax=1.1*firstApertureRing
-        self.swarmRingInitialAtCombinerOutput=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(qMax,pTransMaxRing,
-                                            pxMaxRing,self.numParticlesRing,
-                                            sameSeed=self.sameSeedForSwarm,upperSymmetry=self.useLatticeUpperSymmetry)
+        qyBounds=injectorBounds[0]
+        qzBounds=injectorBounds[1]
+        qTransBounds=[qyBounds,qzBounds]
+        pxBounds=injectorBounds[2]
+        pyBoundsRing=injectorBounds[3]
+        pzBoundsRing=injectorBounds[4]
+        pTransBounds=[pyBoundsRing,pzBoundsRing]
+
+        #todo: Add feature to adjust qMax to at most the aperture size
+        self.swarmRingInitialAtCombinerOutput=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(
+        qTransBounds,pTransBounds,pxBounds,self.numParticlesRing,sameSeed=self.sameSeedForSwarm,
+            upperSymmetry=self.useLatticeUpperSymmetry,circular=False)
 
         return True
     def get_Injector_Swarm_Bounds(self):
@@ -139,13 +158,13 @@ class LatticeOptimizer:
         elif self.temperature!=3e-3 or self.collectorAngleMax!=.06 or self.spotCaptureDiam!=5e-3:
             raise Exception('Swarm paramters have changed')
         else: return injectorBounds
-    def find_Injector_Mode_Match_Bounds(self,parallel):
+    def get_Injector_Mode_Match_Bounds(self,parallel):
         injectorParamsBounds=(.05,.5)
         numGridPointsPerDim = 30
         xArr = np.linspace(injectorParamsBounds[0], injectorParamsBounds[1], numGridPointsPerDim)
         coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
-        fracCutOff=.95 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
-        #resources on outliers
+        fracCutOff=.98 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
+        #resources on outliers. 1.0 is no exclusion
         def wrapper(X): # need a wrapper to update lattice before tracing
             self.update_Injector_Lattice(X)
             swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(
@@ -316,7 +335,6 @@ class LatticeOptimizer:
     def mode_Match(self,XRing,parallel=False):
         #project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         #configuration
-
         solution=Solution()
         solution.xRing_TunedParams2=XRing
         self.update_Ring_Lattice(XRing)
