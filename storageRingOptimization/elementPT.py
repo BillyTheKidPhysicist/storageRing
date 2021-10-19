@@ -1054,9 +1054,10 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def update_rOffset_Fact(self,rOffsetFact):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
-    def solve_Coords_Parallel(self,coords,lens,coordSlices=32):
+    def solve_Coords_Parallel(self,coords,lens):
         if self.parallel==True:njobs=-1
         else: njobs=1
+        coordSlices=32
         parallelCoords=np.array_split(coords,coordSlices)
         results=joblib.Parallel(n_jobs=njobs)(joblib.delayed(lens.BNorm_Gradient)(coord,returnNorm=True)
                                               for coord in parallelCoords)
@@ -1112,7 +1113,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
-        BNormGradArr,BNormArr=self.solve_Coords_Parallel(fieldCoordsPeriodic,lensSegmentedSymmetry,coordSlices=64)
+        BNormGradArr,BNormArr=self.solve_Coords_Parallel(fieldCoordsPeriodic,lensSegmentedSymmetry)
         dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
         self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
     def make_Force_And_Potential_Functions(self,data):

@@ -1,3 +1,6 @@
+from ParticleClass import Particle
+from ParticleTracerClass import ParticleTracer
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import numba
@@ -77,38 +80,58 @@ class ParticleTracerLattice:
     def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.
-        from ParticleClass import Particle
-        from ParticleTracerClass import ParticleTracer
-        from ParaWell import ParaWell
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
-        PTL_Ring=ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
+        PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector',parallel=parallel)
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
-
         def errorFunc(rOffsetFact):
+            h=5e-6
             PTL_Ring.elList[1].update_rOffset_Fact(rOffsetFact)
             PTL_Ring.build_Lattice()
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
-            particle=particleTracer.trace(particle,1e-5,1.0,fastMode=False)
-            error=np.std(1e6*particle.qoArr[:,1])
-            return error
-
-        rOffsetFactArr=np.linspace(.5,1.5,12)
-        if parallel==True:
-            helper=ParaWell()
-            vals=np.asarray(helper.parallel_Problem(errorFunc,rOffsetFactArr,onlyReturnResults=True))
-        else:
-            vals=np.asarray([errorFunc(rOffsetFact) for rOffsetFact in rOffsetFactArr])
-        fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],vals)
+            particle=particleTracer.trace(particle,h,1.0,fastMode=False)
+            stepSizeFromEndMaxDeviation=25*h*self.v0Nominal
+            if particle.qoArr[-1,0]>PTL_Ring.totalLength-stepSizeFromEndMaxDeviation:
+                error=np.std(1e6*particle.qoArr[:,1])
+                return error
+            else: return np.nan
+        rOffsetFactArr=np.asarray([.8,.9,.933,.966,1.0,1.033,1.066,1.1,1.2])
+        if parallel==True: njobs=-1
+        else: njobs=1
+        errorArr=np.asarray(Parallel(n_jobs=njobs)(delayed(errorFunc)(rOffset) for rOffset in rOffsetFactArr))
+        rOptimal=self._find_rOptimal(rOffsetFactArr,errorArr)
+        return rOptimal
+    def _find_rOptimal(self,rOffsetFactArr,errorArr):
+        test=errorArr.copy()[1:]
+        test=np.append(test,errorArr[0])
+        numValidSolutions=np.sum(~np.isnan(errorArr))
+        numNanInitial=np.sum(np.isnan(errorArr))
+        numNanAfter=np.sum(np.isnan(test+errorArr))
+        valid=True
+        if numNanAfter-numNanInitial>1:
+            valid=False
+        elif numValidSolutions<4:
+            valid=False
+        elif numNanInitial>0:
+            if (np.isnan(errorArr[0])==False and np.isnan(errorArr[-1])==False):
+                valid=False
+        if valid==False:
+            return None
+        #trim out invalid points
+        rOffsetFactArr=rOffsetFactArr[~np.isnan(errorArr)]
+        errorArr=errorArr[~np.isnan(errorArr)]
+        fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],errorArr)
         rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],10000)
-        newVals=fit(rOffsetFactArrDense[:,np.newaxis])
-        # plt.plot(rOffsetFactArr,vals,marker='x')
-        # plt.plot(rOffsetFactArrDense,newVals)
-        # plt.show()
-        return rOffsetFactArrDense[np.argmin(newVals)]  #optimal rOffsetFactor
+        newerrorArr=fit(rOffsetFactArrDense[:,np.newaxis])
+        rOptimal=rOffsetFactArrDense[np.argmin(newerrorArr)]
+        rMinDistFromEdge=np.min(rOffsetFactArr[1:]-rOffsetFactArr[:-1])/4
+        if rOptimal>rOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<rOffsetFactArr[0]+rMinDistFromEdge:
+            warnings.warn('Invalid solution, rMin very near edge. ')
+            return None
+        return rOptimal
     def set_Constrained_Linear_Element(self,el):
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)

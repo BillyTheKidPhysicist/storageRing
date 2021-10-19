@@ -59,10 +59,11 @@ class phaseSpaceInterpolater:
         XiArr=np.asarray(XiList)
         self.XMaxima=np.max(XiArr,axis=0)
         self.XMinima=np.min(XiArr,axis=0)
-    def __call__(self,swarmInjector,useUpperSymmetry):
+    def __call__(self,swarmInjector:Swarm,useUpperSymmetry):
         totalRevs=0
         zIndex=2
         numParticlesExcluded=0
+        particleNearestIndexList=[]
         for particle in swarmInjector:
             assert 0.0<=particle.probability<=1.0 and particle.traced==True
             q=particle.q.copy()
@@ -75,8 +76,13 @@ class phaseSpaceInterpolater:
                 numParticlesExcluded+=1
                 weightedRevolutions=0.0
             else:
-                weightedRevolutions=self.interpolater(X)[0]*particle.probability
+                revolutions,particleIndex=self.interpolater(X)
+                weightedRevolutions=revolutions[0]*particle.probability
+                particleNearestIndexList.append(particleIndex)
             totalRevs+=weightedRevolutions
+        numUniqueNearestParticles=len(np.unique(np.asarray(particleNearestIndexList)))
+        if numUniqueNearestParticles<swarmInjector.num_Particles()//10:
+            warnings.warn("Low number of particles during nearest neighbor:"+str(numUniqueNearestParticles))
         percentParticlesExcluded=np.round(100*numParticlesExcluded/self.numParticles,1)
         if percentParticlesExcluded>1:
             warnings.warn(str(percentParticlesExcluded)+' % particles excluded in count')
@@ -109,7 +115,7 @@ class LatticeOptimizer:
         self.sameSeedForSearch=True #wether to use the same seed, 42, for the search process
         self.numParticlesInjector=500
         self.numParticlesRing=50000
-
+        self.postCombinerAperture=self.latticeRing.elList[self.latticeRing.combinerIndex+1].ap #radius
         self.spotCaptureDiam=5e-3
         self.collectorAngleMax=.06
         self.temperature=3e-3
@@ -143,24 +149,9 @@ class LatticeOptimizer:
             upperSymmetry=self.useLatticeUpperSymmetry,circular=False)
 
         return True
-    def get_Injector_Swarm_Bounds(self):
-        #finding injector bounds is expensive. This function attempts to reuse previously computed bounds.
-        #for now, it simply uses bounds saved below, unless something has changed in which case it throws an
-        #exception so I don't accidently change something and not update them
-        injectorLensLength=.2
-        injectorLenBoreRadius=.025
-        numberInjectorElements=4
-        injectorBounds=[(-0.015, 0.018), (-0.00625, 0.006), (-4.5, 4), (-12, 12),
-                        (-8, 8)]#10 m/s
-        if self.latticeInjector.elList[1].L!= injectorLensLength: raise Exception('lens has changed')
-        elif self.latticeInjector.elList[1].rp!=injectorLenBoreRadius:  raise Exception('lens has changed')
-        elif len(self.latticeInjector.elList)!=numberInjectorElements:  raise Exception('number of element have changed')
-        elif self.temperature!=3e-3 or self.collectorAngleMax!=.06 or self.spotCaptureDiam!=5e-3:
-            raise Exception('Swarm paramters have changed')
-        else: return injectorBounds
     def get_Injector_Mode_Match_Bounds(self,parallel):
-        injectorParamsBounds=(.05,.5)
-        numGridPointsPerDim = 30
+        injectorParamsBounds=(.05,.4)
+        numGridPointsPerDim = 20
         xArr = np.linspace(injectorParamsBounds[0], injectorParamsBounds[1], numGridPointsPerDim)
         coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
         fracCutOff=.98 # for any given extrema, chose the value that bounds this fraction of particles to avoid wasting
@@ -196,8 +187,12 @@ class LatticeOptimizer:
             return None
         boundsList=[] #list to hold bounds of swarm to trace in storage ring
         for i in range(phaseSpaceExtremaArr.shape[1]//2): #loop over each coordinate, ie y,z,px etc
-            boundsList.append((np.round(phaseSpaceExtremaArr[:,2*i].min(),6),np.round(phaseSpaceExtremaArr[:,2*i+1].max(),6))) #need to double
+            boundsList.append([np.round(phaseSpaceExtremaArr[:,2*i].min(),6),np.round(phaseSpaceExtremaArr[:,2*i+1].max(),6)]) #need to double
             #i because there are 2 columns per variable, a min and a max
+        #clip bounds for position to aperture of following element
+        for i in range(2):
+            boundsList[i][0]=max(boundsList[i][0],-self.postCombinerAperture)
+            boundsList[i][1]=min(boundsList[i][1],self.postCombinerAperture)
         return boundsList
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
         newShapelyObjectList=[]
@@ -352,31 +347,8 @@ class LatticeOptimizer:
                 survival=self.compute_Swarm_Survival(swarm,modeMatchFunc)
                 cost=self.cost_Function(survival)
                 return cost
-        bounds=[(0.1,.5),(0.05,.5)]
-        gridEdgeNum=5
-        coordsForGrid=[]
-        for bound in bounds:
-            dx=(bound[1]-bound[0])/gridEdgeNum
-            xArr=np.linspace(bound[0]+dx,bound[1]-dx,gridEdgeNum)
-            coordsForGrid.append(xArr)
-        coordsArr=np.asarray(np.meshgrid(*coordsForGrid)).T.reshape(-1,len(bounds))
-        coordsArr=np.row_stack((coordsArr,np.asarray([.15,.15])))
-        if parallel==True:
-            costArr=np.asarray(self.helper.parallel_Problem(cost_To_Minimize,coordsArr,onlyReturnResults=True))
-            solverCoordInitial=coordsArr[np.argmin(costArr)]
-        else:
-            costArr=np.asarray([cost_To_Minimize(coord) for coord in coordsArr])
-            solverCoordInitial=coordsArr[np.argmin(costArr)] #start solver at minimum value
-
-        useScipy=False
-        if useScipy==True:
-            minimizerSol=spo.minimize(cost_To_Minimize,solverCoordInitial,bounds=bounds,method='Nelder-Mead',options={'xatol':.0001})
-        else:
-            coordsListForSkopt=coordsArr.tolist()
-            costListForSkopt=costArr.tolist()
-            minimizerSol=skopt.gp_minimize(cost_To_Minimize,bounds,n_calls=20,n_initial_points=0,x0=coordsListForSkopt,
-                                       y0=costListForSkopt,acq_optimizer='sampling',
-                                       n_points=3000,noise=.05)
+        bounds=[(0.05,.3),(0.05,.4)]
+        minimizerSol=spo.differential_evolution(cost_To_Minimize,bounds,tol=.005,mutation=.75,polish=False,maxiter=20)
         solution.xInjector_TunedParams=minimizerSol.x
         solution.survival=self.inverse_Cost_Function(minimizerSol.fun)
         return solution
@@ -392,7 +364,7 @@ class LatticeOptimizer:
                 p=particle.p.copy()
                 p[:2]=self.latticeInjector.combiner.RIn@p[:2]
                 q=q+p*np.abs(q[0]/p[0])
-                if np.sqrt(q[1]**2+q[2]**2)<apNextElement:
+                if np.sqrt(q[1]**2+q[2]**2)<apNextElement: #test that particle survives through next aperture
                     if copyParticles==False: particleEnd=particle
                     else: particleEnd=particle.copy()
                     particleEnd.q=q
@@ -400,8 +372,8 @@ class LatticeOptimizer:
                     swarmEnd.particles.append(particleEnd)
         return swarmEnd
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self):
-        swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy(),self.h,np.inf,
-                                                    parallel=False,fastMode=True,copySwarm=False,accelerated=True)
+        swarmInjectorTraced=self.swarmTracerInjector.trace_Swarm_Through_Lattice(self.swarmInjectorInitial.quick_Copy()
+                                ,self.h,1.0,parallel=False,fastMode=True,copySwarm=False,accelerated=True)
         swarmEnd=self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced,copyParticles=False)
         swarmEnd=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd,copySwarm=False)
         return swarmEnd
@@ -458,13 +430,22 @@ class LatticeOptimizer:
         return survival
     @staticmethod
     def cost_Function(survival):
-        assert 0.0<=survival<=100.0
-        return np.exp(-survival/10)
+        assert 0<=survival<=100.0
+        cost=np.exp(-survival/100.0)
+        offset=np.exp(-100.0/100.0)
+        norm=np.exp(-0.0/100.0)-np.exp(-100.0/100.0)
+        cost=cost-offset
+        cost=cost/norm
+        return cost
     @staticmethod
     def inverse_Cost_Function(cost):
         #returns survival
         assert 0.0<=cost<=1.0
-        return -10*np.log(cost)
+        norm=np.exp(-0.0/100.0)-np.exp(-100.0/100.0)
+        offset=np.exp(-100.0/100.0)
+        cost=cost*norm+offset
+        survival=-100.0*np.log(cost)
+        return survival
     def best_Solution(self):
         return self.solutionList[np.nanargmax(np.asarray([sol.survival for sol in self.solutionList]))]
     def catch_Optimizer_Errors(self,tuningBounds,elementIndices,tuningChoice):
@@ -541,7 +522,15 @@ class LatticeOptimizer:
             return cost
         gridSearchCostResults=[self.cost_Function(survival) for survival in gridSearchSurvivalResults]
         skoptMimizerJobs=-1 if parallel==True else 1
+        file=open('intermediateResults','wb')
+        import dill
+        dill.dump(self.solutionList,file)
+
+        file.close()
         skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
                                    ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
-                                   n_points=10000,noise=1e-6,acq_optimizer='lbfgs')
+                                   n_points=10000,acq_optimizer='lbfgs')
+        print(self.best_Solution())
+        plot_objective(skoptSol)
+        plt.show()
         return self.best_Solution()

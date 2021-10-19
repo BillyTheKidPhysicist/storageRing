@@ -22,12 +22,23 @@ for tunability
 def mine_In_Parallel(function,argumentsList):
     #need to circumvent the fact that numba has a bug wherein compiled solutions persists in memory by limiting
     ###tasks per child
-    pool = multiprocess.Pool(processes=None,maxtasksperchild=2)
-    solutionList=pool.map(function,argumentsList) #8.01
+    multiprocess.set_start_method('spawn')
+    pool = multiprocess.Pool(processes=30,maxtasksperchild=1)
+    solutionList=pool.map(function,argumentsList,chunksize=1) #8.01
     pool.close()
+    file=open('solutionList_Random','wb')  #dump to save right now
+    dill.dump(solutionList,file)
+    file.close()
+    print('Finished random search')
     return solutionList
-
-def is_Invalid_Injector(X):
+def invalid_Solution(XLattice):
+    assert len(XLattice)>2, "must be lattice paramters"
+    sol=Solution()
+    sol.xRing_TunedParams1=XLattice
+    sol.survival=0.0
+    sol.description='Pseudorandom search'
+    return sol
+def is_Valid_Injector(X):
     injectorFactor,rpInjectorFactor=X
     LInjector=injectorFactor*.15
     rpInjector=rpInjectorFactor*.02
@@ -40,8 +51,9 @@ def is_Invalid_Injector(X):
         return True
 def generate_Ring_Lattice(X,parallel=False):
     combinerGap=5e-2
-    tunableDriftGap=5e-2
+    tunableDriftGap=2.54e-2
     probeSpace=.0254
+    jeremyMagnetAp=.01
     rpLens,Lm,LLens=X
     rpBend=rpLens
     rpLensFirst=rpLens
@@ -49,12 +61,14 @@ def generate_Ring_Lattice(X,parallel=False):
     PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing',parallel=parallel)
     rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,
                                                     parallel=parallel)  #25% of time here, 1.0138513851385138
-    PTL_Ring.add_Drift(tunableDriftGap/2)
+    if rOffsetFact is None:
+        return None
+    PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
-    PTL_Ring.add_Drift(tunableDriftGap/2)
+    PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     PTL_Ring.add_Combiner_Sim('combinerV3.txt')
-    PTL_Ring.add_Drift(combinerGap)
+    PTL_Ring.add_Drift(combinerGap,ap=jeremyMagnetAp)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
@@ -76,31 +90,19 @@ def generate_Injector_Lattice(X,parallel=False):
     PTL_Injector.add_Drift(.2,ap=.01)
     PTL_Injector.add_Combiner_Sim('combinerV3.txt')
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
-    # file=open('injectorFile','wb')
-    # dill.dump(PTL_Injector,file)
-    # file=open('injectorFile','rb')
-    # PTL_Injector=dill.load(file)
-    # print('done making lattice')
     return PTL_Injector
-
-
 def solve_System(spacingBounds,numInitial):
     def solve_For_Lattice_Params(X,parallel=False,numGridSearchEdge=10):
         t=time.time()
         rpLens,Lm,LLens,injectorFactor,rpInjectorFactor=X
         XInjector=injectorFactor,rpInjectorFactor
         XRing=rpLens,Lm,LLens
-        if is_Invalid_Injector(XInjector)==True:
-            pass
-        else:
-            sol=Solution()
-            sol.xRing_TunedParams1=X
-            sol.survival=0.0
-            sol.description='Pseudorandom search'
-            return sol
+        if is_Valid_Injector(XInjector)==False:
+            return invalid_Solution(X)
         PTL_Ring=generate_Ring_Lattice(XRing,parallel=parallel)
+        if PTL_Ring is None:
+            return invalid_Solution(X)
         PTL_Injector=generate_Injector_Lattice(XInjector,parallel=parallel)
-
         optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
         sol=optimizer.optimize_Magnetic_Field((1,8),spacingBounds,numGridSearchEdge,'spacing',maxIter=20,parallel=parallel)
         sol.xRing_TunedParams1=X
@@ -109,12 +111,12 @@ def solve_System(spacingBounds,numInitial):
         print(time.time()-t)
         return sol
     paramBounds=[(.005,.03),(.005,.025),(.1,.3),(.75,1.25),(.75,1.25)]
-    initialSampleCoords=skopt.sampler.Sobol().generate(paramBounds,numInitial)
+    randomSearchSampleCoords=skopt.sampler.Sobol().generate(paramBounds,numInitial)
     # np.random.seed(42)
     t=time.time()
-    solutionList=mine_In_Parallel(solve_For_Lattice_Params,initialSampleCoords)
+    solutionList=mine_In_Parallel(solve_For_Lattice_Params,randomSearchSampleCoords)
     initialCostValues=[LatticeOptimizer.cost_Function(sol.survival) for sol in solutionList]
-    print('Finished random search')
+    initialSampleCoords=[sol.xRing_TunedParams1 for sol in solutionList]
 
     def wrapper(X):
         sol=solve_For_Lattice_Params(X,parallel=True)
@@ -122,9 +124,8 @@ def solve_System(spacingBounds,numInitial):
         solutionList.append(sol)
         cost=LatticeOptimizer.cost_Function(sol.survival)
         return cost
-
     skoptSol=skopt.gp_minimize(wrapper,paramBounds,n_calls=32,n_initial_points=0,x0=initialSampleCoords,
-                               y0=initialCostValues,model_queue_size=None ,n_jobs=-1,acq_optimizer='lbfgs',
+                               y0=initialCostValues ,n_jobs=-1,acq_optimizer='lbfgs',
                                n_points=100000 ,n_restarts_optimizer=32*10,noise=1e-6)
 
     argMax=np.argmax(np.asarray([sol.survival for sol in solutionList]))
@@ -135,26 +136,12 @@ def solve_System(spacingBounds,numInitial):
     emailText+='Run time: '+str(int(time.time()-t))+' s \n'
     send_MySelf_Email(emailText)
 
-    file=open('solutionList_Spacing_LessVariable','wb')
+    file=open('solutionList','wb')
     dill.dump(solutionList,file)
     plot_objective(skoptSol)
     plt.show()
 
 
 def run(numInitial):
-    spacingBounds=[(.2,.8),(.2,.8)]
+    spacingBounds=[(.1,.9),(.1,.9)]
     solve_System(spacingBounds,numInitial)
-# run(32*10)
-
-
-'''
-
-yes viable solution
-----------Solution-----------   
-injector element spacing optimum configuration: [0.10095484210380992, 0.2770761911138699]
- storage ring tuned params 1 optimum configuration: [0.011381501322762834, 0.005, 0.25655570903830643, 1.1932851004294265, 1.073627788624332]
- storage ring tuned params 2 optimum configuration: [0.8, 0.2666666666666667]
- bump params: None
-optimum result: 25.66739760407623
-
-'''

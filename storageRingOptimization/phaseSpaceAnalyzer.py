@@ -46,6 +46,7 @@ class Particle(ParticleBase):
         self.deltaE=None
 class SwarmSnapShot:
     def __init__(self,swarm:Swarm,xSnapShot):
+        assert xSnapShot>0.0 #orbit coordinates, not real coordinates
         self.swarmPhaseSpace=Swarm()
         self._take_SnapShot(swarm,xSnapShot)
     def __iter__(self):
