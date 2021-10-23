@@ -107,11 +107,12 @@ class Particle:
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
-    def __init__(self,qi=None,pi=None):
+    def __init__(self,qi=None,pi=None,probability=1.0):
         if qi is None:
             qi=np.zeros(3)
         if pi is None:
             pi=np.asarray([-200.0, 0.0, 0.0])
+        assert len(qi)==3 and len(pi)==3 and 0.0<=probability<=1.0
         self.q=qi #position, lab frame, meters
         self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
         self.qi=qi.copy()#initial position, lab frame, meters
@@ -149,10 +150,10 @@ class Particle:
         self.EArr=None #total energy
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
         #element index and list of energy changes for each pass
-        self.probability=1.0 #used for swarm behaviour based on probability
+        self.probability=probability #used for swarm behaviour based on probability
     def reset(self):
         #reset the particle
-        self.__init__(qi=self.qi,pi=self.pi)
+        self.__init__(qi=self.qi,pi=self.pi,probability=self.probability)
     def __str__(self):
         np.set_printoptions(precision=100)
         string='------particle-------\n'

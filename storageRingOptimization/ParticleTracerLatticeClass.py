@@ -129,7 +129,7 @@ class ParticleTracerLattice:
         rOptimal=rOffsetFactArrDense[np.argmin(newerrorArr)]
         rMinDistFromEdge=np.min(rOffsetFactArr[1:]-rOffsetFactArr[:-1])/4
         if rOptimal>rOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<rOffsetFactArr[0]+rMinDistFromEdge:
-            warnings.warn('Invalid solution, rMin very near edge. ')
+            print('Invalid solution, rMin very near edge. ')
             return None
         return rOptimal
     def set_Constrained_Linear_Element(self,el):
@@ -142,8 +142,9 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None):
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,parallel=self.parallel)
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,dipolesPerDim=2):
+        #dipolesPerDim: dipoles per dimension in the halbach lens simulation
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,dipolesPerDim,parallel=self.parallel)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
