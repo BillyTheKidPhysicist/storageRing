@@ -522,15 +522,8 @@ class LatticeOptimizer:
             return cost
         gridSearchCostResults=[self.cost_Function(survival) for survival in gridSearchSurvivalResults]
         skoptMimizerJobs=-1 if parallel==True else 1
-        file=open('intermediateResults','wb')
-        import dill
-        dill.dump(self.solutionList,file)
-
-        file.close()
+        
         skoptSol=skopt.gp_minimize(skopt_Cost,tuningBounds,n_initial_points=0,x0=tuningCoordsList,y0=gridSearchCostResults
                                    ,n_calls=maxIter,model_queue_size=1,n_jobs=skoptMimizerJobs,n_restarts_optimizer=32,
                                    n_points=10000,acq_optimizer='lbfgs')
-        print(self.best_Solution())
-        plot_objective(skoptSol)
-        plt.show()
         return self.best_Solution()

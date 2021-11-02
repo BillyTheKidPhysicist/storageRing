@@ -22,7 +22,7 @@ for tunability
 def mine_In_Parallel(function,argumentsList):
     #need to circumvent the fact that numba has a bug wherein compiled solutions persists in memory by limiting
     ###tasks per child
-    multiprocess.set_start_method('spawn')
+    # multiprocess.set_start_method('spawn')
     pool = multiprocess.Pool(processes=30,maxtasksperchild=1)
     solutionList=pool.map(function,argumentsList,chunksize=1) #8.01
     pool.close()
@@ -92,6 +92,8 @@ def generate_Injector_Lattice(X,parallel=False):
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
 def solve_System(spacingBounds,numInitial):
+    from profilehooks import profile
+    @profile()
     def solve_For_Lattice_Params(X,parallel=False,numGridSearchEdge=10):
         t=time.time()
         rpLens,Lm,LLens,injectorFactor,rpInjectorFactor=X
@@ -113,8 +115,12 @@ def solve_System(spacingBounds,numInitial):
     paramBounds=[(.005,.03),(.005,.025),(.1,.3),(.75,1.25),(.75,1.25)]
     randomSearchSampleCoords=skopt.sampler.Sobol().generate(paramBounds,numInitial)
     # np.random.seed(42)
+    solve_For_Lattice_Params(randomSearchSampleCoords[0],parallel=True)
+    exit()
     t=time.time()
     solutionList=mine_In_Parallel(solve_For_Lattice_Params,randomSearchSampleCoords)
+    # with open('solutionList_Random','rb') as file:
+    #     solutionList=dill.load(file)
     initialCostValues=[LatticeOptimizer.cost_Function(sol.survival) for sol in solutionList]
     initialSampleCoords=[sol.xRing_TunedParams1 for sol in solutionList]
 

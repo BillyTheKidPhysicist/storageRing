@@ -93,8 +93,10 @@ class ParticleTracerLattice:
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,h,1.0,fastMode=False)
-            stepSizeFromEndMaxDeviation=25*h*self.v0Nominal
-            if particle.qoArr[-1,0]>PTL_Ring.totalLength-stepSizeFromEndMaxDeviation:
+            qoArr=particle.qoArr
+            particleAng=np.arctan2(qoArr[-1][1],qoArr[-1][0]) #very close to zero, or negative, if particle made it to
+            #end
+            if particleAng<.01:
                 error=np.std(1e6*particle.qoArr[:,1])
                 return error
             else: return np.nan
@@ -129,7 +131,7 @@ class ParticleTracerLattice:
         rOptimal=rOffsetFactArrDense[np.argmin(newerrorArr)]
         rMinDistFromEdge=np.min(rOffsetFactArr[1:]-rOffsetFactArr[:-1])/4
         if rOptimal>rOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<rOffsetFactArr[0]+rMinDistFromEdge:
-            print('Invalid solution, rMin very near edge. ')
+            # print('Invalid solution, rMin very near edge. ')
             return None
         return rOptimal
     def set_Constrained_Linear_Element(self,el):

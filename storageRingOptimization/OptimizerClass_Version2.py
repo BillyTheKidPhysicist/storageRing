@@ -1,23 +1,13 @@
-from skopt.plots import plot_objective
-import warnings
 from shapely.affinity import rotate, translate
-import black_box as bb
-import sys
-import numpy.linalg as npl
-from profilehooks import profile
 import copy
-import skopt
 from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm, Particle
 import scipy.optimize as spo
-import time
-import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from ParaWell import ParaWell
 from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal, Drift
-import globalMethods as gm
 
 
 class Solution:
@@ -28,6 +18,9 @@ class Solution:
         self.xRing_TunedParams2 = np.nan  # paramters tuned by the 'inner' gp minimize
         self.survival = np.nan
         self.cost=np.nan
+        self.stable=None
+        self.invalidInjector=None
+        self.invalidRing=None
         self.description = None
         self.bumpParams = None  # List of parameters used in the misalignment testing
 
@@ -36,10 +29,11 @@ class Solution:
         string += 'injector element spacing optimum configuration: ' + str(self.xInjector_TunedParams) + '\n '
         string += 'storage ring tuned params 1 optimum configuration: ' + str(self.xRing_TunedParams1) + '\n '
         string += 'storage ring tuned params 2 optimum configuration: ' + str(self.xRing_TunedParams2) + '\n '
-        string += 'bump params: ' + str(self.bumpParams) + '\n'
+        # string+='stable configuration:'+str(self.stable)+'\n'
+        # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
         string += 'survival: ' + str(self.survival) + '\n'
-        string += '----------------------------'
+        # string += '----------------------------'
         return string
 
 
@@ -53,13 +47,11 @@ class LatticeOptimizer:
         self.particleTracerRing = ParticleTracer(latticeRing)
         self.particleTracerInjector = ParticleTracer(latticeInjector)
         self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
-        self.h = 5e-6  # timestep size
+        self.h = 1e-5  # timestep size
         self.T = 10.0
         self.swarmTracerRing = SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc = None  # function that returns the number of revolutions of a particle at a given
         # point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
-        self.solutionList = []  # list to hold solution objects the track coordsinates and function values for injector
-        # and ring paramters
         self.tunedElementList = None
         self.tuningChoice = None  # what type of tuning will occur
         self.useLatticeUpperSymmetry = True  # exploit the fact that the lattice has symmetry in the z axis to use half
@@ -117,7 +109,8 @@ class LatticeOptimizer:
         else:
             return True
 
-    def show_Floor_Plan(self):
+    def show_Floor_Plan(self,X):
+        self.update_Ring_And_Injector(X)
         shapelyObjectList = self.generate_Shapely_Floor_Plan()
         for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy)
         plt.gca().set_aspect('equal')
@@ -130,8 +123,9 @@ class LatticeOptimizer:
         for val, bounds in zip(X, self.tuningBounds):
             assert bounds[0] <= val <= bounds[1]
         if self.test_Stability(X) == False:
-            return 1.0
-        swarmTraced=self.inject_Swarm(X,parallel=parallel)
+            swarmTraced=Swarm() #empty swarm
+        else:
+            swarmTraced=self.inject_Swarm(X,parallel=parallel)
         cost = self.cost_Function(swarmTraced,X)
         return cost
     def inject_Swarm(self,X,parallel=False):
@@ -139,7 +133,7 @@ class LatticeOptimizer:
         swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End()
         swarmInitial.reset()
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T, parallel=parallel,
-                                                                       fastMode=True, accelerated=True, copySwarm=False)
+                                                                       fastMode=True, accelerated=True, copySwarm=False,)
         return swarmTraced
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced, copyParticles=False):
         apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap
@@ -214,6 +208,7 @@ class LatticeOptimizer:
     def update_Ring_Spacing(self, X):
         for elCenter, spaceFracElBefore, totalLength in zip(self.tunedElementList, X, self.tunableTotalLengthList):
             elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
+            assert isinstance(elBefore,Drift) and isinstance(elAfter,Drift)
             tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
             LBefore = spaceFracElBefore * tunableLength + self.minElementLength
             LAfter = totalLength - LBefore
@@ -221,37 +216,42 @@ class LatticeOptimizer:
             elAfter.set_Length(LAfter)
         self.latticeRing.build_Lattice()
 
-    def compute_Swarm_Survival(self, swarmTraced):
+    def compute_Swarm_Survival(self, swarmTraced:Swarm):
         # A reasonable metric is the total flux multiplication of the beam. If the average particle survives n
         # revolutions then the beam has been multiplied n times. I want this to be constrained between 0 and 1 however,
         #so I will use the baseline as the smallest possible lattice. The smallest is defined as a lattice with a
         # bending radius of 1 meter and the combiner. This makes the results better for smaller actual lattices
-        fluxMult = np.mean(np.asarray([p.revolutions * p.probability for p in swarmTraced.particles]))
-        rBend=1.0
+        if swarmTraced.num_Particles()==0:
+            return 0.0
+        fluxMult = sum([p.revolutions * p.probability for p in swarmTraced.particles])
+        rBendNominal=1.0
         Lcombiner=self.latticeRing.combiner.Lo
-        minLatticeLength=2*(np.pi*rBend+Lcombiner)
-        maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #approximately
-        #correct
+        minLatticeLength=2*(np.pi*rBendNominal+Lcombiner)
+        maxRevs=self.T * self.latticeRing.v0Nominal / minLatticeLength #approximately correct
+        maxFluxMult=sum([maxRevs*p.probability for p in self.swarmInjectorInitial])
         survival = 1e2 * fluxMult/maxFluxMult
         assert 0.0 <= survival <= 100.0
         return survival
     def floor_Plan_Cost(self,X):
         self.update_Ring_And_Injector(X)
-        return self.floor_Plan_OverLap()/1e-3
+        overlap=self.floor_Plan_OverLap()
+        factor = 1e-3
+        cost = 2 / (1 + np.exp(-overlap / factor)) - 1
+        assert 0.0<=cost<=1.0
+        return cost
     def cost_Function(self, swarm,X):
         survival=self.compute_Swarm_Survival(swarm)
         survivalCost=(100.0-survival)/100.0
         cost=survivalCost+self.floor_Plan_Cost(X)
-        assert cost>=0.0
+        assert 0.0<=cost<=2.0
         return cost
     def survival_From_Cost(self, cost,X):
         # returns survival
         survivalCost=cost-self.floor_Plan_Cost(X)
         survival=100.0*(1.0-survivalCost)
+        assert 0.0<=survival<=100.0
         return survival
-
     def catch_Optimizer_Errors(self, tuningBounds, elementIndices, tuningChoice):
-        if len(self.solutionList) != 0: raise Exception("You cannot call optimize twice")
         if max(elementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(elementIndices): raise Exception("Bounds do not match number of tuned elements")
         if tuningChoice == 'field':
@@ -293,13 +293,15 @@ class LatticeOptimizer:
         if self.sameSeedForSearch == True:
             np.random.seed(42)
 
-    def test_Lattice_Stability(self, ringTuningBounds, numEdgePoints=30, parallel=False):
-        assert len(ringTuningBounds) == 2
+    def test_Lattice_Stability(self, ringTuningBounds,injectorTuningBounds, numEdgePoints=30, parallel=False):
+        assert len(ringTuningBounds) == 2 and len(injectorTuningBounds)==2
         x1Arr = np.linspace(ringTuningBounds[0][0], ringTuningBounds[0][1], numEdgePoints)
         x2Arr = np.linspace(ringTuningBounds[1][0], ringTuningBounds[1][1], numEdgePoints)
-        x34Val=.1
+        x3Arr = (ringTuningBounds[0][1]-injectorTuningBounds[0][0])*np.ones(numEdgePoints**2)
+        x4Arr = (ringTuningBounds[1][1]-injectorTuningBounds[1][0])*np.ones(numEdgePoints**2)
         testCoords = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-        testCoords=np.column_stack((testCoords,np.zeros(testCoords.shape)))
+        testCoords=np.column_stack((testCoords,x3Arr,x4Arr))
+        assert testCoords.shape==(numEdgePoints**2,4)
         if parallel == False:
             stablilityList = [self.test_Stability(coords) for coords in testCoords]
         else:
@@ -314,41 +316,37 @@ class LatticeOptimizer:
             numWorkers = -1
         else:
             numWorkers = 1
-        spoSol = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=.01, polish=False,
-                                            workers=numWorkers)
+        approxSol_SP = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=.01, polish=False,
+                                            workers=numWorkers) #global minimizer
 
-        spoSol = spo.minimize(self.mode_Match_Cost, spoSol.x, args=(parallel), bounds=self.tuningBounds,
-                              method='Nelder-Mead',options={'ftol':.001})
+        sol_SP = spo.minimize(self.mode_Match_Cost, approxSol_SP.x, args=(parallel), bounds=self.tuningBounds,
+                              method='Nelder-Mead',options={'ftol':.001}) #polish the result
         sol=Solution()
-        cost=spoSol.fun
-        costMax=1.0
-        if spoSol.fun>costMax:
-            sol.cost=costMax
-        else:
-            sol.cost=self.survival_From_Cost(cost,spoSol.x)
-        sol.xRing_TunedParams2 = spoSol.x[:2]
-        sol.xInjector_TunedParams = spoSol.x[2:]
+        cost=sol_SP.fun
+        sol.cost=cost
+        optimalConfig=sol_SP.x
+        sol.survival=self.survival_From_Cost(cost,optimalConfig)
+        sol.stable=True
+        sol.xRing_TunedParams2 = sol_SP.x[:2]
+        sol.xInjector_TunedParams = sol_SP.x[2:]
+        sol.invalidInjector=False
+        sol.invalidRing=False
+
         return sol
     def optimize(self, elementIndices, ringTuningBounds=None, injectorTuningBounds=None, tuningChoice='spacing',
                  parallel=True)->Solution:
-        # optimize magnetic field of the lattice by tuning element field strengths. This is done by first evaluating the
-        # system over a grid, then using a non parametric model to find the optimum.
-        # elementIndices: tuple of indices of elements to tune the field strength
-        # bounds: list of tuples of (min,max) for tuning
-        # maxIter: maximum number of optimization iterations with non parametric optimizer
-        # num0: number of points in grid of magnetic fields
         if ringTuningBounds is None:
             ringTuningBounds = [(.2, .8), (.2, .8)]
         if injectorTuningBounds is None:
-            injectorTuningBounds = [(.05, .3), (.05, .3)]
+            injectorTuningBounds = [(.05, .4), (.05, .4)]
         self.catch_Optimizer_Errors(ringTuningBounds, elementIndices, tuningChoice)
         self.initialize_Optimizer(elementIndices, tuningChoice, ringTuningBounds, injectorTuningBounds)
-        if self.test_Lattice_Stability(ringTuningBounds, parallel=parallel) == False:
+        if self.test_Lattice_Stability(ringTuningBounds,injectorTuningBounds, parallel=parallel) == False:
             sol = Solution()
             sol.survival = 0.0
             sol.cost=1.0
+            sol.stable=False
             return sol
         print('stable')
         sol=self._minimize(parallel)
-        print('res',sol.survival,sol.cost)
         return sol
