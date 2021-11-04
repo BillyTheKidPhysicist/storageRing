@@ -38,7 +38,7 @@ class Solution:
 
 
 class LatticeOptimizer:
-    def __init__(self, latticeRing, latticeInjector):
+    def __init__(self, latticeRing, latticeInjector,numParticles=500):
 
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -59,7 +59,7 @@ class LatticeOptimizer:
         self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
         # generation with the same number, 42
         self.sameSeedForSearch = True  # wether to use the same seed, 42, for the search process
-        self.numParticlesInjector = 500
+        self.numParticlesInjector = numParticles
         self.postCombinerAperture = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap  # radius
         self.spotCaptureDiam = 5e-3
         self.collectorAngleMax = .06
@@ -112,8 +112,10 @@ class LatticeOptimizer:
     def show_Floor_Plan(self,X):
         self.update_Ring_And_Injector(X)
         shapelyObjectList = self.generate_Shapely_Floor_Plan()
-        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy)
+        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
         plt.gca().set_aspect('equal')
+        plt.xlabel('meters')
+        plt.ylabel('meters')
         plt.grid()
         plt.show()
 

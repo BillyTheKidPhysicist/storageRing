@@ -117,6 +117,7 @@ class Particle:
         self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
         self.qi=qi.copy()#initial position, lab frame, meters
         self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
+        self.qoFinal=None #final orbit coordinates
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
         self.v0=sqrt(pi[0]**2+pi[1]**2+pi[2]**2) #initial speed
@@ -151,6 +152,7 @@ class Particle:
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
         #element index and list of energy changes for each pass
         self.probability=probability #used for swarm behaviour based on probability
+        self.totalLatticeLength=None
     def reset(self):
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi,probability=self.probability)
@@ -261,8 +263,9 @@ class Particle:
         if self.currentEl is not None: #This option is here so the particle class can be used in situation beside ParticleTracer
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
-                qo=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength)
-                self.revolutions=qo[0]/totalLatticeLength
+                self.totalLatticeLength=totalLatticeLength
+                self.qoFinal=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength)
+                self.revolutions=self.qoFinal[0]/totalLatticeLength
             self.currentEl=None # to save memory
     def plot_Energies(self,showOnlyTotalEnergy=False):
         if self.EArr.shape[0]==0:
@@ -275,10 +278,14 @@ class Particle:
         plt.title('Particle energies vs position. \n Total initial energy is '+str(np.round(EArr[0],1)) +' energy units')
         plt.plot(qoArr[:,0],EArr-EArr[0],label='E')
         if showOnlyTotalEnergy==False:
-            plt.plot(qoArr[:, 0], TArr - TArr[0],label='T')
-            plt.plot(qoArr[:, 0], VArr - VArr[0],label='V')
-        plt.ylabel("Energy")
-        plt.xlabel('Meters')
+            distFact=self.totalLatticeLength if self.totalLatticeLength is not None else 1.0
+            plt.plot(qoArr[:, 0]/distFact, TArr - TArr[0],label='T')
+            plt.plot(qoArr[:, 0]/distFact, VArr - VArr[0],label='V')
+        plt.ylabel("Energy, simulation units")
+        if self.totalLatticeLength is not None:
+            plt.xlabel("Distance along lattice, revolutions")
+        else:
+            plt.xlabel("Distance along lattice, meters")
         plt.legend()
         plt.grid()
         plt.show()

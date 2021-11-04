@@ -47,13 +47,13 @@ class Particle(ParticleBase):
 class SwarmSnapShot:
     def __init__(self,swarm:Swarm,xSnapShot):
         assert xSnapShot>0.0 #orbit coordinates, not real coordinates
+        for particle in swarm: assert particle.dataLogging==True
         self.swarmPhaseSpace=Swarm()
         self._take_SnapShot(swarm,xSnapShot)
     def __iter__(self):
         return (particle for particle in self.swarmPhaseSpace)
     def _take_SnapShot(self,swarm,xSnapShot):
         for particle in swarm:
-            assert particle.dataLogging==True
             particleSnapShot=Particle(qi=particle.qi.copy(),pi=particle.pi.copy())
             particleSnapShot.probability=particle.probability
             if self._check_If_Particle_Made_It_To_x(particle,xSnapShot)==False:
@@ -120,15 +120,19 @@ class SwarmSnapShot:
 class PhaseSpaceAnalyzer:
     def __init__(self,swarm,lattice: ParticleTracerLattice):
         assert lattice.latticeType=='storageRing'
-        for particle in swarm: assert particle.dataLogging==True
         self.swarm=swarm
         self.lattice=lattice
-    def _get_Plot_Data_From_SnapShot(self,snapShotPhaseSpace,xAxis,yAxis):
+        self.maxRevs = np.inf
+    def _get_Axis_Index(self,xaxis,yaxis):
         strinNameArr=np.asarray(['y','z','px','py','pz'])
-        xAxisIndex=np.argwhere(strinNameArr==xAxis)[0][0]
-        yAxisIndex=np.argwhere(strinNameArr==yAxis)[0][0]
-        xAxisArr=snapShotPhaseSpace[:,xAxisIndex+1]
-        yAxisArr=snapShotPhaseSpace[:,yAxisIndex+1]
+        assert xaxis in strinNameArr and yaxis in strinNameArr
+        xAxisIndex=np.argwhere(strinNameArr==xaxis)[0][0]+1
+        yAxisIndex=np.argwhere(strinNameArr==yaxis)[0][0]+1
+        return xAxisIndex,yAxisIndex
+    def _get_Plot_Data_From_SnapShot(self,snapShotPhaseSpace,xAxis,yAxis):
+        xAxisIndex,yAxisIndex=self._get_Axis_Index(xAxis,yAxis)
+        xAxisArr=snapShotPhaseSpace[:,xAxisIndex]
+        yAxisArr=snapShotPhaseSpace[:,yAxisIndex]
         return xAxisArr,yAxisArr
     def _find_Max_Xorbit_For_Swarm(self,timeStep=-1):
         #find the maximum longitudinal distance a particle has traveled
@@ -155,7 +159,7 @@ class PhaseSpaceAnalyzer:
             ax.plot(*el.SO.exterior.xy,c='black')
         if plotPointCoords is not None:
             ax.scatter(plotPointCoords[0],plotPointCoords[1],c='red',marker='x',s=100)
-    def _make_Phase_Space_Video_For_X_Array(self,videoTitle,xOrbitSnapShotArr,xaxis,yaxis,alpha,fps):
+    def _make_Phase_Space_Video_For_X_Array(self,videoTitle,xOrbitSnapShotArr,xaxis,yaxis,alpha,fps,dpi):
         fig,axes=plt.subplots(2,1)
         camera=celluloid.Camera(fig)
         labels,unitModifier=self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
@@ -185,35 +189,40 @@ class PhaseSpaceAnalyzer:
                 camera.snap()
         plt.tight_layout()
         animation=camera.animate()
-        animation.save(str(videoTitle)+'.gif',fps=fps)
+        animation.save(str(videoTitle)+'.gif',fps=fps,dpi=dpi)
     def _check_Axis_Choice(self,xaxis,yaxis):
         validPhaseCoords=['y','z','px','py','pz']
         assert (xaxis in validPhaseCoords) and (yaxis in validPhaseCoords)
     def _get_Axis_Labels_And_Unit_Modifiers(self,xaxis,yaxis):
         positionLabel='Position, mm'
-        momentumLabel='Momentum, 1*m/s'
+        momentumLabel='Momentum, m/s'
         positionUnitModifier=1e3
         if xaxis in ['y','z']: #there has to be a better way to do this
-            labelsList=[positionLabel]
+            label=xaxis+' '+positionLabel
+            labelsList=[label]
             unitModifier=[positionUnitModifier]
         else:
-            labelsList=[momentumLabel]
+            label=xaxis +' '+momentumLabel
+            labelsList=[label]
             unitModifier=[1]
         if yaxis in ['y','z']:
-            labelsList.append(positionLabel)
+            label = yaxis + ' ' + positionLabel
+            labelsList.append(label)
             unitModifier.append(positionUnitModifier)
         else:
-            labelsList.append(momentumLabel)
+            label = yaxis + ' ' + momentumLabel
+            labelsList.append(label)
             unitModifier.append(1.0)
         return labelsList,unitModifier
     def _make_SnapShot_XArr(self,numPoints):
         #revolutions: set to -1 for using the largest number possible based on swarm
-        xMax=self._find_Max_Xorbit_For_Swarm()
+        xMaxSwarm=self._find_Max_Xorbit_For_Swarm()
+        xMax=min(xMaxSwarm,self.maxRevs*self.lattice.totalLength)
         xStart=self._find_Inclusive_Min_XOrbit_For_Swarm()
         return np.linspace(xStart,xMax,numPoints)
 
     def make_Phase_Space_Movie_At_Repeating_Lattice_Point(self,videoTitle,xVideoPoint,xaxis='y',yaxis='z',
-                                                          videoLengthSeconds=10.0,alpha=.25):
+                                                          videoLengthSeconds=10.0,alpha=.25,dpi=None):
         # xPoint: x point along lattice that the video is made at
         # xaxis: which cooordinate is plotted on the x axis of phase space plot
         # yaxis: which coordine is plotted on the y axis of phase plot
@@ -226,14 +235,16 @@ class PhaseSpaceAnalyzer:
         fpsApprox=min(int(numFrames/videoLengthSeconds),1)
         print(fpsApprox,numFrames)
         xSnapShotArr=self._make_SnapShot_Position_Arr_At_Same_X(xVideoPoint)
-        self._make_Phase_Space_Video_For_X_Array(videoTitle,xSnapShotArr,xaxis,yaxis,alpha,fpsApprox)
-    def make_Phase_Space_Movie_Through_Lattice(self,title,xaxis,yaxis,videoLengthSeconds=10.0,fps=30,alpha=.25):
+        self._make_Phase_Space_Video_For_X_Array(videoTitle,xSnapShotArr,xaxis,yaxis,alpha,fpsApprox,dpi)
+    def make_Phase_Space_Movie_Through_Lattice(self,title,xaxis,yaxis,videoLengthSeconds=10.0,fps=30,alpha=.25,
+                                               maxRevs=np.inf,dpi=None):
         #maxVideoLengthSeconds: The video can be no longer than this, but will otherwise shoot for a few fps
+        self.maxRevs=maxRevs
         self._check_Axis_Choice(xaxis,yaxis)
         numFrames=int(videoLengthSeconds*fps)
         xArr=self._make_SnapShot_XArr(numFrames)
         print('making video')
-        self._make_Phase_Space_Video_For_X_Array(title,xArr,xaxis,yaxis,alpha,fps)
+        self._make_Phase_Space_Video_For_X_Array(title,xArr,xaxis,yaxis,alpha,fps,dpi)
     def plot_Survival_Versus_Time(self,TMax=None,axis=None):
         TSurvivedList=[]
         for particle in self.swarm:
@@ -285,6 +296,32 @@ class PhaseSpaceAnalyzer:
         axes[1].set_ylabel('Percent Survival ')
         axes[1].set_xlabel('Distance along orbit, m')
         axes[0].legend()
+        plt.show()
+    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None):
+        self._check_Axis_Choice(xaxis, yaxis)
+        labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
+        from matplotlib.patches import Patch
+        xPlotIndex,yPlotIndex=self._get_Axis_Index(xaxis,yaxis)
+        num=0
+        for particle in self.swarm:
+            num+=1
+            X = particle.qi.copy()
+            assert np.abs(X[0]) < 1e-6
+            X = np.append(X, particle.pi.copy())
+            xPlot = X[xPlotIndex]
+            yPlot = X[yPlotIndex]
+            color = 'red' if particle.clipped == True else 'green'
+            plt.scatter(xPlot, yPlot, c=color, alpha=.5)
+        legendList = [Patch(facecolor='green', edgecolor='green',
+                       label='survived'), Patch(facecolor='red', edgecolor='red',
+                                                label='clipped')]
+        plt.title('Phase space survival.')
+        plt.legend(handles=legendList)
+        plt.xlabel(labelList[0])
+        plt.ylabel(labelList[1])
+        plt.tight_layout()
+        if saveTitle is not None:
+            plt.savefig(saveTitle,dpi=150)
         plt.show()
 
 
