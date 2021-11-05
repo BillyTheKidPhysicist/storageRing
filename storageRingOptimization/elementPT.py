@@ -1268,7 +1268,11 @@ class HalbachLensSim(LensIdeal):
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
-        numXY=int((self.ap/self.rp)*numPointsTransverse)
+        # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
+        # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
+
+
+        numXY=int((self.ap/self.rp)*numPointsTransverse) 
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
