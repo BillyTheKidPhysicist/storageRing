@@ -763,8 +763,8 @@ class ParticleTracerLattice:
             else: #else use the specified color
                 color=particle.color
             if showMarkers==True:
-                plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
-                plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
+                plt.scatter(*particle.qFinal[:2], marker='x', s=xMarkerSize, c=color)
+                plt.scatter(*particle.qFinal[:2], marker='o', s=10, c=color)
             if showTraceLines==True:
                 if particle.dataLogging!=True:
                     raise Exception("Particle must have logged results to plot trace lines")

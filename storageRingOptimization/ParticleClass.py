@@ -26,11 +26,11 @@ class Swarm:
         for particle in self.particles:
             if onlyUnclipped==True:
                 if particle.clipped==False:
-                    qVec.append(particle.q)
-                    pVec.append(particle.p)
+                    qVec.append(particle.qFinal)
+                    pVec.append(particle.pFinal)
             else:
-                qVec.append(particle.q)
-                pVec.append(particle.p)
+                qVec.append(particle.qFinal)
+                pVec.append(particle.pFinal)
         qVec=np.asarray(qVec)
         pVec=np.asarray(pVec)
         return qVec,pVec
@@ -113,10 +113,10 @@ class Particle:
         if pi is None:
             pi=np.asarray([-200.0, 0.0, 0.0])
         assert len(qi)==3 and len(pi)==3 and 0.0<=probability<=1.0
-        self.q=qi #position, lab frame, meters
-        self.p=pi #momentu, lab frame, meters*kg/s, where mass=1
         self.qi=qi.copy()#initial position, lab frame, meters
         self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
+        self.qFinal=None
+        self.pFinal=None
         self.qoFinal=None #final orbit coordinates
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
@@ -161,8 +161,8 @@ class Particle:
         string='------particle-------\n'
         string+='qi: '+str(self.qi)+'\n'
         string+='pi: '+str(self.pi)+'\n'
-        string+='p: '+str(self.p)+'\n'
-        string+='q: '+str(self.q)+'\n'
+        string+='p: '+str(self.pFinal)+'\n'
+        string+='q: '+str(self.qFinal)+'\n'
         string+='current element: '+str(self.currentEl)+' \n '
         string+='revolution: '+str(self.revolutions)+' \n'
         np.set_printoptions(precision=8) #reset output to default per docs
@@ -245,9 +245,11 @@ class Particle:
         self._TList=[]
         self._VList=[]
 
-    def finished(self,totalLatticeLength=None):
+    def finished(self,currentEl,qEl,pEl,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
+        self.qFinal = currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+        self.pFinal = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)
         self.traced=True
         self.force=None
         if self.dataLogging==True:
@@ -264,7 +266,7 @@ class Particle:
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
                 self.totalLatticeLength=totalLatticeLength
-                self.qoFinal=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.q, self.cumulativeLength)
+                self.qoFinal=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.qFinal, self.cumulativeLength)
                 self.revolutions=self.qoFinal[0]/totalLatticeLength
             self.currentEl=None # to save memory
     def plot_Energies(self,showOnlyTotalEnergy=False):

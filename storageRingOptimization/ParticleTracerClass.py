@@ -119,15 +119,15 @@ class ParticleTracer:
             if el.Lo<=LMin: #have at least a few steps in each element
                 print(el,el.L,LMin,self.particle.v0,self.h)
                 raise Exception('element too short for time steps size')
-        self.currentEl = self.which_Element_Lab_Coords(self.particle.q)
+        self.currentEl = self.which_Element_Lab_Coords(self.particle.qi)
         self.particle.currentEl=self.currentEl
         self.particle.dataLogging= not self.fastMode #if using fast mode, there will NOT be logging
         if self.currentEl is None:
             self.particle.clipped=True
         else:
             self.particle.clipped=False
-            self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.q)
-            self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.p)
+            self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.qi)
+            self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
     def trace(self,particle,h,T0,fastMode=False,accelerated=False):
@@ -145,7 +145,7 @@ class ParticleTracer:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
         if self.particle.clipped==True: #some particles may come in clipped so ignore them
-            self.particle.finished(totalLatticeLength=0)
+            self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=0)
             return self.particle
         self.fastMode=fastMode
         self.h=h
@@ -154,16 +154,16 @@ class ParticleTracer:
         self.accelerated=accelerated
         if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
             # to become clipped
-            self.particle.finished(totalLatticeLength=0)
+            self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=0)
             return particle
 
         self.time_Step_Loop()
         self.forceLast=None #reset last force to zero
-        self.particle.q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
+        self.particle._q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
         self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
         self.particle.currentEl=self.currentEl
 
-        self.particle.finished(totalLatticeLength=self.totalLatticeLength)
+        self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=self.totalLatticeLength)
         return self.particle
     def time_Step_Loop(self):
         while (True):
