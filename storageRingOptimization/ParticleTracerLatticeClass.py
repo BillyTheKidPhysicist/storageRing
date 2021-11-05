@@ -302,12 +302,12 @@ class ParticleTracerLattice:
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
-        params=self.solve_Combiner_Constraints()
         for linearElementToConstrain in self.linearElementsToConstraint:
             assert (isinstance(linearElementToConstrain,HalbachLensSim) or
                isinstance(linearElementToConstrain,LensIdeal)) and linearElementToConstrain is not None
             assert self.elList[linearElementToConstrain.index-1].type=='BEND' or\
                    self.elList[linearElementToConstrain.index+1].type=='BEND'
+        params = self.solve_Combiner_Constraints()
         if self.bender1.segmented==True:
             rb1, rb2, numMagnets1, numMagnets2, L3=params
             self.bender1.rb=rb1
@@ -335,17 +335,26 @@ class ParticleTracerLattice:
 
         #find the distance from the kink in the combiner from the bender before it, and the distance to the bender after
         # (clockwise)
-        L1=self.elList[self.combinerIndex].Lb+self.bender1.Lcap #from kink to next bender
-        L2=self.elList[self.combinerIndex].La+self.bender1.Lcap #from previous bender to kink
-        inputAng = self.elList[self.combinerIndex].ang
-        inputOffset = self.elList[self.combinerIndex].inputOffset
-        for i in range(self.combinerIndex+1,len(self.elList)+1):
-            if self.elList[i].type=='BEND': #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
-                break
-            L1 += self.elList[i].L
-        for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
-            #lattice element list
-            L2+=self.elList[i].L
+        if self.combiner is None:
+            inputAng,inputOffset=(None,None)
+            L2=None
+            L1=self.bender1.Lcap+self.bender2.Lcap
+            for el in self.elList:
+                if el.type=='BEND':
+                    break
+                L1+=el.L
+        else:
+            L1=self.elList[self.combinerIndex].Lb+self.bender1.Lcap #from kink to next bender
+            L2=self.elList[self.combinerIndex].La+self.bender1.Lcap #from previous bender to kink
+            inputAng = self.elList[self.combinerIndex].ang
+            inputOffset = self.elList[self.combinerIndex].inputOffset
+            for i in range(self.combinerIndex+1,len(self.elList)+1):
+                if self.elList[i].type=='BEND': #if some kind of bender (ideal,segmented,sim etc) then the end has been reached
+                    break
+                L1 += self.elList[i].L
+            for i in range(self.combinerIndex-1,-1,-1): #assumes that the combiner will be before the first bender in the
+                #lattice element list
+                L2+=self.elList[i].L
         if self.bender1.segmented==True: #both bender1 and bender2 are same type
             params=self.solve_Implicit_Segmented_Triangle_Problem(inputAng,inputOffset, L1, L2)
         else:
@@ -402,12 +411,11 @@ class ParticleTracerLattice:
         params[2]=int(np.round(params[2]))
         params[3]=int(np.round(params[3]))
         if cost(params[:2])>tol:
-            print(inputAng, inputOffset, L1, L2,r10,r20)
             raise Exception('FAILED TO SOLVE IMPLICIT TRIANGLE PROBLEM TO REQUESTED ACCURACY')
         return params
 
     @staticmethod
-    @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64,numba.float64,numba.float64,numba.float64))
+    # @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64,numba.float64,numba.float64,numba.float64))
     def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. The geometry of the combiner requires an additional step because the orbit
@@ -420,6 +428,8 @@ class ParticleTracerLattice:
         #r1: radius of circle after the combiner
         #r2: radius of circle before the combiner
         #note that L1 and L2 INCLUDE the sections in the combiner.
+        if inputAng is None:
+            return np.pi,np.pi,L1
         L1 += -inputOffset / np.tan(inputAng)
         L2 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
 
@@ -526,12 +536,11 @@ class ParticleTracerLattice:
         if constrain==True:
             if type(self.bender1)!=type(self.bender2): #for continuous benders
                 raise Exception('BENDERS BOTH MUST BE SAME TYPE')
-            if self.combinerIndex is None:
-                raise  Exception('THERE MUST BE A COMBINER')
             if len(self.benderIndices) != 2:
                 raise Exception('THERE MUST BE TWO BENDERS')
-            if self.combinerIndex>self.benderIndices[0]:
-                raise Exception('COMBINER MUST BE BEFORE FIRST BENDER')
+            if self.combiner is not None:
+                if self.combinerIndex>self.benderIndices[0]:
+                    raise Exception('COMBINER MUST BE BEFORE FIRST BENDER')
 
             if self.bender1.segmented==True:
                 if (self.bender1.Lseg != self.bender2.Lseg) or (self.bender1.yokeWidth != self.bender2.yokeWidth):
@@ -754,8 +763,8 @@ class ParticleTracerLattice:
             else: #else use the specified color
                 color=particle.color
             if showMarkers==True:
-                plt.scatter(*particle.q[:2], marker='x', s=xMarkerSize, c=color)
-                plt.scatter(*particle.q[:2], marker='o', s=10, c=color)
+                plt.scatter(*particle.qFinal[:2], marker='x', s=xMarkerSize, c=color)
+                plt.scatter(*particle.qFinal[:2], marker='o', s=10, c=color)
             if showTraceLines==True:
                 if particle.dataLogging!=True:
                     raise Exception("Particle must have logged results to plot trace lines")
