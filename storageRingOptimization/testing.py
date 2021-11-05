@@ -17,11 +17,11 @@ def save_Poop_Data(PTL,poopDataFileName):
     tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=False,parallel=False)
     testData=[]
     for particle in tracedSwarm:
-        p=particle.p
-        q=particle.q
+        pF=particle.pFinal
+        qF=particle.qFinal
         revolutions=particle.revolutions
         EFinal=particle.EArr[-1]
-        testData.append(np.append(np.append(np.append(q,p),revolutions),EFinal))
+        testData.append(np.append(np.append(np.append(qF,pF),revolutions),EFinal))
     np.savetxt(os.path.join(testDataFolderPath,poopDataFilePath),np.asarray(testData))
     
 def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
@@ -34,21 +34,21 @@ def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
     #the nature of digitla computing, the same algorithm done in a different way can give slightly different answers
     #in the last few digits
     for i in range(len(tracedSwarm.particles)):
-        q=tracedSwarm.particles[i].q
+        qF=tracedSwarm.particles[i].qFinal
         qTest=testData[i,:3]
-        p=tracedSwarm.particles[i].p
+        pF=tracedSwarm.particles[i].pFinal
         pTest=testData[i,3:6]
         revs=tracedSwarm.particles[i].revolutions
         revsTest=testData[i,6]
         EFinalTest=testData[i,7]
-        condition=(np.all(np.abs(q-qTest)<eps) and np.all(np.abs(p-pTest)<eps) and np.abs(revs-revsTest)<eps)
+        condition=(np.all(np.abs(qF-qTest)<eps) and np.all(np.abs(pF-pTest)<eps) and np.abs(revs-revsTest)<eps)
         if fastMode==False: #include energy considerations
             EFinalTraced=tracedSwarm.particles[i].EArr[-1]
             condition=condition and np.abs(EFinalTest-EFinalTraced)<eps
         if condition==False:
-            print('q:',q)
+            print('q:',qF)
             print('qTest:',qTest)
-            print('p:',p)
+            print('p:',pF)
             print('pTest:',pTest)
             raise Exception('Failed')
         assert condition,'Failed on particle: '+str(i)

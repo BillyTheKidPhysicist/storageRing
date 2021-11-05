@@ -1,3 +1,4 @@
+import joblib
 from joblib import Parallel,delayed
 from ParticleTracerClass import ParticleTracer
 import numpy as np
@@ -5,6 +6,7 @@ from ParticleClass import Swarm
 import time
 from ParaWell import ParaWell
 import skopt
+import multiprocess
 
 
 
@@ -234,16 +236,11 @@ class SwarmTracer:
         swarmAtOrigin=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=upperSymmetry,
                                                                sameSeed=sameSeed,circular=circular,smallXOffset=smallXOffset)
         swarmAtCombiner=self.move_Swarm_To_Combiner_Output(swarmAtOrigin,copySwarm=False,scoot=True)
-        #now update the initial positions of particles to reflect this move, otherwise initial position would be that of
-        #swarmAtOrigin
-        for particle in swarmAtCombiner:
-            particle.qi=particle.q.copy()
-            particle.pi=particle.p.copy()
         return swarmAtCombiner
 
     def move_Swarm_To_Combiner_Output(self,swarm,scoot=False,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
-        #(0,0,0) and have average negative velocity. Any swarm can work however, but the previous condition is assumed.
+        #(0,0,0) and have average negative velocity.
         #swarm: the swarm to move to output
         #scoot: if True, move the particles along a tiny amount so that they are just barely in the next element. Helpful
         #for the doing the particle tracing sometimes
@@ -253,11 +250,12 @@ class SwarmTracer:
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
         for particle in swarm.particles:
-            particle.q[:2] = particle.q[:2] @ R
-            particle.q += r2
-            particle.p[:2] = particle.p[:2] @ R
+            assert np.abs(particle.qi[0])<1e-12 and particle.pi[0]<0.0 and particle.traced==False
+            particle.qi[:2] = particle.qi[:2] @ R
+            particle.qi += r2
+            particle.pi[:2] = particle.pi[:2] @ R
             if scoot==True:
-                particle.q+=particle.p*1e-10
+                particle.qi+=particle.pi*1e-10
         return swarm
 
     def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True,accelerated=False):
