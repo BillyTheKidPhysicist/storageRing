@@ -397,40 +397,42 @@ class HalbachLens:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
         #r: rows of coordinates, shape (N,3). Where N is the number of evaluation points
-        return self._transform_r_NUMBA(r,self.r0,self.theta,self.ROutTheta)
+        if self.theta is not None:
+            return self._transform_r_NUMBA(r,self.r0,self.ROutTheta)
+        else:
+            return r
     @staticmethod
-    @numba.njit()
-    def _transform_r_NUMBA(r,r0,theta,ROutTheta):
+    @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:,:]))
+    def _transform_r_NUMBA(r,r0,ROutTheta):
         #todo: something is wrong here with the matrix multiplication
         rNew=r.copy()
         rNew=rNew-np.ones(rNew.shape)*r0 #need to move the coordinates towards where the evaluation will take
         #place
-        if theta is not None:
-            for i in range(rNew.shape[0]):
-                rx=rNew[i][0]
-                rz=rNew[i][2]
-                rNew[i][0]=ROutTheta[0,0]*rx+ROutTheta[0,1]*rz
-                rNew[i][2]=ROutTheta[1,0]*rx+ROutTheta[1,1]*rz
+        for i in range(rNew.shape[0]):
+            rx=rNew[i][0]
+            rz=rNew[i][2]
+            rNew[i][0]=ROutTheta[0,0]*rx+ROutTheta[0,1]*rz
+            rNew[i][2]=ROutTheta[1,0]*rx+ROutTheta[1,1]*rz
         return rNew
-    # @profile
     def _transform_Vector(self,v):
         #todo: something seems wrong here with the matrix multiplixation
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
-        return self._transform_Vector_NUMBA(v,self.theta,self.RInTheta)
+        if self.theta is not None:
+            return self._transform_Vector_NUMBA(v,self.RInTheta)
+        else:
+            return v
     @staticmethod
-    @numba.njit()
-    def _transform_Vector_NUMBA(v,theta,RInTheta):
+    @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:,:]))
+    def _transform_Vector_NUMBA(v,RInTheta):
         #todo: remove the none catches
         vNew=v.copy()
-        if theta is not None:
-            for i in range(vNew.shape[0]):
-                vx=vNew[i][0]
-                vz=vNew[i][2]
-                vNew[i][0]=RInTheta[0,0]*vx+RInTheta[0,1]*vz
-                vNew[i][2]=RInTheta[1,0]*vx+RInTheta[1,1]*vz
-                # vNew[i][[0,2]]=RInTheta@vNew[i][[0,2]]
+        for i in range(vNew.shape[0]):
+            vx=vNew[i][0]
+            vz=vNew[i][2]
+            vNew[i][0]=RInTheta[0,0]*vx+RInTheta[0,1]*vz
+            vNew[i][2]=RInTheta[1,0]*vx+RInTheta[1,1]*vz
         return vNew
     def B_Vec(self,r):
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.

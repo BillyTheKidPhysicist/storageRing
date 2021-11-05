@@ -1055,20 +1055,22 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
     def solve_Coords_Parallel(self,coords,lens):
-        if self.parallel==True:njobs=-1
-        else: njobs=1
-        coordSlices=32
-        parallelCoords=np.array_split(coords,coordSlices)
-        results=joblib.Parallel(n_jobs=njobs)(joblib.delayed(lens.BNorm_Gradient)(coord,returnNorm=True)
-                                              for coord in parallelCoords)
-        BNormGradList=[]
-        BNormList=[]
-        for result in results:
-            BNormGradList.append(result[0])
-            BNormList.append(result[1])
-        BNormGradArr=np.row_stack(BNormGradList)
-        BNormArr=np.concatenate(BNormList)
-        return BNormGradArr,BNormArr
+        if self.parallel==False:
+            BNormGradArr,BNormArr=lens.BNorm_Gradient(coords,returnNorm=True)
+            return BNormGradArr,BNormArr
+        else:
+            coordSlices=joblib.cpu_count()
+            parallelCoords=np.array_split(coords,coordSlices)
+            results=joblib.Parallel(n_jobs=-1,backend='multiprocessing')(joblib.delayed(lens.BNorm_Gradient)(coord,
+                                                returnNorm=True) for coord in parallelCoords)
+            BNormGradList=[]
+            BNormList=[]
+            for result in results:
+                BNormGradList.append(result[0])
+                BNormList.append(result[1])
+            BNormGradArr=np.row_stack(BNormGradList)
+            BNormArr=np.concatenate(BNormList)
+            return BNormGradArr,BNormArr
     def fill_Field_Func_Cap(self):
         lensCap=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
@@ -1213,7 +1215,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rp,L,apFrac,bumpOffset,parallel=False):
+    def __init__(self,PTL, rp,L,apFrac,bumpOffset,dipolesPerDim,parallel=False):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         super().__init__(PTL, None, None, rp, None, fillParams=False)
@@ -1224,6 +1226,7 @@ class HalbachLensSim(LensIdeal):
         self.rp=rp
         self.ap=rp*apFrac
         self.parallel=parallel
+        self.dipolesPerDim=dipolesPerDim
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
@@ -1260,7 +1263,8 @@ class HalbachLensSim(LensIdeal):
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
         magnetWidth=self.rp*np.tan(2*np.pi/24)*2
-        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=2)
+        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=
+        self.dipolesPerDim)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=self.rp+magnetWidth +mountThickness
 
@@ -1282,7 +1286,7 @@ class HalbachLensSim(LensIdeal):
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
             planeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,0)).T.reshape(-1,3)
-            BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
+            BNormGrad,BNorm=self.solve_Coords_Parallel(planeCoords,lens)#lens.BNorm_Gradient(planeCoords,returnNorm=True)
             self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
             self.fill_Field_Func_2D()
@@ -1302,24 +1306,28 @@ class HalbachLensSim(LensIdeal):
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
-        BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
+        BNormGrad,BNorm = self.solve_Coords_Parallel(volumeCoords,lens)#lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
         self.compile_Fast_Numba_Force_Function()
+
     def solve_Coords_Parallel(self,coords,lens):
-        if self.parallel==True:njobs=-1
-        else: njobs=1
-        parallelCoords=np.array_split(coords,32)
-        results=joblib.Parallel(n_jobs=njobs)(joblib.delayed(lens.BNorm_Gradient)(coord,returnNorm=True)
-                                              for coord in parallelCoords)
-        BNormGradList=[]
-        BNormList=[]
-        for result in results:
-            BNormGradList.append(result[0])
-            BNormList.append(result[1])
-        BNormGradArr=np.row_stack(BNormGradList)
-        BNormArr=np.concatenate(BNormList)
-        return BNormGradArr,BNormArr
+        if self.parallel==False:
+            BNormGradArr,BNormArr=lens.BNorm_Gradient(coords,returnNorm=True)
+            return BNormGradArr,BNormArr
+        else:
+            coordSlices=joblib.cpu_count()
+            parallelCoords=np.array_split(coords,coordSlices)
+            results=joblib.Parallel(n_jobs=-1,backend='multiprocessing')(joblib.delayed(lens.BNorm_Gradient)(coord,
+                                                                returnNorm=True) for coord in parallelCoords)
+            BNormGradList=[]
+            BNormList=[]
+            for result in results:
+                BNormGradList.append(result[0])
+                BNormList.append(result[1])
+            BNormGradArr=np.row_stack(BNormGradList)
+            BNormArr=np.concatenate(BNormList)
+            return BNormGradArr,BNormArr
 
     def fill_Field_Func_Cap(self):
         interpF, interpV = self.make_Interp_Functions(self.data3D)
