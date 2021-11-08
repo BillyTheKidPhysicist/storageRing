@@ -255,7 +255,8 @@ class SwarmTracer:
             particle.qi += r2
             particle.pi[:2] = particle.pi[:2] @ R
             if scoot==True:
-                particle.qi+=particle.pi*1e-10
+                tinyTimeStep=1e-9
+                particle.qi+=particle.pi*tinyTimeStep
         return swarm
 
     def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True,accelerated=False):

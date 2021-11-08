@@ -737,7 +737,7 @@ class ParticleTracerLattice:
         return xLab,yLab
 
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
-                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None):
+                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None,finalCoords=True):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -763,8 +763,12 @@ class ParticleTracerLattice:
             else: #else use the specified color
                 color=particle.color
             if showMarkers==True:
-                plt.scatter(*particle.qFinal[:2], marker='x', s=xMarkerSize, c=color)
-                plt.scatter(*particle.qFinal[:2], marker='o', s=10, c=color)
+                if finalCoords==False:
+                    xy=particle.qi[:2]
+                else:
+                    xy = particle.qf[:2]
+                plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
+                plt.scatter(*xy, marker='o', s=10, c=color)
             if showTraceLines==True:
                 if particle.dataLogging!=True:
                     raise Exception("Particle must have logged results to plot trace lines")

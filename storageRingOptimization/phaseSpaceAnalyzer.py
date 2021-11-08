@@ -12,29 +12,28 @@ import matplotlib.pyplot as plt
 
 
 def make_Test_Swarm_And_Lattice(numParticles=100,totalTime=.1)->(Swarm,ParticleTracerLattice):
-    # PTL=ParticleTracerLattice(200.0)
-    # PTL.add_Lens_Ideal(.4,1.0,.025)
-    # PTL.add_Drift(.1)
-    # PTL.add_Lens_Ideal(.4,1.0,.025)
-    # # PTL.add_Bender_Ideal_Segmented_With_Cap(200,.01,.1,1.0,.01,1.0,.001,1e-6)
-    # PTL.add_Bender_Ideal(np.pi,1.0,1.0,.025)
-    # PTL.add_Drift(.2)
-    # PTL.add_Lens_Ideal(.2,1.0,.025)
-    # PTL.add_Drift(.1)
-    # PTL.add_Lens_Ideal(.2,1.0,.025)
-    # PTL.add_Drift(.2)
-    # PTL.add_Bender_Ideal(np.pi,1.0,1.0,.025)
-    # PTL.end_Lattice()
+    PTL=ParticleTracerLattice(200.0)
+    PTL.add_Lens_Ideal(.4,1.0,.025)
+    PTL.add_Drift(.1)
+    PTL.add_Lens_Ideal(.4,1.0,.025)
+    # PTL.add_Bender_Ideal_Segmented_With_Cap(200,.01,.1,1.0,.01,1.0,.001,1e-6)
+    PTL.add_Bender_Ideal(np.pi,1.0,1.0,.025)
+    PTL.add_Drift(.2)
+    PTL.add_Lens_Ideal(.2,1.0,.025)
+    PTL.add_Drift(.1)
+    PTL.add_Lens_Ideal(.2,1.0,.025)
+    PTL.add_Drift(.2)
+    PTL.add_Bender_Ideal(np.pi,1.0,1.0,.025)
+    PTL.end_Lattice()
 
-    file=open('ringFile','rb')
-    PTL=dill.load(file)
-    # swarmTracer=SwarmTracer(PTL)
-    # swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3,5.0,1e-5,numParticles)
-    # swarm=swarmTracer.trace_Swarm_Through_Lattice(swarm,5e-6,totalTime,fastMode=False,parallel=True)
+
+    swarmTracer=SwarmTracer(PTL)
+    swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3,5.0,1e-5,numParticles)
+    swarm=swarmTracer.trace_Swarm_Through_Lattice(swarm,5e-6,totalTime,fastMode=False,parallel=True)
     # file=open('swarmFile','wb')
     # dill.dump(swarm,file)
-    file=open('swarmFile','rb')
-    swarm=dill.load(file)
+    # file=open('swarmFile','rb')
+    # swarm=dill.load(file)
     print('swarm and lattice done')
     return swarm,PTL
 class Particle(ParticleBase):
@@ -59,8 +58,8 @@ class SwarmSnapShot:
             if self._check_If_Particle_Made_It_To_x(particle,xSnapShot)==False:
                 particleSnapShot.qo=particle.qoArr[-1].copy()
                 particleSnapShot.po=particle.pArr[-1].copy()
-                particleSnapShot.p=particle.p.copy()
-                particleSnapShot.q=particle.q.copy()
+                particleSnapShot.pf=particle.pf.copy()
+                particleSnapShot.qf=particle.qf.copy()
                 particleSnapShot.E=particle.EArr[-1].copy()
                 particleSnapShot.clipped=True
             else:
@@ -158,7 +157,7 @@ class PhaseSpaceAnalyzer:
         for el in self.lattice.elList:
             ax.plot(*el.SO.exterior.xy,c='black')
         if plotPointCoords is not None:
-            ax.scatter(plotPointCoords[0],plotPointCoords[1],c='red',marker='x',s=100)
+            ax.scatter(plotPointCoords[0],plotPointCoords[1],c='red',marker='x',s=100,edgecolors=None)
     def _make_Phase_Space_Video_For_X_Array(self,videoTitle,xOrbitSnapShotArr,xaxis,yaxis,alpha,fps,dpi):
         fig,axes=plt.subplots(2,1)
         camera=celluloid.Camera(fig)
@@ -297,7 +296,7 @@ class PhaseSpaceAnalyzer:
         axes[1].set_xlabel('Distance along orbit, m')
         axes[0].legend()
         plt.show()
-    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None):
+    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None,alpha=.5):
         self._check_Axis_Choice(xaxis, yaxis)
         labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
         from matplotlib.patches import Patch
@@ -311,7 +310,7 @@ class PhaseSpaceAnalyzer:
             xPlot = X[xPlotIndex]
             yPlot = X[yPlotIndex]
             color = 'red' if particle.clipped == True else 'green'
-            plt.scatter(xPlot, yPlot, c=color, alpha=.5)
+            plt.scatter(xPlot, yPlot, c=color, alpha=alpha,edgecolors='none')
         legendList = [Patch(facecolor='green', edgecolor='green',
                        label='survived'), Patch(facecolor='red', edgecolor='red',
                                                 label='clipped')]

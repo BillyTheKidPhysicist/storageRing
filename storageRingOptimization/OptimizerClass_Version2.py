@@ -59,7 +59,7 @@ class LatticeOptimizer:
         self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
         # generation with the same number, 42
         self.sameSeedForSearch = True  # wether to use the same seed, 42, for the search process
-        self.numParticlesInjector = numParticles
+        self.numParticles = numParticles
         self.postCombinerAperture = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap  # radius
         self.spotCaptureDiam = 5e-3
         self.collectorAngleMax = .06
@@ -72,7 +72,7 @@ class LatticeOptimizer:
         # if I do many iterations
         self.tuningBounds = None
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
-            self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesInjector, temperature=self.temperature,
+            self.spotCaptureDiam, self.collectorAngleMax, self.numParticles, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
 
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
@@ -133,30 +133,34 @@ class LatticeOptimizer:
     def inject_Swarm(self,X,parallel=False):
         self.update_Ring_And_Injector(X)
         swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End()
-        swarmInitial.reset()
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T, parallel=parallel,
                                                                        fastMode=True, accelerated=True, copySwarm=False,)
         return swarmTraced
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced, copyParticles=False):
+        #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
+        #are now clipping the combiner and any that would clip the next element
         apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap
-        swarmEnd = Swarm()
+        swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
-            q = particle.q.copy() - self.latticeInjector.combiner.r2
-            q[:2] = self.latticeInjector.combiner.RIn @ q[:2]
-            if q[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
+            qf = particle.qf - self.latticeInjector.combiner.r2
+            qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
+            if qf[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
                 # assume it's at the end
-                p = particle.p.copy()
-                p[:2] = self.latticeInjector.combiner.RIn @ p[:2]
-                q = q + p * np.abs(q[0] / p[0])
-                if np.sqrt(q[1] ** 2 + q[2] ** 2) < apNextElement:  # test that particle survives through next aperture
+                pf = particle.pf.copy()
+                pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
+                qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
+                qf[0]=0.0 #no rounding error
+                clipsNextElement=np.sqrt(qf[1] ** 2 + qf[2] ** 2) > apNextElement
+                if clipsNextElement==False:  # test that particle survives through next aperture
                     if copyParticles == False:
                         particleEnd = particle
                     else:
                         particleEnd = particle.copy()
-                    particleEnd.q = q
-                    particleEnd.p = p
-                    swarmEnd.particles.append(particleEnd)
-        return swarmEnd
+                    particleEnd.qi = qf
+                    particleEnd.pi = pf
+                    particleEnd.reset()
+                    swarmSurvived.particles.append(particleEnd)
+        return swarmSurvived
 
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self) -> Swarm:
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
@@ -165,7 +169,7 @@ class LatticeOptimizer:
             fastMode=True, copySwarm=False,
             accelerated=True)
         swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
-        swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False)
+        swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         return swarmEnd
 
     def test_Stability(self, X,minRevs=5.0):
