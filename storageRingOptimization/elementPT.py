@@ -676,7 +676,9 @@ class CombinerSim(CombinerIdeal):
             if qNew[2] < 0:  # if in the lower plane, need to use symmetry
                 qNew[2] = -qNew[2]
         return self.magnetic_Potential_Func(*qNew)
-
+class Combiner_Hexapole_Sim:
+    def __init__(self):
+        pass
 
 class BenderIdealSegmented(BenderIdeal):
     # -very similiar to ideal bender, but force is not a continuous
