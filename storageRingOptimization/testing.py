@@ -48,9 +48,11 @@ def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
         if condition==False:
             print('q:',qf)
             print('qTest:',qTest)
+            print('difference:',qTest-qf)
             print('p:',pf)
             print('pTest:',pTest)
-            raise Exception('Failed')
+            print('difference:',pTest-pf)
+            raise Exception('Failed test')
         assert condition,'Failed on particle: '+str(i)
 def generate_Lattice(configuration):
     if configuration=='1':

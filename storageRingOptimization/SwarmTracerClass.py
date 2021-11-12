@@ -259,7 +259,8 @@ class SwarmTracer:
                 particle.qi+=particle.pi*tinyTimeStep
         return swarm
 
-    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True,accelerated=False):
+    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True,accelerated=False,
+                                    stepsBetweenLogging=1):
         #trace a swarm through the lattice
         if copySwarm==True:
             swarmNew=swarm.copy()
@@ -267,8 +268,9 @@ class SwarmTracer:
             swarmNew=swarm
         if parallel==True:
             def func(particle):
-                return self.particleTracer.trace(particle, h, T,fastMode=fastMode,accelerated=accelerated)
-            results = self.helper.parallel_Chunk_Problem(func, swarmNew.particles)
+                return self.particleTracer.trace(particle, h, T,fastMode=fastMode,accelerated=accelerated,
+                                                 stepsBetweenLogging=stepsBetweenLogging)
+            results = self.helper.parallel_Problem(func, swarmNew.particles)
             for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
                 #is not important
                 swarmNew.particles[i]=results[i][1]

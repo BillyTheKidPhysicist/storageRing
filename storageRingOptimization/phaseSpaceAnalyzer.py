@@ -61,6 +61,7 @@ class SwarmSnapShot:
                 particleSnapShot.pf=particle.pf.copy()
                 particleSnapShot.qf=particle.qf.copy()
                 particleSnapShot.E=particle.EArr[-1].copy()
+                particleSnapShot.deltaE=particleSnapShot.E-particle.EArr[0]
                 particleSnapShot.clipped=True
             else:
                 E,qo,po=self._get_Phase_Space_Coords_And_Energy_SnapShot(particle,xSnapShot)
@@ -77,6 +78,9 @@ class SwarmSnapShot:
         if len(particle.qoArr)==0: return False #clipped immediately probably
         elif particle.qoArr[-1,0]>x:return True
         else:return False
+    def num_Surviving(self):
+        num=sum([not particle.clipped for particle in self.swarmPhaseSpace])
+        return num
     def _get_Phase_Space_Coords_And_Energy_SnapShot(self,particle,xSnapShot):
         qoArr=particle.qoArr #position in orbit coordinates
         poArr=particle.pArr
@@ -107,15 +111,18 @@ class SwarmSnapShot:
                 poList.append(particle.po)
         phaseSpaceCoords=np.column_stack((qoList,poList))
         return phaseSpaceCoords
-    def get_surviving_Particles_Energy(self,returnChangeInE=False):
+    def get_Particles_Energy(self,returnChangeInE=False,survivingOnly=True):
         EList=[]
         for particle in self.swarmPhaseSpace:
-            if particle.clipped==False:
+            if particle.clipped==True and survivingOnly==True:
+                pass
+            else:
                 if returnChangeInE==True:
                     EList.append(particle.deltaE)
                 else:
                     EList.append(particle.E)
-        return np.asarray(EList)
+        EList=[np.nan] if len(EList)==0 else np.asarray(EList)
+        return EList
 class PhaseSpaceAnalyzer:
     def __init__(self,swarm,lattice: ParticleTracerLattice):
         assert lattice.latticeType=='storageRing'
@@ -270,8 +277,12 @@ class PhaseSpaceAnalyzer:
             plt.show()
         else:
             axis.plot(TArr,survivalList)
-    def plot_Energy_Growth(self,numPoints=100):
-        fig,axes=plt.subplots(2,1)
+    def plot_Energy_Growth(self,numPoints=100,dpi=150,saveTitle=None,survivingOnly=True):
+        if survivingOnly==True:
+            fig,axes=plt.subplots(2,1)
+        else:
+            fig,axes=plt.subplots(1,1)
+            axes=[axes]
         xSnapShotArr=self._make_SnapShot_XArr(numPoints)[:-10]
         EList_RMS=[]
         EList_Mean=[]
@@ -279,24 +290,30 @@ class PhaseSpaceAnalyzer:
         survivalList=[]
         for xOrbit in tqdm(xSnapShotArr):
             snapShot=SwarmSnapShot(self.swarm,xOrbit)
-            deltaESnapShot=snapShot.get_surviving_Particles_Energy(returnChangeInE=True)
+            deltaESnapShot=snapShot.get_Particles_Energy(returnChangeInE=True,survivingOnly=survivingOnly)
             minParticlesForStatistics=5
             if len(deltaESnapShot)<minParticlesForStatistics:
                 break
-            survivalList.append(100*len(deltaESnapShot)/self.swarm.num_Particles())
+            survivalList.append(100*snapShot.num_Surviving()/self.swarm.num_Particles())
             E_RMS=np.std(deltaESnapShot)
             EList_RMS.append(E_RMS)
-            EList_Mean.append(np.mean(np.abs(deltaESnapShot)))
+            EList_Mean.append(np.mean(deltaESnapShot))
             EList_Max.append(np.max(deltaESnapShot))
-        axes[0].plot(xSnapShotArr[:len(EList_RMS)],EList_RMS,label='RMS')
-        axes[0].plot(xSnapShotArr[:len(EList_RMS)],EList_Mean,label='mean')
-        axes[1].plot(xSnapShotArr[:len(EList_RMS)],survivalList)
-        axes[0].set_ylabel('Energy change, simulation units \n (Mass Li=1.0) ')
-        axes[1].set_ylabel('Percent Survival ')
-        axes[1].set_xlabel('Distance along orbit, m')
+        revArr=xSnapShotArr[:len(EList_RMS)]/self.lattice.totalLength
+        axes[0].plot(revArr,EList_RMS,label='RMS')
+        axes[0].plot(revArr,EList_Mean,label='mean')
+        axes[0].set_ylabel('Energy change, sim units \n (Mass Li=1.0) ')
+        if survivingOnly==True:
+            axes[1].plot(revArr,survivalList)
+            axes[1].set_ylabel('Survival,%')
+            axes[1].set_xlabel('Revolutions')
+        else:
+            axes[0].set_xlabel('Revolutions')
         axes[0].legend()
+        if saveTitle is not None:
+            plt.savefig(saveTitle,dpi=dpi)
         plt.show()
-    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None,alpha=.5):
+    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None,alpha=.5,dpi=150):
         self._check_Axis_Choice(xaxis, yaxis)
         labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
         from matplotlib.patches import Patch
@@ -307,8 +324,8 @@ class PhaseSpaceAnalyzer:
             X = particle.qi.copy()
             assert np.abs(X[0]) < 1e-6
             X = np.append(X, particle.pi.copy())
-            xPlot = X[xPlotIndex]
-            yPlot = X[yPlotIndex]
+            xPlot = X[xPlotIndex]*unitModifier[0]
+            yPlot = X[yPlotIndex]*unitModifier[1]
             color = 'red' if particle.clipped == True else 'green'
             plt.scatter(xPlot, yPlot, c=color, alpha=alpha,edgecolors='none')
         legendList = [Patch(facecolor='green', edgecolor='green',
@@ -320,7 +337,7 @@ class PhaseSpaceAnalyzer:
         plt.ylabel(labelList[1])
         plt.tight_layout()
         if saveTitle is not None:
-            plt.savefig(saveTitle,dpi=150)
+            plt.savefig(saveTitle,dpi=dpi)
         plt.show()
 
 

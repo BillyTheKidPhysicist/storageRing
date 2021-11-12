@@ -90,7 +90,8 @@ class ParticleTracer:
 
         self.fastMode=None #wether to log particle positions
         self.T0=None #total time to trace
-        self.test=[]
+        self.logTracker=None
+        self.stepsBetweenLogging=None
     def transform_To_Next_Element(self,q,p,nextEll):
         el1=self.currentEl
         el2=nextEll
@@ -121,6 +122,7 @@ class ParticleTracer:
         self.currentEl = self.which_Element_Lab_Coords(self.particle.qi)
         self.particle.currentEl=self.currentEl
         self.particle.dataLogging= not self.fastMode #if using fast mode, there will NOT be logging
+        self.logTracker=0
         if self.currentEl is None:
             self.particle.clipped=True
         else:
@@ -129,7 +131,7 @@ class ParticleTracer:
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-    def trace(self,particle,h,T0,fastMode=False,accelerated=False):
+    def trace(self,particle,h,T0,fastMode=False,accelerated=False,stepsBetweenLogging=1):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -138,6 +140,8 @@ class ParticleTracer:
         #h: timestep
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        self.stepsBetweenLogging=stepsBetweenLogging
         if particle is None:
             particle=Particle()
         if particle.traced==True:
@@ -177,8 +181,9 @@ class ParticleTracer:
                 if self.fastMode==False or self.numbaMultiStepCache[self.currentEl.index] is None: #either recording data at each step
                     #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                     self.time_Step_Verlet()
-                    if self.fastMode is False: #if false, take time to log parameters
+                    if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
                         self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+                    self.logTracker+=1
                 else:
                     self.multi_Step_Verlet()
                 if self.particle.clipped == True:

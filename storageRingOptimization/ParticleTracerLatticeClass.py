@@ -737,7 +737,8 @@ class ParticleTracerLattice:
         return xLab,yLab
 
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
-                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None,finalCoords=True):
+                     showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None,finalCoords=True,
+                     saveTitle=None,dpi=150):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -810,4 +811,6 @@ class ParticleTracerLattice:
             plt.gca().set_aspect('equal')
         plt.xlabel('meters')
         plt.ylabel('meters')
+        if saveTitle is not None:
+            plt.savefig(saveTitle,dpi=dpi)
         plt.show()
