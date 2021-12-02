@@ -59,11 +59,6 @@ class ParticleTracerLattice:
         #is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
         self.mass_Li7 = 1.1648E-26  # mass of lithium 7, SI
-        self.u0_Actual = 9.274009994E-24 # bohr magneton, SI
-        #In the equation F=u0*B0'=m*a, m can be changed to one with the following sub: m=mass_Li7*m_Adjust where m_Adjust
-        # is 1. Then F=B0'*u0/mass_Li7=B0'*u0_Adjust=m_Adjust*a
-        self.u0=self.u0_Actual/self.mass_Li7 #Adjusted value of bohr magneton, about equal to 800
-        self.kb = 1.38064852E-23  # boltzman constant, SI
         self.parallel=parallel
         self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
         #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
@@ -480,7 +475,6 @@ class ParticleTracerLattice:
                         q3Outer=np.asarray([xe+np.sin(theta)*halfWidth,ye-halfWidth*np.cos(theta)])  #bottom right when theta=0
                         q4Outer=np.asarray([xb+np.sin(theta)*halfWidth,yb-halfWidth*np.cos(theta)])  #bottom left when theta=0
                         pointsOuter=[q1Outer,q2Outer,q3Outer,q4Outer]
-                    
             elif el.type=='BEND':
                 phiArr=np.linspace(0,-el.ang,num=benderPoints)+theta+np.pi/2 #angles swept out
                 r0=el.r0.copy()

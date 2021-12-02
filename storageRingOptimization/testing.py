@@ -32,7 +32,7 @@ def poop_Lattice_Tracing(PTL,fastMode,accelerated,poopDataFileName):
     testData=np.loadtxt(poopDataFilePath)
     eps=1e-9 # a small number to represent changes in values that come from different kinds of operations. Because of
     #the nature of digitla computing, the same algorithm done in a different way can give slightly different answers
-    #in the last few digits
+    #in the last few digits on different computers
     for i in range(len(tracedSwarm.particles)):
         qf=tracedSwarm.particles[i].qf
         qTest=testData[i,:3]

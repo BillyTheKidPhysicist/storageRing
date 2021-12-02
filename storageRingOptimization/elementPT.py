@@ -1,3 +1,4 @@
+from numbers import Number
 import scipy.interpolate as spi
 import time
 import joblib
@@ -11,6 +12,7 @@ import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach\
     as _SegmentedBenderHalbachLensFieldGenerator
+from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION_MAGNETON
 
 
 # from profilehooks import profile
@@ -147,7 +149,7 @@ class Element:
 
     def is_Coord_Inside(self, q):
         return None
-    def make_Interp_Functions(self, data):
+    def make_Interp_Functions(self, data,):
         # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
         # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
         # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
@@ -169,12 +171,11 @@ class Element:
         xIndices=np.argwhere(data[:,0][:,None]==xArr)[:,1]
         yIndices=np.argwhere(data[:,1][:,None]==yArr)[:,1]
         zIndices=np.argwhere(data[:,2][:,None]==zArr)[:,1]
-        FxMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,3]
-        FyMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,4]
-        FzMatrix[xIndices,yIndices,zIndices]=-self.PTL.u0*data[:,5]
-        VMatrix[xIndices,yIndices,zIndices]=self.PTL.u0*data[:,6]
+        FxMatrix[xIndices,yIndices,zIndices]=-SIMULATION_MAGNETON*data[:,3]
+        FyMatrix[xIndices,yIndices,zIndices]=-SIMULATION_MAGNETON*data[:,4]
+        FzMatrix[xIndices,yIndices,zIndices]=-SIMULATION_MAGNETON*data[:,5]
+        VMatrix[xIndices,yIndices,zIndices]=SIMULATION_MAGNETON*data[:,6]
         interpF=generate_3DInterp_Function_NUMBA(FxMatrix,FyMatrix,FzMatrix,xArr,yArr,zArr)
-        # interpV = generate_3DInterp_Function_NUMBA(self.PTL.u0 * B0Matrix, xArr, yArr, zArr)
         interpV=spi.RegularGridInterpolator((xArr,yArr,zArr),VMatrix)
         interpVWrap=lambda x,y,z:interpV((x,y,z))
         return interpF,interpVWrap
@@ -198,9 +199,9 @@ class LensIdeal(Element):
         #update the magnetic field multiplication factor. This is used to simulate changing field values, or making
         #the bore larger
         self.fieldFact=BpFact
-        self.K = self.fieldFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
+        self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
     def fill_Params(self):
-        self.K = self.fieldFact*(2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
+        self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
         self.compile_Fast_Numba_Force_Function()
@@ -316,7 +317,7 @@ class BenderIdeal(Element):
             self.fill_Params()
 
     def fill_Params(self):
-        self.K = (2 * self.Bp * self.PTL.u0 / self.rp ** 2)  # 'spring' constant
+        self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.rOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
         self.rOffset = self.rOffsetFunc(self.rb)
         self.ro = self.rb + self.rOffset
@@ -330,7 +331,7 @@ class BenderIdeal(Element):
         r = sqrt(q[0] ** 2 + +q[1] ** 2)
         if self.rb + self.rp > r > self.rb - self.rp and np.abs(q[2]) < self.ap:
             rNew = sqrt((r - self.rb) ** 2 + q[2] ** 2)
-            return self.Bp * self.PTL.u0 * rNew ** 2 / self.rp ** 2
+            return self.Bp * SIMULATION_MAGNETON * rNew ** 2 / self.rp ** 2
         else:
             return 0.0
 
@@ -510,13 +511,13 @@ class CombinerIdeal(Element):
         F = np.zeros(3)  # force vector starts out as zero
         if 0<q[0] < self.Lb:
             B0 = sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
-            F[1] = self.PTL.u0 * self.c2 * (self.c1 + self.c2 * q[1]) / B0
-            F[2] = self.PTL.u0 * self.c2 ** 2 * q[2] / B0
+            F[1] = SIMULATION_MAGNETON * self.c2 * (self.c1 + self.c2 * q[1]) / B0
+            F[2] = SIMULATION_MAGNETON * self.c2 ** 2 * q[2] / B0
         return F*self.fieldFact
     def magnetic_Potential(self, q):
         V0=0
         if 0<q[0] < self.Lb:
-            V0 = self.PTL.u0*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
+            V0 = mu_Sim*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
         return V0
 
 
@@ -989,7 +990,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             lens = _SegmentedBenderHalbachLensFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3)
             xArr = np.linspace(-self.rp/3, self.rp/3) + rb
             coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
-            FArr = self.PTL.u0*lens.BNorm_Gradient(coords)[:, 0]
+            FArr = SIMULATION_MAGNETON*lens.BNorm_Gradient(coords)[:, 0]
             xArr -= rb
             m, b = np.polyfit(xArr, FArr, 1)  # fit to a line y=m*x+b, and only use the m component
             return m
@@ -1217,16 +1218,21 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rp,L,apFrac,bumpOffset,dipolesPerDim,parallel=False):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,dipolesPerDim,parallel=False):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
-        super().__init__(PTL, None, None, rp, None, fillParams=False)
+        if isinstance(rpLayers,Number):
+            rpLayers=(rpLayers,)
+        elif not isinstance(rpLayers,tuple):
+            raise TypeError
+        super().__init__(PTL, None, None, min(rpLayers), None, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
         self.Lo=None
-        self.rp=rp
-        self.ap=rp*apFrac
+        self.rp=min(rpLayers)
+        self.rpLayers=rpLayers #can be multiple bore radius for different layers
+        self.ap=self.rp*apFrac
         self.parallel=parallel
         self.dipolesPerDim=dipolesPerDim
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
@@ -1260,21 +1266,22 @@ class HalbachLensSim(LensIdeal):
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         assert self.Lm>0.0
         self.Lo=self.L
-        self.lengthEffective=min(self.fringeFracInnerMin*self.rp,
+        #todo: the behaviour of this with multiple layers is dubious
+        self.lengthEffective=min(self.fringeFracInnerMin*max(self.rpLayers),
                                  self.Lm)  #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
-        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*self.rp
-        magnetWidth=self.rp*np.tan(2*np.pi/24)*2
-        lens=_HalbachLensFieldGenerator(1,magnetWidth,self.rp,length=self.lengthEffective,numSpherePerDim=
+        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*max(self.rpLayers)
+        magnetWidth=np.asarray(self.rpLayers)*np.tan(2*np.pi/24)*2
+        lens=_HalbachLensFieldGenerator(self.lengthEffective,magnetWidth,self.rpLayers,numSpherePerDim=
         self.dipolesPerDim)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
-        self.outerHalfWidth=self.rp+magnetWidth +mountThickness
+        self.outerHalfWidth=max(self.rpLayers)+magnetWidth[np.argmax(self.rpLayers)] +mountThickness
 
         # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
         # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
 
 
-        numXY=int((self.ap/self.rp)*numPointsTransverse) 
+        numXY=int((self.ap/self.rp)*numPointsTransverse)
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
@@ -1360,9 +1367,9 @@ class HalbachLensSim(LensIdeal):
         BGradyMatrix[xIndices, yIndices] = self.data2D[:, 3]
         B0Matrix[xIndices, yIndices] = self.data2D[:, 4]
 
-        interpFx=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradxMatrix,xArr,yArr)
-        interpFy=generate_2DInterp_Function_NUMBA(-self.PTL.u0*BGradyMatrix,xArr,yArr)
-        interpV=generate_2DInterp_Function_NUMBA(self.PTL.u0*B0Matrix,xArr,yArr)
+        interpFx=generate_2DInterp_Function_NUMBA(-SIMULATION_MAGNETON*BGradxMatrix,xArr,yArr)
+        interpFy=generate_2DInterp_Function_NUMBA(-SIMULATION_MAGNETON*BGradyMatrix,xArr,yArr)
+        interpV=generate_2DInterp_Function_NUMBA(SIMULATION_MAGNETON*B0Matrix,xArr,yArr)
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_Func_Inner(x,y,z):
             Fx=0.0
