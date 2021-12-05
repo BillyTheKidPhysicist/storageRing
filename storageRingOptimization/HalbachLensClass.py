@@ -240,6 +240,27 @@ class Sphere:
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True)
         arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True, planeReflection=True)
         return arr
+    def B_Shim(self, r, planeSymmetry=True):
+        # a single magnet actually represents 12 magnet
+        # r: array of N position vectors to get field at. Shape (N,3)
+        # planeSymmetry: Wether to exploit z symmetry or not
+        arr = np.zeros(r.shape)
+        arr += self.B(r)
+        arr += self.B_Symetry(r, "clockwise", factors=1, flipDipole=True)
+        arr += self.B_Symetry(r, "clockwise", factors=2, flipDipole=False)
+        arr += self.B_Symetry(r, "clockwise", factors=3, flipDipole=True)
+        arr += self.B_Symetry(r, "clockwise", factors=4, flipDipole=False)
+        arr += self.B_Symetry(r, "clockwise", factors=5, flipDipole=True)
+
+        if planeSymmetry == True:
+            arr += self.B_Symetry(r, "clockwise", factors=0, flipDipole=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=1, flipDipole=True, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=2, flipDipole=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=3, flipDipole=True, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=4, flipDipole=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=5, flipDipole=True, planeReflection=True)
+
+        return arr
 
     def B_Symetry(self, r, orientation, factors=1, flipDipole=False, angle=np.pi / 2, fixedDipoleDirection=False,
                   planeReflection=False):

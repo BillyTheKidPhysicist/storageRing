@@ -121,7 +121,6 @@ class Particle:
         self.qoFinal=None #final orbit coordinates
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
-        self.v0=sqrt(pi[0]**2+pi[1]**2+pi[2]**2) #initial speed
         self.color=None #color that can be added to each particle for plotting
 
 
@@ -145,10 +144,10 @@ class Particle:
         #array versions
         self.pArr=None
         self.p0Arr=None #array of norm of momentum.
-        self.qArr=None 
+        self.qArr=None
         self.qoArr=None
-        self.TArr=None 
-        self.VArr=None 
+        self.TArr=None
+        self.VArr=None
         self.EArr=None #total energy
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
         #element index and list of energy changes for each pass

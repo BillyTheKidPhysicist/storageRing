@@ -115,7 +115,7 @@ class ParticleTracer:
         self.T=0.0
         if self.particle.clipped is not None:
             self.particle.clipped=False
-        LMin=self.particle.v0*self.h*self.minTimeStepsPerElement
+        LMin=npl.norm(self.particle.pi)*self.h*self.minTimeStepsPerElement
         for el in self.latticeElementList:
             if el.Lo<=LMin: #have at least a few steps in each element
                 raise Exception('element too short for time steps size')

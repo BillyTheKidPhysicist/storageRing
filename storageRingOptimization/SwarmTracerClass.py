@@ -1,12 +1,13 @@
 import joblib
 from joblib import Parallel,delayed
+from collections.abc import Iterable
 from ParticleTracerClass import ParticleTracer
 import numpy as np
-from ParticleClass import Swarm
+from ParticleClass import Swarm,Particle
 import time
 from ParaWell import ParaWell
 import skopt
-import multiprocess
+import multiprocess as mp
 
 
 
@@ -259,23 +260,53 @@ class SwarmTracer:
                 particle.qi+=particle.pi*tinyTimeStep
         return swarm
 
-    def trace_Swarm_Through_Lattice(self,swarm,h,T,parallel=True,fastMode=True,copySwarm=True,accelerated=False,
+    def _super_Fast_Trace(self,swarm,trace_Particle):
+        # use trick of accessing only the important class variabels and passing those through to reduce pickle time
+        def fastFunc(compactDict):
+            particle = Particle()
+            for key, val in compactDict.items():
+                setattr(particle, key, val)
+            particle = trace_Particle(particle)
+            compactDictTraced = {}
+            for key, val in vars(particle).items():
+                if val is not None:
+                    compactDictTraced[key] = val
+            return compactDictTraced
+        compactDictList = []
+        for particle in swarm:
+            compactDict = {}
+            for key, val in vars(particle).items():
+                if val is not None:
+                    if not (isinstance(val, Iterable) and len(val) == 0):
+                        compactDict[key] = val
+            compactDictList.append(compactDict)
+        with mp.Pool(mp.cpu_count()) as Pool:
+            compactDictTracedList = Pool.map(fastFunc, compactDictList)
+        for particle, compactDict in zip(swarm.particles, compactDictTracedList):
+            for key, val in compactDict.items():
+                setattr(particle, key, val)
+        return swarm
+    def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=True, fastMode=True, copySwarm=True, accelerated=False,
                                     stepsBetweenLogging=1):
-        #trace a swarm through the lattice
-        if copySwarm==True:
-            swarmNew=swarm.copy()
+        if copySwarm == True:
+            swarmNew = swarm.copy()
         else:
-            swarmNew=swarm
-        if parallel==True:
-            def func(particle):
-                return self.particleTracer.trace(particle, h, T,fastMode=fastMode,accelerated=accelerated,
-                                                 stepsBetweenLogging=stepsBetweenLogging)
-            results = self.helper.parallel_Problem(func, swarmNew.particles)
-            for i in range(len(results)): #replaced the particles in the swarm with the new traced particles. Order
-                #is not important
-                swarmNew.particles[i]=results[i][1]
+            swarmNew = swarm
+        def trace_Particle(particle):
+            particleNew = self.particleTracer.trace(particle, h, T, fastMode=fastMode, accelerated=accelerated,
+                                                    stepsBetweenLogging=stepsBetweenLogging)
+            return particleNew
+        if parallel=='superfast':
+            #use trick of accessing only the important class variabels and passing those through. about 30%
+            #faster
+            swarmNew=self._super_Fast_Trace(swarmNew,trace_Particle)
+            return swarmNew
+        elif parallel==True:
+            #more straightforward method. works for serial as well
+            numWorkers = 1 if parallel == False else mp.cpu_count()
+            with mp.Pool(numWorkers) as pool:
+                swarmNew.particles = pool.map(trace_Particle, swarmNew.particles)
+            return swarmNew
         else:
-            for i in range(swarmNew.num_Particles()):
-                swarmNew.particles[i]=self.particleTracer.trace(swarmNew.particles[i],h,T,fastMode=fastMode
-                                                                ,accelerated=accelerated)
-        return swarmNew
+            swarmNew.particles=[trace_Particle(particle) for particle in swarmNew]
+            return swarmNew

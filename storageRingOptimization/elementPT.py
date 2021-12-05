@@ -1218,19 +1218,25 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,dipolesPerDim,parallel=False):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,dipolesPerDim,magnetWidth,parallel):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,Number):
             rpLayers=(rpLayers,)
-        elif not isinstance(rpLayers,tuple):
-            raise TypeError
+            if magnetWidth is not None:
+                assert isinstance(magnetWidth,Number)
+                magnetWidth=(magnetWidth,)
+        elif isinstance(rpLayers,tuple):
+            if magnetWidth is not None:
+                assert isinstance(magnetWidth,tuple)
+        else: raise TypeError
         super().__init__(PTL, None, None, min(rpLayers), None, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
         self.Lo=None
         self.rp=min(rpLayers)
+        self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
         self.ap=self.rp*apFrac
         self.parallel=parallel
@@ -1263,7 +1269,7 @@ class HalbachLensSim(LensIdeal):
         numPointsLongitudinal=25
         numPointsTransverse=30
 
-        self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
+        self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
         self.Lo=self.L
         #todo: the behaviour of this with multiple layers is dubious
@@ -1271,11 +1277,16 @@ class HalbachLensSim(LensIdeal):
                                  self.Lm)  #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=self.lengthEffective/2+self.fringeFracOuter*max(self.rpLayers)
-        magnetWidth=np.asarray(self.rpLayers)*np.tan(2*np.pi/24)*2
-        lens=_HalbachLensFieldGenerator(self.lengthEffective,magnetWidth,self.rpLayers,numSpherePerDim=
+        maximumMagnetWidth=np.array(self.rpLayers)*np.tan(2*np.pi/24)*2
+        if self.magnetWidth is None:
+            self.magnetWidth=maximumMagnetWidth
+        else:
+            assert np.all(np.array(self.magnetWidth)<maximumMagnetWidth)
+
+        lens=_HalbachLensFieldGenerator(self.lengthEffective,self.magnetWidth,self.rpLayers,numSpherePerDim=
         self.dipolesPerDim)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
-        self.outerHalfWidth=max(self.rpLayers)+magnetWidth[np.argmax(self.rpLayers)] +mountThickness
+        self.outerHalfWidth=max(self.rpLayers)+self.magnetWidth[np.argmax(self.rpLayers)] +mountThickness
 
         # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
         # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly

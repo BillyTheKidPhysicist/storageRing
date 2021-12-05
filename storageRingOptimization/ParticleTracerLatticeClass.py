@@ -1,3 +1,4 @@
+from lensShimElement import ShimmedInjectorLens
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 import warnings
@@ -132,6 +133,10 @@ class ParticleTracerLattice:
     def set_Constrained_Linear_Element(self,el):
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)
+    def add_Halbach_Lens_Sim_Shim(self,rp,Lm,apFrac=.8):
+        el=ShimmedInjectorLens(self, rp,Lm,apFrac,parallel=self.parallel)
+        el.index = len(self.elList) #where the element is in the lattice
+        self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
@@ -139,9 +144,9 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,dipolesPerDim=2):
-        #dipolesPerDim: dipoles per dimension in the halbach lens simulation
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,dipolesPerDim,parallel=self.parallel)
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,dipolesPerDim=3,
+                             magnetWidth=None):
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,dipolesPerDim,magnetWidth,self.parallel)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -765,9 +770,7 @@ class ParticleTracerLattice:
                 plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*xy, marker='o', s=10, c=color)
             if showTraceLines==True:
-                if particle.dataLogging!=True:
-                    raise Exception("Particle must have logged results to plot trace lines")
-                if particle.qArr.shape[0]!=0:
+                if particle.qArr is not None and len(particle.qArr)>0: #if there are lines to show
                     plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,alpha=traceLineAlpha)
 
         for el in self.elList:
