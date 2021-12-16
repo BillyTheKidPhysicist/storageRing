@@ -190,6 +190,17 @@ class SwarmTracer:
         if sameSeed==True or type(sameSeed)==int:
             np.random.seed(int(time.time()))  # re randomize
         return swarm
+    def initialize_Point_Source_Swarm(self,sourceAngle,numParticles,smallXOffset=True,sameSeed=False):
+        p0=self.lattice.v0Nominal #the momentum of each particle
+        qTBounds,pxBounds=1e-12,1e-12 #force to a point spatialy, and no speed spread
+        pTBounds=np.tan(sourceAngle)*p0
+        swarmPseudoRandom=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTBounds, pTBounds, pxBounds, numParticles,
+                                sameSeed=sameSeed, circular=True, smallXOffset=smallXOffset)
+        for particle in swarmPseudoRandom:
+            px,py,pz=particle.pi
+            px=-np.sqrt(p0**2-(py**2+pz**2))
+            particle.pi=np.asarray([px,py,pz])
+        return swarmPseudoRandom
 
     def generate_Probe_Sample(self,v0,seed=None,rpPoints=3,rqPoints=3):
         # value of 3 for points is a good value from testing to give qualitative results
