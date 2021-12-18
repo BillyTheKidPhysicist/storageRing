@@ -1,6 +1,7 @@
 from numbers import Number
 import scipy.interpolate as spi
 import time
+import matplotlib.pyplot as plt
 import joblib
 import numpy as np
 from math import sqrt
@@ -421,7 +422,7 @@ class CombinerIdeal(Element):
         self.c2 = c2 / self.sizeScale
         self.space = 0  # space at the end of the combiner to account for fringe fields
 
-        self.type = 'COMBINER'
+        self.type = 'COMBINER_SQUARE'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         if fillsParams == True:
@@ -517,7 +518,7 @@ class CombinerIdeal(Element):
     def magnetic_Potential(self, q):
         V0=0
         if 0<q[0] < self.Lb:
-            V0 = mu_Sim*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
+            V0 = SIMULATION_MAGNETON*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
         return V0
 
 
@@ -677,9 +678,7 @@ class CombinerSim(CombinerIdeal):
             if qNew[2] < 0:  # if in the lower plane, need to use symmetry
                 qNew[2] = -qNew[2]
         return self.magnetic_Potential_Func(*qNew)
-class Combiner_Hexapole_Sim:
-    def __init__(self):
-        pass
+
 
 class BenderIdealSegmented(BenderIdeal):
     # -very similiar to ideal bender, but force is not a continuous
@@ -1426,3 +1425,286 @@ class HalbachLensSim(LensIdeal):
             return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
         self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
+
+
+class CombinerHexapoleSim(Element):
+    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode):
+        #PTL: object of ParticleTracerLatticeClass
+        #Lm: hardedge length of magnet.
+        #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
+        #layers: Number of concentric layers
+        #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
+        vacuumTubeThickness=2e-3
+        super().__init__(PTL)
+        assert  mode in ('storageRing','injector')
+        self.Lm = Lm
+        self.rp = rp
+        self.layers=layers
+        self.ap=self.rp-vacuumTubeThickness
+        assert loadBeamDiam<self.ap
+        self.loadBeamDiam=loadBeamDiam
+        self.PTL = PTL
+        self.mode = mode #wether storage ring or injector. This dictate high or low field seeking
+        self.sim = True
+        self.force_Func = None
+        self.magnetic_Potential_Func = None
+        self.space=None
+
+        self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
+        # the center of the inlet to the center of the kink
+        self.Lb = None  # length of straight section after the kink after the inlet actuall inside the magnet
+
+        self.type = 'COMBINER_CIRCULAR'
+        self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
+        # the y, with angle self.ang, will exit at x,y=0,0
+        self.force_Func=None
+        self.magnetic_Potential_Func=None
+        self.fill_Params()
+
+    def fill_Params(self):
+        outerFringeFrac = 1.5
+        numPointsLongitudinal=25
+        numPointsTransverse=30
+
+
+
+        self.fieldFact=-1.0 if self.mode=='injector' else 1.0
+
+
+
+        rpList=[]
+        magnetWidthList=[]
+        for _ in range(self.layers):
+            rpList.append(self.rp+sum(magnetWidthList))
+            nextMagnetWidth = (self.rp+sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
+            magnetWidthList.append(nextMagnetWidth)
+        self.space=max(rpList)*outerFringeFrac
+
+        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=4)
+
+
+        numXY=int((self.ap/self.rp)*numPointsTransverse)
+        #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
+        #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
+        #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
+        yArr_Quadrant=np.linspace(-TINY_STEP,1.1*self.rp+TINY_STEP,numXY)
+        xArr_Quadrant=np.linspace(-(1.1*self.rp+TINY_STEP),TINY_STEP,numXY)
+
+
+        zMin=-TINY_STEP
+        zMax=self.Lm/2+self.space+TINY_STEP
+        zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
+
+        volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
+        #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
+        #input coordinates will be shifted in a wrapper function
+        BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
+        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        self.fill_Field_Func(data3D)
+        self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
+        # to the hard edge of the input in a straight line
+
+
+        idealOffset=self.find_Ideal_Offset()
+        inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(idealOffset)
+        print(inputAngle)
+        # to find the length
+
+        self.Lo = self.compute_Trajectory_Length(
+            qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
+        self.ang = inputAngle
+        y0 = inputOffset
+        x0 = self.space
+        theta = inputAngle
+        self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
+        self.inputOffset = inputOffset - np.tan(
+            inputAngle) * self.space  # the input offset is measured at the end of the hard edge
+
+        self.compile_Fast_Numba_Force_Function()
+    def find_Ideal_Offset(self):
+        #use newton's method to find where the minimum seperation between atomic beam PATH and lens is equal to the
+        #beam diameter for INJECTED beam. This requires modeling high field seekers. A larger output offset produces
+        # a smaller input seperation, and a larger loading/circulating beam angular speration. Particle is traced
+        # backwards from the end of the combiner to the input. Uses forward difference.
+        self.fieldFact=-1.0
+
+        #try and find an initial gradient that works
+        keepTrying=True
+        dxInitial=self.ap/2.0
+        sepWithNoOffset=self.ap #maximum seperation occurs with no added offset
+        maxTries=10
+        numTries=0
+        while keepTrying:
+            try:
+                grad=(self.compute_Input_Angle_And_Offset(dxInitial)[-1]-sepWithNoOffset)/dxInitial
+                keepTrying=False
+            except:
+                dxInitial*=.5
+            numTries+=1
+            assert numTries<maxTries
+
+
+        x=0.0 #initial value of output offset
+        f=self.ap #initial value of lens/atom seperation. This should be equal to input deam diamter/2 eventuall
+        i,iterMax=0,10 #to prevent possibility of ifnitne loop
+        tolAbsolute=1e-4 #m
+        targetSep=self.loadBeamDiam/2
+        while(abs(f-targetSep)>tolAbsolute):
+            deltaX=-.8*(f-targetSep)/grad # I like to use a little damping
+            x=x+deltaX
+            fNew = self.compute_Input_Angle_And_Offset(x)[-1]
+            grad=(fNew-f)/deltaX
+            f=fNew
+            i+=1
+            assert i<iterMax
+        self.fieldFact = -1.0 if self.mode == 'injector' else 1.0
+        return x
+    def fill_Field_Func(self,data):
+        interpF, interpV = self.make_Interp_Functions(data)
+        # wrap the function in a more convenietly accesed function
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_Func(x,y,z):
+            Fx0,Fy0,Fz0=interpF(-z, y,x)
+            Fx=Fz0
+            Fy=Fy0
+            Fz=-Fx0
+            return Fx,Fy,Fz
+        self.force_Func=force_Func
+        self.magnetic_Potential_Func = lambda x, y, z: interpV(-z, y, x)
+    def force(self, q,searchIsCoordInside=True):
+        # this function uses the symmetry of the combiner to extract the force everywhere.
+        #I believe there are some redundancies here that could be trimmed to save time.
+
+        if searchIsCoordInside==False: # the inlet length of the combiner, La, can only be computed after tracing
+            #through the combiner. Thus, it should be set to zero to use the force function for tracing purposes
+            La=0.0
+        else:
+            La=self.La
+        F=fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+                                            self.ap,searchIsCoordInside,self.force_Func)
+        F=self.fieldFact*np.asarray(F)
+        return F
+
+    def compute_Input_Angle_And_Offset(self, inputOffset,h=1e-6):
+        # this computes the output angle and offset for a combiner magnet.
+        # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
+        # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
+        # to go to zero (finite field space) so the the particle will violate conservation of energy
+        # limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
+        # length, but for the simulated magnets, it's that plus twice the length at the ends.
+        # h: timestep
+        # lowField: wether to model low or high field seekers
+        assert 0.0<inputOffset<self.ap
+        q = np.asarray([0.0, -inputOffset, 0.0])
+        p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
+        coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
+        # #of orbit.
+        force = lambda x: self.force(x,searchIsCoordInside=False)
+        limit = self.Lm + 2 * self.space
+
+        forcePrev = force(q)  # recycling the previous force value cut simulation time in half
+        while True:
+            F = forcePrev
+            F[2] = 0.0  # exclude z component, ideally zero
+            a = F
+            q_n = q + p * h + .5 * a * h ** 2
+            if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
+                dr = limit - q[0]
+                dt = dr / p[0]
+                q = q + p * dt
+                coordList.append(q)
+                break
+            F_n = force(q_n)
+            assert np.all(np.isnan(F_n)==False)
+
+            F_n[2]=0.0
+            a_n=F_n  # accselferation new or accselferation sub n+1
+            p_n=p+.5*(a+a_n)*h
+
+            q = q_n
+            p = p_n
+            forcePrev = F_n
+            coordList.append(q)
+        qArr=np.asarray(coordList)
+        outputAngle = np.arctan2(p[1], p[0])
+        outputOffset = q[1]
+        lensCorner=np.asarray([self.space+self.Lm,-self.ap,0.0])
+        minSep=np.min(np.linalg.norm(qArr-lensCorner,axis=1))
+
+
+        return outputAngle, outputOffset,qArr, minSep
+
+    def compute_Trajectory_Length(self, qTracedArr):
+        # TODO: CHANGE THAT X DOESN'T START AT ZERO
+        # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
+        # length
+        x = qTracedArr[:, 0]
+        y = qTracedArr[:, 1]
+        xDelta = np.append(x[0],x[1:] - x[:-1])  # have to add the first value to the length of difference because
+        # it starts at zero
+        yDelta = np.append(y[0], y[1:] - y[:-1])
+        dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
+        Lo = np.sum(dLArr)
+        return Lo
+    def compile_Fast_Numba_Force_Function(self):
+        forceNumba = fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA
+        La=self.La
+        Lb=self.Lb
+        Lm=self.Lm
+        space=self.space
+        ang=self.ang
+        ap=self.ap
+        searchIsCoordInside=True
+        force_Func=self.force_Func
+        @numba.njit()
+        def force_NUMBA_Wrapper(q):
+            return forceNumba(q,La,Lb,Lm,space,ang,ap,searchIsCoordInside,force_Func)
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
+    def transform_Lab_Coords_Into_Element_Frame(self, q):
+         qNew = q.copy()
+         qNew = qNew - self.r2
+         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
+         return qNew
+
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
+        # NOTE: THIS NOT GOING TO BE CORRECT IN GENERALY BECAUSE THE TRAJECTORY IS NOT SMOOTH AND I HAVE NOT WORKED IT OUT
+        # YET
+        qo = q.copy()
+        qo[0] = self.Lo - qo[0]
+        qo[1] = 0  # qo[1]
+        return qo
+    def transform_Element_Coords_Into_Lab_Frame(self,q):
+        qNew=q.copy()
+        qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
+        return qNew
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
+        qNew=qo.copy()
+        qNew[0]=-qNew[0]
+        qNew[:2]=self.ROut@qNew[:2]
+        qNew+=self.r1
+        return qNew
+
+
+    def is_Coord_Inside(self, q):
+        # q: coordinate to test in element's frame
+        if not -self.ap <= q[2] <= self.ap:  # if outside the z apeture (vertical)
+            return False
+        elif 0 <= q[0] <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
+            # through the combiner. Simple square apeture
+            if np.sqrt(q[1]**2+q[2]**2) < self.ap:  # if inside the y (width) apeture
+                return True
+        elif q[0] < 0:
+            return False
+        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
+            m = np.tan(self.ang)
+            Y1 = m * q[0] + (self.ap - m * self.Lb)  # upper limit
+            Y2 = (-1 / m) * q[0] + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
+            Y3 = m * q[0] + (-self.ap - m * self.Lb)
+            if np.sign(m)<0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3): #if the inlet is tilted 'down'
+                return True
+            elif np.sign(m)>0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3): #if the inlet is tilted 'up'
+                return True
+            else:
+                return False

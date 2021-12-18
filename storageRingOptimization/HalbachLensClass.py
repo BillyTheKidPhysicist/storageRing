@@ -354,6 +354,7 @@ class HalbachLens:
         #a factor
         assert all(isinstance(variable,Iterable) for variable in (rp,width))
         assert all(val>0.0 for val in [*rp,*width])
+        assert len(width)==len(rp)
         assert length>0.0 and numSpherePerDim>0 and isinstance(numSpherePerDim,int) and M>0.0
         self.width=width
         self.rp=rp

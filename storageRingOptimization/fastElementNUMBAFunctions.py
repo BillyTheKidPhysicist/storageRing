@@ -170,7 +170,6 @@ def lens_Shim_Halbach_Force_NUMBA(q,L,ap,force_Func):
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     y = abs(y)  # confine to upper right quadrant
     z = abs(z)
-
     if 0<=x <=L/2:
         x = L/2 - x
         Fx,Fy,Fz= force_Func(x, y, z)
@@ -183,6 +182,53 @@ def lens_Shim_Halbach_Force_NUMBA(q,L,ap,force_Func):
     Fy = Fy * FySymmetryFact
     Fz = Fz * FzSymmetryFact
     return Fx,Fy,Fz
+@numba.njit()
+def combiner_Sim_Hexapole_Force_NUMBA(q, La, Lb, Lm, space, ang, ap, searchIsCoordInside, force_Func):
+    # this function uses the symmetry of the combiner to extract the force everywhere.
+    # I believe there are some redundancies here that could be trimmed to save time.
+    if searchIsCoordInside == True:
+        if not -ap <= q[2] <= ap:  # if outside the z apeture (vertical)
+            return np.nan, np.nan, np.nan
+        elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
+            # through the combiner.
+            if np.sqrt(q[1]**2+q[2]**2)<ap:
+                pass
+            else:
+                return np.nan, np.nan, np.nan
+        elif q[0] < 0:
+            return np.nan, np.nan, np.nan
+        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
+            #todo: For now a square aperture, update to circular. Use a simple rotation
+            m = np.tan(ang)
+            Y1 = m * q[0] + (ap - m * Lb)  # upper limit
+            Y2 = (-1 / m) * q[0] + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
+            Y3 = m * q[0] + (-ap - m * Lb)
+            if np.sign(m) < 0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3):  # if the inlet is tilted 'down'
+                pass
+            elif np.sign(m) > 0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3):  # if the inlet is tilted 'up'
+                pass
+            else:
+                return np.nan, np.nan, np.nan
+    x,y,z=q
+    FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
+    FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
+    y = abs(y)  # confine to upper right quadrant
+    z = abs(z)
+    fieldLength=Lm+2*space
+    if 0<=x <=fieldLength/2:
+        x = fieldLength/2 - x
+        Fx,Fy,Fz= force_Func(x, y, z)
+        Fx=-Fx
+    elif fieldLength/2<x <= fieldLength:
+        x=x-fieldLength/2
+        Fx,Fy,Fz = force_Func(x, y, z)
+    else:
+        return np.nan,np.nan,np.nan
+    Fy = Fy * FySymmetryFact
+    Fz = Fz * FzSymmetryFact
+    return Fx,Fy,Fz
+
+
 
 
 @numba.njit()
@@ -201,6 +247,7 @@ def combiner_Sim_Force_NUMBA(q, La, Lb, Lm, space, ang, apz, apL, apR, searchIsC
         elif q[0] < 0:
             return np.nan, np.nan, np.nan
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
+            #todo: better modeled as a simpler rotation
             m = np.tan(ang)
             Y1 = m * q[0] + (apR - m * Lb)  # upper limit
             Y2 = (-1 / m) * q[0] + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m

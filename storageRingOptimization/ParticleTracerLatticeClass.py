@@ -10,7 +10,7 @@ import scipy.interpolate as spi
 import numpy.linalg as npl
 from joblib import Parallel,delayed
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim
+    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,CombinerHexapoleSim
 class SimpleLocalMinimizer:
     #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
     #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
@@ -140,6 +140,15 @@ class ParticleTracerLattice:
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
+        el.index = len(self.elList) #where the element is in the lattice
+        self.combiner=el
+        self.combinerIndex=el.index
+        self.elList.append(el) #add element to the list holding lattice elements in order
+    def add_Combiner_Sim_Lens(self,Lm,rp,loadBeamDiam=10e-3,layers=2):
+        #PTL,Lm,rp,layers,mode
+        #file: name of the file that contains the simulation data from comsol. must be in a very specific format
+        #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
+        el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
         el.index = len(self.elList) #where the element is in the lattice
         self.combiner=el
         self.combinerIndex=el.index
@@ -502,14 +511,17 @@ class ParticleTracerLattice:
                 pointsInner=np.column_stack((x,y)) #shape the coordinates and make the object
                 if el.outerHalfWidth is None:
                     pointsOuter=pointsInner.copy()
-            elif el.type=='COMBINER':
-                apR=el.apR #the 'right' apeture. here this confusingly means when looking in the yz plane, ie the place
-                #that the particle would look into as it revolves in the lattice
-                apL=el.apL
+            elif el.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
+                if el.type=='COMBINER_SQUARE':
+                    apR=el.apR #the 'right' apeture. here this confusingly means when looking in the yz plane, ie the place
+                    #that the particle would look into as it revolves in the lattice
+                    apL=el.apL
+                else:
+                    apR,apL=el.ap,el.ap
                 q1Inner=np.asarray([0,apR]) #top left ( in standard xy plane) when theta=0
                 q2Inner=np.asarray([el.Lb,apR]) #top middle when theta=0
-                q3Inner=np.asarray([el.Lb+(el.La-el.apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-el.apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
-                q4Inner=np.asarray([el.Lb+(el.La+el.apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+el.apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
+                q3Inner=np.asarray([el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
+                q4Inner=np.asarray([el.Lb+(el.La+apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
                 q5Inner=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
                 q6Inner = np.asarray([0, -apL])  # bottom left when theta=0
                 pointsInner=[q1Inner,q2Inner,q3Inner,q4Inner,q5Inner,q6Inner]
@@ -526,7 +538,7 @@ class ParticleTracerLattice:
         #kinds. This class is not meant to have tons of error handling, so user must be cautious
         if self.elList[0].type=='BEND': #first element can't be a bending element
             raise Exception('FIRST ELEMENT CANT BE A BENDER')
-        if self.elList[0].type=='COMBINER': #first element can't be a combiner element
+        if self.elList[0].type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'): #first element can't be a combiner element
             raise Exception('FIRST ELEMENT CANT BE A COMBINER')
         if len(self.benderIndices)==2: #if there are two benders they must be the same. There could be more benders, but
             #that is not dealth with here
@@ -589,7 +601,7 @@ class ParticleTracerLattice:
 
                 #set end coordinates
                 if el.type=='STRAIGHT':
-                    if prevEl.type=='COMBINER':
+                    if prevEl.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -609,7 +621,7 @@ class ParticleTracerLattice:
                         ye+=dr[1]
                     el.r0=np.asarray([(xb+xe)/2,(yb+ye)/2,0]) #center of lens or drift is midpoint of line connecting beginning and end
                 elif el.type=='BEND':
-                    if prevEl.type=='COMBINER':
+                    if prevEl.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
                         el.theta = prevEl.theta-np.pi  # set the angle that the element is tilted relative to its
                         # reference frame. This is based on the previous element
                     else:
@@ -645,7 +657,7 @@ class ParticleTracerLattice:
                         ye+=-el.nb[1] * el.Lcap+el.ne[1]*el.Lcap
                         el.r0[0]+=-el.nb[0]*el.Lcap
                         el.r0[1]+=-el.nb[1]*el.Lcap
-                elif el.type=='COMBINER':
+                elif el.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
                     el.theta = 2 * np.pi - el.ang - (
                                 np.pi - prevEl.theta)  # Tilt the combiner down by el.ang so y=0 is perpindicular
                     # to the input. Rotate it 1 whole revolution, then back it off by the difference. Need to subtract
@@ -674,7 +686,7 @@ class ParticleTracerLattice:
             #need to make rotation matrices for element
             if el.type=='BEND':
                 rot = (el.theta - el.ang + np.pi / 2)
-            elif el.type=='STRAIGHT' or el.type=='COMBINER':
+            elif el.type=='STRAIGHT' or el.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
                 rot = el.theta
             else:
                 raise Exception('No correct element name provided')

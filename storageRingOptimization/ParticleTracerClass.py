@@ -97,13 +97,13 @@ class ParticleTracer:
         el2=nextEll
         if el1.type=='BEND':
             r01 = el1.r0
-        elif el1.type=='COMBINER':
+        elif el1.type in ('COMBINER_SQUARE','COMBINER_CIRCLE'):
             r01 = el1.r2
         else:
             r01 = el1.r1
         if el2.type=='BEND':
             r02 = el2.r0
-        elif el2.type=='COMBINER':
+        elif el2.type in ('COMBINER_SQUARE','COMBINER_CIRCLE'):
             r02 = el2.r2
         else:
             r02 = el2.r1
@@ -159,7 +159,6 @@ class ParticleTracer:
             # to become clipped
             self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=0)
             return particle
-
         self.time_Step_Loop()
         self.forceLast=None #reset last force to zero
         self.particle._q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
@@ -173,7 +172,7 @@ class ParticleTracer:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if type(self.currentEl)==elementPT.Drift :
+            if False:#type(self.currentEl)==elementPT.Drift :
                 self.handle_Drift_Region()
                 if self.particle.clipped==True:
                     break
@@ -269,6 +268,8 @@ class ParticleTracer:
         #that the particle clips the aperture at
         return x0
     def handle_Drift_Region(self):
+        #TODO: currently not used, of dubious value. Hopefully to be used soon, otherwise to be discarded
+        assert False
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
         driftEl=self.currentEl #to  record the drift element for logging params

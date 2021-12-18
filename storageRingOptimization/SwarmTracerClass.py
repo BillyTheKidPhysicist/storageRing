@@ -5,7 +5,6 @@ from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm,Particle
 import time
-from ParaWell import ParaWell
 import skopt
 import multiprocess as mp
 
@@ -24,7 +23,6 @@ class SwarmTracer:
     def __init__(self,lattice):
         self.lattice=lattice
         self.particleTracer = ParticleTracer(self.lattice)
-        self.helper = ParaWell()  # custom class to help with parallelization
 
     def Rd_Sample(self,n,d=1,seed=.5):
         # copied and modified from: https://github.com/arvoelke/nengolib
