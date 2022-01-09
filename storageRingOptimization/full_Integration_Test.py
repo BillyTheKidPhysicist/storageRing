@@ -4,7 +4,7 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleClass import Particle,Swarm
 import os
 from ParticleTracerClass import ParticleTracer
-
+#TODO: implement testing parallel versus serial
 testDataFolderPath=os.path.join(os.getcwd(),'testData')
 testSwarm=Swarm()
 testSwarm.add_Particle()
@@ -25,6 +25,7 @@ def save_TEST_Data(PTL,TESTDataFileName):
     np.savetxt(os.path.join(testDataFolderPath,TESTDataFilePath),np.asarray(testData))
     
 def TEST_Lattice_Tracing(PTL,fastMode,accelerated,TESTDataFileName):
+    np.set_printoptions(precision=100)
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     swarmTracer=SwarmTracer(PTL)
     tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=fastMode,parallel=False

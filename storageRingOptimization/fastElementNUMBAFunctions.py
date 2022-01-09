@@ -214,16 +214,16 @@ def combiner_Sim_Hexapole_Force_NUMBA(q, La, Lb, Lm, space, ang, ap, searchIsCoo
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     y = abs(y)  # confine to upper right quadrant
     z = abs(z)
-    fieldLength=Lm+2*space
-    if 0<=x <=fieldLength/2:
-        x = fieldLength/2 - x
+    symmetryLength=Lm+2*space
+    if 0<=x <=symmetryLength/2:
+        x = symmetryLength/2 - x
         Fx,Fy,Fz= force_Func(x, y, z)
         Fx=-Fx
-    elif fieldLength/2<x <= fieldLength:
-        x=x-fieldLength/2
+    elif symmetryLength/2<x:
+        x=x-symmetryLength/2
         Fx,Fy,Fz = force_Func(x, y, z)
     else:
-        return np.nan,np.nan,np.nan
+        raise Exception(ValueError)
     Fy = Fy * FySymmetryFact
     Fz = Fz * FzSymmetryFact
     return Fx,Fy,Fz

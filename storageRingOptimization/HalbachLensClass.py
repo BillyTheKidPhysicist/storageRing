@@ -194,6 +194,7 @@ class Sphere:
             self.z = z
         if r is not None:
             self.r = r
+        assert not None in (phi,z,r)
         x = self.r * np.cos(self.phi)
         y = self.r * np.sin(self.phi)
         self.r0 = np.asarray([x, y, self.z])

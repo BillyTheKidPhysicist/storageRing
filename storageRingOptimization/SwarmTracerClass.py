@@ -296,7 +296,7 @@ class SwarmTracer:
                 setattr(particle, key, val)
         return swarm
     def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=True, fastMode=True, copySwarm=True, accelerated=False,
-                                    stepsBetweenLogging=1):
+                                    stepsBetweenLogging=1)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
         else:

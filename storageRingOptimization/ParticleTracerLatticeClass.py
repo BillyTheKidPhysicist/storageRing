@@ -82,9 +82,9 @@ class ParticleTracerLattice:
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
-        def errorFunc(rOffsetFact):
+        def errorFunc(outputOffsetFact):
             h=5e-6
-            PTL_Ring.elList[1].update_rOffset_Fact(rOffsetFact)
+            PTL_Ring.elList[1].update_rOffset_Fact(outputOffsetFact)
             PTL_Ring.build_Lattice()
             particle=Particle()
             particleTracer=ParticleTracer(PTL_Ring)
@@ -96,13 +96,13 @@ class ParticleTracerLattice:
                 error=np.std(1e6*particle.qoArr[:,1])
                 return error
             else: return np.nan
-        rOffsetFactArr=np.asarray([.8,.9,.933,.966,1.0,1.033,1.066,1.1,1.2])
+        outputOffsetFactArr=np.asarray([.8,.9,.933,.966,1.0,1.033,1.066,1.1,1.2])
         if parallel==True: njobs=-1
         else: njobs=1
-        errorArr=np.asarray(Parallel(n_jobs=njobs)(delayed(errorFunc)(rOffset) for rOffset in rOffsetFactArr))
-        rOptimal=self._find_rOptimal(rOffsetFactArr,errorArr)
-        return rOptimal
-    def _find_rOptimal(self,rOffsetFactArr,errorArr):
+        errorArr=np.asarray(Parallel(n_jobs=njobs)(delayed(errorFunc)(outputOffset) for outputOffset in outputOffsetFactArr))
+        rOffsetOptimal=self._find_rOptimal(outputOffsetFactArr,errorArr)
+        return rOffsetOptimal
+    def _find_rOptimal(self,outputOffsetFactArr,errorArr):
         test=errorArr.copy()[1:]
         test=np.append(test,errorArr[0])
         numValidSolutions=np.sum(~np.isnan(errorArr))
@@ -119,14 +119,14 @@ class ParticleTracerLattice:
         if valid==False:
             return None
         #trim out invalid points
-        rOffsetFactArr=rOffsetFactArr[~np.isnan(errorArr)]
+        outputOffsetFactArr=outputOffsetFactArr[~np.isnan(errorArr)]
         errorArr=errorArr[~np.isnan(errorArr)]
-        fit=spi.RBFInterpolator(rOffsetFactArr[:,np.newaxis],errorArr)
-        rOffsetFactArrDense=np.linspace(rOffsetFactArr[0],rOffsetFactArr[-1],10000)
-        newerrorArr=fit(rOffsetFactArrDense[:,np.newaxis])
-        rOptimal=rOffsetFactArrDense[np.argmin(newerrorArr)]
-        rMinDistFromEdge=np.min(rOffsetFactArr[1:]-rOffsetFactArr[:-1])/4
-        if rOptimal>rOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<rOffsetFactArr[0]+rMinDistFromEdge:
+        fit=spi.RBFInterpolator(outputOffsetFactArr[:,np.newaxis],errorArr)
+        outputOffsetFactArrDense=np.linspace(outputOffsetFactArr[0],outputOffsetFactArr[-1],10000)
+        newerrorArr=fit(outputOffsetFactArrDense[:,np.newaxis])
+        rOptimal=outputOffsetFactArrDense[np.argmin(newerrorArr)]
+        rMinDistFromEdge=np.min(outputOffsetFactArr[1:]-outputOffsetFactArr[:-1])/4
+        if rOptimal>outputOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<outputOffsetFactArr[0]+rMinDistFromEdge:
             # print('Invalid solution, rMin very near edge. ')
             return None
         return rOptimal
@@ -174,7 +174,9 @@ class ParticleTracerLattice:
         el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-        if constrain==True: self.set_Constrained_Linear_Element(el)
+        if constrain==True:
+            self.set_Constrained_Linear_Element(el)
+            print('not fully supported feature')
     def add_Drift(self,L,ap=.03):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: length of drift element, m
@@ -182,28 +184,28 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact=1.0,ap=None):
+    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,outputOffsetFact=1.0,ap=None):
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=BenderIdealSegmentedWithCap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap)
+        el=BenderIdealSegmentedWithCap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
     def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
-        #rOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
+        #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
         el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac,
                                               parallel=self.parallel)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap=None):
+    def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: hard edge Length of individual magnet.
         #Bp: Field strength at pole face
@@ -221,7 +223,7 @@ class ParticleTracerLattice:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
 
-        el=BenderIdealSegmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,rOffsetFact,ap)
+        el=BenderIdealSegmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -268,9 +270,9 @@ class ParticleTracerLattice:
     def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,
                     surpressWarning=False):
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
-        #TODO: REALLY NEED TO CLEAN UP ERROR CATCHING
-        #TODO: document which parameters mean what when using constrain!
-        #TODO: THIS ALL NEEDS TO MAKE MORE SENSE
+        #REALLY NEED TO CLEAN UP ERROR CATCHING
+        #document which parameters mean what when using constrain!
+        #THIS ALL NEEDS TO MAKE MORE SENSE
         #call various functions to construct the lattice geometry, the shapely objects for visualization and finding particle
         # positions, catch errors, enforce constraints and fill parameter(s)
         # constrain: wether to constrain the lattice by varying parameters. typically to accomodate the presence of the
@@ -367,7 +369,8 @@ class ParticleTracerLattice:
         if self.bender1.segmented==True: #both bender1 and bender2 are same type
             params=self.solve_Implicit_Segmented_Triangle_Problem(inputAng,inputOffset, L1, L2)
         else:
-            params=self.solve_Triangle_Problem(inputAng, inputOffset, L1, L2, self.bender1.ro, self.bender2.ro)
+            params=self.solve_Triangle_Problem(inputAng, inputOffset,self.combiner.outputOffset, L1, L2,
+                                               self.bender1.ro, self.bender2.ro)
         # need to account for length of caps in bender
         params[-1]-=(self.bender1.Lcap+self.bender2.Lcap) #remove spurious length from straight section
         return params
@@ -394,13 +397,14 @@ class ParticleTracerLattice:
         D = rp + yokeWidth
         r10 = self.bender1.rb #nominal bending radius without including offset, ie center of bender
         r20 = self.bender2.rb #nominal bending radius without including offset, ie center of bender
+        outputOffset=self.combiner.outputOffset
         def cost(args,returnParams=False):
             r1,r2 = args
-            r1Offset=self.bender1.rOffsetFunc(r1) #must include offset in geometry calculation
-            r2Offset=self.bender2.rOffsetFunc(r2) #must include offset in geometry calculation
+            r1Offset=self.bender1.outputOffsetFunc(r1) #must include offset in geometry calculation
+            r2Offset=self.bender2.outputOffsetFunc(r2) #must include offset in geometry calculation
             r1+=r1Offset
             r2+=r2Offset
-            phi1,phi2,L3=self.solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2)
+            phi1,phi2,L3=self.solve_Triangle_Problem(inputAng,inputOffset,outputOffset,L1,L2,r1,r2)
             r1-=r1Offset #remove offset for final step of finding number of magnets
             r2-=r2Offset #remove offset for final step of finding number of magnets
             UCAng1=np.arctan(.5*Lseg/(r1-D))
@@ -425,7 +429,7 @@ class ParticleTracerLattice:
 
     @staticmethod
     # @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64,numba.float64,numba.float64,numba.float64))
-    def solve_Triangle_Problem(inputAng,inputOffset,L1,L2,r1,r2):
+    def solve_Triangle_Problem(inputAng,inputOffset,outputOffset,L1,L2,r1,r2):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. The geometry of the combiner requires an additional step because the orbit
         #does not go straight through the combiner input, but is shifted a small amount by an offset. This, combined with
@@ -439,9 +443,9 @@ class ParticleTracerLattice:
         #note that L1 and L2 INCLUDE the sections in the combiner.
         if inputAng is None:
             return np.pi,np.pi,L1
-        L1 += -inputOffset / np.tan(inputAng)
-        L2 +=- inputOffset * np.sin(inputAng) + inputOffset / np.sin(inputAng)
-
+        assert outputOffset>=0.0 #a positive value corresponds to a negative shift in y in element frame
+        L1 += -(inputOffset+outputOffset) / np.tan(inputAng)
+        L2 +=- inputOffset * np.sin(inputAng) + (inputOffset+outputOffset) / np.sin(inputAng)
 
         theta3 = np.pi - inputAng
         a = theta3 - np.arctan(r1 / L1) - np.arctan(r2 / L2)
@@ -545,6 +549,8 @@ class ParticleTracerLattice:
             if type(self.bender1)!=type(self.bender2):
                 raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
         if constrain==True:
+            if self.latticeType!='storageRing':
+                raise Exception('Constrained lattice must be storage ring type')
             if type(self.bender1)!=type(self.bender2): #for continuous benders
                 raise Exception('BENDERS BOTH MUST BE SAME TYPE')
             if len(self.benderIndices) != 2:
@@ -610,15 +616,15 @@ class ParticleTracerLattice:
                     ye=yb+el.L*np.sin(el.theta)
                     el.nb = -np.asarray([np.cos(el.theta), np.sin(el.theta)])  # normal vector to input
                     el.ne = -el.nb #normal vector to end
-                    if prevEl.type=='BEND' or prevEl.type=='LENS_SIM_CAP':
-                        n=np.zeros(2)
-                        n[0]=-prevEl.ne[1]
-                        n[1]=prevEl.ne[0]
-                        dr=n*prevEl.rOffset
-                        xb+=dr[0]
-                        yb+=dr[1]
-                        xe+=dr[0]
-                        ye+=dr[1]
+                    #account for an offset if present
+                    n=np.zeros(2)
+                    n[0]=-prevEl.ne[1]
+                    n[1]=prevEl.ne[0]
+                    dr=n*prevEl.outputOffset
+                    xb+=dr[0]
+                    yb+=dr[1]
+                    xe+=dr[0]
+                    ye+=dr[1]
                     el.r0=np.asarray([(xb+xe)/2,(yb+ye)/2,0]) #center of lens or drift is midpoint of line connecting beginning and end
                 elif el.type=='BEND':
                     if prevEl.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
@@ -626,10 +632,10 @@ class ParticleTracerLattice:
                         # reference frame. This is based on the previous element
                     else:
                         el.theta=prevEl.theta-prevEl.ang
-                    if prevEl.type=="BENDER_SIM_SEGMENTED_CAP":
-                        rOffset=0
+                    if prevEl.type=="BENDER_SIM_SEGMENTED_CAP": #TODO: REMOVE?
+                        outputOffset=0
                     else:
-                        rOffset=el.rOffset
+                        outputOffset=el.outputOffset
                     #the bender can be tilted so this is tricky. This is a rotation about a point that is
                     #not the origin. First I need to find that point.
                     xc=xb+np.sin(el.theta)*el.rb #without including trajectory offset
@@ -641,10 +647,10 @@ class ParticleTracerLattice:
                     ye=np.sin(phi)*xb+np.cos(phi)*yb-xc*np.sin(phi)-yc*np.cos(phi)+yc
                     #accomodate for bending trajectory
 
-                    xb+=rOffset*np.sin(el.theta)
-                    yb+=rOffset*(-np.cos(el.theta))
-                    xe+=rOffset*np.sin(el.theta)
-                    ye+=rOffset*(-np.cos(el.theta))
+                    xb+=outputOffset*np.sin(el.theta)
+                    yb+=outputOffset*(-np.cos(el.theta))
+                    xe+=outputOffset*np.sin(el.theta)
+                    ye+=outputOffset*(-np.cos(el.theta))
 
 
 
@@ -668,7 +674,6 @@ class ParticleTracerLattice:
                     # and rotate it. Input is where nominal trajectory particle enters
                     drx = -(el.Lb + (el.La - el.inputOffset * np.sin(el.ang)) * np.cos(el.ang))
                     dry = -(el.inputOffset + (el.La - el.inputOffset * np.sin(el.ang)) * np.sin(el.ang))
-
 
 
                     el.r1El = np.asarray([0, 0])
@@ -705,7 +710,7 @@ class ParticleTracerLattice:
             if i==len(self.elList)-1: #if the last element then set the end of the element correctly
                 reo = el.r2.copy()
                 if el.type=='BEND':
-                    reo[1]-=el.rOffset
+                    reo[1]-=el.outputOffset
             i+=1
         #check that the last point matchs the first point within a small number.
         #need to account for offset.

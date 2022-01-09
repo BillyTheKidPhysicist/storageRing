@@ -126,7 +126,6 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
     def fill_Swarms_And_Test_For_Feasible_Injector(self,parallel):
-        #todo: this is doing too many things at once right now
 
         self.swarmInjectorInitial=self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
             self.spotCaptureDiam, self.collectorAngleMax,self.numParticlesInjector,temperature=self.temperature,
@@ -143,7 +142,6 @@ class LatticeOptimizer:
         pzBoundsRing=injectorBounds[4]
         pTransBounds=[pyBoundsRing,pzBoundsRing]
 
-        #todo: Add feature to adjust qMax to at most the aperture size
         self.swarmRingInitialAtCombinerOutput=self.swarmTracerRing.initalize_PseudoRandom_Swarm_At_Combiner_Output(
         qTransBounds,pTransBounds,pxBounds,self.numParticlesRing,sameSeed=self.sameSeedForSwarm,
             upperSymmetry=self.useLatticeUpperSymmetry,circular=False)

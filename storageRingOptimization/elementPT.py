@@ -90,9 +90,13 @@ class Element:
         self.bumpOffset=None # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
         self.sim = None  # wether the field values are from simulations
+        self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
+        #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
+        self.maxCombinerAng=.1 #because the field value is a right rectangular prism, it must extend to past the
+        #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
     def compile_Fast_Numba_Force_Function(self):
         #function that generates the fast_Numba_Force_Function based on existing parameters. It compiles it as well
         #by passing dummy arguments
@@ -126,20 +130,13 @@ class Element:
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
         # vec: 3D vector in lab frame to rotate into element frame
         vecNew = vec.copy()  # copying prevents modifying the original value
-        vecx = vecNew[0]
-        vecy = vecNew[1]
-        vecNew[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
-        vecNew[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
+        vecNew[:2]=self.RIn@vecNew[:2]
         return vecNew
-
     def transform_Element_Frame_Vector_Into_Lab_Frame(self, vec):
         # rotate vector out of element frame into lab frame
         # vec: vector in
         vecNew = vec.copy()  # copy input vector to not modify the original
-        vecx = vecNew[0];
-        vecy = vecNew[1]
-        vecNew[0] = vecx * self.ROut[0, 0] + vecy * self.ROut[0, 1]
-        vecNew[1] = vecx * self.ROut[1, 0] + vecy * self.ROut[1, 1]
+        vecNew[:2]=self.ROut@vecNew[:2]
         return vecNew
 
     def set_Length(self, L):
@@ -306,10 +303,8 @@ class BenderIdeal(Element):
         self.rb = rb  # bending radius of magnet. This is tricky because this is the bending radius down the center, but the
         # actual trajectory of the particles is offset a little out from this
         self.type = 'BEND'
-        self.rOffset = None  # the offset to the bending radius because of centrifugal force. There are two versions, one that
-        # accounts for reduced speed from energy conservation for actual fields, and one that doesn't
         self.ro = None  # bending radius of orbit, ie rb + rOffset.
-        self.rOffsetFunc = None  # a function that returns the value of the offset of the trajectory for a given bending radius
+        self.outputOffsetFunc = None  # a function that returns the value of the offset of the trajectory for a given bending radius
         self.segmented = False  # wether the element is made up of discrete segments, or is continuous
         self.capped = False  # wether the element has 'caps' on the inlet and outlet. This is used to model fringe fields
         self.Lcap = 0  # length of caps
@@ -319,9 +314,9 @@ class BenderIdeal(Element):
 
     def fill_Params(self):
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
-        self.rOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
-        self.rOffset = self.rOffsetFunc(self.rb)
-        self.ro = self.rb + self.rOffset
+        self.outputOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
+        self.outputOffset = self.outputOffsetFunc(self.rb)
+        self.ro = self.rb + self.outputOffset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
 
             self.L = self.rb * self.ang
@@ -572,7 +567,7 @@ class CombinerSim(CombinerIdeal):
         fringeSpace = 5 * 1.1e-2
         apz = 6e-3
         super().__init__(PTL, Lm, np.nan, np.nan, np.nan,mode, sizeScale,
-                         fillsParams=False)  # TODO: replace all the Nones with np.nan
+                         fillsParams=False)
         self.sim = True
 
         self.space = fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
@@ -706,9 +701,9 @@ class BenderIdealSegmented(BenderIdeal):
 
     def fill_Params(self):
         super().fill_Params()
-        self.rOffsetFunc = lambda rb: self.rOffsetFact * (sqrt(
+        self.outputOffsetFunc = lambda rb: self.rOffsetFact * (sqrt(
             rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2)
-        self.rOffset = self.rOffsetFunc(self.rb)
+        self.outputOffset = self.outputOffsetFunc(self.rb)
         self.Lseg = self.Lm + 2 * self.space
         if self.numMagnets is not None:
             self.ucAng = np.arctan((self.Lm / 2 + self.space) / (self.rb - self.yokeWidth - self.rp))
@@ -720,19 +715,14 @@ class BenderIdealSegmented(BenderIdeal):
 
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
-        qx = qNew[0]
-        qy = qNew[1]
-        qNew[0] = qx * self.RIn[0, 0] + qy * self.RIn[0, 1]
-        qNew[1] = qx * self.RIn[1, 0] + qy * self.RIn[1, 1]
+        qNew[:2]=self.RIn@qNew[:2]
         return qNew
 
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
         # vec: 3D vector in lab frame to rotate into element frame
-        vecx = vec[0]
-        vecy = vec[1]
-        vec[0] = vecx * self.RIn[0, 0] + vecy * self.RIn[0, 1]
-        vec[1] = vecx * self.RIn[1, 0] + vecy * self.RIn[1, 1]
-        return vec
+        vecNew=vec.copy()
+        vecNew[:2]=self.RIn@vecNew[:2]
+        return vecNew
 
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         qo = q.copy()
@@ -1002,7 +992,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
 
 
         self.K_Func=lambda r: a * r ** 2 + b * r + c
-        self.rOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
+        self.outputOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
     def fill_Params_Post_Constrained(self):
         self.ap=self.compute_Aperture()
@@ -1028,7 +1018,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.compile_Fast_Numba_Force_Function()
-        self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+        self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
         assert Max>Min and Max-Min>TINY_STEP
         assert (not (stepSize is not None and numSteps is not None)) and (stepSize is not None or numSteps is not None)
@@ -1049,13 +1039,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def fill_rOffset_And_Dependent_Params(self,rOffset):
         #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
         #the entire element
-        self.rOffset=rOffset
-        self.ro=self.rb+self.rOffset
+        self.outputOffset=rOffset
+        self.ro=self.rb+self.outputOffset
         self.L=self.ang*self.rb
         self.Lo=self.ang*self.ro+2*self.Lcap
     def update_rOffset_Fact(self,rOffsetFact):
         self.rOffsetFact=rOffsetFact
-        self.fill_rOffset_And_Dependent_Params(self.rOffsetFunc(self.rb))
+        self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def solve_Coords_Parallel(self,coords,lens):
         if self.parallel==False:
             BNormGradArr,BNormArr=lens.BNorm_Gradient(coords,returnNorm=True)
@@ -1480,7 +1470,7 @@ class CombinerHexapoleSim(Element):
             magnetWidthList.append(nextMagnetWidth)
         self.space=max(rpList)*outerFringeFrac
 
-        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=4)
+        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=2)
 
 
         numXY=int((self.ap/self.rp)*numPointsTransverse)
@@ -1490,9 +1480,9 @@ class CombinerHexapoleSim(Element):
         yArr_Quadrant=np.linspace(-TINY_STEP,1.1*self.rp+TINY_STEP,numXY)
         xArr_Quadrant=np.linspace(-(1.1*self.rp+TINY_STEP),TINY_STEP,numXY)
 
-
+        tiltedExtraSpace=2*self.maxCombinerAng*self.ap #extra space
         zMin=-TINY_STEP
-        zMax=self.Lm/2+self.space+TINY_STEP
+        zMax=self.Lm/2+self.space+tiltedExtraSpace
         zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
@@ -1505,11 +1495,10 @@ class CombinerHexapoleSim(Element):
         # to the hard edge of the input in a straight line
 
 
-        idealOffset=self.find_Ideal_Offset()
-        inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(idealOffset)
-        print(inputAngle)
+        self.outputOffset=self.find_Ideal_Offset()
+        inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(self.outputOffset)
         # to find the length
-
+        assert np.abs(inputAngle)<self.maxCombinerAng #tilt can't be too large or it exceeds field region.
         self.Lo = self.compute_Trajectory_Length(
             qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
@@ -1695,6 +1684,8 @@ class CombinerHexapoleSim(Element):
             # through the combiner. Simple square apeture
             if np.sqrt(q[1]**2+q[2]**2) < self.ap:  # if inside the y (width) apeture
                 return True
+            else:
+                return False
         elif q[0] < 0:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines

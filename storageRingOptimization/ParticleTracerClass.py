@@ -11,9 +11,10 @@ from shapely.geometry import Polygon,Point
 
 import elementPT
 
+#TODO: Why does the tracked time differe between fastMode=True and fastMode=False
 
 
-
+TINY_TIME_STEP=1e-9 #nanosecond time step to move particle from one element to another
 @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
 def fast_qNew(q,F,p,h):
     return q+p*h+.5*F*h**2
@@ -23,37 +24,20 @@ def fast_pNew(p,F,F_n,h):
     return p+.5*(F+F_n)*h
 
 
-@numba.njit()
-def fast_2D_Mat_Mult(M,v):
-    vx0=v[0]
-    vy0=v[1]
-    vx=M[0,0]*vx0+M[0,1]*vy0
-    vy=M[1,0]*vx0+M[1,1]*vy0
-    v[0]=vx
-    v[1]=vy
 
-
-@numba.njit()
-def increment_Array_In_Place(q,dq):
-    q[0]=q[0]+dq[0]
-    q[1]=q[1]+dq[1]
-    q[2]=q[2]+dq[2]
-
-
-@numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
-                                                     ,numba.float64[:,:],numba.float64[:,:]))
-def transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
+# @numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
+#                                                      ,numba.float64[:,:],numba.float64[:,:]))
+def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
+    #don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
     q=q.copy()
     p=p.copy()
-    fast_2D_Mat_Mult(ROutEl1,q)
-    increment_Array_In_Place(q,r01)
-    increment_Array_In_Place(q,-r02)
-    fast_2D_Mat_Mult(RInEl2,q)
-    fast_2D_Mat_Mult(ROutEl1,p)
-    fast_2D_Mat_Mult(RInEl2,p)
+    q[:2]=ROutEl1@q[:2]
+    q+=r01
+    q-=r02
+    q[:2]=RInEl2@q[:2]
+    p[:2]=ROutEl1@p[:2]
+    p[:2]=RInEl2@p[:2]
     return q,p
-
-
 #this class does the work of tracing the particles through the lattice with timestepping algorithms.
 #it utilizes fast numba functions that are compiled and saved at the moment that the lattice is passed. If the lattice
 #is changed, then the particle tracer needs to be updated.
@@ -63,7 +47,6 @@ class ParticleTracer:
         #lattice: ParticleTracerLattice object typically
         self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=lattice.totalLength
-
         self.numbaMultiStepCache=[]
         self.generate_Multi_Step_Cache()
 
@@ -109,7 +92,7 @@ class ParticleTracer:
             r02 = el2.r1
         ROutEl1 = el1.ROut
         RInEl2 = el2.RIn
-        return transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2)
+        return _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2)
     def initialize(self):
         # prepare for a single particle to be traced
         self.T=0.0
@@ -193,7 +176,7 @@ class ParticleTracer:
         results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
-            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n) #it doesn't quite make sense
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.pEl) #it doesn't quite make sense
             #that I'm doing it like this. The outside the element system could be revamped.
     def generate_Multi_Step_Cache(self):
         self.numbaMultiStepCache = []
@@ -308,30 +291,6 @@ class ParticleTracer:
             qf = qi + pi * dt  # the final position of the particle. Either at the end, or at some place where it
             # clipped, or where time ran out
             self.particle.log_Params_In_Drift_Region(qi, pi, qf, self.h,driftEl)
-    def handle_Element_Edge(self):
-        # This method uses the correct timestep to put the particle just on the other side of the end of the element
-        # using explicit euler.
-        el=self.currentEl
-        q=el.transform_Element_Coords_Into_Lab_Frame(self.qEl)
-        p=el.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
-
-        r=el.r2-q
-
-        rt=np.abs(np.sum(el.ne*r[:2])) #perindicular position  to element's end
-        pt=np.abs(np.sum(el.ne*p[:2]))#perpindicular momentum to surface of element's end
-        h=rt/pt
-        self.T += h-self.h #to account for the smaller step size here
-        q=q+p*h
-        eps=1e-9 #tiny step to put the particle on the other side
-        n_p=p/np.sum(np.sqrt(p**2)) #normalized vector of particle velocity direction
-
-        q=q+n_p*eps
-        #now the particle is in the next element!
-        return q,p
-
-
-
-
 
 
     def time_Step_Verlet(self):
@@ -347,12 +306,9 @@ class ParticleTracer:
             F=self.currentEl.force(qEl)
         #a = F # acceleration old or acceleration sub n
         qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
-        # el= self.which_Element(qEl_n) # todo: a more efficient algorithm here will make up to a 17% difference. Perhaps
-        # #not always checking if the particle is inside the element by looking at how far away it is from and edge and
-        # #calculating when I should check again the soonest
         F_n=self.currentEl.force(qEl_n)
         if np.isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
-            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n)  #check if element has changed.
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,pEl)  #check if element has changed.
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
@@ -361,17 +317,17 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
-    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n):
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl,pEl):
         #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
         #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
         #This returns True if the particle has been walked to the next element with a special algorithm, or is when
         #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
         #None. Most of the time this return false and the leapfrog algorithm continues
         #el: The element to check against
-        #todo: there are some issues here with element edges
+        qEl_Scooted=qEl+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
         if self.accelerated==True:
             nextEl = self.get_Next_Element()
-            q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_n,self.pEl,nextEl)
+            q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Scooted,pEl,nextEl)
             if nextEl.is_Coord_Inside(q_nextEl)==False:
                 self.particle.clipped=True
                 return
@@ -384,15 +340,15 @@ class ParticleTracer:
                 self.elHasChanged = True
                 return
         else:
-            el=self.which_Element(qEl_n) #
+            el=self.which_Element(qEl_Scooted)
             if el is None: #if outside the lattice
                 self.particle.clipped = True
                 return
             elif el is not self.currentEl: #element has changed
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
-                qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_n) #use the old  element for transform
-                pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl) #use the old  element for transform
+                qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Scooted) #use the old  element for transform
+                pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl) #use the old  element for transform
                 self.currentEl=nextEl
                 self.particle.currentEl=nextEl
                 self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
@@ -418,9 +374,10 @@ class ParticleTracer:
         nextEl=self.get_Next_Element()
         if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True: #try the next element
             return nextEl
-        #now instead look everywhere, except the next element we already checked
-        for el in self.latticeElementList:
-            if el is not nextEl: #don't waste rechecking current element or next element
-                if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
-                    return el
-        return None
+        else:
+            #now instead look everywhere, except the next element we already checked
+            for el in self.latticeElementList:
+                if el is not nextEl: #don't waste rechecking current element or next element
+                    if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
+                        return el
+            return None
