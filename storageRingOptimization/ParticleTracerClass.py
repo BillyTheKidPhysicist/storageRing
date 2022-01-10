@@ -80,13 +80,13 @@ class ParticleTracer:
         el2=nextEll
         if el1.type=='BEND':
             r01 = el1.r0
-        elif el1.type in ('COMBINER_SQUARE','COMBINER_CIRCLE'):
+        elif el1.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
             r01 = el1.r2
         else:
             r01 = el1.r1
         if el2.type=='BEND':
             r02 = el2.r0
-        elif el2.type in ('COMBINER_SQUARE','COMBINER_CIRCLE'):
+        elif el2.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
             r02 = el2.r2
         else:
             r02 = el2.r1
@@ -318,12 +318,6 @@ class ParticleTracer:
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
 
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl,pEl):
-        #this method checks if the element that the particle is in, or being evaluated, has changed. If it has
-        #changed then that needs to be recorded and the particle carefully walked up to the edge of the element
-        #This returns True if the particle has been walked to the next element with a special algorithm, or is when
-        #using this algorithm the particle is now outside the lattice. It also return True if the provided element is
-        #None. Most of the time this return false and the leapfrog algorithm continues
-        #el: The element to check against
         qEl_Scooted=qEl+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
         if self.accelerated==True:
             nextEl = self.get_Next_Element()
@@ -356,6 +350,9 @@ class ParticleTracer:
                 # element
                 self.elHasChanged = True
                 return
+            else:
+                raise Exception('Something is wrong, element should have changed. Particle is possibly frozen because '
+                                'of broken logic, or being returned the same location')
     def which_Element_Lab_Coords(self,qLab):
         for el in self.latticeElementList:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:

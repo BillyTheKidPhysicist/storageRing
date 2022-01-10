@@ -11,6 +11,10 @@ import numpy.linalg as npl
 from joblib import Parallel,delayed
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,CombinerHexapoleSim
+
+#todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
+#people, I need to change that. This was before my cleaner code approach
+
 class SimpleLocalMinimizer:
     #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
     #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
@@ -141,6 +145,7 @@ class ParticleTracerLattice:
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
         el.index = len(self.elList) #where the element is in the lattice
+        assert self.combiner is None #there can be only one!
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -150,6 +155,7 @@ class ParticleTracerLattice:
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
         el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
         el.index = len(self.elList) #where the element is in the lattice
+        assert self.combiner is None  # there can be only one!
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -262,6 +268,7 @@ class ParticleTracerLattice:
 
         el=CombinerIdeal(self, Lm, c1, c2, ap,self.latticeType,sizeScale) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
+        assert self.combiner is None  # there can be only one!
         self.combiner = el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order

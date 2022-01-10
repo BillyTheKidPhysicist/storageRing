@@ -7,7 +7,8 @@ from ParticleClass import Swarm,Particle
 import time
 import skopt
 import multiprocess as mp
-
+from constants import BOLTZMANN_CONSTANT,MASS_LITHIUM_7
+from ParticleTracerLatticeClass import ParticleTracerLattice
 
 
 def lorentz_Function(x,gamma):
@@ -20,7 +21,7 @@ def normal(v,sigma,v0=0.0):
 
 
 class SwarmTracer:
-    def __init__(self,lattice):
+    def __init__(self,lattice:ParticleTracerLattice):
         self.lattice=lattice
         self.particleTracer = ParticleTracer(self.lattice)
 
@@ -46,12 +47,13 @@ class SwarmTracer:
 
         return z
     def initialize_Stablity_Testing_Swarm(self,qMax):
+        smallOffset=-1e-10 #this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
-        swarmTest.add_Particle(qi=np.asarray([-1e-10,0.0,0.0]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax/2, qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax/2, qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, qMax/2, -qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([-1e-10, -qMax/2, -qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([smallOffset,0.0,0.0]))
+        swarmTest.add_Particle(qi=np.asarray([smallOffset, qMax/2, qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([smallOffset, -qMax/2, qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([smallOffset, qMax/2, -qMax/2]))
+        swarmTest.add_Particle(qi=np.asarray([smallOffset, -qMax/2, -qMax/2]))
         return swarmTest
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, numGridEdge, upperSymmetry=False):
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -91,7 +93,7 @@ class SwarmTracer:
 
         pTransMax=self.lattice.v0Nominal*np.tan(collectorOutputAngle) #transverse velocity dominates thermal velocity,
         #ie, geometric heating
-        sigmaVelocity=np.sqrt(self.lattice.kb*temperature/self.lattice.mass_Li7) #thermal velocity spread. Used for
+        sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
         #longitudinal velocity only because geometric dominates thermal in transverse dimension
         pLongitudinalMax=2*sigmaVelocity+(1-np.cos(collectorOutputAngle))*self.lattice.v0Nominal #include 2 sigma of
         #velocity, and geometric spread
@@ -259,8 +261,13 @@ class SwarmTracer:
 
         R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
+
+        #if there is and output offset, the particles need to be launched from there
+        n2=self.lattice.combiner.ne #unit normal to outlet
+        np2=-np.asarray([n2[1],-n2[0]]) # unit parallel to outlet
+        r2[:2]+=np2*self.lattice.combiner.outputOffset #add offset to output vector
+
         for particle in swarm.particles:
-            assert np.abs(particle.qi[0])<1e-12 and particle.pi[0]<0.0 and particle.traced==False
             particle.qi[:2] = particle.qi[:2] @ R
             particle.qi += r2
             particle.pi[:2] = particle.pi[:2] @ R
@@ -312,8 +319,7 @@ class SwarmTracer:
             return swarmNew
         elif parallel==True:
             #more straightforward method. works for serial as well
-            numWorkers = 1 if parallel == False else mp.cpu_count()
-            with mp.Pool(numWorkers) as pool:
+            with mp.Pool(mp.cpu_count()) as pool:
                 swarmNew.particles = pool.map(trace_Particle, swarmNew.particles)
             return swarmNew
         else:

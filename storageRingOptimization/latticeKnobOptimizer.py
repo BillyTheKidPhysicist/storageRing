@@ -5,9 +5,14 @@ import numpy as np
 from ParticleClass import Swarm, Particle
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
-from ParaWell import ParaWell
 from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal, Drift
+import multiprocess as mp
+'''
+This file contains a class used to optimize the tunable knobs we can expect to have. These are either field values
+or element spacing
+
+'''
 
 
 class Solution:
@@ -42,7 +47,6 @@ class LatticeOptimizer:
 
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
-        self.helper = ParaWell()  # custom class to help with parallelization
         self.i = 0  # simple variable to track solution status
         self.particleTracerRing = ParticleTracer(latticeRing)
         self.particleTracerInjector = ParticleTracer(latticeInjector)
@@ -172,16 +176,19 @@ class LatticeOptimizer:
         swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         return swarmEnd
 
-    def test_Stability(self, X,minRevs=5.0):
+    def test_Stability(self, X,minRevsToTest=5.0):
         self.update_Ring_And_Injector(X)
-        swarmTest = self.swarmTracerRing.initialize_Stablity_Testing_Swarm(1e-3)
-        swarmTest = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTest)
-        swarmTest = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTest, self.h,
-                                                                     1.5 * minRevs * self.latticeRing.totalLength / 200.0,
-                                                                     parallel=False, accelerated=True, fastMode=True)
+        maxInitialTransversePos=1e-3
+        swarmTestInitial = self.swarmTracerRing.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
+        swarmTestInitial=self.swarmTracerRing.initalize_PseudoRandom_Swarm_In_Phase_Space(maxInitialTransversePos,5.0,1.0,10,sameSeed=True)
+        swarmTestAtCombiner = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTestInitial)
+        swarmTestTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
+                                                            1.5 * minRevsToTest * self.latticeRing.totalLength / 200.0,
+                                                            parallel=False, accelerated=False,
+                                                            fastMode=True)
         stable = False
-        for particle in swarmTest:
-            if particle.revolutions > minRevs:
+        for particle in swarmTestTraced:
+            if particle.revolutions > minRevsToTest: #any stable particle, consider lattice stable
                 stable = True
         return stable
 
@@ -310,7 +317,7 @@ class LatticeOptimizer:
         assert testCoords.shape==(numEdgePoints**2,4)
         if parallel == False:
             stablilityList = [self.test_Stability(coords) for coords in testCoords]
-        else:
+        else: #todo: parallelize this. Try using joblib again
             stablilityList = self.helper.parallel_Problem(self.test_Stability, argsList=testCoords,
                                                           onlyReturnResults=True)
         if sum(stablilityList) == 0:

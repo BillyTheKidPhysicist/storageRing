@@ -15,6 +15,7 @@ from HalbachLensClass import SegmentedBenderHalbach\
     as _SegmentedBenderHalbachLensFieldGenerator
 from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION_MAGNETON
 
+#Todo: there has to be a more logical way to do all this numba stuff
 
 # from profilehooks import profile
 
@@ -95,7 +96,7 @@ class Element:
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
-        self.maxCombinerAng=.1 #because the field value is a right rectangular prism, it must extend to past the
+        self.maxCombinerAng=.15 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
     def compile_Fast_Numba_Force_Function(self):
         #function that generates the fast_Numba_Force_Function based on existing parameters. It compiles it as well
@@ -283,10 +284,21 @@ class Drift(LensIdeal):
 
     def force(self, q):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        if 0 <= q[0] <= self.L and q[1] ** 2 + q[2] ** 2 < self.ap**2:
+        if 0 <= q[0] <= self.L and sqrt(q[1] ** 2 + q[2] ** 2) < self.ap:
             return np.zeros(3)
         else:
             return np.asarray([np.nan,np.nan,np.nan])
+    def compile_Fast_Numba_Force_Function(self):
+        L = self.L
+        ap = self.ap
+        @numba.njit()
+        def force_NUMBA_Wrapper(q):
+            if 0 <= q[0] <= L and sqrt(q[1] ** 2 + q[2] ** 2) < ap:
+                return np.zeros(3)
+            else:
+                return np.asarray([np.nan, np.nan, np.nan])
+        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Numba_Force_Function(np.zeros(3))
 
 
 class BenderIdeal(Element):
@@ -1562,6 +1574,8 @@ class CombinerHexapoleSim(Element):
         self.force_Func=force_Func
         self.magnetic_Potential_Func = lambda x, y, z: interpV(-z, y, x)
     def force(self, q,searchIsCoordInside=True):
+        #todo: this is really messed up and needs to change for all three
+
         # this function uses the symmetry of the combiner to extract the force everywhere.
         #I believe there are some redundancies here that could be trimmed to save time.
 
@@ -1589,7 +1603,10 @@ class CombinerHexapoleSim(Element):
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
         # #of orbit.
-        force = lambda x: self.force(x,searchIsCoordInside=False)
+        def force(x):
+            if x[0]<self.Lm+self.space and sqrt(x[1]**2+x[2]**2)>self.ap:
+                    return np.empty(3)*np.nan
+            return self.force(x,searchIsCoordInside=False)
         limit = self.Lm + 2 * self.space
 
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
