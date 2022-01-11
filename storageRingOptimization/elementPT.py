@@ -17,6 +17,8 @@ from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION
 
 #Todo: there has to be a more logical way to do all this numba stuff
 
+#Todo: set numpy array to unwritabel
+
 # from profilehooks import profile
 
 
@@ -289,16 +291,19 @@ class Drift(LensIdeal):
         else:
             return np.asarray([np.nan,np.nan,np.nan])
     def compile_Fast_Numba_Force_Function(self):
-        L = self.L
-        ap = self.ap
-        @numba.njit()
-        def force_NUMBA_Wrapper(q):
-            if 0 <= q[0] <= L and sqrt(q[1] ** 2 + q[2] ** 2) < ap:
-                return np.zeros(3)
-            else:
-                return np.asarray([np.nan, np.nan, np.nan])
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3))
+        #todo: this is not optimal. Some work is needed here
+        #because the length of drift regions can change, and they are very short, this is much faster. Otherwise,
+        #naively, everything needs to be recompiled again in the ParticleTracerClass
+        # L = self.L
+        # ap = self.ap
+        # @numba.njit()
+        # def force_NUMBA_Wrapper(q):
+        #     if 0 <= q[0] <= L and sqrt(q[1] ** 2 + q[2] ** 2) < ap:
+        #         return np.zeros(3)
+        #     else:
+        #         return np.asarray([np.nan, np.nan, np.nan])
+        self.fast_Numba_Force_Function=None#force_NUMBA_Wrapper
+        # self.fast_Numba_Force_Function(np.zeros(3))
 
 
 class BenderIdeal(Element):
@@ -1483,18 +1488,17 @@ class CombinerHexapoleSim(Element):
         self.space=max(rpList)*outerFringeFrac
 
         lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=2)
-
-
         numXY=int((self.ap/self.rp)*numPointsTransverse)
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-        yArr_Quadrant=np.linspace(-TINY_STEP,1.1*self.rp+TINY_STEP,numXY)
-        xArr_Quadrant=np.linspace(-(1.1*self.rp+TINY_STEP),TINY_STEP,numXY)
-
-        tiltedExtraSpace=2*self.maxCombinerAng*self.ap #extra space
+        yExtraSpace=self.space*np.sin(self.maxCombinerAng)+self.ap*np.sin(self.maxCombinerAng)**2
+        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP+yExtraSpace,numXY)
+        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP+yExtraSpace),TINY_STEP,numXY)
+        # el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang)
+        ZExtraSpace=self.ap*np.sin(self.maxCombinerAng)*np.cos(self.maxCombinerAng)
         zMin=-TINY_STEP
-        zMax=self.Lm/2+self.space+tiltedExtraSpace
+        zMax=self.Lm/2+self.space+ZExtraSpace
         zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
@@ -1504,7 +1508,7 @@ class CombinerHexapoleSim(Element):
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func(data3D)
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
-        # to the hard edge of the input in a straight line
+        # to the hard edge of the input in a straight line. This is that section
 
 
         self.outputOffset=self.find_Ideal_Offset()

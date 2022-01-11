@@ -1,3 +1,4 @@
+import time
 from shapely.affinity import rotate, translate
 import copy
 from ParticleTracerClass import ParticleTracer
@@ -180,10 +181,9 @@ class LatticeOptimizer:
         self.update_Ring_And_Injector(X)
         maxInitialTransversePos=1e-3
         swarmTestInitial = self.swarmTracerRing.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
-        swarmTestInitial=self.swarmTracerRing.initalize_PseudoRandom_Swarm_In_Phase_Space(maxInitialTransversePos,5.0,1.0,10,sameSeed=True)
         swarmTestAtCombiner = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTestInitial)
         swarmTestTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
-                                                            1.5 * minRevsToTest * self.latticeRing.totalLength / 200.0,
+                                1.1 * minRevsToTest * self.latticeRing.totalLength / self.latticeRing.v0Nominal,
                                                             parallel=False, accelerated=False,
                                                             fastMode=True)
         stable = False
@@ -314,26 +314,26 @@ class LatticeOptimizer:
         x4Arr = (ringTuningBounds[1][1]-injectorTuningBounds[1][0])*np.ones(numEdgePoints**2)
         testCoords = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
         testCoords=np.column_stack((testCoords,x3Arr,x4Arr))
-        assert testCoords.shape==(numEdgePoints**2,4)
         if parallel == False:
-            stablilityList = [self.test_Stability(coords) for coords in testCoords]
-        else: #todo: parallelize this. Try using joblib again
-            stablilityList = self.helper.parallel_Problem(self.test_Stability, argsList=testCoords,
-                                                          onlyReturnResults=True)
-        if sum(stablilityList) == 0:
+            stabilityList = [self.test_Stability(coords) for coords in testCoords]
+        else:
+            with mp.Pool(mp.cpu_count()) as pool:
+                stabilityList=pool.map(self.test_Stability,testCoords)
+        assert len(stabilityList)==numEdgePoints**2
+        if sum(stabilityList) == 0:
             return False
         else:
             return True
     def _minimize(self,parallel)->Solution:
         if parallel == True:
-            numWorkers = -1
+            numWorkers = mp.Pool(mp.cpu_count()).map
         else:
             numWorkers = 1
         approxSol_SP = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=.01, polish=False,
-                                            workers=numWorkers) #global minimizer
-
-        sol_SP = spo.minimize(self.mode_Match_Cost, approxSol_SP.x, args=(parallel), bounds=self.tuningBounds,
-                              method='Nelder-Mead',options={'ftol':.001}) #polish the result
+                                            workers=numWorkers,mutation=(.5,1.5)) #global minimizer
+        parallel=False
+        sol_SP = spo.minimize(self.mode_Match_Cost, approxSol_SP.x, args=(parallel,), bounds=self.tuningBounds,
+                              method='Nelder-Mead',options={'ftol':.001,'xtol':1e-4}) #polish the result
         sol=Solution()
         cost=sol_SP.fun
         sol.cost=cost
@@ -360,6 +360,5 @@ class LatticeOptimizer:
             sol.cost=1.0
             sol.stable=False
             return sol
-        print('stable')
         sol=self._minimize(parallel)
         return sol

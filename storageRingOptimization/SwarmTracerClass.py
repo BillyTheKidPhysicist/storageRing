@@ -259,11 +259,11 @@ class SwarmTracer:
         if copySwarm==True:
             swarm=swarm.copy()
 
-        R = self.lattice.combiner.RIn #matrix to rotate into combiner frame
-        r2 = self.lattice.combiner.r2 #position of the outlet of the combiner
+        R = self.lattice.combiner.RIn.copy() #matrix to rotate into combiner frame
+        r2 = self.lattice.combiner.r2.copy() #position of the outlet of the combiner
 
         #if there is and output offset, the particles need to be launched from there
-        n2=self.lattice.combiner.ne #unit normal to outlet
+        n2=self.lattice.combiner.ne.copy() #unit normal to outlet
         np2=-np.asarray([n2[1],-n2[0]]) # unit parallel to outlet
         r2[:2]+=np2*self.lattice.combiner.outputOffset #add offset to output vector
 

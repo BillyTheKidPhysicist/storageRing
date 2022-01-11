@@ -1,4 +1,6 @@
 import os
+import random
+
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from asyncDE import solve_Async
 import numpy as np
@@ -92,29 +94,26 @@ def solve_For_Lattice_Params(X,parallel=False):
 
     rpBend,rpLens,rpLensFirst,Lm,LLens,injectorFactor,rpInjectorFactor=X
 
-    # PTL_Ring=generate_Ring_Lattice(rpBend,rpLens,rpLensFirst,Lm,LLens,parallel=parallel)
-    # if PTL_Ring is None:
-    #     # print('invalid ring',int(time.time()-t))
-    #     sol=invalid_Solution(X,invalidRing=True)
-    #     # print(sol)
-    #     return sol
-    #
-    # PTL_Injector=generate_Injector_Lattice(injectorFactor,rpInjectorFactor,parallel=parallel)
-    # if PTL_Injector is None:
-    #     # print('invalid injector',int(time.time()-t))
-    #     sol=invalid_Solution(X,invalidInjector=True)
-    #     # print(sol)
-    #     return sol
-    import dill
+    PTL_Ring=generate_Ring_Lattice(rpBend,rpLens,rpLensFirst,Lm,LLens,parallel=parallel)
+    if PTL_Ring is None:
+        print('invalid ring')
+        sol=invalid_Solution(X,invalidRing=True)
+        return sol
+
+    PTL_Injector=generate_Injector_Lattice(injectorFactor,rpInjectorFactor,parallel=parallel)
+    if PTL_Injector is None:
+        print('invalid injector')
+        sol=invalid_Solution(X,invalidInjector=True)
+        return sol
+    # import dill
     # with open('temp','wb') as file:
     #     dill.dump(PTL_Ring,file)
-    with open('temp','rb') as file:
-        PTL_Ring=dill.load(file)
-    #
+    # with open('temp','rb') as file:
+    #     PTL_Ring=dill.load(file)
     # with open('temp1', 'wb') as file:
     #     dill.dump(PTL_Injector, file)
-    with open('temp1','rb') as file:
-        PTL_Injector=dill.load(file)
+    # with open('temp1','rb') as file:
+    #     PTL_Injector=dill.load(file)
 
     # PTL_Injector.show_Lattice()
     # PTL_Ring.show_Lattice()

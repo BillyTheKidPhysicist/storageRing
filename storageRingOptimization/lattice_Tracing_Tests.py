@@ -9,11 +9,11 @@ testDataFolderPath=os.path.join(os.getcwd(),'testData')
 
 def generate_Test_Swarm(configuration):
     testSwarm = Swarm()
-    if configuration in ('1','2','3','4','5'):
+    if configuration in ('1','2','3','4','5','6'):
         testSwarm.add_Particle()
         testSwarm.add_Particle(qi=np.asarray([-1e-10, 1e-3, 0.0]))
         testSwarm.add_Particle(pi=np.asarray([-200.0, 5.0, 0.0]))
-    elif configuration in ('6',):
+    elif configuration in (None,):
         pass
     else:
         raise Exception('no valid configuration given')
@@ -22,6 +22,8 @@ def generate_Test_Swarm(configuration):
 def save_TEST_Data(PTL,testSwarm,TESTDataFileName):
     #swarm is traced through the lattice with all fancy features turned off
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
+    if os.path.exists(TESTDataFilePath) == True:
+        raise Exception("A results file already exists for that test case")
     swarmTracer=SwarmTracer(PTL)
     tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=False,parallel=False,accelerated=False)
     testData=[]
@@ -75,12 +77,15 @@ def generate_Lattice(configuration):
         PTL.add_Halbach_Lens_Sim(.01,1.0)
         PTL.add_Drift(.1)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
-    elif configuration=='2':
+    elif configuration in ('2','5'):
         PTL=ParticleTracerLattice(200.0,latticeType='injector')
         PTL.add_Drift(.25)
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Drift(.1)
-        PTL.add_Combiner_Sim('combinerV3.txt')
+        if configuration=='2':
+            PTL.add_Combiner_Sim('combinerV3.txt')
+        else:
+            PTL.add_Combiner_Sim_Lens(.1, .02)
         PTL.add_Halbach_Lens_Sim(.01, .5)
         PTL.end_Lattice()
     elif configuration=='3':
@@ -90,10 +95,13 @@ def generate_Lattice(configuration):
         PTL.add_Lens_Ideal(1.0,1.0,.01)
         PTL.add_Bender_Ideal(np.pi,1.0,1.0,.01)
         PTL.end_Lattice()
-    elif configuration=='4':
+    elif configuration in ('4','6'):
         PTL=ParticleTracerLattice(200.0,latticeType='storageRing')
         PTL.add_Halbach_Lens_Sim(.01,.5)
-        PTL.add_Combiner_Sim('combinerV3.txt')
+        if configuration == '4':
+            PTL.add_Combiner_Sim('combinerV3.txt')
+        else:
+            PTL.add_Combiner_Sim_Lens(.1, .02)
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)
@@ -101,14 +109,6 @@ def generate_Lattice(configuration):
         PTL.end_Lattice(enforceClosedLattice=True,constrain=True)
         PTL.elList[0].fieldFact=.3
         PTL.elList[2].fieldFact=.3
-    elif configuration=='5':
-        PTL=ParticleTracerLattice(200.0,latticeType='injector')
-        PTL.add_Drift(.25)
-        PTL.add_Halbach_Lens_Sim(.01,.5)
-        PTL.add_Drift(.1)
-        PTL.add_Combiner_Sim_Lens(.1,.02)
-        PTL.add_Halbach_Lens_Sim(.01, .5)
-        PTL.end_Lattice()
     else:
         raise Exception('no proper configuration name provided')
     return PTL
@@ -117,17 +117,16 @@ def TEST_Lattice_Configuration(configuration,saveData=False):
     testSwarm=generate_Test_Swarm(configuration)
     TESTName='test_'+configuration
     if saveData==True:
-        raise Exception('You must comment this line out to save data') #todo: replace this with file check
         save_TEST_Data(PTL,testSwarm,TESTName)
     else:
         for fastMode in [True,False]:
             for parallel in [True,False]:
                 for accelerated in [True,False]:
                     TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
-def TEST_All():
-    tests=['1','2','3','4','5']
+def TEST_All(saveData=False):
+    tests=['1','2','3','4','5','6']
     for testNum in tests:
         print('Test number '+testNum)
-        TEST_Lattice_Configuration(testNum)
+        TEST_Lattice_Configuration(testNum,saveData=saveData)
         print('Success')
 TEST_All()

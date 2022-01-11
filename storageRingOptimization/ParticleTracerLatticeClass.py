@@ -800,7 +800,7 @@ class ParticleTracerLattice:
         for el in self.elList:
             plt.plot(*el.SO.exterior.xy,c='black')
         if particleCoords is not None: #plot from the provided particle coordinate
-            if particleCoords.shape[0]==3: #if the 3d value is provided trim it to 2D
+            if len(particleCoords)==3: #if the 3d value is provided trim it to 2D
                 particleCoords=particleCoords[:2]
             #plot the particle as both a dot and a X
             if showMarkers==True:
