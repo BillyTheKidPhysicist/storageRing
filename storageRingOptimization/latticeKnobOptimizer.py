@@ -144,10 +144,12 @@ class LatticeOptimizer:
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced, copyParticles=False):
         #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
         #are now clipping the combiner and any that would clip the next element
+        #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
         apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
-            qf = particle.qf - self.latticeInjector.combiner.r2
+            outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
+            qf = particle.qf - outputCenter
             qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
             if qf[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
                 # assume it's at the end
@@ -267,6 +269,9 @@ class LatticeOptimizer:
     def catch_Optimizer_Errors(self, tuningBounds, elementIndices, tuningChoice):
         if max(elementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(elementIndices): raise Exception("Bounds do not match number of tuned elements")
+        if self.latticeRing.combiner.L!=self.latticeInjector.combiner.L and \
+            self.latticeRing.combiner.ap!=self.latticeInjector.combiner.ap:
+            raise Exception('Combiners are different between the two lattices')
         if tuningChoice == 'field':
             for el in self.tunedElementList:
                 if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:

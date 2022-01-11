@@ -249,7 +249,13 @@ class SwarmTracer:
                                                                sameSeed=sameSeed,circular=circular,smallXOffset=smallXOffset)
         swarmAtCombiner=self.move_Swarm_To_Combiner_Output(swarmAtOrigin,copySwarm=False,scoot=True)
         return swarmAtCombiner
-
+    def combiner_Output_Offset_Shift(self):
+        #combiner may have an output offset (ie hexapole combiner). This return the 3d vector (x,y,0) that connects the
+        #geoemtric center of the output plane with the offset point, which also lies in the plane. stern gerlacht
+        #style doesn't have and offset
+        n2=self.lattice.combiner.ne.copy() #unit normal to outlet
+        np2=-np.asarray([n2[1],-n2[0],0.0]) # unit parallel to outlet
+        return np2*self.lattice.combiner.outputOffset
     def move_Swarm_To_Combiner_Output(self,swarm,scoot=False,copySwarm=True):
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
         #(0,0,0) and have average negative velocity.
@@ -261,11 +267,7 @@ class SwarmTracer:
 
         R = self.lattice.combiner.RIn.copy() #matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2.copy() #position of the outlet of the combiner
-
-        #if there is and output offset, the particles need to be launched from there
-        n2=self.lattice.combiner.ne.copy() #unit normal to outlet
-        np2=-np.asarray([n2[1],-n2[0]]) # unit parallel to outlet
-        r2[:2]+=np2*self.lattice.combiner.outputOffset #add offset to output vector
+        r2+=self.combiner_Output_Offset_Shift()
 
         for particle in swarm.particles:
             particle.qi[:2] = particle.qi[:2] @ R
