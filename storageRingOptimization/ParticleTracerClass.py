@@ -1,14 +1,17 @@
 from ParticleClass import Particle
 import numpy.linalg as npl
 import numba
+import warnings
+from numba.core.errors import NumbaPerformanceWarning
+warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 import time
 import numpy as np
 import math
+from math import isnan
 from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
-
 import elementPT
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
@@ -25,8 +28,8 @@ def fast_pNew(p,F,F_n,h):
 
 
 
-# @numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
-#                                                      ,numba.float64[:,:],numba.float64[:,:]))
+@numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
+                                                     ,numba.float64[:,:],numba.float64[:,:]))
 def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
     #don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
     q=q.copy()
@@ -90,9 +93,7 @@ class ParticleTracer:
             r02 = el2.r2
         else:
             r02 = el2.r1
-        ROutEl1 = el1.ROut
-        RInEl2 = el2.RIn
-        return _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2)
+        return _transform_To_Next_Element(q,p,r01,r02,el1.ROut,el2.RIn)
     def initialize(self):
         # prepare for a single particle to be traced
         self.T=0.0
@@ -200,40 +201,42 @@ class ParticleTracer:
 
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEl,pEl,T,T0,h,forceFact,force):
-        #copy the input arrays to prevent modifying them outside the function
-        qEl=qEl.copy()
-        pEl=pEl.copy()
-        F_n=np.empty(3)
-        F=np.asarray(force(qEl))
-        F*=forceFact
-        if math.isnan(F[0]) == True or T>=T0:
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, forceFact, force):
+        # copy the input arrays to prevent modifying them outside the function
+        x, y, z = qEln
+        px, py, pz = pEln
+        Fx, Fy, Fz = force(x,y,z)
+        if math.isnan(Fx) == True or T >= T0:
             particleOutside = True
-            return qEl, qEl, pEl, T, particleOutside
-        particleOutside=False
-        while(True):
-            if T>=T0:
-                return qEl,qEl,pEl,T,particleOutside
-            #unfortunately, += and -= is not yet defined in numba and numpy, so to modify in place I must disect the array as
-            #such
-            qEl[0]=qEl[0]+pEl[0]*h+.5*F[0]*h**2
-            qEl[1]=qEl[1]+pEl[1]*h+.5*F[1]*h**2
-            qEl[2]=qEl[2]+pEl[2]*h+.5*F[2]*h**2
+            return qEln, qEln, pEln, T, particleOutside
+        Fx, Fy, Fz = Fx * forceFact, Fy * forceFact, Fz * forceFact
+        particleOutside = False
+        while (True):
+            if T >= T0:
+                pEl = np.asarray([px, py, pz])
+                qEl = np.asarray([x, y, z])
+                return qEl, qEl, pEl, T, particleOutside
+            x =x+px * h + .5 * Fx * h ** 2
+            y =y+py * h + .5 * Fy * h ** 2
+            z =z+pz * h + .5 * Fz * h ** 2
 
-            F_n[:] = force(qEl)
-            F_n*=forceFact #modifying in place is faster
+            Fx_n, Fy_n, Fz_n = force(x,y,z)
+            Fx_n, Fy_n, Fz_n = Fx_n * forceFact, Fy_n * forceFact, Fz_n * forceFact
 
+            if math.isnan(Fx_n) == True:
+                qEl = np.asarray([x, y, z])
+                pEl = np.asarray([px, py, pz])
+                xo = x - (px * h + .5 * Fx * h ** 2)
+                yo = y - (py * h + .5 * Fy * h ** 2)
+                zo = z - (pz * h + .5 * Fz * h ** 2)
+                qEl_o = np.asarray([xo, yo, zo])
 
-            if math.isnan(F_n[0])==True:
-                qEl_o = qEl - (pEl * h + .5 * F * h ** 2)
-                particleOutside=True
+                particleOutside = True
                 return qEl, qEl_o, pEl, T, particleOutside
-            pEl[0] = pEl[0]+.5*(F[0]+F_n[0])*h
-            pEl[1] = pEl[1]+.5*(F[1]+F_n[1])*h
-            pEl[2] = pEl[2]+.5*(F[2]+F_n[2])*h
-            # qEl[:] = qEl_n
-            # pEl[:] = pEl_n
-            F[:] = F_n  # record the force to be recycled
+            px =px+.5 * (Fx_n + Fx) * h
+            py =py+.5 * (Fy_n + Fy) * h
+            pz =pz+.5 * (Fz_n + Fz) * h
+            Fx, Fy, Fz = Fx_n, Fy_n, Fz_n
             T += h
     @staticmethod
     @numba.njit(numba.float64(numba.float64[:],numba.float64[:],numba.float64))
@@ -307,7 +310,7 @@ class ParticleTracer:
         #a = F # acceleration old or acceleration sub n
         qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
         F_n=self.currentEl.force(qEl_n)
-        if np.isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
+        if isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,pEl)  #check if element has changed.
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
@@ -316,7 +319,7 @@ class ParticleTracer:
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
-
+    # @profile
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl,pEl):
         qEl_Scooted=qEl+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
         if self.accelerated==True:
