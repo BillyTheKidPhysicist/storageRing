@@ -2,16 +2,16 @@ import numba
 import numpy as np
 
 
-@numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64, numba.float64[:],
+@numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64, numba.float64,numba.float64,
                                                    numba.types.Array(numba.types.float64, 2, 'C', readonly=True),
                                                    numba.float64))
-def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, q, M_uc, ucAng):
+def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x,y, M_uc, ucAng):
     # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
     # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
     # or leaving the element interface as mirror images of each other.
     # FNew: Force to be rotated out of unit cell frame
     # q: particle's position in the element frame where the force is acting
-    phi = np.arctan2(q[1], q[0])  # the anglular displacement from output of bender to the particle. I use
+    phi = np.arctan2(y, x)  # the anglular displacement from output of bender to the particle. I use
     # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
     if phi < 0:  # restrict range to between 0 and 2pi
         phi += 2 * np.pi
@@ -32,9 +32,9 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, q, M_uc, ucAn
 
 
 @numba.njit()
-def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
+def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(x,y,z, ang, ucAng):
     quc = np.empty(3)
-    angle = np.arctan2(q[1], q[0])
+    angle = np.arctan2(y, x)
     if angle < 0:  # restrict range to between 0 and 2pi
         angle += 2 * np.pi
     phi = ang - angle
@@ -43,21 +43,20 @@ def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q, ang, ucAng):
         theta = phi - ucAng * revs
     else:  # if odd
         theta = ucAng - (phi - ucAng * revs)
-    r = np.sqrt(q[0] ** 2 + q[1] ** 2)
+    r = np.sqrt(x ** 2 + y ** 2)
     x = r * np.cos(theta)  # cartesian coords in unit cell frame
     y = r * np.sin(theta)  # cartesian coords in unit cell frame
     quc[0] = x
     quc[1] = y
-    quc[2] = q[2]
+    quc[2] = z
     return quc
 
 
 @numba.njit()
-def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang, M_uc, RIn_Ang, Lcap, Force_Func_Seg,
+def segmented_Bender_Sim_Force_NUMBA(x,y,z, ang, ucAng, numMagnets, rb, ap, M_ang, M_uc, RIn_Ang, Lcap, Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap):
     # force at point q in element frame
     # q: particle's position in element frame
-    x, y, z = q
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     z = abs(z)
     phi = np.arctan2(y, x)
@@ -79,10 +78,10 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang, M
                     theta = psi - ucAng * revs
                 else:  # if odd
                     theta = ucAng - (psi - ucAng * revs)
-                x = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
-                y = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
-                Fx, Fy, Fz = Force_Func_Seg(x, y, z)
-                Fx, Fy, Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, q, M_uc,
+                xuc = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
+                yuc = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
+                Fx, Fy, Fz = Force_Func_Seg(xuc, yuc, z)
+                Fx, Fy, Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x,y, M_uc,
                                                                                 ucAng)  # transform unit cell coordinates into  element frame
             else:
                 if position == 'FIRST':
@@ -122,25 +121,23 @@ def segmented_Bender_Sim_Force_NUMBA(q, ang, ucAng, numMagnets, rb, ap, M_ang, M
 
 
 @numba.njit()
-def lens_Ideal_Force_NUMBA(q, L, ap, K):
+def lens_Ideal_Force_NUMBA(x,y,z, L, ap, K):
     # fast numba function for idea lens. Simple hard edge model
     # q: 3d coordinates in element frame
     # L: length of lens
     # ap: size of aperture, or bore of vacuum tube, of lens
     # K: the 'spring' constant of the lens
-    if 0 <= q[0] <= L and q[1] ** 2 + q[2] ** 2 < ap ** 2:
+    if 0 <= x <= L and y ** 2 + z ** 2 < ap ** 2:
         Fx = 0
-        Fy = -K * q[1]
-        Fz = -K * q[2]
+        Fy = -K * y
+        Fz = -K * z
         return Fx, Fy, Fz
     else:
         return np.nan, np.nan, np.nan
 
 
 @numba.njit()
-def lens_Halbach_Force_NUMBA(q, Lcap, L, ap, force_Func_Inner, force_Func_Outer):
-    x, y, z = q
-    # print(q)
+def lens_Halbach_Force_NUMBA(x,y,z, Lcap, L, ap, force_Func_Inner, force_Func_Outer):
     if np.sqrt(y ** 2 + z ** 2) > ap:
         return np.nan, np.nan, np.nan
     FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
@@ -153,7 +150,7 @@ def lens_Halbach_Force_NUMBA(q, Lcap, L, ap, force_Func_Inner, force_Func_Outer)
         Fx = -Fx
     elif Lcap < x <= L - Lcap:
         Fx, Fy, Fz = force_Func_Inner(x, y, z)
-    elif 0 <= q[0] <= L:
+    elif 0 <= x <= L:
         x = Lcap - (L - x)
         Fx, Fy, Fz = force_Func_Outer(x, y, z)
     else:
@@ -162,8 +159,7 @@ def lens_Halbach_Force_NUMBA(q, Lcap, L, ap, force_Func_Inner, force_Func_Outer)
     Fz = Fz * FzSymmetryFact
     return Fx, Fy, Fz
 @numba.njit()
-def lens_Shim_Halbach_Force_NUMBA(q,L,ap,force_Func):
-    x,y,z=q
+def lens_Shim_Halbach_Force_NUMBA(x,y,z,L,ap,force_Func):
     if np.sqrt(y**2+z**2)>=ap:
         return np.nan,np.nan,np.nan
     FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
@@ -183,33 +179,32 @@ def lens_Shim_Halbach_Force_NUMBA(q,L,ap,force_Func):
     Fz = Fz * FzSymmetryFact
     return Fx,Fy,Fz
 @numba.njit()
-def combiner_Sim_Hexapole_Force_NUMBA(q, La, Lb, Lm, space, ang, ap, searchIsCoordInside, force_Func):
+def combiner_Sim_Hexapole_Force_NUMBA(x,y,z, La, Lb, Lm, space, ang, ap, searchIsCoordInside, force_Func):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     if searchIsCoordInside == True:
-        if not -ap <= q[2] <= ap:  # if outside the z apeture (vertical)
+        if not -ap <= z <= ap:  # if outside the z apeture (vertical)
             return np.nan, np.nan, np.nan
-        elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
+        elif 0 <= x <= Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner.
-            if np.sqrt(q[1]**2+q[2]**2)<ap:
+            if np.sqrt(y**2+z**2)<ap:
                 pass
             else:
                 return np.nan, np.nan, np.nan
-        elif q[0] < 0:
+        elif x < 0:
             return np.nan, np.nan, np.nan
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             #todo: For now a square aperture, update to circular. Use a simple rotation
             m = np.tan(ang)
-            Y1 = m * q[0] + (ap - m * Lb)  # upper limit
-            Y2 = (-1 / m) * q[0] + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
-            Y3 = m * q[0] + (-ap - m * Lb)
-            if np.sign(m) < 0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3):  # if the inlet is tilted 'down'
+            Y1 = m * x + (ap - m * Lb)  # upper limit
+            Y2 = (-1 / m) * x + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
+            Y3 = m * x + (-ap - m * Lb)
+            if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 pass
-            elif np.sign(m) > 0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3):  # if the inlet is tilted 'up'
+            elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
                 pass
             else:
                 return np.nan, np.nan, np.nan
-    x,y,z=q
     FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     y = abs(y)  # confine to upper right quadrant
@@ -232,33 +227,32 @@ def combiner_Sim_Hexapole_Force_NUMBA(q, La, Lb, Lm, space, ang, ap, searchIsCoo
 
 
 @numba.njit()
-def combiner_Sim_Force_NUMBA(q, La, Lb, Lm, space, ang, apz, apL, apR, searchIsCoordInside, force_Func):
+def combiner_Sim_Force_NUMBA(x,y,z, La, Lb, Lm, space, ang, apz, apL, apR, searchIsCoordInside, force_Func):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     if searchIsCoordInside == True:
-        if not -apz <= q[2] <= apz:  # if outside the z apeture (vertical)
+        if not -apz <= z <= apz:  # if outside the z apeture (vertical)
             return np.nan, np.nan, np.nan
-        elif 0 <= q[0] <= Lb:  # particle is in the horizontal section (in element frame) that passes
+        elif 0 <= x <= Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
-            if -apL <= q[1] <= apR:  # if inside the y (width) apeture
+            if -apL <= y <= apR:  # if inside the y (width) apeture
                 pass
             else:
                 return np.nan, np.nan, np.nan
-        elif q[0] < 0:
+        elif x < 0:
             return np.nan, np.nan, np.nan
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             #todo: better modeled as a simpler rotation
             m = np.tan(ang)
-            Y1 = m * q[0] + (apR - m * Lb)  # upper limit
-            Y2 = (-1 / m) * q[0] + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
-            Y3 = m * q[0] + (-apL - m * Lb)
-            if np.sign(m) < 0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3):  # if the inlet is tilted 'down'
+            Y1 = m * x + (apR - m * Lb)  # upper limit
+            Y2 = (-1 / m) * x + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
+            Y3 = m * x + (-apL - m * Lb)
+            if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 pass
-            elif np.sign(m) > 0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3):  # if the inlet is tilted 'up'
+            elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
                 pass
             else:
                 return np.nan, np.nan, np.nan
-    x, y, z = q
     xFact = 1  # value to modify the force based on symmetry
     zFact = 1
     if 0 <= x <= (Lm / 2 + space):  # if the particle is in the first half of the magnet

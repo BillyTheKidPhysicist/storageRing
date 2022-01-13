@@ -4,7 +4,8 @@ import random
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from asyncDE import solve_Async
 import numpy as np
-
+from ParticleTracerClass import ParticleTracer
+from SwarmTracerClass import SwarmTracer
 from latticeKnobOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 
@@ -32,10 +33,12 @@ def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
         return True
 
 
-def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,LmCombiner,parallel=False)->ParticleTracerLattice:
+def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleTracerLattice:
     combinerGap=5e-2
     tunableDriftGap=2.54e-2
     rpBend=.01
+    LmCombiner=0.07292032
+    rpCombiner=0.02168499
     assert type(parallel)==bool
     fringeFrac=1.5
     if LLens-2*rpLens*fringeFrac<0 or LLens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
@@ -50,7 +53,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,LmCombiner,parallel=False)
     PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     # PTL_Ring.add_Combiner_Sim('combinerV3.txt')
-    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, .02)
+    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
     # PTL_Ring.add_Drift(combinerGap,ap=jeremyMagnetAp)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
@@ -65,7 +68,12 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,LmCombiner,parallel=False)
     return PTL_Ring
 
 
-def generate_Injector_Lattice(injectorFactor,rpInjectorFactor,LmCombiner,parallel=False)->ParticleTracerLattice:
+def generate_Injector_Lattice(parallel=False)->ParticleTracerLattice:
+    injectorFactor=1.52350646
+    rpInjectorFactor=1.21702144
+    LmCombiner=0.07292032
+    rpCombiner=0.02168499
+
     assert type(parallel)==bool
     if is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor)==False:
         return None
@@ -80,23 +88,21 @@ def generate_Injector_Lattice(injectorFactor,rpInjectorFactor,LmCombiner,paralle
 
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)
     PTL_Injector.add_Drift(.2,ap=.01)
-    # PTL_Injector.add_Combiner_Sim('combinerV3.txt')
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,.02)
+    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner)
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
 
 
 def solve_For_Lattice_Params(X,parallel=False):
-    assert len(X)==7
 
-    rpLens,rpLensFirst,Lm,LLens,injectorFactor,rpInjectorFactor,LmCombiner=X
+    rpLens,rpLensFirst,Lm,LLens=X
 
-    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,LmCombiner,parallel=parallel)
+    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=parallel)
     if PTL_Ring is None:
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)
         return sol
-    PTL_Injector=generate_Injector_Lattice(injectorFactor,rpInjectorFactor,LmCombiner,parallel=parallel)
+    PTL_Injector=generate_Injector_Lattice(parallel=parallel)
     if PTL_Injector is None:
         print('invalid injector')
         sol=invalid_Solution(X,invalidInjector=True)

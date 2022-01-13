@@ -304,7 +304,7 @@ class SwarmTracer:
             for key, val in compactDict.items():
                 setattr(particle, key, val)
         return swarm
-    def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=True, fastMode=True, copySwarm=True, accelerated=False,
+    def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=False, fastMode=True, copySwarm=True, accelerated=False,
                                     stepsBetweenLogging=1)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()

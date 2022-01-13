@@ -254,11 +254,10 @@ class LensIdeal(Element):
         ap = self.ap
         K = self.K
         forceNumba = fastElementNUMBAFunctions.lens_Ideal_Force_NUMBA
-        @numba.njit()
-        def force_NUMBA_Wrapper(q):
-            return forceNumba(q, L, ap, K)
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_NUMBA_Wrapper(x,y,z):
+            return forceNumba(x,y,z, L, ap, K)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3))
 
 
     def set_Length(self, L):
@@ -303,7 +302,6 @@ class Drift(LensIdeal):
         #     else:
         #         return np.asarray([np.nan, np.nan, np.nan])
         self.fast_Numba_Force_Function=None#force_NUMBA_Wrapper
-        # self.fast_Numba_Force_Function(np.zeros(3))
 
 
 class BenderIdeal(Element):
@@ -656,7 +654,7 @@ class CombinerSim(CombinerIdeal):
             La=0.0
         else:
             La=self.La
-        F=fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+        F=fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA(*q, La,self.Lb,self.Lm,self.space,self.ang,
                                             self.apz,self.apL,self.apR,searchIsCoordInside,self.force_Func)
         F=self.fieldFact*np.asarray(F)
         return F
@@ -672,11 +670,10 @@ class CombinerSim(CombinerIdeal):
         apR=self.apR
         searchIsCoordInside=True
         force_Func=self.force_Func
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64[:]))
-        def force_NUMBA_Wrapper(q):
-            return forceNumba(q,La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func)
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_NUMBA_Wrapper(x,y,z):
+            return forceNumba(x,y,z,La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
     def magnetic_Potential(self, q):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
@@ -771,7 +768,8 @@ class BenderIdealSegmented(BenderIdeal):
         # or leaving the element interface as mirror images of each other.
         # F: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
-        F= fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F[0],F[1],F[2], q, self.M_uc, self.ucAng)
+        x,y,z=q
+        F= fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F[0],F[1],F[2], x,y, self.M_uc, self.ucAng)
         return np.asarray(F)
 
 
@@ -784,11 +782,11 @@ class BenderIdealSegmented(BenderIdeal):
         # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
         # used for including unit cell fringe fields
         # return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTH(qNew, self.ang, self.ucAng)
-        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q,self.ang,self.ucAng)
+        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
 
 
     def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(self,q):
-        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(q,self.ang,self.ucAng)
+        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
 
 
 class BenderIdealSegmentedWithCap(BenderIdealSegmented):
@@ -1141,7 +1139,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(q,self.ang,self.ucAng,self.numMagnets,self.rb,
+        F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(*q,self.ang,self.ucAng,self.numMagnets,self.rb,
                 self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
                                                                           ,self.Force_Func_Cap)
         return self.fieldFact*np.asarray(F)
@@ -1159,12 +1157,11 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         Force_Func_Internal_Fringe=self.Force_Func_Internal_Fringe
         Force_Func_Cap=self.Force_Func_Cap
         forceNumba = fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA
-        @numba.njit()#numba.float64[:](numba.float64[:]))
-        def force_NUMBA_Wrapper(q):
-            return forceNumba(q, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_NUMBA_Wrapper(x,y,z):
+            return forceNumba(x,y,z, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3))
 
 
     def magnetic_Potential(self, q):
@@ -1417,7 +1414,7 @@ class HalbachLensSim(LensIdeal):
 
 
     def force(self, q):
-        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(q,self.Lcap,self.L,self.ap,self.force_Func_Inner
+        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(*q,self.Lcap,self.L,self.ap,self.force_Func_Inner
                                                                   ,self.force_Func_Outer)
         return self.fieldFact*np.asarray(F)
     def compile_Fast_Numba_Force_Function(self):
@@ -1427,11 +1424,10 @@ class HalbachLensSim(LensIdeal):
         ap=self.ap
         force_Func_Inner=self.force_Func_Inner
         force_Func_Outer=self.force_Func_Outer
-        @numba.njit()
-        def force_NUMBA_Wrapper(q):
-            return forceNumba(q,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_NUMBA_Wrapper(x,y,z):
+            return forceNumba(x,y,z,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
 
 
 class CombinerHexapoleSim(Element):
@@ -1588,7 +1584,7 @@ class CombinerHexapoleSim(Element):
             La=0.0
         else:
             La=self.La
-        F=fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA(q, La,self.Lb,self.Lm,self.space,self.ang,
+        F=fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA(*q, La,self.Lb,self.Lm,self.space,self.ang,
                                             self.ap,searchIsCoordInside,self.force_Func)
         F=self.fieldFact*np.asarray(F)
         return F
@@ -1667,11 +1663,10 @@ class CombinerHexapoleSim(Element):
         ap=self.ap
         searchIsCoordInside=True
         force_Func=self.force_Func
-        @numba.njit()
-        def force_NUMBA_Wrapper(q):
-            return forceNumba(q,La,Lb,Lm,space,ang,ap,searchIsCoordInside,force_Func)
+        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
+        def force_NUMBA_Wrapper(x,y,z):
+            return forceNumba(x,y,z,La,Lb,Lm,space,ang,ap,searchIsCoordInside,force_Func)
         self.fast_Numba_Force_Function=force_NUMBA_Wrapper
-        self.fast_Numba_Force_Function(np.zeros(3)) #force compile by passing a dummy argument
     def transform_Lab_Coords_Into_Element_Frame(self, q):
          qNew = q.copy()
          qNew = qNew - self.r2

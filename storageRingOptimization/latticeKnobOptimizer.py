@@ -1,4 +1,5 @@
 import time
+import skopt
 from shapely.affinity import rotate, translate
 import copy
 from ParticleTracerClass import ParticleTracer
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal, Drift
 import multiprocess as mp
+from profilehooks import profile
 '''
 This file contains a class used to optimize the tunable knobs we can expect to have. These are either field values
 or element spacing
@@ -44,7 +46,7 @@ class Solution:
 
 
 class LatticeOptimizer:
-    def __init__(self, latticeRing, latticeInjector,numParticles=500):
+    def __init__(self, latticeRing, latticeInjector):
 
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -64,7 +66,6 @@ class LatticeOptimizer:
         self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
         # generation with the same number, 42
         self.sameSeedForSearch = True  # wether to use the same seed, 42, for the search process
-        self.numParticles = numParticles
         self.postCombinerAperture = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap  # radius
         self.spotCaptureDiam = 5e-3
         self.collectorAngleMax = .06
@@ -76,10 +77,13 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
         self.tuningBounds = None
-        self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
-            self.spotCaptureDiam, self.collectorAngleMax, self.numParticles, temperature=self.temperature,
-            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
+        self.swarmInjectorInitial=None
+        self.generate_Initial_Swarm(300)
 
+    def generate_Initial_Swarm(self,numParticles):
+        self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
+            self.spotCaptureDiam, self.collectorAngleMax, numParticles, temperature=self.temperature,
+            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
         newShapelyObjectList = []
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang

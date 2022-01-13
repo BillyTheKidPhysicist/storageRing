@@ -17,7 +17,7 @@ def generate_3DInterp_Function_NUMBA(vx,vy,vz,xData,yData,zData):
     vy=np.ravel(vy)
     vz=np.ravel(vz)
 
-    @numba.njit()
+    @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
     def interp3D(x,y,z):
         x=(x-min_x)/delta_x
         y=(y-min_y)/delta_y
@@ -66,7 +66,6 @@ def generate_3DInterp_Function_NUMBA(vx,vy,vz,xData,yData,zData):
         else:
             raise Exception('out of bounds')
         return c_x,c_y,c_z
-
     return interp3D
 
 
