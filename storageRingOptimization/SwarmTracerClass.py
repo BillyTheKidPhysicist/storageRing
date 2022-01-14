@@ -159,6 +159,7 @@ class SwarmTracer:
             #factor for momentum and one for position
         else:
             numParticlesfrac=1.0
+        reSeedVal=np.random.get_state()[1][0]
         if sameSeed==True:
             np.random.seed(42)
         if type(sameSeed) == int:
@@ -188,7 +189,7 @@ class SwarmTracer:
             else:
                 swarm.add_Particle(qi=q,pi=p)
         if sameSeed==True or type(sameSeed)==int:
-            np.random.seed(int(time.time()))  # re randomize
+            np.random.seed(reSeedVal)  # re randomize
         return swarm
     def initialize_Point_Source_Swarm(self,sourceAngle,numParticles,smallXOffset=True,sameSeed=False):
         p0=self.lattice.v0Nominal #the momentum of each particle

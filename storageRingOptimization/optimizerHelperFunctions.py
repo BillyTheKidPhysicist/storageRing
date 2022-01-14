@@ -120,7 +120,7 @@ def solve_For_Lattice_Params(X,parallel=False):
     # PTL_Injector.show_Lattice()
     # PTL_Ring.show_Lattice()
     optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
-    sol=optimizer.optimize((1,7),parallel=parallel)
+    sol=optimizer.optimize((1,7),parallel=parallel,fastSolver=False)
     sol.xRing_TunedParams1=X
     sol.description='Pseudorandom search'
     if sol.survival>.1:
