@@ -1,9 +1,9 @@
 import time
 import numba
-from HalbachLensClass import Sphere
+from HalbachLensClassOLD import Sphere
 import numpy as np
 from elementPT import LensIdeal
-from HalbachLensClass import HalbachLens
+from HalbachLensClassOLD import HalbachLens
 import fastElementNUMBAFunctions
 import numpy.linalg as npl
 import joblib

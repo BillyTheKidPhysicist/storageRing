@@ -2,7 +2,7 @@
 
 
 
-from HalbachLensClass import B_NUMBA,HalbachLens
+from HalbachLensClassOLD import B_NUMBA,HalbachLens
 import numpy as np
 sufficientPrecision=1e-12
 def test_Magnetic_Dipole_Field():

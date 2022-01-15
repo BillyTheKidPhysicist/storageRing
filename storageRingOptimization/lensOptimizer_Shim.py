@@ -3,7 +3,7 @@ os.environ['OPENBLAS_NUM_THREADS']='1'
 import joblib
 from ParticleClass import Particle, Swarm
 from SwarmTracerClass import SwarmTracer
-from HalbachLensClass import Sphere
+from HalbachLensClassOLD import Sphere
 import scipy.optimize as spo
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer

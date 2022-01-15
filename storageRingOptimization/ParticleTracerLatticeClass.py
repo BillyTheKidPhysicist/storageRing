@@ -159,9 +159,9 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,dipolesPerDim=3,
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,
                              magnetWidth=None):
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,dipolesPerDim,magnetWidth,self.parallel)
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,magnetWidth,self.parallel)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)

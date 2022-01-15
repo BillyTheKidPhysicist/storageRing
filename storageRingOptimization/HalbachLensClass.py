@@ -10,7 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numba
 # from profilehooks import profile
+from scipy.spatial.transform import Rotation
+from magpylib.magnet import Box,Sphere
 
+M_Default=1.018E6
 
 
 
@@ -27,149 +30,8 @@ def B_NUMBA(r,r0,m):
     return Bvec
 
 
-class RectangularPrism:
-    #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
-    #are equal, but the length, in the z plane, can be anything.
-    def __init__(self, width,length,M=1.15E6,MVec=None,spherePerDim=6):
-        #width: The width in the x,y plane without rotation, meters
-        #lengthI: The length in the z plane without rotation, meters
-        #M: magnetization, SI
-        #MVec: direction of the magnetization vector
-        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
-        #a factor
-        # theta rotation is clockwise about y in my notation, originating at positive z
-        # psi is counter clockwise around z
-        assert width>0.0 and length >0.0 and spherePerDim>0 and M>0
-        if MVec is None:
-            MVec=np.asarray([1,0,0])
-        self.width = width
-        self.length=length
-        self.M=M
-        self.numSpherePerDim=spherePerDim
-        if MVec[0]==0 and MVec[1]==0:
-            self.Mpsi=0
-        else:
-            self.Mpsi=np.arctan2(MVec[1],MVec[0]) #magnetization psi direction.
-        self.Mtheta=np.pi/2-np.arctan(MVec[2]/npl.norm(MVec[:2])) #magnetization theta direction
-
-
-        self.n = None
-        self.r = 0.0
-        self.z = 0.0
-        self.phi = 0.0
-        self.r0 = np.asarray([self.r * np.cos(self.phi), self.r * np.sin(self.phi), self.z])
-        self.theta = 0
-        self.psi = 0
-        self.sphereList = None
-
-    def _build_RectangularPrism(self):
-        # build a rectangular prism made of multiple spheres
-        # make rotation matrices
-        # theta rotation is clockwise about y in my notation. psi is coutner clokwise around z
-        #rotation matrices
-        Rtheta = np.asarray([[np.cos(self.theta), np.sin(self.theta)], [-np.sin(self.theta), np.cos(self.theta)]]) 
-        Rpsi = np.asarray([[np.cos(self.psi), -np.sin(self.psi)], [np.sin(self.psi), np.cos(self.psi)]])
-        rArr,radiusArr=self.generate_Positions_And_Radii_Ver2()
-        self.sphereList = []
-        i=0
-        for r in rArr:
-            sphere = Sphere(radiusInInches=radiusArr[i]/.0254,M=self.M)
-            # rotate in theta
-            r[[0, 2]] = Rtheta @ r[[0, 2]]
-            r[:2] = Rpsi @ r[:2]
-            sphere.r0 = r + self.r0
-            sphere.orient(self.theta+self.Mtheta, self.psi+self.Mpsi)
-            self.sphereList.append(sphere)
-            i+=1
-
-    def generate_Positions_And_Radii_Ver1(self):
-        #create a model of a rectangular prism with a large sphere in the middle and spheres at each of the 8 corners
-        #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
-        #only useful for a cube
-        radiussphereCenter=self.width/2 #central sphere fits just inside the RectangularPrism
-        volumeRemaining=self.width**3-(4/3)*np.pi*radiussphereCenter**3 #remaining volume of RectangularPrism after subtracting
-        #center sphere
-        radiusSphereCorners=((volumeRemaining/8)/(4*np.pi/3))**(1/3)
-
-        # now do the spheres at the faces.
-        # make list of starting positions
-        r1 = np.asarray([0.0, 0.0, 0.0])
-        r2 = np.asarray([self.width / 2, self.width / 2, self.length / 2])
-        r3 = np.asarray([-self.width / 2, self.width / 2, self.length / 2])
-        r4 = np.asarray([-self.width / 2, -self.width / 2, self.length / 2])
-        r5 = np.asarray([self.width / 2, -self.width / 2, self.length / 2])
-        r6=-r2
-        r7=-r3
-        r8=-r4
-        r9=-r5
-        radiusArr=np.asarray([radiussphereCenter])
-        radiusArr=np.append(radiusArr,np.ones(8)*radiusSphereCorners)
-        rList = [r1, r2, r3, r4, r5, r6, r7,r8,r9]
-        return np.asarray(rList),radiusArr
-    def generate_Positions_And_Radii_Ver2(self):
-        #create a model of a rectangular prism with an array of spheres
-        #Returns an array of position vectors of the spheres, and an array of the radius of each sphere
-        numSpheresXYDim=self.numSpherePerDim #number of spheres in the XY dimension without rotation.
-        numSpheresZDim=max(1,int(self.length*numSpheresXYDim/self.width)) #no less than 1
-        numSpheres=numSpheresXYDim**2*numSpheresZDim
-        radius=((self.width**2*self.length/numSpheres)/((4*np.pi/3)))**(1/3) #this is not the actual radius, a virtual
-        # print(numSpheres)
-        #radius to set the total magnetization of the sphere
-        xySpacing=self.width/numSpheresXYDim  #the spacing between the spheres, including that I want a half gap at each
-        #edge
-        zSpacing=self.length/numSpheresZDim
-        xyPosArr=np.linspace(-self.width/2+xySpacing/2,self.width/2-xySpacing/2,num=numSpheresXYDim)
-        zPosArr=np.linspace(-self.length/2+zSpacing/2,self.length/2-zSpacing/2,num=numSpheresZDim)
-        rArr=np.asarray(np.meshgrid(xyPosArr,xyPosArr,zPosArr)).T.reshape(-1,3)
-        radiusArr=np.ones(rArr.shape[0])*radius
-
-        return rArr,radiusArr
-
-    def position(self, r=None, phi=None, z=None):
-        # r: the distance from x,y=0 from the inner edge of the RectangularPrism
-
-
-        if phi is not None:
-            self.phi = phi
-        if z is not None:
-            self.z = z
-        if r is not None:
-            self.r = r + self.width / 2  # need to add the width of the RectangularPrism
-        x = self.r * np.cos(self.phi)
-        y = self.r * np.sin(self.phi)
-        self.r0 = np.asarray([x, y, self.z])
-        self._build_RectangularPrism()
-
-    def orient(self, theta=0.0, psi=0.0):
-        # tilt the RectangularPrism in spherical coordinates
-        self.theta = theta
-        self.psi = psi
-        self._build_RectangularPrism()
-
-
-    def B(self, r):
-        assert len(r.shape)==2 and r.shape[1]==3
-        BVec = np.zeros(r.shape)
-        for sphere in self.sphereList:
-            BVec += sphere.B(r)
-        return BVec
-
-    def B_Symmetric(self, r):
-        # exploit the four fold symmetry of a 12 magnet hexapole
-        arr = self.B(r)
-        phi0 = self.phi
-        self.position(phi=phi0 + np.pi / 2)
-        arr += self.B(r)
-        self.position(phi=phi0 + np.pi)
-        arr += self.B(r)
-        self.position(phi=phi0 + 3 * np.pi / 2)
-        arr += self.B(r)
-        self.position(phi=phi0)
-        return arr
-
-
-class Sphere:
-    def __init__(self, radiusInInches=1.0 / 2,M=1.15e6):
+class SpherePop:
+    def __init__(self, radiusInInches=1.0 / 2,M=M_Default):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         #M: magnetization
@@ -295,55 +157,107 @@ class Sphere:
 
 
 
-class Layer:
-    # class object for a layer of the magnet. Uses the RectangularPrism object
-    def __init__(self, z,width,length,spherePerDim,M):
-        # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center of the
-        #width: width of the rectangular prism in the xy plane
-        #length: length of the rectangular prism in the z axis
+class RectangularPrism:
+    #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
+    #are equal, but the length, in the z plane, can be anything.
+    def __init__(self, width,length,M=M_Default):
+        #width: The width in the x,y plane without rotation, meters
+        #lengthI: The length in the z plane without rotation, meters
         #M: magnetization, SI
-        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
-        #a factor
-        assert width>0.0 and length> 0.0 and spherePerDim>0.0 and M>0.0
-        self.z = z
-        self.width=width
+        #MVec: direction of the magnetization vector
+        # theta rotation is clockwise about y in my notation, originating at positive z
+        # psi is counter clockwise around z
+        assert width>0.0 and length >0.0  and M>0
+        self.width = width
         self.length=length
         self.M=M
-        self.numSpherePerDim=spherePerDim
-        self.r1 = None  # radius values for the 3 kinds of magnets in each layer
-        self.r2 = None  # radius values for the 3 kinds of magnets in each layer
-        self.r3 = None  # radius values for the 3 kinds of magnets in each layer
+        self.r = None #r in cylinderical coordinates, equals sqrt(x**2+y**2)
+        self.x=None #cartesian
+        self.y=None #cartesian
+        self.z = None #cartesian
+        self.phi = None #position angle in polar coordinates
+        self.r0 = None
+        self.theta = None # rotation about body z axis
+        self.magnet=None #holds the magpylib element
+    def place(self, r, theta, z,phi):
+        #currentyl no feature for tilting body, only rotating about z axis
+        # r: the distance from x,y=0 from the center of the RectangularPrism
+        #phi: position in polar/cylinderical coordinates
+        #z: vertical distance in cylinderical coordinates
+        #theta: rotation rectuangular prism about body axis
+        self.theta=theta
+        self.phi = phi
+        self.z = z
+        self.r = r
+        self.x = self.r * np.cos(self.theta)
+        self.y = self.r * np.sin(self.theta)
+        self.r0 = np.asarray([self.x, self.y, self.z])
+        self._build_RectangularPrism()
+    def _build_RectangularPrism(self):
+        # build a rectangular prism made of multiple spheres
+        # make rotation matrices
+        # theta rotation is clockwise about y in my notation. psi is coutner clokwise around z
+        #rotation matrices
+        dimensions_mm=1e3*np.asarray([self.width,self.width,self.length])
+        position_mm=1e3*np.asarray([self.x,self.y,self.z])
+        R = Rotation.from_rotvec([0, 0, self.phi])
+        M_MagpyUnit=1e3*self.M*MAGNETIC_PERMEABILITY #uses units of mT for magnetization.
+        self.magnet=Box(magnetization=(M_MagpyUnit,0,0.0),dimension=dimensions_mm,position=position_mm,orientation=R)
+    def B(self, evalCoords):
+        # (n,3) array to evaluate coords at. SI
+        assert len(evalCoords.shape)==2 and evalCoords.shape[1]==3
+        evalCoords_mm=1e3*evalCoords
+        BVec_mT = self.magnet.getB(evalCoords_mm) #need to convert to mm
+        BVec_T=1e-3*BVec_mT #convert to tesla from milliTesla
+        if len(BVec_T.shape)==1:
+            BVec_T=np.asarray([BVec_T])
+        return BVec_T
+
+class Layer:
+    # class object for a layer of the magnet. Uses the RectangularPrism object
+    def __init__(self, z, width, length, M=M_Default):
+        # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
+        # width: width of the rectangular prism in the xy plane
+        # length: length of the rectangular prism in the z axis
+        # M: magnetization, SI
+        # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
+        # a factor
+        assert width > 0.0 and length > 0.0  and M > 0.0
+        self.z = z
+        self.width = width
+        self.length = length
+        self.M = M
         self.RectangularPrismsList = []  # list of RectangularPrisms
+    def build(self, r):
+        #r: bore radius of the layer
+        # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
+        #magnetization points along positive x
+        thetaArr=np.linspace(0,2*np.pi,12,endpoint=False) #location of 12 magnets
+        phiArr=np.pi+np.arange(0,13)*2*np.pi/3 #orientation of 12 magnets. I add pi to make it the direction I like
+        r=r+self.width/2 # need to add the magnet width because their coordinates are in the center
+        for theta,phi in zip(thetaArr,phiArr):
+            # x,y=r*np.cos(theta),r*np.sin(theta)
+            # plt.quiver(x,y,np.cos(phi),np.sin(phi))
+            magnet=RectangularPrism(self.width, self.length,self.M)
+            magnet.place(r,theta,self.z,phi)
+            self.RectangularPrismsList.append(magnet)
 
-    def build(self, r1, r2, r3):
-        # shape the layer. Create new RectangularPrisms for each reshpaing adds negligeable performance hit
-        RectangularPrism1 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.numSpherePerDim)
-        RectangularPrism1.position(r=r1, phi=0, z=self.z)
 
-        RectangularPrism2 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.numSpherePerDim)
-        RectangularPrism2.position(r=r2, phi=np.pi / 6, z=self.z)
-        RectangularPrism2.orient(psi=(2*np.pi/3))
-
-        RectangularPrism3 = RectangularPrism(self.width,self.length,M=self.M,MVec=np.asarray([-1.0,0.0,0.0])
-                                             ,spherePerDim=self.numSpherePerDim)
-        RectangularPrism3.position(r=r3, phi=-np.pi / 6, z=self.z)
-        RectangularPrism3.orient(psi=-2*np.pi/3)
-
-        self.RectangularPrismsList = [RectangularPrism1, RectangularPrism2, RectangularPrism3]
+        # plt.gca().set_aspect('equal')
+        # plt.show()
     def B(self, r):
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        BArr=0
+        BArr = 0
         for prism in self.RectangularPrismsList:
-            BArr+= prism.B_Symmetric(r)
+            BArr += prism.B(r)
         return BArr
+
 
 class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
 
-    def __init__(self,length,width,rp,M=1.018e6,numSpherePerDim=2):
+    def __init__(self,length,width,rp,M=M_Default):
         #note that M is tuned to  for spherePerDim=4
         # numLayers: Number of layers
         # width: Width of each Rectangular Prism in the layer, meter
@@ -351,15 +265,12 @@ class HalbachLens:
         # rp: bore radius of concentric layers
         #Br: remnant flux density
         #M: magnetization.
-        #spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
-        #a factor
         assert all(isinstance(variable,Iterable) for variable in (rp,width))
         assert all(val>0.0 for val in [*rp,*width])
         assert len(width)==len(rp)
-        assert length>0.0 and numSpherePerDim>0 and isinstance(numSpherePerDim,int) and M>0.0
+        assert length>0.0 and M>0.0
         self.width=width
         self.rp=rp
-        self.numSpherePerDim=numSpherePerDim
         if length is None:
             self.length=width
         else:
@@ -403,8 +314,8 @@ class HalbachLens:
         self.layerList=[]
         z=0.0
         for radiusLayer,widthLayer in zip(self.layerArgs,self.width):
-            layer=Layer(z,widthLayer,self.length,M=self.M,spherePerDim=self.numSpherePerDim)
-            layer.build(*radiusLayer)
+            layer=Layer(z,widthLayer,self.length,M=self.M)
+            layer.build(radiusLayer)
             self.layerList.append(layer)
     def update(self,layerArgs):
         #update the lens with new arguments. Requires all the arguments that the lens requires
@@ -417,7 +328,7 @@ class HalbachLens:
         #r: radius, meter
         self.layerArgs=[]
         for r in rpListTemp:
-            self.layerArgs.append((r,r,r))
+            self.layerArgs.append(r)
         self._build()
     def _transform_r(self,r):
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
@@ -521,6 +432,7 @@ class HalbachLens:
                 return np.column_stack((BNormGradx, BNormGrady, BNormGradz)),BNormCenter
             else:
                 return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
+
 
 
 class SegmentedBenderHalbach(HalbachLens):

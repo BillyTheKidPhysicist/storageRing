@@ -1221,7 +1221,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         return V0*self.fieldFact
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,dipolesPerDim,magnetWidth,parallel):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,parallel):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,Number):
@@ -1243,7 +1243,6 @@ class HalbachLensSim(LensIdeal):
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
         self.ap=self.rp*apFrac
         self.parallel=parallel
-        self.dipolesPerDim=dipolesPerDim
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
@@ -1286,8 +1285,7 @@ class HalbachLensSim(LensIdeal):
         else:
             assert np.all(np.array(self.magnetWidth)<maximumMagnetWidth)
 
-        lens=_HalbachLensFieldGenerator(self.lengthEffective,self.magnetWidth,self.rpLayers,numSpherePerDim=
-        self.dipolesPerDim)
+        lens=_HalbachLensFieldGenerator(self.lengthEffective,self.magnetWidth,self.rpLayers)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=max(self.rpLayers)+self.magnetWidth[np.argmax(self.rpLayers)] +mountThickness
 
@@ -1443,7 +1441,7 @@ class CombinerHexapoleSim(Element):
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
-        self.ap=min([self.rp-vacuumTubeThickness,.9*self.rp]) #restrict to good field region
+        self.ap=min([self.rp-vacuumTubeThickness,.95*self.rp]) #restrict to good field region
         assert loadBeamDiam<self.ap and self.ap>0.0
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
@@ -1477,8 +1475,7 @@ class CombinerHexapoleSim(Element):
             nextMagnetWidth = (self.rp+sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
             magnetWidthList.append(nextMagnetWidth)
         self.space=max(rpList)*outerFringeFrac
-        numSpheresPerDim=4 #appears to work well
-        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=numSpheresPerDim)
+        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList)
         numXY=int((self.ap/self.rp)*numPointsTransverse)
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left

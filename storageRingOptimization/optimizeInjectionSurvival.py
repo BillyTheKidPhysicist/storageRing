@@ -112,6 +112,9 @@ def lattice_Cost(X,bendingAngle):
     return cost
 def main():
     import skopt
+    args=[1.94302787, 2.13442969, 0.22129791 ,0.015     ]
+    lattice_Cost(args,.22)
+    exit()
     #injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
     angle=.18
     bounds=[(1.0,4.0),(1,3),(.05,.5),(.015,.1)]
