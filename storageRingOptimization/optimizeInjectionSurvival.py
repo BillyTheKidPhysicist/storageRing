@@ -95,7 +95,9 @@ class Injection_Model(LatticeOptimizer):
         swarmCost = self.injected_Swarm_Cost()
         assert 0.0<=swarmCost<=1.0
         overLapCost=self.floor_Plan_Cost()
+        assert 0.0<=overLapCost<=1.0
         cost=np.sqrt(overLapCost**2+swarmCost**2)
+        self.show_Floor_Plan()
         return cost
 
     def injected_Swarm_Cost(self):
@@ -104,7 +106,7 @@ class Injection_Model(LatticeOptimizer):
             , self.h, 1.0, parallel=False,
             fastMode=True, copySwarm=False,
             accelerated=True)
-        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True)
+        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False)
         swarmSurvived = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced,
                                                                                  copyParticles=False)
         swarmCost = (self.swarmInjectorInitial.num_Particles() - swarmSurvived.num_Particles()) \
@@ -151,17 +153,19 @@ class Injection_Model(LatticeOptimizer):
                     swarmSurvived.particles.append(particleEnd)
         return swarmSurvived
 def injector_Cost(X):
+    maximumCost=2.0
     PTL_I=generate_Injector_Lattice(X)
     if PTL_I is None:
-        return np.inf
+        return maximumCost
     PTL_R=generate_Ring_Surrogate_Lattice(X)
     if PTL_R is None:
-        return np.inf
+        return maximumCost
     test=Injection_Model(PTL_R,PTL_I)
-    return test.cost()
+    cost=test.cost()
+    assert cost<maximumCost
+    return cost
 def main():
-    bounds = [(1.0, 4.0), (1, 3), (.05, .5), (.015, .1)]
+    bounds = [(.5, 2), (.5, 2), (.05, .5), (.015, .1)]
     print(solve_Async(injector_Cost,bounds,15*len(bounds),tol=.05,surrogateMethodProb=0.0))
-
 if __name__=="__main__":
     main()

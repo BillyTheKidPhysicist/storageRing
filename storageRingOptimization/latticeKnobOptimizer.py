@@ -360,7 +360,7 @@ class LatticeOptimizer:
         XInitial=samples[np.argmin(vals)]
         sol=spo.differential_evolution(self.mode_Match_Cost,self.tuningBounds,polish=False,x0=XInitial,tol=self.tolerance,
                                        maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),args=(False,False))
-        return sol.cost,sol.x
+        return sol.fun,sol.x
 
     def _minimize(self)->Solution:
         if self.fastSolver==True:
