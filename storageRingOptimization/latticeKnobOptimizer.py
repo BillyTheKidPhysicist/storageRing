@@ -70,7 +70,6 @@ class LatticeOptimizer:
         self.optimalPopSize=5 #for scipy differential solver. This was carefully chosen
         self.tolerance=.01 #for scipy differential evolution. This is the maximum accuravy roughly speaking
         self.maxEvals=500 #for scipy differntial evolution. Shouldn't be more than this
-        self.postCombinerAperture = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap  # radius
         self.spotCaptureDiam = 5e-3
         self.collectorAngleMax = .06
         self.temperature = 3e-3

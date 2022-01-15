@@ -138,7 +138,7 @@ class ParticleTracerLattice:
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)
     def add_Halbach_Lens_Sim_Shim(self,rp,Lm,apFrac=.8):
-        el=ShimmedInjectorLens(self, rp,Lm,apFrac,parallel=self.parallel)
+        el=ShimmedInjectorLens(self, rp,Lm,apFrac)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Combiner_Sim(self,file,sizeScale=1.0):
@@ -161,7 +161,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,
                              magnetWidth=None):
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,magnetWidth,self.parallel)
+        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,magnetWidth)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -206,8 +206,7 @@ class ParticleTracerLattice:
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac,
-                                              parallel=self.parallel)
+        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)

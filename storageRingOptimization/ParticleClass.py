@@ -277,9 +277,9 @@ class Particle:
         qoArr=self.qoArr
         plt.close('all')
         plt.title('Particle energies vs position. \n Total initial energy is '+str(np.round(EArr[0],1)) +' energy units')
-        plt.plot(qoArr[:,0],EArr-EArr[0],label='E')
+        distFact = self.totalLatticeLength if self.totalLatticeLength is not None else 1.0
+        plt.plot(qoArr[:,0]/distFact,EArr-EArr[0],label='E')
         if showOnlyTotalEnergy==False:
-            distFact=self.totalLatticeLength if self.totalLatticeLength is not None else 1.0
             plt.plot(qoArr[:, 0]/distFact, TArr - TArr[0],label='T')
             plt.plot(qoArr[:, 0]/distFact, VArr - VArr[0],label='V')
         plt.ylabel("Energy, simulation units")

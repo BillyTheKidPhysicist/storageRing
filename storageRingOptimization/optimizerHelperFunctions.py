@@ -34,7 +34,6 @@ def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
 
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleTracerLattice:
-    combinerGap=5e-2
     tunableDriftGap=2.54e-2
     rpBend=.01
     LmCombiner=0.07292032
@@ -52,16 +51,12 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleT
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
-    # PTL_Ring.add_Combiner_Sim('combinerV3.txt')
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
-    # PTL_Ring.add_Drift(combinerGap,ap=jeremyMagnetAp)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
-    # PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
-    # PTL_Ring.add_Drift(probeSpace)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  # 17.8 % of time here
