@@ -1443,8 +1443,8 @@ class CombinerHexapoleSim(Element):
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
-        self.ap=self.rp-vacuumTubeThickness
-        assert loadBeamDiam<self.ap
+        self.ap=min([self.rp-vacuumTubeThickness,.9*self.rp]) #restrict to good field region
+        assert loadBeamDiam<self.ap and self.ap>0.0
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
         self.mode = mode #wether storage ring or injector. This dictate high or low field seeking
@@ -1468,12 +1468,7 @@ class CombinerHexapoleSim(Element):
         outerFringeFrac = 1.5
         numPointsLongitudinal=25
         numPointsTransverse=30
-
-
-
         self.fieldFact=-1.0 if self.mode=='injector' else 1.0
-
-
 
         rpList=[]
         magnetWidthList=[]
@@ -1482,8 +1477,8 @@ class CombinerHexapoleSim(Element):
             nextMagnetWidth = (self.rp+sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
             magnetWidthList.append(nextMagnetWidth)
         self.space=max(rpList)*outerFringeFrac
-
-        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=2)
+        numSpheresPerDim=4 #appears to work well
+        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList, numSpherePerDim=numSpheresPerDim)
         numXY=int((self.ap/self.rp)*numPointsTransverse)
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
@@ -1511,6 +1506,7 @@ class CombinerHexapoleSim(Element):
         inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(self.outputOffset)
         # to find the length
         assert np.abs(inputAngle)<self.maxCombinerAng #tilt can't be too large or it exceeds field region.
+        assert inputAngle*self.fieldFact>0 #satisfied if low field is positive angle and high is negative
         self.Lo = self.compute_Trajectory_Length(
             qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
@@ -1554,11 +1550,14 @@ class CombinerHexapoleSim(Element):
         while(abs(f-targetSep)>tolAbsolute):
             deltaX=-.8*(f-targetSep)/grad # I like to use a little damping
             x=x+deltaX
-            fNew = self.compute_Input_Angle_And_Offset(x)[-1]
+            angle,offset,qArr,fNew = self.compute_Input_Angle_And_Offset(x)
+            assert angle<0 #This doesn't work if the beam is exiting upwards. This can happpen physical of course,
+            #but shouldn't happen
             grad=(fNew-f)/deltaX
             f=fNew
             i+=1
             assert i<iterMax
+        assert x>0
         self.fieldFact = -1.0 if self.mode == 'injector' else 1.0
         return x
     def fill_Field_Func(self,data):
@@ -1622,12 +1621,18 @@ class CombinerHexapoleSim(Element):
                 coordList.append(q)
                 break
             F_n = force(q_n)
+            # if np.all(np.isnan(F_n)==False)==False:
+            #     temp=np.asarray(temp)
+            #     plt.plot(temp[:,0],temp[:,1])
+            #     plt.axhline(y=self.ap,c='r')
+            #     plt.axhline(y=-self.ap,c='r')
+            #     plt.axvline(x=self.Lm+self.space,c='r')
+                # plt.show()
             assert np.all(np.isnan(F_n)==False)
 
             F_n[2]=0.0
             a_n=F_n  # accselferation new or accselferation sub n+1
             p_n=p+.5*(a+a_n)*h
-
             q = q_n
             p = p_n
             forcePrev = F_n
@@ -1637,8 +1642,6 @@ class CombinerHexapoleSim(Element):
         outputOffset = q[1]
         lensCorner=np.asarray([self.space+self.Lm,-self.ap,0.0])
         minSep=np.min(np.linalg.norm(qArr-lensCorner,axis=1))
-
-
         return outputAngle, outputOffset,qArr, minSep
 
     def compute_Trajectory_Length(self, qTracedArr):
