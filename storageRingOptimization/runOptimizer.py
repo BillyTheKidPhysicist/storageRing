@@ -1,9 +1,17 @@
 import os
+
+import numpy as np
+
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
 def wrapper(args):
-    cost=solve_For_Lattice_Params(args,parallel=False).cost
+    try:
+        cost=solve_For_Lattice_Params(args,parallel=False).cost
+    except:
+        np.set_printoptions(precision=100)
+        print('assert during evaluation on args: ',args)
+        assert False
     return cost
 
 def main():

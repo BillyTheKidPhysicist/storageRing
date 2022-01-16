@@ -84,8 +84,15 @@ class Swarm:
             particleNew.color=particle.color
             swarmNew.particles.append(particleNew)
         return swarmNew
-    def num_Particles(self):
-        return len(self.particles)
+    def num_Particles(self,weighted=False):
+        if weighted==False: return len(self.particles)
+        else: return sum([particle.probability for particle in self.particles])
+    def weighted_Flux_Multiplication(self):
+        if self.num_Particles() == 0: return 0.0
+        assert all([particle.traced == True for particle in self.particles])
+        numWeighedtRevs = sum([particle.revolutions * particle.probability for particle in self.particles])
+        numWeightedParticles = self.num_Particles(weighted=True)
+        return numWeighedtRevs/numWeightedParticles
     def reset(self):
         #reset the swarm.
         for particle in self.particles:

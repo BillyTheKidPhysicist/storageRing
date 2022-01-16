@@ -26,6 +26,7 @@ class Solution:
         self.xRing_TunedParams2 = np.nan  # paramters tuned by the 'inner' gp minimize
         self.survival = np.nan
         self.cost=np.nan
+        self.fluxMultiplication=np.nan
         self.stable=None
         self.invalidInjector=None
         self.invalidRing=None
@@ -41,7 +42,8 @@ class Solution:
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
         string += 'survival: ' + str(self.survival) + '\n'
-        # string += '----------------------------'
+        string+='flux multiplication: '+str(int(self.fluxMultiplication)) +'\n'
+        string += '----------------------------'
         return string
 
 
@@ -249,17 +251,19 @@ class LatticeOptimizer:
         # revolutions then the beam has been multiplied n times. I want this to be constrained between 0 and 1 however,
         #so I will use the baseline as the smallest possible lattice. The smallest is defined as a lattice with a
         # bending radius of 1 meter and the combiner. This makes the results better for smaller actual lattices
-        if swarmTraced.num_Particles()==0:
-            return 0.0
-        fluxMult = sum([p.revolutions * p.probability for p in swarmTraced.particles])
-        rBendNominal=1.0
-        Lcombiner=self.latticeRing.combiner.Lo
-        minLatticeLength=2*(np.pi*rBendNominal+Lcombiner)
-        maxRevs=self.T * self.latticeRing.v0Nominal / minLatticeLength #approximately correct
-        maxFluxMult=sum([maxRevs*p.probability for p in self.swarmInjectorInitial])
+        assert all([particle.traced == True for particle in swarmTraced.particles])
+        if swarmTraced.num_Particles()==0: return 0.0
+        fluxMult = swarmTraced.weighted_Flux_Multiplication()
+        maxFluxMult=self.maximum_Weighted_Flux_Multiplication()
         survival = 1e2 * fluxMult/maxFluxMult
         assert 0.0 <= survival <= 100.0
         return survival
+    def maximum_Weighted_Flux_Multiplication(self):
+        rBendNominal=1.0
+        Lcombiner=self.latticeRing.combiner.Lo
+        minLatticeLength=2*(np.pi*rBendNominal+Lcombiner)
+        maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #approximately correct
+        return maxFluxMult
     def floor_Plan_Cost(self,X):
         self.update_Ring_And_Injector(X)
         overlap=self.floor_Plan_OverLap()
