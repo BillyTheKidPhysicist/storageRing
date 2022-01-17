@@ -1680,3 +1680,18 @@ class CombinerHexapoleSim(Element):
                 return True
             else:
                 return False
+    def magnetic_Potential(self, q):
+        # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
+        x,y,z=q
+        y = abs(y)  # confine to upper right quadrant
+        z = abs(z)
+        symmetryLength=self.Lm+2*self.space
+        if 0<=x <=symmetryLength/2:
+            x = symmetryLength/2 - x
+            V=self.magnetic_Potential_Func(x,y,z)
+        elif symmetryLength/2<x:
+            x=x-symmetryLength/2
+            V=self.magnetic_Potential_Func(x,y,z)
+        else:
+            raise Exception(ValueError)
+        return V

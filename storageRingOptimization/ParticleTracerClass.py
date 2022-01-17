@@ -59,7 +59,7 @@ class ParticleTracer:
         self.T=None #total time elapsed
         self.h=None #step size
         self.minTimeStepsPerElement=3
-
+        self.energyCorrection=None
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step
         self.E0=None #total initial energy of particle
@@ -113,9 +113,10 @@ class ParticleTracer:
             self.particle.clipped=False
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.qi)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
+            self.E0=self.particle.get_Energy(self.currentEl,self.qEl,self.pEl)
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-    def trace(self,particle,h,T0,fastMode=False,accelerated=False,stepsBetweenLogging=1):
+    def trace(self,particle,h,T0,fastMode=False,accelerated=False,energyCorrection=False,stepsBetweenLogging=1):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -125,6 +126,7 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
         if particle is None:
             particle=Particle()
@@ -177,7 +179,7 @@ class ParticleTracer:
         results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
-            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.pEl) #it doesn't quite make sense
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl) #it doesn't quite make sense
             #that I'm doing it like this. The outside the element system could be revamped.
     def generate_Multi_Step_Cache(self):
         self.numbaMultiStepCache = []
@@ -311,7 +313,7 @@ class ParticleTracer:
         qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
         F_n=self.currentEl.force(qEl_n)
         if isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
-            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,pEl)  #check if element has changed.
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,qEl,pEl)  #check if element has changed.
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
@@ -320,15 +322,23 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
     # @profile
-    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl,pEl):
-        qEl_Scooted=qEl+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n,qEl,pEl):
+        #qEl_n: coordinates that are outside the current element and possibley in the next
+        #qEl: coordinates right before this method was called, should still be in the element
+        #pEl: momentum for both qEl_n and qEl
+        qEl_Scooted=qEl_n+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
         if self.accelerated==True:
+            if self.energyCorrection == True:
+                pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
             nextEl = self.get_Next_Element()
             q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Scooted,pEl,nextEl)
             if nextEl.is_Coord_Inside(q_nextEl)==False:
                 self.particle.clipped=True
                 return
             else:
+                if self.energyCorrection == True:
+                    p_nextEl = p_nextEl + self.momentum_Correction_At_Bounday(q_nextEl, p_nextEl,
+                                                                              nextEl, 'entering')
                 self.particle.cumulativeLength+=self.currentEl.Lo  # add the previous orbit length
                 self.currentEl=nextEl
                 self.particle.currentEl=nextEl
@@ -342,6 +352,8 @@ class ParticleTracer:
                 self.particle.clipped = True
                 return
             elif el is not self.currentEl: #element has changed
+                if self.energyCorrection==True:
+                    pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Scooted) #use the old  element for transform
@@ -352,10 +364,29 @@ class ParticleTracer:
                 self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
                 # element
                 self.elHasChanged = True
+                if self.energyCorrection==True:
+                    self.pEl=self.pEl+self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
                 return
             else:
                 raise Exception('Something is wrong, element should have changed. Particle is possibly frozen because '
                                 'of broken logic, or being returned the same location')
+    def momentum_Correction_At_Bounday(self,qEl,pEl,el,direction):
+        #a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
+        assert direction in ('entering','leaving')
+        F = el.force(qEl)
+        FNorm = np.linalg.norm(F)
+        if FNorm< 1e-6: #force is too small, and may cause a division error
+            return np.zeros(3)
+        else:
+            if direction == 'leaving': #go from zero to non zero potential instantly
+                ENew = np.sum(pEl ** 2) / 2.0  # ideally, no magnetic field right at border
+                deltaE = self.E0 - ENew  # need to lose energy to maintain E0 when the potential turns off
+            else: #go from zero to non zero potentially instantly
+                deltaE = -el.magnetic_Potential(qEl)  # need to lose this energy
+            F_unit = F / np.linalg.norm(F)
+            deltaPNorm = deltaE / np.dot(F_unit, pEl)
+            deltaP = deltaPNorm * F_unit
+            return deltaP
     def which_Element_Lab_Coords(self,qLab):
         for el in self.latticeElementList:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:

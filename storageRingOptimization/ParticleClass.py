@@ -187,9 +187,9 @@ class Particle:
             elIndex=currentEl.index
             self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(q, self.cumulativeLength))
             self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
-    def get_Energy(self,currentEl,qel,pel):
-        V=currentEl.magnetic_Potential(qel)
-        T=npl.norm(pel)
+    def get_Energy(self,currentEl,qEl,pEl):
+        V=currentEl.magnetic_Potential(qEl)
+        T=np.sum(pEl**2)/2.0
         return T+V
 
     def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,driftEl):

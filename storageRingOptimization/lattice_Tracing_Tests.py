@@ -65,6 +65,10 @@ def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated,par
             print('p:',pf)
             print('pTest:',pTest)
             print('difference:',pTest-pf)
+            if fastMode==False:
+                print('Energy: ',EFinalTraced)
+                print('EnergyTest: ',EFinalTest)
+                print('difference: ',EFinalTest-EFinalTraced)
             raise Exception('Failed test')
         assert condition,'Failed on particle: '+str(i)
 def generate_Lattice(configuration):
@@ -129,4 +133,4 @@ def TEST_All(saveData=False):
         print('Test number '+testNum)
         TEST_Lattice_Configuration(testNum,saveData=saveData)
         print('Success')
-TEST_All()
+TEST_All(saveData=True)

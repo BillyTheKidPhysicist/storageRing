@@ -12,7 +12,7 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
 
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
-    assert len(XLattice)==7,"must be lattice paramters"
+    assert len(XLattice)==4,"must be lattice paramters"
     sol=Solution()
     sol.xRing_TunedParams1=XLattice
     sol.survival=0.0
@@ -86,7 +86,7 @@ def generate_Injector_Lattice(parallel=False)->ParticleTracerLattice:
     return PTL_Injector
 
 
-def solve_For_Lattice_Params(X,parallel=False):
+def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
 
     rpLens,rpLensFirst,Lm,LLens=X
 
@@ -107,21 +107,15 @@ def solve_For_Lattice_Params(X,parallel=False):
     #     PTL_Ring=dill.load(file)
     # with open('temp1', 'wb') as file:
     #     dill.dump(PTL_Injector, file)
-    # with open('temp1','rb') as file:
+    # with open('injectorFile','rb') as file:
     #     PTL_Injector=dill.load(file)
 
     # PTL_Injector.show_Lattice()
     # PTL_Ring.show_Lattice()
     optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
-    sol=optimizer.optimize((1,7),parallel=parallel,fastSolver=False)
+    sol=optimizer.optimize((1,7),parallel=parallel,fastSolver=useSurrogateMethod)
     sol.xRing_TunedParams1=X
     sol.description='Pseudorandom search'
     if sol.survival>.1:
         print(sol)
     return sol
-
-
-
-
-
-

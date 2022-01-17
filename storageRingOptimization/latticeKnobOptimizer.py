@@ -1,3 +1,4 @@
+import random
 import time
 import skopt
 from shapely.affinity import rotate, translate
@@ -27,6 +28,7 @@ class Solution:
         self.survival = np.nan
         self.cost=np.nan
         self.fluxMultiplication=np.nan
+        self.scipyMessage=None
         self.stable=None
         self.invalidInjector=None
         self.invalidRing=None
@@ -42,7 +44,8 @@ class Solution:
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
         string += 'survival: ' + str(self.survival) + '\n'
-        string+='flux multiplication: '+str(int(self.fluxMultiplication)) +'\n'
+        string += 'scipy message: '+ str(self.scipyMessage)+'\n'
+        # string+='flux multiplication: '+str(int(self.fluxMultiplication)) +'\n'
         string += '----------------------------'
         return string
 
@@ -70,8 +73,8 @@ class LatticeOptimizer:
         self.sameSeedForSearch = True  # wether to use the same seed, 42, for the search process
         self.fastSolver=None #wether to use the faster, but less accurate solver. See oneNote
         self.optimalPopSize=5 #for scipy differential solver. This was carefully chosen
-        self.tolerance=.01 #for scipy differential evolution. This is the maximum accuravy roughly speaking
-        self.maxEvals=500 #for scipy differntial evolution. Shouldn't be more than this
+        self.tolerance=.03 #for scipy differential evolution. This is the maximum accuravy roughly speaking
+        self.maxEvals=300 #for scipy differntial evolution. Shouldn't be more than this
         self.spotCaptureDiam = 5e-3
         self.collectorAngleMax = .06
         self.temperature = 3e-3
@@ -88,9 +91,9 @@ class LatticeOptimizer:
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
             self.spotCaptureDiam, self.collectorAngleMax, numParticlesFullSwarm, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
-        self.swarmInjectorInitial_Surrogate = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
-            self.spotCaptureDiam, self.collectorAngleMax, numParticlesSurrogate, temperature=self.temperature,
-            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
+        random.shuffle(self.swarmInjectorInitial.particles)
+        self.swarmInjectorInitial_Surrogate=Swarm()
+        self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:numParticlesSurrogate]
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
         newShapelyObjectList = []
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
@@ -135,7 +138,7 @@ class LatticeOptimizer:
         plt.grid()
         plt.show()
 
-    def mode_Match_Cost(self, X,useSurrogate,parallel):
+    def mode_Match_Cost(self, X,useSurrogate,energyCorrection):
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         for val, bounds in zip(X, self.tuningBounds):
@@ -143,14 +146,14 @@ class LatticeOptimizer:
         if self.test_Stability(X) == False:
             swarmTraced=Swarm() #empty swarm
         else:
-            swarmTraced=self.inject_Swarm(X,useSurrogate,parallel)
+            swarmTraced=self.inject_Swarm(X,useSurrogate,energyCorrection)
         cost = self.cost_Function(swarmTraced,X)
         return cost
-    def inject_Swarm(self,X,useSurrogate,parallel):
+    def inject_Swarm(self,X,useSurrogate,energyCorrection):
         self.update_Ring_And_Injector(X)
         swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End(useSurrogate)
-        swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T, parallel=parallel,
-                                                                       fastMode=True, accelerated=True, copySwarm=False,)
+        swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T, parallel=False,
+                                    fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
         return swarmTraced
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced, copyParticles=False):
         #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
@@ -353,8 +356,7 @@ class LatticeOptimizer:
                                                    polish=False,args=(True,False),
                                                    maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
                                                    popsize=self.optimalPopSize)
-        cost_Real=self.mode_Match_Cost(sol_Surrogate.x,False,False)
-        return cost_Real,sol_Surrogate.x
+        return sol_Surrogate
     def _accurate_Minimize(self):
         #start first by quickly randomly searching with a surrogate swarm.
         randomSamplePoints=128
@@ -363,18 +365,21 @@ class LatticeOptimizer:
         vals=[self.mode_Match_Cost(sample,True,False) for sample in samples]
         XInitial=samples[np.argmin(vals)]
         sol=spo.differential_evolution(self.mode_Match_Cost,self.tuningBounds,polish=False,x0=XInitial,tol=self.tolerance,
-                                       maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),args=(False,False))
-        return sol.fun,sol.x
+                                       maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
+                                       args=(False,False),disp=True,popsize=self.optimalPopSize)
+        return sol
 
     def _minimize(self)->Solution:
         if self.fastSolver==True:
-            cost,xOptimal=self._fast_Minimize()
+            scipySol=self._fast_Minimize()
         else:
-            cost,xOptimal=self._accurate_Minimize()
+            scipySol=self._accurate_Minimize()
+        cost_Most_Accurate = self.mode_Match_Cost(scipySol.x, False, True)
         sol = Solution()
-        sol.cost = cost
-        optimalConfig = xOptimal
-        sol.survival = self.survival_From_Cost(cost, optimalConfig)
+        sol.scipyMessage=scipySol.message
+        sol.cost = cost_Most_Accurate
+        optimalConfig = scipySol.x
+        sol.survival = self.survival_From_Cost(cost_Most_Accurate, optimalConfig)
         sol.stable = True
         sol.xRing_TunedParams2 = optimalConfig[:2]
         sol.xInjector_TunedParams = optimalConfig[2:]
