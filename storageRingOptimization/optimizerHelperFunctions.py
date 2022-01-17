@@ -9,10 +9,10 @@ from SwarmTracerClass import SwarmTracer
 from latticeKnobOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 
-XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
+# XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
 
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
-    assert len(XLattice)==4,"must be lattice paramters"
+    assert len(XLattice)==8,"must be lattice paramters"
     sol=Solution()
     sol.xRing_TunedParams1=XLattice
     sol.survival=0.0
@@ -35,10 +35,12 @@ def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
         return True
 
 
-def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleTracerLattice:
+def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner
+                          ,parallel=False)->ParticleTracerLattice:
     tunableDriftGap=2.54e-2
+    jeremyGap=.03
     rpBend=.01
-    injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner=XInjector
+    Lm=.02
     assert type(parallel)==bool
     fringeFrac=1.5
     if LLens-2*rpLens*fringeFrac<0 or LLens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
@@ -51,8 +53,9 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleT
     PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,LLens)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
+    PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
@@ -64,8 +67,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=False)->ParticleT
     return PTL_Ring
 
 
-def generate_Injector_Lattice(parallel=False)->ParticleTracerLattice:
-    injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner=XInjector
+def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner,parallel=False)->ParticleTracerLattice:
 
     assert type(parallel)==bool
     if is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor)==False:
@@ -88,14 +90,15 @@ def generate_Injector_Lattice(parallel=False)->ParticleTracerLattice:
 
 def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
 
-    rpLens,rpLensFirst,Lm,LLens=X
+    rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner=X
 
-    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,Lm,LLens,parallel=parallel)
+    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor,
+                                   LmCombiner, rpCombiner,parallel=parallel)
     if PTL_Ring is None:
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)
         return sol
-    PTL_Injector=generate_Injector_Lattice(parallel=parallel)
+    PTL_Injector=generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner,parallel=parallel)
     if PTL_Injector is None:
         print('invalid injector')
         sol=invalid_Solution(X,invalidInjector=True)
@@ -113,7 +116,7 @@ def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
     # PTL_Injector.show_Lattice()
     # PTL_Ring.show_Lattice()
     optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
-    sol=optimizer.optimize((1,7),parallel=parallel,fastSolver=useSurrogateMethod)
+    sol=optimizer.optimize((1,8),parallel=parallel,fastSolver=useSurrogateMethod)
     sol.xRing_TunedParams1=X
     sol.description='Pseudorandom search'
     if sol.survival>.1:

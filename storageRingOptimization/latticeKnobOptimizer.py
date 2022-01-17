@@ -143,6 +143,8 @@ class LatticeOptimizer:
         # configuration
         for val, bounds in zip(X, self.tuningBounds):
             assert bounds[0] <= val <= bounds[1]
+        if self.floor_Plan_Cost(X)>1e-3:
+            return 1.0+self.floor_Plan_Cost(X)
         if self.test_Stability(X) == False:
             swarmTraced=Swarm() #empty swarm
         else:
@@ -355,7 +357,7 @@ class LatticeOptimizer:
         sol_Surrogate = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=self.tolerance,
                                                    polish=False,args=(True,False),
                                                    maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
-                                                   popsize=self.optimalPopSize)
+                                                   popsize=self.optimalPopSize,init='halton')
         return sol_Surrogate
     def _accurate_Minimize(self):
         #start first by quickly randomly searching with a surrogate swarm.
@@ -366,7 +368,7 @@ class LatticeOptimizer:
         XInitial=samples[np.argmin(vals)]
         sol=spo.differential_evolution(self.mode_Match_Cost,self.tuningBounds,polish=False,x0=XInitial,tol=self.tolerance,
                                        maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
-                                       args=(False,False),disp=True,popsize=self.optimalPopSize)
+                                       args=(False,False),popsize=self.optimalPopSize,init='halton')
         return sol
 
     def _minimize(self)->Solution:
