@@ -85,15 +85,17 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
         self.tuningBounds = None
+        self.numParticlesFullSwarm=300
+        self.numParticlesSurrogate=50
+        self.generate_Swarms()
 
-        numParticlesFullSwarm=300
-        numParticlesSurrogate=50
+    def generate_Swarms(self):
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
-            self.spotCaptureDiam, self.collectorAngleMax, numParticlesFullSwarm, temperature=self.temperature,
+            self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
         random.shuffle(self.swarmInjectorInitial.particles)
         self.swarmInjectorInitial_Surrogate=Swarm()
-        self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:numParticlesSurrogate]
+        self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
         newShapelyObjectList = []
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
@@ -253,17 +255,21 @@ class LatticeOptimizer:
 
     def compute_Swarm_Survival(self, swarmTraced:Swarm):
         # A reasonable metric is the total flux multiplication of the beam. If the average particle survives n
-        # revolutions then the beam has been multiplied n times. I want this to be constrained between 0 and 1 however,
+        # revolutions then the beam has been multiplied n times. I want this to be constrained between 0 and 100 however,
         #so I will use the baseline as the smallest possible lattice. The smallest is defined as a lattice with a
-        # bending radius of 1 meter and the combiner. This makes the results better for smaller actual lattices
+        # bending radius of 1 meter and the combiner. This makes the results better for smaller actual lattices.
+        #I need to scale to adjust for the number of particles that survive through the injection system.
         assert all([particle.traced == True for particle in swarmTraced.particles])
         if swarmTraced.num_Particles()==0: return 0.0
-        fluxMult = swarmTraced.weighted_Flux_Multiplication()
+        fluxMult_Unscaled = swarmTraced.weighted_Flux_Multiplication()
+        injectSurvival=swarmTraced.num_Particles(weighted=True)/self.swarmInjectorInitial.num_Particles(weighted=True)
+        fluxMult=fluxMult_Unscaled*injectSurvival
         maxFluxMult=self.maximum_Weighted_Flux_Multiplication()
         survival = 1e2 * fluxMult/maxFluxMult
         assert 0.0 <= survival <= 100.0
         return survival
     def maximum_Weighted_Flux_Multiplication(self):
+        #unrealistic maximum flux of lattice
         rBendNominal=1.0
         Lcombiner=self.latticeRing.combiner.Lo
         minLatticeLength=2*(np.pi*rBendNominal+Lcombiner)
