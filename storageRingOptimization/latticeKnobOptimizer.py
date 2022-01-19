@@ -25,9 +25,8 @@ class Solution:
         self.xInjector_TunedParams = np.nan
         self.xRing_TunedParams1 = np.nan  # paramters tuned by the 'outer' gp minimize
         self.xRing_TunedParams2 = np.nan  # paramters tuned by the 'inner' gp minimize
-        self.survival = np.nan
+        self.fluxMultiplicationPercent = np.nan
         self.cost=np.nan
-        self.fluxMultiplication=np.nan
         self.scipyMessage=None
         self.stable=None
         self.invalidInjector=None
@@ -37,13 +36,13 @@ class Solution:
 
     def __str__(self):  # method that gets called when you do print(Solution())
         string = '----------Solution-----------   \n'
-        string += 'injector element spacing optimum configuration: ' + str(self.xInjector_TunedParams) + '\n '
-        string += 'storage ring tuned params 1 optimum configuration: ' + str(self.xRing_TunedParams1) + '\n '
-        string += 'storage ring tuned params 2 optimum configuration: ' + str(self.xRing_TunedParams2) + '\n '
+        string += 'injector element spacing optimum configuration: ' + str(self.xInjector_TunedParams) + '\n'
+        string += 'storage ring tuned params 1 optimum configuration: ' + str(self.xRing_TunedParams1) + '\n'
+        string += 'storage ring tuned params 2 optimum configuration: ' + str(self.xRing_TunedParams2) + '\n'
         # string+='stable configuration:'+str(self.stable)+'\n'
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
-        string += 'survival: ' + str(self.survival) + '\n'
+        string += 'percent max flux multiplication: ' + str(self.fluxMultiplicationPercent) + '\n'
         string += 'scipy message: '+ str(self.scipyMessage)+'\n'
         # string+='flux multiplication: '+str(int(self.fluxMultiplication)) +'\n'
         string += '----------------------------'
@@ -253,27 +252,25 @@ class LatticeOptimizer:
             elAfter.set_Length(LAfter)
         self.latticeRing.build_Lattice()
 
-    def compute_Swarm_Survival(self, swarmTraced:Swarm):
-        # A reasonable metric is the total flux multiplication of the beam. If the average particle survives n
-        # revolutions then the beam has been multiplied n times. I want this to be constrained between 0 and 100 however,
-        #so I will use the baseline as the smallest possible lattice. The smallest is defined as a lattice with a
-        # bending radius of 1 meter and the combiner. This makes the results better for smaller actual lattices.
-        #I need to scale to adjust for the number of particles that survive through the injection system.
+    def compute_Swarm_Flux_Mult_Percent(self, swarmTraced:Swarm):
+        # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
+        #all particles survived through the lattice.
         assert all([particle.traced == True for particle in swarmTraced.particles])
         if swarmTraced.num_Particles()==0: return 0.0
-        fluxMult_Unscaled = swarmTraced.weighted_Flux_Multiplication()
-        injectSurvival=swarmTraced.num_Particles(weighted=True)/self.swarmInjectorInitial.num_Particles(weighted=True)
-        fluxMult=fluxMult_Unscaled*injectSurvival
-        maxFluxMult=self.maximum_Weighted_Flux_Multiplication()
-        survival = 1e2 * fluxMult/maxFluxMult
-        assert 0.0 <= survival <= 100.0
-        return survival
+        weightedFluxMult=swarmTraced.weighted_Flux_Multiplication()
+        weightedFluxMultMax=self.maximum_Weighted_Flux_Multiplication()
+        injectionSurvivalFrac=swarmTraced.num_Particles(weighted=True)/\
+                              self.swarmInjectorInitial.num_Particles(weighted=True) #particle may be lost
+        #during injection
+        fluxMultPerc=1e2*(weightedFluxMult/weightedFluxMultMax)*injectionSurvivalFrac
+        assert 0.0 <= fluxMultPerc <= 100.0
+        return fluxMultPerc
     def maximum_Weighted_Flux_Multiplication(self):
         #unrealistic maximum flux of lattice
         rBendNominal=1.0
-        Lcombiner=self.latticeRing.combiner.Lo
-        minLatticeLength=2*(np.pi*rBendNominal+Lcombiner)
-        maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #approximately correct
+        LCombinerNominal=.2
+        minLatticeLength=2*(np.pi*rBendNominal+LCombinerNominal)
+        maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #the aboslute max
         return maxFluxMult
     def floor_Plan_Cost(self,X):
         self.update_Ring_And_Injector(X)
@@ -283,17 +280,16 @@ class LatticeOptimizer:
         assert 0.0<=cost<=1.0
         return cost
     def cost_Function(self, swarm,X):
-        survival=self.compute_Swarm_Survival(swarm)
-        survivalCost=(100.0-survival)/100.0
-        cost=survivalCost+self.floor_Plan_Cost(X)
+        fluxMultPerc=self.compute_Swarm_Flux_Mult_Percent(swarm)
+        fluxCost=(100.0-fluxMultPerc)/100.0
+        cost=fluxCost+self.floor_Plan_Cost(X)
         assert 0.0<=cost<=2.0
         return cost
-    def survival_From_Cost(self, cost,X):
-        # returns survival
-        survivalCost=cost-self.floor_Plan_Cost(X)
-        survival=100.0*(1.0-survivalCost)
-        assert 0.0<=survival<=100.0
-        return survival
+    def flux_Percent_From_Cost(self, cost,X):
+        fluxCost=cost-self.floor_Plan_Cost(X)
+        fluxMulPerc=100.0*(1.0-fluxCost)
+        assert 0.0<=fluxMulPerc<=100.0
+        return fluxMulPerc
     def catch_Optimizer_Errors(self, tuningBounds, elementIndices, tuningChoice):
         if max(elementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(elementIndices): raise Exception("Bounds do not match number of tuned elements")
@@ -387,7 +383,7 @@ class LatticeOptimizer:
         sol.scipyMessage=scipySol.message
         sol.cost = cost_Most_Accurate
         optimalConfig = scipySol.x
-        sol.survival = self.survival_From_Cost(cost_Most_Accurate, optimalConfig)
+        sol.fluxMultiplicationPercent = self.flux_Percent_From_Cost(cost_Most_Accurate, optimalConfig)
         sol.stable = True
         sol.xRing_TunedParams2 = optimalConfig[:2]
         sol.xInjector_TunedParams = optimalConfig[2:]
@@ -405,7 +401,7 @@ class LatticeOptimizer:
         self.initialize_Optimizer(elementIndices, tuningChoice, ringTuningBounds, injectorTuningBounds)
         if self.test_Lattice_Stability(ringTuningBounds,injectorTuningBounds, parallel=parallel) == False:
             sol = Solution()
-            sol.survival = 0.0
+            sol.fluxMultiplicationPercent = 0.0
             sol.cost=1.0
             sol.stable=False
             return sol

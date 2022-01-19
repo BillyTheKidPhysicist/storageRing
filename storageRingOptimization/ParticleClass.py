@@ -87,12 +87,27 @@ class Swarm:
     def num_Particles(self,weighted=False):
         if weighted==False: return len(self.particles)
         else: return sum([particle.probability for particle in self.particles])
+    def num_Revs(self,weighted=False):
+        if weighted==False:
+            return sum([particle.revolutions for particle in self.particles])
+        else:
+            return sum([particle.revolutions*particle.probability for particle in self.particles])
     def weighted_Flux_Multiplication(self):
+        #only for circular lattice
         if self.num_Particles() == 0: return 0.0
         assert all([particle.traced == True for particle in self.particles])
-        numWeighedtRevs = sum([particle.revolutions * particle.probability for particle in self.particles])
+        numWeighedtRevs = self.num_Revs(weighted=True)
         numWeightedParticles = self.num_Particles(weighted=True)
         return numWeighedtRevs/numWeightedParticles
+    def lattice_Flux(self,weighted=False):
+        #only for circular lattice. This gives the average flux in a cross section of the lattice. Only makes sense
+        #for many more than one revolutions
+        totalFlux=0
+        for particle in self.particles:
+            flux=particle.revolutions/np.linalg.norm(particle.pi)
+            flux=flux*particle.probability if weighted==True else flux
+            totalFlux+=flux
+        return totalFlux
     def reset(self):
         #reset the swarm.
         for particle in self.particles:

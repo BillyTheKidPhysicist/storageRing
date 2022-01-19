@@ -15,7 +15,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     assert len(XLattice)==8,"must be lattice paramters"
     sol=Solution()
     sol.xRing_TunedParams1=XLattice
-    sol.survival=0.0
+    sol.fluxMultiplicationPercent=0.0
     sol.cost=1.0
     sol.description='Pseudorandom search'
     sol.invalidRing=invalidRing
@@ -119,6 +119,6 @@ def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
     sol=optimizer.optimize((1,8),parallel=parallel,fastSolver=useSurrogateMethod)
     sol.xRing_TunedParams1=X
     sol.description='Pseudorandom search'
-    if sol.survival>.1:
+    if sol.fluxMultiplicationPercent>.1:
         print(sol)
     return sol
