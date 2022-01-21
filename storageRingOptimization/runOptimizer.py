@@ -16,7 +16,7 @@ def wrapper(args):
 def main():
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
     bounds=[(.005,.03),(.02,.04),(.005,.03),(.2,.4),(.5,1.5),(.5,1.5),(.05,.2),(.015,.04)]
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.5,timeOut_Seconds=1e12,workers=8) )
+    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.5,timeOut_Seconds=1e12) )
 if __name__=='__main__':
     main()
 
