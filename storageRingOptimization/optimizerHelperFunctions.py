@@ -38,9 +38,9 @@ def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner
                           ,parallel=False)->ParticleTracerLattice:
     tunableDriftGap=2.54e-2
-    jeremyGap=.03
+    jeremyGap=.05
     rpBend=.01
-    Lm=.02
+    Lm=.0254/2.0
     assert type(parallel)==bool
     fringeFrac=1.5
     if LLens-2*rpLens*fringeFrac<0 or LLens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected

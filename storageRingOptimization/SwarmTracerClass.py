@@ -78,7 +78,7 @@ class SwarmTracer:
                 swarm.add_Particle(qi, pi)
         return swarm
     def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam,collectorOutputAngle,numParticles,
-                    gammaSpace=3.5e-3,temperature=.003,sameSeed=False,upperSymmetry=False,equalProbability=False):
+                    gammaSpace=3.5e-3,temperature=.003,sameSeed=False,upperSymmetry=False,probabilityMin=0.0):
         #this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
         #swarm that is well spread out in space, then weighitng each particle by it's probability according to the
         #observed data. The probability is finally rescaled
@@ -95,12 +95,14 @@ class SwarmTracer:
         #ie, geometric heating
         sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
         #longitudinal velocity only because geometric dominates thermal in transverse dimension
-        pLongitudinalMax=2*sigmaVelocity+(1-np.cos(collectorOutputAngle))*self.lattice.v0Nominal #include 2 sigma of
+        pLongitudinalMin=-(2*sigmaVelocity+(1-np.cos(collectorOutputAngle))*self.lattice.v0Nominal) #include 2 sigma of
         #velocity, and geometric spread
-        swarmEvenlySpread=self.initalize_PseudoRandom_Swarm_In_Phase_Space(captureDiam/2.0,pTransMax,pLongitudinalMax,
+        pLongitudinalMax=2*sigmaVelocity #include 2 sigma of
+        #velocity, and geometric spread
+        pLongBounds=(pLongitudinalMin,pLongitudinalMax)
+        swarmEvenlySpread=self.initalize_PseudoRandom_Swarm_In_Phase_Space(captureDiam/2.0,pTransMax,pLongBounds,
                                                             numParticles,sameSeed=sameSeed,upperSymmetry=upperSymmetry)
-        if equalProbability==True: #don't apply the observed swarm characteristicssss
-            return swarmEvenlySpread
+
         probabilityList=[]
         for particle in swarmEvenlySpread:
             probability=1.0
@@ -111,12 +113,15 @@ class SwarmTracer:
             pTrans=np.sqrt(py**2+pz**2)
             pxMean=-np.sqrt(self.lattice.v0Nominal**2-pTrans**2)
             probability=probability*normal(px,sigmaVelocity,v0=pxMean)
+            assert probability<1.0
             probabilityList.append(probability)
-        peakProbability=max(probabilityList)
+        swarmObserved = Swarm()
+        peakProbability=max(probabilityList) # I think this is unnesesary
         for particle,probability in zip(swarmEvenlySpread.particles,probabilityList):
             particle.probability=probability/peakProbability
-            assert 0.0<particle.probability<=1.0
-        return swarmEvenlySpread
+            if particle.probability>probabilityMin:
+                swarmObserved.particles.append(particle)
+        return swarmObserved
     def _make_PseudoRandom_Swarm_Bounds_List(self,qTBounds,pTBounds,pxBounds,upperSymmetry=False):
         if isinstance(qTBounds,float):
             assert qTBounds>0.0

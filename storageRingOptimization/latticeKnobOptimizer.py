@@ -54,7 +54,6 @@ class LatticeOptimizer:
 
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
-        self.i = 0  # simple variable to track solution status
         self.particleTracerRing = ParticleTracer(latticeRing)
         self.particleTracerInjector = ParticleTracer(latticeInjector)
         self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
@@ -74,9 +73,10 @@ class LatticeOptimizer:
         self.optimalPopSize=5 #for scipy differential solver. This was carefully chosen
         self.tolerance=.03 #for scipy differential evolution. This is the maximum accuravy roughly speaking
         self.maxEvals=300 #for scipy differntial evolution. Shouldn't be more than this
-        self.spotCaptureDiam = 5e-3
+        self.spotCaptureDiam = 1e-2
         self.collectorAngleMax = .06
-        self.temperature = 3e-3
+        self.temperature = 1e-3
+        self.gamma_Space=4.5e-3
         fractionalMarginOfError = 1.25
         self.minElementLength = fractionalMarginOfError * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
@@ -91,7 +91,8 @@ class LatticeOptimizer:
     def generate_Swarms(self):
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
             self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
-            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry)
+            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry,gammaSpace=self.gamma_Space,
+            probabilityMin=.05)
         random.shuffle(self.swarmInjectorInitial.particles)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]

@@ -21,11 +21,14 @@ if __name__=='__main__':
     main()
 
 
-# ----------Solution-----------
-# injector element spacing optimum configuration: [0.39952416 0.30446732]
-#  storage ring tuned params 1 optimum configuration: [0.01195178 0.02872478 0.01391224 0.3030036  1.20776536 1.3854315
-#  0.08843782 0.02597373]
-#  storage ring tuned params 2 optimum configuration: [0.33064234 0.7194921 ]
-#  cost: 0.3421403981620351
-# survival: 65.78596018379649
-# scipy message: Optimization terminated successfully.
+'''
+----------Solution-----------   
+injector element spacing optimum configuration: [0.10970817 0.13830605]
+ storage ring tuned params 1 optimum configuration: [0.02000886 0.03119919 0.01324413 0.36503544 1.15110092 1.00777664
+ 0.12208005 0.03236198]
+ storage ring tuned params 2 optimum configuration: [0.66706644 0.78041371]
+ cost: 0.5396119504745164
+survival: 46.03880495254836
+scipy message: Optimization terminated successfully.
+----------------------------
+'''
