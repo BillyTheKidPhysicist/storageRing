@@ -11,12 +11,12 @@ from ParticleTracerClass import ParticleTracer
 from ParticleClass import Swarm
 import matplotlib.pyplot as plt
 
-
+V0=210
 def is_Valid_Injector_Phase(injectorFactor, rpInjectorFactor):
     LInjector = injectorFactor * .15
     rpInjector = rpInjectorFactor * .02
     BpLens = .7
-    injectorLensPhase = np.sqrt((2 * 800.0 / 200 ** 2) * BpLens / rpInjector ** 2) * LInjector
+    injectorLensPhase = np.sqrt((2 * 800.0 / V0 ** 2) * BpLens / rpInjector ** 2) * LInjector
     if np.pi < injectorLensPhase or injectorLensPhase < np.pi / 10:
         # print('bad lens phase')
         return False
@@ -34,7 +34,7 @@ def generate_Injector_Lattice(X) -> ParticleTracerLattice:
     LMagnet = LInjector - 2 * fringeFrac * rpInjector
     if LMagnet < 1e-9:  # minimum fringe length must be respected.
         return None
-    PTL_Injector = ParticleTracerLattice(200.0, latticeType='injector', parallel=parallel)
+    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=parallel)
     PTL_Injector.add_Drift(.1, ap=.025)
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector, LInjector, apFrac=.9)
     PTL_Injector.add_Drift(.2, ap=.01)
@@ -54,7 +54,7 @@ def generate_Ring_Surrogate_Lattice(X,parallel=False)->ParticleTracerLattice:
     LLens=.4
     injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner = X
     assert type(parallel)==bool
-    PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing',parallel=parallel)
+    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=parallel)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     try:
         PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)

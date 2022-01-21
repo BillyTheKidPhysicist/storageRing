@@ -18,7 +18,7 @@ from ParaWell import ParaWell
 from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal,Drift
 import globalMethods as gm
-
+V0=210.0
 class Solution:
     #class to hold onto results of each solution
     def __init__(self):
@@ -379,7 +379,7 @@ class LatticeOptimizer:
         swarmTest=self.swarmTracerRing.initialize_Stablity_Testing_Swarm(1e-3)
         swarmTest=self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTest)
         swarmTest=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTest,self.h,
-                                                                   1.5*minRevs*self.latticeRing.totalLength/200.0,
+                                                                   1.5*minRevs*self.latticeRing.totalLength/V0,
                                                                    parallel=False,accelerated=True,fastMode=True)
         stable=False
         for particle in swarmTest:

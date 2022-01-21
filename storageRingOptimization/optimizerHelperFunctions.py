@@ -10,7 +10,7 @@ from latticeKnobOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 
 # XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
-
+V0=210
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     assert len(XLattice)==8,"must be lattice paramters"
     sol=Solution()
@@ -27,7 +27,7 @@ def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
     LInjector=injectorFactor*.15
     rpInjector=rpInjectorFactor*.02
     BpLens=.7
-    injectorLensPhase=np.sqrt((2*800.0/200**2)*BpLens/rpInjector**2)*LInjector
+    injectorLensPhase=np.sqrt((2*800.0/V0**2)*BpLens/rpInjector**2)*LInjector
     if np.pi<injectorLensPhase or injectorLensPhase<np.pi/10:
         print('bad lens phase')
         return False
@@ -45,7 +45,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rp
     fringeFrac=1.5
     if LLens-2*rpLens*fringeFrac<0 or LLens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
         return None
-    PTL_Ring=ParticleTracerLattice(200.0,latticeType='storageRing',parallel=parallel)
+    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=parallel)
     rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,
                                                     parallel=parallel)  # 25% of time here, 1.0138513851385138
     if rOffsetFact is None:
@@ -78,7 +78,7 @@ def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCo
     LMagnet=LInjector-2*fringeFrac*rpInjector
     if LMagnet<1e-9:  # minimum fringe length must be respected.
         return None
-    PTL_Injector=ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
+    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',parallel=parallel)
     PTL_Injector.add_Drift(.1,ap=.025)
 
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)

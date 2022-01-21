@@ -186,6 +186,7 @@ class ShimOptimizer:
             shim.update_Size(radius)
     def build_Lattice(self,parallel):
         self.lattice = ParticleTracerLattice(200.0,latticeType='injector',parallel=parallel)
+        assert False
         self.lattice.add_Drift(.5)
         self.lattice.add_Halbach_Lens_Sim_Shim(.05, .5)
         self.lattice.add_Drift(1.0)
