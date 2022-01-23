@@ -72,6 +72,7 @@ def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCo
     assert type(parallel)==bool
     if is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor)==False:
         return None
+    L1_Tunable, L2_Tunable = [.1,.2] #pretty much dummy arguments
     LInjector=injectorFactor*.15
     rpInjector=rpInjectorFactor*.02
     fringeFrac=1.5
@@ -79,10 +80,10 @@ def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCo
     if LMagnet<1e-9:  # minimum fringe length must be respected.
         return None
     PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',parallel=parallel)
-    PTL_Injector.add_Drift(.1,ap=.025)
+    PTL_Injector.add_Drift(L1_Tunable,ap=.025)
 
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)
-    PTL_Injector.add_Drift(.2,ap=.01)
+    PTL_Injector.add_Drift(L2_Tunable,ap=.01)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner)
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
