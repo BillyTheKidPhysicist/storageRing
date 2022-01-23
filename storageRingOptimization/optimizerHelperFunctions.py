@@ -23,11 +23,9 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     return sol
 
 
-def is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor):
-    LInjector=injectorFactor*.15
-    rpInjector=rpInjectorFactor*.02
+def is_Valid_Injector_Phase(L_InjectorMagnet,rp_InjectorMagnet):
     BpLens=.7
-    injectorLensPhase=np.sqrt((2*800.0/V0**2)*BpLens/rpInjector**2)*LInjector
+    injectorLensPhase=np.sqrt((2*800.0/V0**2)*BpLens/rp_InjectorMagnet**2)*L_InjectorMagnet
     if np.pi<injectorLensPhase or injectorLensPhase<np.pi/10:
         print('bad lens phase')
         return False
@@ -67,19 +65,21 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rp
     return PTL_Ring
 
 
-def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner,parallel=False)->ParticleTracerLattice:
+def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner)->ParticleTracerLattice:
 
-    assert type(parallel)==bool
-    if is_Valid_Injector_Phase(injectorFactor,rpInjectorFactor)==False:
-        return None
+
     L1_Tunable, L2_Tunable = [.1,.2] #pretty much dummy arguments
-    LInjector=injectorFactor*.15
-    rpInjector=rpInjectorFactor*.02
+    L_InjectorMagnet=.15
+    rp_InjectorMagnet=.02
+    LInjector=injectorFactor*L_InjectorMagnet
+    rpInjector=rpInjectorFactor*rp_InjectorMagnet
     fringeFrac=1.5
     LMagnet=LInjector-2*fringeFrac*rpInjector
     if LMagnet<1e-9:  # minimum fringe length must be respected.
         return None
-    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',parallel=parallel)
+    if is_Valid_Injector_Phase(L_InjectorMagnet,rp_InjectorMagnet)==False:
+        return None
+    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',parallel=False)
     PTL_Injector.add_Drift(L1_Tunable,ap=.025)
 
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)
