@@ -6,12 +6,12 @@ import os
 from ParticleTracerClass import ParticleTracer
 #TODO: test swarmTracer class features
 testDataFolderPath=os.path.join(os.getcwd(),'testData')
-
+V0=200.0
 def generate_Test_Swarm(configuration):
     testSwarm = Swarm()
     if configuration in ('1','2','3','4','5','6'):
-        testSwarm.add_Particle()
-        testSwarm.add_Particle(qi=np.asarray([-1e-10, 1e-3, 0.0]))
+        testSwarm.add_Particle(pi=np.asarray([-V0, 0.0, 0.0]))
+        testSwarm.add_Particle(qi=np.asarray([-1e-10, 1e-3, 0.0]),pi=np.asarray([-V0, 0.0, 0.0]))
         testSwarm.add_Particle(pi=np.asarray([-200.0, 5.0, 0.0]))
     elif configuration in (None,):
         pass

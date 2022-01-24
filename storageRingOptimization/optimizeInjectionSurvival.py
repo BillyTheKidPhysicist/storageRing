@@ -21,7 +21,7 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
     else:
         return True
 def generate_Injector_Lattice(X) -> ParticleTracerLattice:
-    L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,L1,L2=X
+    L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
     fringeFrac = 1.5
     LMagnet = L_InjectorMagnet - 2 * fringeFrac * rpInjectorMagnet
     if LMagnet < 1e-9:  # minimum fringe length must be respected.
@@ -31,7 +31,7 @@ def generate_Injector_Lattice(X) -> ParticleTracerLattice:
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet, L_InjectorMagnet, apFrac=.9)
     PTL_Injector.add_Drift(L2, ap=.03)
     try:
-        PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
+        PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     except:
         # print('combiner error')
         return None
@@ -44,12 +44,11 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     jeremyGap=2.54e-2
     rpLensLast=.015
     rplensFirst=.015
-    LLens=.4
-    injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner,L1,L2 = X
+    L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,LLens)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,2.0)
     try:
-        PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
+        PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     except:
         return None
     PTL_Ring.add_Drift(jeremyGap)
@@ -76,21 +75,27 @@ class Injection_Model(LatticeOptimizer):
             , self.h, 1.0, parallel=False,
             fastMode=True, copySwarm=False,
             accelerated=True)
+        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False)
         swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
+        # print(swarmEnd.num_Particles(weighted=True))
         swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
 
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=False)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=True)
+        # self.latticeRing.show_Lattice(swarm=swarmRingTraced,finalCoords=False, showTraceLines=True, trueAspectRatio=False)
         ne=self.latticeRing.elList[-1].ne
         endAngle=abs(ne[1]/ne[0])
         xMax=self.latticeRing.elList[-1].r2[0]
         numSurvivedWeighted=0.0
         for particle in swarmRingTraced:
-            xFinal=particle.qf[0]
-            slantWidth=endAngle*self.latticeRing.elList[-1].ap
-            survived=abs(xFinal-xMax)<slantWidth+2*self.h*np.linalg.norm(particle.pf)
-            numSurvivedWeighted+=particle.probability if survived==True else 0.0
+            if (particle.qf is None) ==False:
+                xFinal=particle.qf[0]
+                slantWidth=endAngle*self.latticeRing.elList[-1].ap
+                survived=abs(xFinal-xMax)<slantWidth+2*self.h*np.linalg.norm(particle.pf)
+                numSurvivedWeighted+=particle.probability if survived==True else 0.0
+        # print(numSurvivedWeighted)
         swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) - numSurvivedWeighted) \
                                 / self.swarmInjectorInitial.num_Particles(weighted=True)
+
         return swarmCost
     def floor_Plan_Cost(self):
         overlap=self.floor_Plan_OverLap()
@@ -108,20 +113,31 @@ class Injection_Model(LatticeOptimizer):
         plt.show()
 def injector_Cost(X):
     maximumCost=2.0
+    L_Injector_TotalMax = 1.0
     PTL_I=generate_Injector_Lattice(X)
     if PTL_I is None:
+        return maximumCost
+    if PTL_I.totalLength>L_Injector_TotalMax:
         return maximumCost
     PTL_R=generate_Ring_Surrogate_Lattice(X)
     if PTL_R is None:
         return maximumCost
+    assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
     model=Injection_Model(PTL_R,PTL_I)
     cost=model.cost()
-    assert cost<maximumCost
+    assert 0.0<cost<maximumCost
     return cost
 def main():
-    # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,L1,L2
-    bounds = [(.05, .5), (.01, .05), (.02, .2), (.005, .05),(.05,.3),(.05,.3)]
-    print(solve_Async(injector_Cost,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=1e12))
+    def wrapper(X):
+        try:
+            return injector_Cost(X)
+        except:
+            np.set_printoptions(precision=100)
+            print('failed with params',X)
+            raise Exception()
+    # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2
+    bounds = [(.05, .5), (.01, .05), (.02, .2), (.005, .075),(5e-3,20e-3),(.03,.5),(.03,.5)]
+    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=2000))
 if __name__=="__main__":
     main()
 '''

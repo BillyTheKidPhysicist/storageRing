@@ -1427,6 +1427,7 @@ class CombinerHexapoleSim(Element):
         self.fill_Params()
 
     def fill_Params(self):
+        #todo: this is filthy
         outerFringeFrac = 1.5
         numPointsLongitudinal=25
         numPointsTransverse=30
@@ -1448,10 +1449,13 @@ class CombinerHexapoleSim(Element):
         yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP+yExtraSpace,numXY)
         xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP+yExtraSpace),TINY_STEP,numXY)
         # el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang)
-        ZExtraSpace=self.ap*np.sin(self.maxCombinerAng)*np.cos(self.maxCombinerAng)
+        La_Approx=(self.ap+self.space/ np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
+                np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng)) #todo:  A better less wasteful hueristic
+        zTotalMax=self.Lm+self.space + (La_Approx + self.ap * np.sin(self.maxCombinerAng)) * np.cos(self.maxCombinerAng)
+
         zMin=-TINY_STEP
-        zMax=self.Lm/2+self.space+ZExtraSpace
-        zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
+        zMaxHalf=self.Lm/2+self.space+(zTotalMax-2*(self.Lm/2+self.space))
+        zArr=np.linspace(zMin,zMaxHalf,num=numPointsLongitudinal) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
@@ -1479,6 +1483,13 @@ class CombinerHexapoleSim(Element):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
+        xMax=self.Lb+(self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
+        # print(xMaxHalf,(self.space*2+self.Lm)/2)
+        yzMax=self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
+        # print(zMaxHalf)
+        assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
+        assert np.abs(xArr_Quadrant).max()>yzMax and np.abs(yArr_Quadrant).max()>yzMax, \
+            "field region must extend past particle region"
 
         self.compile_Fast_Numba_Force_Function()
     def find_Ideal_Offset(self):
@@ -1685,6 +1696,8 @@ class CombinerHexapoleSim(Element):
         x,y,z=q
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
+        if self.is_Coord_Inside(q)==False:
+            raise Exception(ValueError)
         symmetryLength=self.Lm+2*self.space
         if 0<=x <=symmetryLength/2:
             x = symmetryLength/2 - x

@@ -93,7 +93,7 @@ class LatticeOptimizer:
             self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry,gammaSpace=self.gamma_Space,
             probabilityMin=.05)
-        random.shuffle(self.swarmInjectorInitial.particles)
+        np.random.shuffle(self.swarmInjectorInitial.particles)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
     def get_Injector_Shapely_Objects_In_Lab_Frame(self):
@@ -117,6 +117,8 @@ class LatticeOptimizer:
 
     def floor_Plan_OverLap(self):
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
+        assert len(injectorShapelyObjects)==4
+        assert isinstance(self.latticeInjector.elList[1],HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
         injectorLens = injectorShapelyObjects[1]
         area = 0
