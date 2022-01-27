@@ -133,4 +133,4 @@ def TEST_All(saveData=False):
         print('Test number '+testNum)
         TEST_Lattice_Configuration(testNum,saveData=saveData)
         print('Success')
-TEST_All(saveData=True)
+TEST_All()

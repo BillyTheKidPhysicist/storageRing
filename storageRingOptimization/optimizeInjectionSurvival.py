@@ -44,9 +44,11 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     jeremyGap=2.54e-2
     rpLensLast=.015
     rplensFirst=.015
+    lastGap = 5e-2
     L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,2.0)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,.5)
+    PTL_Ring.add_Drift(lastGap)
     try:
         PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     except:
@@ -99,7 +101,7 @@ class Injection_Model(LatticeOptimizer):
         return swarmCost
     def floor_Plan_Cost(self):
         overlap=self.floor_Plan_OverLap()
-        factor = 1e-3
+        factor = 1e-4
         cost = 2 / (1 + np.exp(-overlap / factor)) - 1
         assert 0.0<=cost<=1.0
         return cost
@@ -136,13 +138,11 @@ def main():
             print('failed with params',X)
             raise Exception()
     # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2
-    bounds = [(.05, .5), (.01, .05), (.02, .2), (.005, .075),(5e-3,20e-3),(.03,.5),(.03,.5)]
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=2000))
+    bounds = [(.05, .5), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
+    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=99000,workers=8))
 if __name__=="__main__":
     main()
 '''
-BEST MEMBER BELOW
----population member---- 
-DNA: [0.65197469 0.68726815 0.11550685 0.03046567 0.13747125 0.07512276]
-cost: 0.26565685183227844
+[0.16251646 ,0.02351541, 0.13552071 ,0.04318609, 0.01744993 ,0.26296971,
+ 0.2057939 ]
 '''

@@ -23,40 +23,33 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     return sol
 
 
-def is_Valid_Injector_Phase(L_InjectorMagnet,rp_InjectorMagnet):
-    BpLens=.7
-    injectorLensPhase=np.sqrt((2*800.0/V0**2)*BpLens/rp_InjectorMagnet**2)*L_InjectorMagnet
-    if np.pi<injectorLensPhase or injectorLensPhase<np.pi/10:
-        print('bad lens phase')
-        return False
-    else:
-        return True
 
 
-def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner
-                          ,parallel=False)->ParticleTracerLattice:
+def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,L_Lens,L_Injector, rpInjector, LmCombiner, rpCombiner
+                          )->ParticleTracerLattice:
     tunableDriftGap=2.54e-2
     jeremyGap=.05
     rpBend=.01
     Lm=.0254/2.0
-    assert type(parallel)==bool
+    lastGap=5e-2
     fringeFrac=1.5
-    if LLens-2*rpLens*fringeFrac<0 or LLens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
+    loadBeamDiameter=.017
+    if L_Lens-2*rpLens*fringeFrac<0 or L_Lens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
         return None
-    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=parallel)
-    rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm,
-                                                    parallel=parallel)  # 25% of time here, 1.0138513851385138
+    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
+    rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)
     if rOffsetFact is None:
         return None
-    PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
-    PTL_Ring.add_Drift(tunableDriftGap/2,ap=rpLens)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,LLens)
-    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner)
-    PTL_Ring.add_Drift(jeremyGap)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
+    PTL_Ring.add_Drift(tunableDriftGap/2)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
+    PTL_Ring.add_Drift(lastGap)
+    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiameter)
+    PTL_Ring.add_Drift(jeremyGap)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
+    PTL_Ring.add_Drift(tunableDriftGap/2)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
@@ -65,45 +58,41 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rp
     return PTL_Ring
 
 
-def generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner)->ParticleTracerLattice:
+def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner)->ParticleTracerLattice:
 
 
     L1_Tunable, L2_Tunable = [.1,.2] #pretty much dummy arguments
-    L_InjectorMagnet=.15
-    rp_InjectorMagnet=.02
-    LInjector=injectorFactor*L_InjectorMagnet
-    rpInjector=rpInjectorFactor*rp_InjectorMagnet
     fringeFrac=1.5
-    LMagnet=LInjector-2*fringeFrac*rpInjector
-    if LMagnet<1e-9:  # minimum fringe length must be respected.
+    loadBeamDiameter=.017
+    L_InjectorMagnet=L_Injector-2*fringeFrac*rpInjector
+    if L_InjectorMagnet<1e-9:  # minimum fringe length must be respected.
         return None
-    if is_Valid_Injector_Phase(L_InjectorMagnet,rp_InjectorMagnet)==False:
-        return None
-    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',parallel=False)
+    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector')
     PTL_Injector.add_Drift(L1_Tunable,ap=.025)
 
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjector,LInjector,apFrac=.9)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjector,L_Injector,apFrac=.9)
     PTL_Injector.add_Drift(L2_Tunable,ap=.01)
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner)
+    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiameter)
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
 
 
-def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
+def solve_For_Lattice_Params(X,useSurrogateMethod=False):
 
-    rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner=X
+    rpLens,rpLensFirst,rpLensLast,L_Lens,L_Injector, rpInjector, LmCombiner, rpCombiner=X
 
-    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,LLens,injectorFactor, rpInjectorFactor,
-                                   LmCombiner, rpCombiner,parallel=parallel)
+    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,L_Lens,L_Injector, rpInjector,
+                                   LmCombiner, rpCombiner)
     if PTL_Ring is None:
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)
         return sol
-    PTL_Injector=generate_Injector_Lattice(injectorFactor, rpInjectorFactor, LmCombiner, rpCombiner,parallel=parallel)
+    PTL_Injector=generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner)
     if PTL_Injector is None:
         print('invalid injector')
         sol=invalid_Solution(X,invalidInjector=True)
         return sol
+    assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset
     # import dill
     # with open('temp','wb') as file:
     #     dill.dump(PTL_Ring,file)
@@ -117,7 +106,7 @@ def solve_For_Lattice_Params(X,parallel=False,useSurrogateMethod=False):
     # PTL_Injector.show_Lattice()
     # PTL_Ring.show_Lattice()
     optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
-    sol=optimizer.optimize((1,8),parallel=parallel,fastSolver=useSurrogateMethod)
+    sol=optimizer.optimize((1,9),fastSolver=useSurrogateMethod)
     sol.xRing_TunedParams1=X
     sol.description='Pseudorandom search'
     if sol.fluxMultiplicationPercent>.1:

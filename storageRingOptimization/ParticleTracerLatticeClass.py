@@ -9,6 +9,7 @@ from shapely.geometry import Polygon
 import scipy.interpolate as spi
 import numpy.linalg as npl
 from joblib import Parallel,delayed
+from profilehooks import profile
 from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
     ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,CombinerHexapoleSim
 
