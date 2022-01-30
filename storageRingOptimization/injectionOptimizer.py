@@ -24,7 +24,7 @@ def generate_Injector_Lattice(X) -> ParticleTracerLattice:
     L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
     fringeFrac = 1.5
     maximumMagnetWidth = rpInjectorMagnet * np.tan(2 * np.pi / 24) * 2
-    rpInjectorLayers=(rpInjectorMagnet,rpInjectorMagnet+maximumMagnetWidth)
+    rpInjectorLayers=(rpInjectorMagnet,)#rpInjectorMagnet+maximumMagnetWidth)
     LMagnet = L_InjectorMagnet - 2 * fringeFrac * max(rpInjectorLayers)
     if LMagnet < 1e-9:  # minimum fringe length must be respected.
         return None
@@ -99,7 +99,6 @@ class Injection_Model(LatticeOptimizer):
         # print(numSurvivedWeighted)
         swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) - numSurvivedWeighted) \
                                 / self.swarmInjectorInitial.num_Particles(weighted=True)
-
         return swarmCost
     def floor_Plan_Cost(self):
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
@@ -140,14 +139,33 @@ def main():
             print('failed with params',X)
             raise Exception()
     # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2
-    bounds = [(.05, .5), (.005, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=99000,workers=8))
-    # args=[0.09720613, 0.01065874 ,0.09999615 ,0.01263289, 0.0090281,  0.2057647,
- # 0.38057085]
- #    wrapper(args)
+    # bounds = [(.05, .5), (.005, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
+    # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=99000,workers=8))
+    args=[0.16063242, 0.0233469 , 0.13838299, 0.04630577, 0.02055515 ,0.24656484,
+ 0.208979  ]
+    print(wrapper(args))
 if __name__=="__main__":
     main()
 '''
-[0.16251646 ,0.02351541, 0.13552071 ,0.04318609, 0.01744993 ,0.26296971,
- 0.2057939 ]
+layers 1:
+------ITERATIONS: 3255
+POPULATION VARIABILITY: [0.03303349 0.03799871 0.04011572 0.06331573 0.10230542 0.0591025
+ 0.03675829]
+BEST MEMBER BELOW
+---population member---- 
+DNA: [0.16063242 0.0233469  0.13838299 0.04630577 0.02055515 0.24656484
+ 0.208979  ]
+cost: 0.24410153339876842
+
+
+layers 2:
+------ITERATIONS: 3990
+POPULATION VARIABILITY: [0.03344047 0.02149729 0.03160192 0.01352181 0.02316342 0.03558464
+ 0.03241287]
+BEST MEMBER BELOW
+---population member---- 
+DNA: [0.14441819 0.02017742 0.14555262 0.04862708 0.01715612 0.20153852
+ 0.25008462]
+cost: 0.4126723176560932
+
 '''

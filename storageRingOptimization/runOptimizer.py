@@ -15,27 +15,18 @@ def wrapper(args):
         assert False
     return cost
 def main():
-    #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
     bounds=[
         (.005,.03), #rpLens
         (.02,.04), #rpLensFirst
         (.005,.04), #rplensLast
-        (.1,.4), #L_Lens
-        (.125,.2125), #L_Injector
-        (.01,.03), #rpInjector
-        (.075,.2), #LmCombiner
-        (.02,.05)] #rpCombiner
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=9) )
+        (.0075, .0125),  # rpBend
+        (.1,.4) #L_Lens
+        # (.125,.2125), #L_Injector
+        # (.01,.03), #rpInjector
+        # (.075,.2), #LmCombiner
+        # (.02,.05)  #rpCombiner
+        ]
+    #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
+    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12) )
 if __name__=='__main__':
     main()
-
-'''
-----------Solution-----------   
-injector element spacing optimum configuration: [0.11530739 0.3196804 ]
-storage ring tuned params 1 optimum configuration: [0.00952787 0.02       0.01954273 0.2        0.17214592 0.02036743
- 0.07609841 0.03821327]
-storage ring tuned params 2 optimum configuration: [0.22522063 0.67234298]
-cost: 0.7620724937060898
-percent max flux multiplication: 23.792750629391023
-scipy message: Optimization terminated successfully.
-'''

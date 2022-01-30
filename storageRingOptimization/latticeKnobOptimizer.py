@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal, Drift
 import multiprocess as mp
+from collections.abc import Iterable
 from profilehooks import profile
 '''
 This file contains a class used to optimize the tunable knobs we can expect to have. These are either field values
@@ -57,8 +58,10 @@ class LatticeOptimizer:
         self.particleTracerRing = ParticleTracer(latticeRing)
         self.particleTracerInjector = ParticleTracer(latticeInjector)
         self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
+        self.whichKnobs=None #injector or lattice and injector knobs may be tuned
         self.h = 1e-5  # timestep size
         self.T = 10.0
+        self.injectTuneElIndices=(0,2)
         self.swarmTracerRing = SwarmTracer(self.latticeRing)
         self.phaseSpaceFunc = None  # function that returns the number of revolutions of a particle at a given
         # point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
@@ -212,17 +215,21 @@ class LatticeOptimizer:
         return stable
 
     def update_Ring_And_Injector(self,X):
-        assert len(X)==4
-        XRing = X[:2]
-        XInjector = X[2:]
-        self.update_Ring_Lattice(XRing)
-        self.update_Injector_Lattice(XInjector)
+        if self.whichKnobs=='all':
+            assert len(X) == 4
+            XRing,XInjector=X[:2],X[2:]
+            self.update_Ring_Lattice(XRing)
+            self.update_Injector_Lattice(XInjector)
+        elif self.whichKnobs=='ring':
+            assert len(X) == 2
+            self.update_Ring_Lattice(X)
+        else: raise ValueError
     def update_Injector_Lattice(self, X):
         # modify lengths of drift regions in injector
         assert len(X)==2
         assert X[0]>0.0 and X[1]>0.0
-        self.latticeInjector.elList[0].set_Length(X[0])
-        self.latticeInjector.elList[2].set_Length(X[1])
+        self.latticeInjector.elList[self.injectTuneElIndices[0]].set_Length(X[0])
+        self.latticeInjector.elList[self.injectTuneElIndices[2]].set_Length(X[1])
         self.latticeInjector.build_Lattice()
 
     def update_Ring_Lattice(self, X):
@@ -231,8 +238,7 @@ class LatticeOptimizer:
             self.update_Ring_Field_Values(X)
         elif self.tuningChoice == 'spacing':
             self.update_Ring_Spacing(X)
-        else:
-            raise Exception('wrong tuning choice')
+        else: raise ValueError
 
     def update_Ring_Field_Values(self, X):
         raise Exception('Not currently supported')
@@ -289,12 +295,16 @@ class LatticeOptimizer:
         fluxMulPerc=100.0*(1.0-fluxCost)
         assert 0.0<=fluxMulPerc<=100.0
         return fluxMulPerc
-    def catch_Optimizer_Errors(self, tuningBounds, tuningElementIndices, tuningChoice):
+    def catch_Optimizer_Errors(self, tuningBounds, tuningElementIndices, tuningChoice,whichKnobs):
         if max(tuningElementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(tuningElementIndices): raise Exception("Bounds do not match number of tuned elements")
-        if self.latticeRing.combiner.L!=self.latticeInjector.combiner.L and \
-            self.latticeRing.combiner.ap!=self.latticeInjector.combiner.ap:
+        combinerRing,combinerLat=self.latticeRing.combiner,self.latticeInjector.combiner
+        if not (combinerRing.Lm==combinerLat.Lm and combinerRing.ap==combinerLat.ap and combinerRing.outputOffset==
+                combinerLat.outputOffset):
             raise Exception('Combiners are different between the two lattices')
+        injectorTuningElements=[self.latticeInjector.elList[index] for index in self.injectTuneElIndices]
+        if not all(isinstance(el,Drift) for el in injectorTuningElements):
+            raise Exception("injector tuning elements must be drift region")
         if tuningChoice == 'field':
             for el in self.tunedElementList:
                 if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:
@@ -309,15 +319,21 @@ class LatticeOptimizer:
                     raise Exception("Tunable elements are too short for length tuning. Min total length is "
                                     + str(2 * self.minElementLength))
         else: raise Exception('No proper tuning choice provided')
+        if whichKnobs not in ('all','ring'):
+            raise Exception('Knobs must be either \'all\' (full system) or \'ring\' (only storage ring)')
 
     def fill_Initial_Total_Tuning_Elements_Length_List(self):
         for elCenter in self.tunedElementList:
             elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
             self.tunableTotalLengthList.append(elBefore.L + elAfter.L)
 
-    def initialize_Optimizer(self, tuningElementIndices, tuningChoice, ringTuningBounds, injectorTuningBounds):
+    def initialize_Optimizer(self, tuningElementIndices, tuningChoice,whichKnobs, ringTuningBounds, injectorTuningBounds):
+        assert tuningChoice in ('spacing','field') and whichKnobs in ('all','ring')
+        assert all(isinstance(arg,Iterable) for arg in (tuningElementIndices,ringTuningBounds,injectorTuningBounds))
+        self.whichKnobs=whichKnobs
         self.tuningBounds = ringTuningBounds.copy()
-        self.tuningBounds.extend(injectorTuningBounds)
+        if self.whichKnobs =='all':
+            self.tuningBounds.extend(injectorTuningBounds)
         self.tunedElementList = [self.latticeRing.elList[index] for index in tuningElementIndices]
         self.tuningChoice = tuningChoice
         if tuningChoice == 'spacing':
@@ -327,12 +343,13 @@ class LatticeOptimizer:
 
     def test_Lattice_Stability(self, ringTuningBounds,injectorTuningBounds, numEdgePoints=30, parallel=False):
         assert len(ringTuningBounds) == 2 and len(injectorTuningBounds)==2
-        x1Arr = np.linspace(ringTuningBounds[0][0], ringTuningBounds[0][1], numEdgePoints)
-        x2Arr = np.linspace(ringTuningBounds[1][0], ringTuningBounds[1][1], numEdgePoints)
-        x3Arr = (ringTuningBounds[0][1]-injectorTuningBounds[0][0])*np.ones(numEdgePoints**2)
-        x4Arr = (ringTuningBounds[1][1]-injectorTuningBounds[1][0])*np.ones(numEdgePoints**2)
-        testCoords = np.asarray(np.meshgrid(x1Arr, x2Arr)).T.reshape(-1, 2)
-        testCoords=np.column_stack((testCoords,x3Arr,x4Arr))
+        ringKnob1Arr = np.linspace(ringTuningBounds[0][0], ringTuningBounds[0][1], numEdgePoints)
+        ringKnob2Arr = np.linspace(ringTuningBounds[1][0], ringTuningBounds[1][1], numEdgePoints)
+        injectorKnob1Arr_Constant = ringTuningBounds[0][1]*np.ones(numEdgePoints**2)
+        injectorKnobA2rr_Constant = ringTuningBounds[1][1]*np.ones(numEdgePoints**2)
+        testCoords = np.asarray(np.meshgrid(ringKnob1Arr, ringKnob2Arr)).T.reshape(-1, 2)
+        if self.whichKnobs=='all':
+            testCoords=np.column_stack((testCoords,injectorKnob1Arr_Constant,injectorKnobA2rr_Constant))
         if parallel == False:
             stabilityList = [self.test_Stability(coords) for coords in testCoords]
         else:
@@ -346,20 +363,24 @@ class LatticeOptimizer:
     def _fast_Minimize(self):
         #less accurate method that minimizes with a smaller surrogate swarm then uses the full swarm for the final
         #value
+        useSurrogate,energyCorrection=[True,False]
         sol_Surrogate = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=self.tolerance,
-                                                   polish=False,args=(True,False),
+                                                   polish=False,args=(useSurrogate,energyCorrection),
                                                    maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
                                                    popsize=self.optimalPopSize,init='halton')
         return sol_Surrogate
     def _accurate_Minimize(self):
         #start first by quickly randomly searching with a surrogate swarm.
         randomSamplePoints=128
+        energyCorrection=False #leave this off here, apply later once
+        useSurrogateRoughPass=True
         samples = skopt.sampler.Sobol().generate(self.tuningBounds, randomSamplePoints)
-        vals=[self.mode_Match_Cost(sample,True,False) for sample in samples]
+        vals=[self.mode_Match_Cost(sample,useSurrogateRoughPass,energyCorrection) for sample in samples]
         XInitial=samples[np.argmin(vals)]
+        useSurrogateScipyOptimer=True
         sol=spo.differential_evolution(self.mode_Match_Cost,self.tuningBounds,polish=False,x0=XInitial,tol=self.tolerance,
                                        maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
-                                       args=(False,False),popsize=self.optimalPopSize,init='halton')
+                                       args=(useSurrogateScipyOptimer,energyCorrection),popsize=self.optimalPopSize,init='halton')
         return sol
 
     def _minimize(self)->Solution:
@@ -367,7 +388,8 @@ class LatticeOptimizer:
             scipySol=self._fast_Minimize()
         else:
             scipySol=self._accurate_Minimize()
-        cost_Most_Accurate = self.mode_Match_Cost(scipySol.x, False, True)
+        useSurrogate,energyCorrection=[False,True]
+        cost_Most_Accurate = self.mode_Match_Cost(scipySol.x, useSurrogate,energyCorrection)
         sol = Solution()
         sol.scipyMessage=scipySol.message
         sol.cost = cost_Most_Accurate
@@ -375,19 +397,20 @@ class LatticeOptimizer:
         sol.fluxMultiplicationPercent = self.flux_Percent_From_Cost(cost_Most_Accurate, optimalConfig)
         sol.stable = True
         sol.xRing_TunedParams2 = optimalConfig[:2]
-        sol.xInjector_TunedParams = optimalConfig[2:]
+        if self.whichKnobs=='all':
+            sol.xInjector_TunedParams = optimalConfig[2:]
         sol.invalidInjector = False
         sol.invalidRing = False
         return sol
-    def optimize(self, tuningElementIndices, ringTuningBounds=None, injectorTuningBounds=None, tuningChoice='spacing',
-                 parallel=False,fastSolver=True)->Solution:
+    def optimize(self, tuningElementIndices, ringTuningBounds=None, injectorTuningBounds=None, tuningChoice='spacing'
+                 ,whichKnobs='all',parallel=False,fastSolver=False)->Solution:
         self.fastSolver=fastSolver
         if ringTuningBounds is None:
             ringTuningBounds = [(.2, .8), (.2, .8)]
         if injectorTuningBounds is None:
             injectorTuningBounds = [(.1, .4), (.1, .4)]
-        self.catch_Optimizer_Errors(ringTuningBounds, tuningElementIndices, tuningChoice)
-        self.initialize_Optimizer(tuningElementIndices, tuningChoice, ringTuningBounds, injectorTuningBounds)
+        self.catch_Optimizer_Errors(ringTuningBounds, tuningElementIndices, tuningChoice,whichKnobs)
+        self.initialize_Optimizer(tuningElementIndices, tuningChoice,whichKnobs, ringTuningBounds, injectorTuningBounds)
         if self.test_Lattice_Stability(ringTuningBounds,injectorTuningBounds, parallel=parallel) == False:
             sol = Solution()
             sol.fluxMultiplicationPercent = 0.0
