@@ -34,7 +34,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,L_Lens,L_Injector, rpInj
     lastGap=5e-2
     fringeFrac=1.5
     loadBeamDiameter=.017
-    if L_Lens-2*rpLens*fringeFrac<0 or L_Lens-2*rpLensFirst*fringeFrac<0:  # minimum fringe length must be respected
+    if L_Lens-2*rpLens*fringeFrac<0 or L_Lens-2*rpLensFirst*fringeFrac<0 or L_Lens-2*rpLensLast*fringeFrac<0:  # minimum fringe length must be respected
         return None
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
     rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)

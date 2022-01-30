@@ -76,7 +76,7 @@ class LatticeOptimizer:
         self.spotCaptureDiam = 1e-2
         self.collectorAngleMax = .06
         self.temperature = 1e-3
-        self.gamma_Space=4.5e-3
+        self.gamma_Space=3.5e-3
         fractionalMarginOfError = 1.25
         self.minElementLength = fractionalMarginOfError * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
@@ -84,7 +84,7 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
         self.tuningBounds = None
-        self.numParticlesFullSwarm=300
+        self.numParticlesFullSwarm=1000
         self.numParticlesSurrogate=50
         self.generate_Swarms()
 
@@ -143,7 +143,7 @@ class LatticeOptimizer:
         # configuration
         for val, bounds in zip(X, self.tuningBounds):
             assert bounds[0] <= val <= bounds[1]
-        if self.floor_Plan_Cost(X)>1e-2: #only permit small floor plan costs
+        if self.floor_Plan_Cost(X)>0.0: #only permit small floor plan costs
             return 1.0+self.floor_Plan_Cost(X)
         if self.test_Stability(X) == False:
             swarmTraced=Swarm() #empty swarm

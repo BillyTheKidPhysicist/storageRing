@@ -95,14 +95,11 @@ class SwarmTracer:
         #ie, geometric heating
         sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
         #longitudinal velocity only because geometric dominates thermal in transverse dimension
-        pLongitudinalMin=-(2*sigmaVelocity+(1-np.cos(collectorOutputAngle))*self.lattice.v0Nominal) #include 2 sigma of
-        #velocity, and geometric spread
-        pLongitudinalMax=2*sigmaVelocity #include 2 sigma of
-        #velocity, and geometric spread
+        pLongitudinalMin=-1e-3
+        pLongitudinalMax=1e-3
         pLongBounds=(pLongitudinalMin,pLongitudinalMax)
         swarmEvenlySpread=self.initalize_PseudoRandom_Swarm_In_Phase_Space(captureDiam/2.0,pTransMax,pLongBounds,
                                                             numParticles,sameSeed=sameSeed,upperSymmetry=upperSymmetry)
-
         probabilityList=[]
         for particle in swarmEvenlySpread:
             probability=1.0
@@ -111,8 +108,8 @@ class SwarmTracer:
             px,py,pz=particle.pi
             probability=probability*lorentz_Function(r,gammaSpace) #spatial probability
             pTrans=np.sqrt(py**2+pz**2)
-            pxMean=-np.sqrt(self.lattice.v0Nominal**2-pTrans**2)
-            probability=probability*normal(px,sigmaVelocity,v0=pxMean)
+            px=-np.sqrt(self.lattice.v0Nominal**2-pTrans**2)
+            particle.pi[0]=px
             assert probability<1.0
             probabilityList.append(probability)
         swarmObserved = Swarm()
