@@ -87,7 +87,7 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
         self.tuningBounds = None
-        self.numParticlesFullSwarm=1000
+        self.numParticlesFullSwarm=500
         self.numParticlesSurrogate=50
         self.generate_Swarms()
 
@@ -121,13 +121,14 @@ class LatticeOptimizer:
     def floor_Plan_OverLap_mm(self):
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
         assert len(injectorShapelyObjects)==4
-        assert isinstance(self.latticeInjector.elList[1],HalbachLensSim)
+        overlapElIndex = 1
+        injectorLensShapely = injectorShapelyObjects[overlapElIndex]
+        assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
-        injectorLens = injectorShapelyObjects[1]
         area = 0
-        converTo_mm=(1e3)**2
+        converTo_mm = (1e3) ** 2
         for element in ringShapelyObjects:
-            area += element.intersection(injectorLens).area*converTo_mm
+            area += element.intersection(injectorLensShapely).area * converTo_mm
         return area
 
 

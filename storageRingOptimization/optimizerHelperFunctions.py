@@ -78,7 +78,7 @@ def solve_For_Lattice_Params(X):
 
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
     #value2 from seperate optimizer
-    L_Injector, rpInjector, LmCombiner, rpCombiner=0.15173395,0.02095094,0.13384621,0.04111257
+    L_Injector, rpInjector, LmCombiner, rpCombiner=0.16063242, 0.0233469 , 0.13838299, 0.04630577
     loadBeamDiam, L1, L2=0.02055515 ,0.24656484 ,0.208979
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam)
     if PTL_Ring is None:
