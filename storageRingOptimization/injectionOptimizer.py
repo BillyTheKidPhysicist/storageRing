@@ -1,5 +1,6 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
+from elementPT import HalbachLensSim
 import random
 import time
 from asyncDE import solve_Async
@@ -20,32 +21,29 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return False
     else:
         return True
-def generate_Injector_Lattice(X) -> ParticleTracerLattice:
-    L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
-    fringeFrac = 1.5
-    maximumMagnetWidth = rpInjectorMagnet * np.tan(2 * np.pi / 24) * 2
-    rpInjectorLayers=(rpInjectorMagnet,)#rpInjectorMagnet+maximumMagnetWidth)
-    LMagnet = L_InjectorMagnet - 2 * fringeFrac * max(rpInjectorLayers)
-    if LMagnet < 1e-9:  # minimum fringe length must be respected.
+def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam,L1,L2)->ParticleTracerLattice:
+    fringeFrac=1.5
+    apFrac=.95
+    L_InjectorMagnet=L_Injector-2*fringeFrac*rpInjector
+    if L_InjectorMagnet<1e-9:  # minimum fringe length must be respected.
         return None
-    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=False)
-    PTL_Injector.add_Drift(L1, ap=.03)
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorLayers, L_InjectorMagnet, apFrac=.9)
-    PTL_Injector.add_Drift(L2, ap=.03)
+    if loadBeamDiam>rpCombiner: #don't waste time exploring silly configurations
+        return None
+    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector')
+    PTL_Injector.add_Drift(L1,ap=rpInjector)
+
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjector,L_Injector,apFrac=apFrac)
+    PTL_Injector.add_Drift(L2,ap=apFrac*rpInjector)
     try:
-        PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
+        PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam)
     except:
-        # print('combiner error')
         return None
-    PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
+    PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
-
-
-
 def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
-    jeremyGap=2.54e-2
-    rpLensLast=.015
-    rplensFirst=.015
+    jeremyGap=5e-2
+    rpLensLast=.02
+    rplensFirst=.02
     lastGap = 5e-2
     L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
@@ -114,10 +112,23 @@ class Injection_Model(LatticeOptimizer):
         plt.ylabel('meters')
         plt.grid()
         plt.show()
+    def floor_Plan_OverLap_mm(self):
+        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
+        assert len(injectorShapelyObjects)==4
+        overlapElIndex = 1
+        injectorLensShapely = injectorShapelyObjects[overlapElIndex]
+        assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
+        ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
+        area = 0
+        converTo_mm = (1e3) ** 2
+        for element in ringShapelyObjects:
+            area += element.intersection(injectorLensShapely).area * converTo_mm
+        area+=injectorShapelyObjects[2].intersection(ringShapelyObjects[0]).area*converTo_mm/10
+        return area
 def injector_Cost(X):
     maximumCost=2.0
     L_Injector_TotalMax = 1.0
-    PTL_I=generate_Injector_Lattice(X)
+    PTL_I=generate_Injector_Lattice(*X)
     if PTL_I is None:
         return maximumCost
     if PTL_I.totalLength>L_Injector_TotalMax:
@@ -128,7 +139,7 @@ def injector_Cost(X):
     assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
     model=Injection_Model(PTL_R,PTL_I)
     cost=model.cost()
-    assert 0.0<cost<maximumCost
+    assert 0.0<=cost<=maximumCost
     return cost
 def main():
     def wrapper(X):
@@ -139,33 +150,29 @@ def main():
             print('failed with params',X)
             raise Exception()
     # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2
-    # bounds = [(.05, .5), (.005, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
-    # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,timeOut_Seconds=99000,workers=8))
-    args=[0.16063242, 0.0233469 , 0.13838299, 0.04630577, 0.02055515 ,0.24656484,
- 0.208979  ]
-    print(wrapper(args))
+    bounds = [(.05, .5), (.005, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
+    for _ in range(1):
+        print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,tol=.01,disp=True,workers=8))
+    # args=[0.15630672 ,0.02294941, 0.14133239, 0.04233863, 0.01828147, 0.2481217,
+ # 0.23321294]
+ #    print(wrapper(args))
 if __name__=="__main__":
     main()
+
 '''
-layers 1:
-------ITERATIONS: 3255
-POPULATION VARIABILITY: [0.03303349 0.03799871 0.04011572 0.06331573 0.10230542 0.0591025
- 0.03675829]
-BEST MEMBER BELOW
+finished with total evals:  3318
 ---population member---- 
-DNA: [0.16063242 0.0233469  0.13838299 0.04630577 0.02055515 0.24656484
- 0.208979  ]
-cost: 0.24410153339876842
-
-
-layers 2:
-------ITERATIONS: 3990
-POPULATION VARIABILITY: [0.03344047 0.02149729 0.03160192 0.01352181 0.02316342 0.03558464
- 0.03241287]
-BEST MEMBER BELOW
+DNA: [0.14974733 0.0221834  0.13993194 0.04462608 0.01837276 0.24009463
+ 0.23051689]
+cost: 0.14920990769899709
+finished with total evals:  5566
 ---population member---- 
-DNA: [0.14441819 0.02017742 0.14555262 0.04862708 0.01715612 0.20153852
- 0.25008462]
-cost: 0.4126723176560932
-
+DNA: [0.15268392 0.02248424 0.1290899  0.04153495 0.01751307 0.24428415
+ 0.25539097]
+cost: 0.154971331755472
+finished with total evals:  5276
+---population member---- 
+DNA: [0.15630672 0.02294941 0.14133239 0.04233863 0.01828147 0.2481217
+ 0.23321294]
+cost: 0.14863308263572253
 '''

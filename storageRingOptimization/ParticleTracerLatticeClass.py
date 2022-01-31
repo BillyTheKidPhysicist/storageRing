@@ -787,10 +787,16 @@ class ParticleTracerLattice:
             else: #else use the specified color
                 color=particle.color
             if showMarkers==True:
-                if finalCoords==False:
-                    xy=particle.qi[:2]
-                else:
-                    xy = particle.qf[:2]
+                try:
+                    if finalCoords==False:
+                        xy=particle.qi[:2]
+                    else:
+                        xy = particle.qf[:2]
+                except: #the coords don't exist. Sometimes this is expected. try and fall back to another
+                    if particle.qi is not None: xy=particle.qi[:2]
+                    elif particle.qf is not None: xy=particle.qf[:2]
+                    else: raise ValueError()
+                    color='yellow'
                 plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*xy, marker='o', s=10, c=color)
             if showTraceLines==True:

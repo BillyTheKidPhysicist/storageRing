@@ -17,8 +17,8 @@ def wrapper(args):
 def main():
     bounds=[
         (.005,.03), #rpLens
-        (.02,.04), #rpLensFirst
-        (.005,.04), #rplensLast
+        (.01,.03), #rpLensFirst
+        (.005,.02), #rplensLast
         (.0075, .0125),  # rpBend
         (.1,.4) #L_Lens
         # (.125,.2125), #L_Injector

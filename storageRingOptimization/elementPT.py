@@ -98,7 +98,7 @@ class Element:
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
         #arguments at the time of calling the function compile_Fast_Numba_Force_Function
-        self.maxCombinerAng=.15 #because the field value is a right rectangular prism, it must extend to past the
+        self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
     def compile_Fast_Numba_Force_Function(self):
         #function that generates the fast_Numba_Force_Function based on existing parameters. It compiles it as well
@@ -1406,7 +1406,7 @@ class CombinerHexapoleSim(Element):
         self.rp = rp
         self.layers=layers
         self.ap=min([self.rp-vacuumTubeThickness,.95*self.rp]) #restrict to good field region
-        assert loadBeamDiam<self.ap and self.ap>0.0
+        # assert loadBeamDiam<1.5*self.ap and self.ap>0.0
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
         self.mode = mode #wether storage ring or injector. This dictate high or low field seeking
@@ -1441,20 +1441,23 @@ class CombinerHexapoleSim(Element):
             magnetWidthList.append(nextMagnetWidth)
         self.space=max(rpList)*outerFringeFrac
         lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList)
+
+        #todo: this making points thing is an abomination
         numXY=int((self.ap/self.rp)*numPointsTransverse)
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-        yExtraSpace=self.space*np.sin(self.maxCombinerAng)+self.ap*np.sin(self.maxCombinerAng)**2
-        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP+yExtraSpace,numXY)
-        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP+yExtraSpace),TINY_STEP,numXY)
-        # el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang)
         La_Approx=(self.ap+self.space/ np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng)) #todo:  A better less wasteful hueristic
+        xyMax=self.ap + (La_Approx + self.ap * np.sin(abs(self.maxCombinerAng))) * np.sin(abs(self.maxCombinerAng))
+        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP+xyMax,numXY)
+        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP+xyMax),TINY_STEP,numXY)
+        # el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang)
+
         zTotalMax=self.Lm+self.space + (La_Approx + self.ap * np.sin(self.maxCombinerAng)) * np.cos(self.maxCombinerAng)
 
         zMin=-TINY_STEP
-        zMaxHalf=self.Lm/2+self.space+(zTotalMax-2*(self.Lm/2+self.space))
+        zMaxHalf=self.Lm/2+self.space+1.5*(zTotalMax-2*(self.Lm/2+self.space))
         zArr=np.linspace(zMin,zMaxHalf,num=numPointsLongitudinal) #add a little extra so interp works as expected
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
@@ -1503,7 +1506,7 @@ class CombinerHexapoleSim(Element):
         keepTrying=True
         dxInitial=self.ap/2.0
         sepWithNoOffset=self.ap #maximum seperation occurs with no added offset
-        maxTries=10
+        maxTries=30
         numTries=0
         while keepTrying:
             try:

@@ -168,25 +168,26 @@ class LatticeOptimizer:
         apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
-            outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
-            qf = particle.qf - outputCenter
-            qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
-            if qf[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
-                # assume it's at the end
-                pf = particle.pf.copy()
-                pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
-                qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
-                qf[0]=0.0 #no rounding error
-                clipsNextElement=np.sqrt(qf[1] ** 2 + qf[2] ** 2) > apNextElement
-                if clipsNextElement==False:  # test that particle survives through next aperture
-                    if copyParticles == False:
-                        particleEnd = particle
-                    else:
-                        particleEnd = particle.copy()
-                    particleEnd.qi = qf
-                    particleEnd.pi = pf
-                    particleEnd.reset()
-                    swarmSurvived.particles.append(particleEnd)
+            if particle.qf is not None:
+                outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
+                qf = particle.qf - outputCenter
+                qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
+                if qf[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
+                    # assume it's at the end
+                    pf = particle.pf.copy()
+                    pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
+                    qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
+                    qf[0]=0.0 #no rounding error
+                    clipsNextElement=np.sqrt(qf[1] ** 2 + qf[2] ** 2) > apNextElement
+                    if clipsNextElement==False:  # test that particle survives through next aperture
+                        if copyParticles == False:
+                            particleEnd = particle
+                        else:
+                            particleEnd = particle.copy()
+                        particleEnd.qi = qf
+                        particleEnd.pi = pf
+                        particleEnd.reset()
+                        swarmSurvived.particles.append(particleEnd)
         return swarmSurvived
 
     def trace_And_Project_Injector_Swarm_To_Combiner_End(self,useSurrogate) -> Swarm:
