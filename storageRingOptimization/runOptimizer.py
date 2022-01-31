@@ -27,6 +27,13 @@ def main():
         # (.02,.05)  #rpCombiner
         ]
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12) )
+    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
 if __name__=='__main__':
     main()
+'''----------Solution-----------   
+injector element spacing optimum configuration: nan
+storage ring tuned params 1 optimum configuration: [0.0155432  0.01517654 0.0149405  0.00865282 0.1       ]
+storage ring tuned params 2 optimum configuration: [0.30753657 0.57824108]
+cost: 0.684965715305649
+percent max flux multiplication: 31.5034284694351
+scipy message: Optimization terminated successfully.'''

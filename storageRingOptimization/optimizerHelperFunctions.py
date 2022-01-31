@@ -74,11 +74,39 @@ def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loa
     PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
     return PTL_Injector
 
+def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2,
+    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)->ParticleTracerLattice:
+    fringeFrac = 1.5
+    apFrac = .95
+    LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
+    LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
+    if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
+        return None
+    if loadBeamDiam > apFrac * rpCombiner:  # silly if load beam doens't fit in half of magnet
+        return None
+    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=False)
+    PTL_Injector.add_Drift(L1, ap=apFrac * rpInjectorMagnet1)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1, apFrac=apFrac)
+    PTL_Injector.add_Drift(L2, ap=apFrac * max([rpInjectorMagnet1, rpInjectorMagnet2]))
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2, apFrac=apFrac)
+    PTL_Injector.add_Drift(L3, ap=apFrac * rpInjectorMagnet2)
+
+    try:  # even with guards it can still derp out
+        PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam)
+    except:
+        return None
+    PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
+    return PTL_Injector
+
 
 def solve_For_Lattice_Params(X):
 
-    L_Injector, rpInjector, LmCombiner, rpCombiner, loadBeamDiam, L1, L2=[0.15630672 ,0.02294941, 0.14133239,
-                                                                0.04233863, 0.01828147, 0.2481217,0.23321294]
+    XInjector=[0.29807248, 0.04453901 ,0.19418043, 0.03118965 ,0.19594843, 0.04991809,
+        0.02302727, 0.01  ,     0.16521442, 0.26193197]
+
+    L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
+    loadBeamDiam, L1, L2, L3=XInjector
+
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
     #value2 from seperate optimizer
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam)
@@ -86,7 +114,9 @@ def solve_For_Lattice_Params(X):
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)
         return sol
-    PTL_Injector=generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam, L1, L2)
+    # PTL_Injector=generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam, L1, L2)
+    PTL_Injector=generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2,
+                                                rpInjectorMagnet2, LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)
     if PTL_Injector is None:
         print('invalid injector')
         sol=invalid_Solution(X,invalidInjector=True)
