@@ -120,8 +120,8 @@ class LatticeOptimizer:
 
     def floor_Plan_OverLap_mm(self):
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        assert len(injectorShapelyObjects)==4
-        overlapElIndex = 1
+        assert len(injectorShapelyObjects)==6
+        overlapElIndex = 3
         injectorLensShapely = injectorShapelyObjects[overlapElIndex]
         assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
@@ -231,7 +231,7 @@ class LatticeOptimizer:
         assert len(X)==2
         assert X[0]>0.0 and X[1]>0.0
         self.latticeInjector.elList[self.injectTuneElIndices[0]].set_Length(X[0])
-        self.latticeInjector.elList[self.injectTuneElIndices[2]].set_Length(X[1])
+        self.latticeInjector.elList[self.injectTuneElIndices[1]].set_Length(X[1])
         self.latticeInjector.build_Lattice()
 
     def update_Ring_Lattice(self, X):

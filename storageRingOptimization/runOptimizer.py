@@ -30,10 +30,13 @@ def main():
     print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
 if __name__=='__main__':
     main()
-'''----------Solution-----------   
+'''
+----------Solution-----------   
 injector element spacing optimum configuration: nan
-storage ring tuned params 1 optimum configuration: [0.0155432  0.01517654 0.0149405  0.00865282 0.1       ]
-storage ring tuned params 2 optimum configuration: [0.30753657 0.57824108]
-cost: 0.684965715305649
-percent max flux multiplication: 31.5034284694351
-scipy message: Optimization terminated successfully.'''
+storage ring tuned params 1 optimum configuration: [0.01872991 0.01912455 0.01931468 0.01113904 0.1210144 ]
+storage ring tuned params 2 optimum configuration: [0.73878657 0.70949108]
+cost: 0.5419640702864256
+percent max flux multiplication: 45.803592971357446
+scipy message: Optimization terminated successfully.
+----------------------------
+'''
