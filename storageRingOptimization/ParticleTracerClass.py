@@ -53,7 +53,8 @@ class ParticleTracer:
         self.numbaMultiStepCache=[]
         self.generate_Multi_Step_Cache()
 
-
+        self.tau_Collision=np.inf #collision time constant
+        self.T_CollisionLast=0.0 # time since last collision
         self.accelerated=None
 
         self.T=None #total time elapsed
@@ -116,7 +117,8 @@ class ParticleTracer:
             self.E0=self.particle.get_Energy(self.currentEl,self.qEl,self.pEl)
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-    def trace(self,particle,h,T0,fastMode=False,accelerated=False,energyCorrection=False,stepsBetweenLogging=1):
+    def trace(self,particle,h,T0,fastMode=False,accelerated=False,energyCorrection=False,stepsBetweenLogging=1,
+              tau_Collision=None):
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -126,6 +128,7 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
         self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
         if particle is None:
@@ -317,6 +320,13 @@ class ParticleTracer:
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
+        if self.T-self.T_CollisionLast>self.tau_Collision:
+            deltaTheta=(np.random.rand()-.5)*2*np.pi/180
+            theta=np.arctan2(pEl_n[1],pEl_n[0])
+            p0=np.linalg.norm(pEl_n[:2])
+            pEl_n[0]=p0*np.cos(theta+deltaTheta)
+            pEl_n[1]=p0*np.sin(theta+deltaTheta)
+            self.T_CollisionLast=self.T
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
