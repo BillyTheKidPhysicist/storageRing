@@ -8,11 +8,13 @@ import time
 import numpy as np
 import math
 from math import isnan
+from functionsForBilly import vLi_final
 from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
 from shapely.geometry import Polygon,Point
 import elementPT
+from constants import BOLTZMANN_CONSTANT,MASS_HELIUM
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
 
@@ -128,6 +130,8 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        if tau_Collision is not None and tau_Collision<=0.0:
+            raise Exception('Collision time must be None or nonzero positive number')
         self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
         self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
@@ -320,18 +324,16 @@ class ParticleTracer:
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
-        if self.T-self.T_CollisionLast>self.tau_Collision:
-            deltaTheta=(np.random.rand()-.5)*2*np.pi/180
-            theta=np.arctan2(pEl_n[1],pEl_n[0])
-            p0=np.linalg.norm(pEl_n[:2])
-            pEl_n[0]=p0*np.cos(theta+deltaTheta)
-            pEl_n[1]=p0*np.sin(theta+deltaTheta)
-            self.T_CollisionLast=self.T
+        if self.tau_Collision is not None:
+            probabilityCutoff=self.h/self.tau_Collision
+            if np.random.rand()<probabilityCutoff:
+                vHe=self.sample_Helium_Momentum()
+                pEl_n=np.asarray(vLi_final(pEl_n,vHe))
+                self.T_CollisionLast = self.T
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
-        self.elHasChanged = False# if the leapfrog is completed, then the element did not change during the leapfrog
-    # @profile
+
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n,qEl,pEl):
         #qEl_n: coordinates that are outside the current element and possibley in the next
         #qEl: coordinates right before this method was called, should still be in the element
@@ -422,3 +424,11 @@ class ParticleTracer:
                     if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
                         return el
             return None
+
+    def sample_Helium_Momentum(self):
+        T_Room = 300.0
+        sigma = np.sqrt(BOLTZMANN_CONSTANT * T_Room / MASS_HELIUM)
+        px = np.random.normal(loc=0.0, scale=sigma)
+        py = np.random.normal(loc=0.0, scale=sigma)
+        pz = np.random.normal(loc=0.0, scale=sigma)
+        return px, py, pz

@@ -5,6 +5,7 @@ I use a different form of units where the mass of a lithium 7 atom is taken as 1
 magneton. Every other constant is the same
 """
 MASS_LITHIUM_7=1.165034676538e-26 #mass of lithium 7, kg
+MASS_HELIUM=6.64216e-27 #mass of lithium 7, kg
 BHOR_MAGNETON=9.274009994e-24 #Bohr magneton, SI
 BOLTZMANN_CONSTANT=1.38064852e-23 #Boltzman constant, SI
 MAGNETIC_PERMEABILITY=1.25663706212*1e-6

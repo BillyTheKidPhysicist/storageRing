@@ -308,14 +308,14 @@ class SwarmTracer:
                 setattr(particle, key, val)
         return swarm
     def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=False, fastMode=True, copySwarm=True, accelerated=False,
-                                    stepsBetweenLogging=1,energyCorrection=False)-> Swarm:
+                                    stepsBetweenLogging=1,energyCorrection=False,tau_Collision=None)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
         else:
             swarmNew = swarm
         def trace_Particle(particle):
             particleNew = self.particleTracer.trace(particle, h, T, fastMode=fastMode, accelerated=accelerated,
-                                             stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection)
+            stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection,tau_Collision=tau_Collision)
             return particleNew
         if parallel=='superfast':
             #use trick of accessing only the important class variabels and passing those through. about 30%
