@@ -215,41 +215,40 @@ class RectangularPrism:
 
 class Layer:
     # class object for a layer of the magnet. Uses the RectangularPrism object
-    def __init__(self, z, width, length, M=M_Default):
+    def __init__(self, z, width, length,rp, M=M_Default):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
         # width: width of the rectangular prism in the xy plane
         # length: length of the rectangular prism in the z axis
         # M: magnetization, SI
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
-        assert width > 0.0 and length > 0.0  and M > 0.0
+        assert width > 0.0 and length > 0.0  and M > 0.0 and rp>0.0
         self.z = z
         self.width = width
         self.length = length
+        self.rp=rp
         self.M = M
         self.RectangularPrismsList = []  # list of RectangularPrisms
-    def build(self, r):
-        #r: bore radius of the layer
+        self.build()
+    def build(self):
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
         thetaArr=np.linspace(0,2*np.pi,12,endpoint=False) #location of 12 magnets
         phiArr=np.pi+np.arange(0,13)*2*np.pi/3 #orientation of 12 magnets. I add pi to make it the direction I like
-        r=r+self.width/2 # need to add the magnet width because their coordinates are in the center
+        r=self.rp+self.width/2 # need to add the magnet width because their coordinates are in the center
         for theta,phi in zip(thetaArr,phiArr):
             # x,y=r*np.cos(theta),r*np.sin(theta)
             # plt.quiver(x,y,np.cos(phi),np.sin(phi))
             magnet=RectangularPrism(self.width, self.length,self.M)
             magnet.place(r,theta,self.z,phi)
             self.RectangularPrismsList.append(magnet)
-
-
-        # plt.gca().set_aspect('equal')
-        # plt.show()
     def B(self, r):
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        BArr = 0
+        assert len(self.RectangularPrismsList)>0
+        BArr=np.zeros(r.shape)
         for prism in self.RectangularPrismsList:
             BArr += prism.B(r)
+
         return BArr
 
 
@@ -275,7 +274,7 @@ class HalbachLens:
             self.length=width
         else:
             self.length=length
-        self.concentricLayerList=[] #object to hold layers
+        self.layerList=[] #object to hold layers
         self.M=M
         #euler angles. Order of operation is theta and then psi, done in the reference frame of the lens. In reality
         #the rotations are done to the evaluation point, then the resulting vector is rotated back
@@ -285,11 +284,6 @@ class HalbachLens:
         self.ROutTheta=None #rotation matrix to rotate the vector out of the tilted frame to the original frame
 
         self._build()
-    def check_Field_For_Reasonable_Values(self,r,BArr):
-        radiusArr=npl.norm(r[:,:2],axis=1)
-        indicesToCheck=radiusArr<.95*min(self.rp)
-        maxReasonableField=1.5 #tesla
-        if BArr[indicesToCheck].max()>maxReasonableField: warnings.warn("Max field is unreasonable")
     def position(self,r0):
         #position the magnet in space
         #r0: 3d position vector of the center of the magnet
@@ -303,12 +297,11 @@ class HalbachLens:
         #vector out after evaluating with the rotated coordinates
     def _build(self):
         #build the lens.
-        self.concentricLayerList=[]
+        self.layerList=[]
         z=0.0
         for radiusLayer,widthLayer in zip(self.rp,self.width):
-            layer=Layer(z,widthLayer,self.length,M=self.M)
-            layer.build(radiusLayer)
-            self.concentricLayerList.append(layer)
+            layer=Layer(z,widthLayer,self.length,radiusLayer,M=self.M)
+            self.layerList.append(layer)
     def _transform_r(self,r):
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
@@ -356,10 +349,9 @@ class HalbachLens:
             rEval=r.copy()
         rEval=self._transform_r(rEval)
         BArr=np.zeros(rEval.shape)
-        for layer in self.concentricLayerList:
+        for layer in self.layerList:
             BArr+=layer.B(rEval)
         BArr=self._transform_Vector(BArr)
-        self.check_Field_For_Reasonable_Values(rEval,BArr)
         if len(r.shape)==1:
             return BArr[0]
         else:
@@ -470,18 +462,36 @@ class SegmentedBenderHalbach(HalbachLens):
         else:
             return BArr
 
-class GeneticLens:
+class GeneticLens(HalbachLens):
     def __init__(self,DNA_List):
-        #DNA: list of arguments to construct lens. each entry in the list corresponds to a single layer. Layers
+        #DNA: list of dictionaries to construct lens. each entry in the list corresponds to a single layer. Layers
         #are assumed to be stacked on top of each other in the order they are entered. No support for multiple
         #concentric layers. arguments in first list entry are:
         #[radius, magnet width,length]
+        #lens is centered at z=0
         numDNA_Args=3
         assert all(len(DNA)==numDNA_Args for DNA in DNA_List)
         self.numLayers=len(DNA_List)
-        self.length=sum([DNA[2] for DNA in DNA_List])
+        self.length=sum([DNA['length'] for DNA in DNA_List])
+        self.DNA_List=DNA_List
+        self.theta=None
+
+        self.zArr=self.make_zArr()
+        self.layerList=[] #genetic lens is modeled as a list of layers
+        self.build()
+    def build(self):
+        for DNA,z in zip(self.DNA_List,self.zArr):
+            layer=Layer(z,DNA['width'],DNA['length'],DNA['rp'])
+            self.layerList.append(layer)
+
+    def make_zArr(self):
         if self.numLayers==1:
-            self.zArr=np.asarray([0])
+            return np.zeros(1)
         else:
-            self.zArr=np.linspace(-(self.length/2+(self.numLayers-2)*self.length/2),
-                                  (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
+            L_List=[DNA['length'] for DNA in self.DNA_List]
+            L_Cumsum=np.cumsum(L_List)
+            zList=[]
+            for L,DNA in zip(L_Cumsum,self.DNA_List):
+                zList.append(L-DNA['length']/2)
+            zArr=np.asarray(zList)-self.length/2
+            return zArr
