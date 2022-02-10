@@ -380,7 +380,7 @@ class HalbachLens:
         for layer in self.layerList:
             BArr+=layer.B(rEval)
         BArr=self._transform_Vector(BArr)
-        self.check_Field_For_Reasonable_Values(r,BArr)
+        self.check_Field_For_Reasonable_Values(rEval,BArr)
         if len(r.shape)==1:
             return BArr[0]
         else:
