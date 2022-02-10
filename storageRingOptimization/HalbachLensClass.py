@@ -275,8 +275,7 @@ class HalbachLens:
             self.length=width
         else:
             self.length=length
-        self.layerList=[] #object to hold layers
-        self.layerArgs=[] #list of tuples of arguments for each layer
+        self.concentricLayerList=[] #object to hold layers
         self.M=M
         #euler angles. Order of operation is theta and then psi, done in the reference frame of the lens. In reality
         #the rotations are done to the evaluation point, then the resulting vector is rotated back
@@ -285,14 +284,7 @@ class HalbachLens:
         self.RInTheta=None #rotation matrix for the evaluation points to generate the final value
         self.ROutTheta=None #rotation matrix to rotate the vector out of the tilted frame to the original frame
 
-        #too be used when including different longitudinal layers
-        # if numLayers==1:
-        #     self.zArr=np.asarray([0])
-        # else:
-        #     self.zArr=np.linspace(-(self.length/2+(self.numLayers-2)*self.length/2),
-        #                           (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
-        if rp is not None:
-            self.set_Radius_And_Build(self.rp) #this is for when variable longitudinal layers are eventually used
+        self._build()
     def check_Field_For_Reasonable_Values(self,r,BArr):
         radiusArr=npl.norm(r[:,:2],axis=1)
         indicesToCheck=radiusArr<.95*min(self.rp)
@@ -311,25 +303,12 @@ class HalbachLens:
         #vector out after evaluating with the rotated coordinates
     def _build(self):
         #build the lens.
-        self.layerList=[]
+        self.concentricLayerList=[]
         z=0.0
-        for radiusLayer,widthLayer in zip(self.layerArgs,self.width):
+        for radiusLayer,widthLayer in zip(self.rp,self.width):
             layer=Layer(z,widthLayer,self.length,M=self.M)
             layer.build(radiusLayer)
-            self.layerList.append(layer)
-    def update(self,layerArgs):
-        #update the lens with new arguments. Requires all the arguments that the lens requires
-        #layerArgs: List of tuple of arguments, one tuple per layer.
-        self.layerArgs=layerArgs
-        self._build()
-    def set_Radius_And_Build(self,rpListTemp):
-        #set the radius of the entire lens. There are 3 fundamental magnets in the halbach hexapole, and each can have a
-        #unique radius, so they are set independently here. Allows for tunability in other applications
-        #r: radius, meter
-        self.layerArgs=[]
-        for r in rpListTemp:
-            self.layerArgs.append(r)
-        self._build()
+            self.concentricLayerList.append(layer)
     def _transform_r(self,r):
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
@@ -377,7 +356,7 @@ class HalbachLens:
             rEval=r.copy()
         rEval=self._transform_r(rEval)
         BArr=np.zeros(rEval.shape)
-        for layer in self.layerList:
+        for layer in self.concentricLayerList:
             BArr+=layer.B(rEval)
         BArr=self._transform_Vector(BArr)
         self.check_Field_For_Reasonable_Values(rEval,BArr)
@@ -484,9 +463,25 @@ class SegmentedBenderHalbach(HalbachLens):
         BArr=np.zeros(rEval0.shape)
         for lens in self.lensList:
             rEval=lens._transform_r(rEval0)
-            for layer in lens.layerList:
+            for layer in lens.concentricLayerList:
                 BArr += lens._transform_Vector(layer.B(rEval))
         if len(r.shape)==1:
             return BArr[0]
         else:
             return BArr
+
+class GeneticLens:
+    def __init__(self,DNA_List):
+        #DNA: list of arguments to construct lens. each entry in the list corresponds to a single layer. Layers
+        #are assumed to be stacked on top of each other in the order they are entered. No support for multiple
+        #concentric layers. arguments in first list entry are:
+        #[radius, magnet width,length]
+        numDNA_Args=3
+        assert all(len(DNA)==numDNA_Args for DNA in DNA_List)
+        self.numLayers=len(DNA_List)
+        self.length=sum([DNA[2] for DNA in DNA_List])
+        if self.numLayers==1:
+            self.zArr=np.asarray([0])
+        else:
+            self.zArr=np.linspace(-(self.length/2+(self.numLayers-2)*self.length/2),
+                                  (self.length/2+(self.numLayers-2)*self.length/2),num=self.numLayers)
