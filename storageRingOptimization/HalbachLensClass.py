@@ -495,3 +495,7 @@ class GeneticLens(HalbachLens):
                 zList.append(L-DNA['length']/2)
             zArr=np.asarray(zList)-self.length/2
             return zArr
+    def minimum_Radius(self):
+        minRadius=min([DNA['rp'] for DNA in self.DNA_List])
+        assert minRadius>0.0
+        return minRadius
