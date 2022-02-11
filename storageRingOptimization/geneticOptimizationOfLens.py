@@ -1,5 +1,6 @@
+from asyncDE import solve_Async
 import matplotlib.pyplot as plt
-import multiprocess as mp
+import time
 from HalbachLensClass import GeneticLens
 import numpy as np
 import scipy.optimize as spo
@@ -17,6 +18,10 @@ class GeneticLens_Analyzer:
         coords = np.column_stack((np.ones(len(self._zArr)) * x0, np.ones(len(self._zArr)) * y0, self._zArr))
         valList = np.linalg.norm(self.lens.BNorm_Gradient(coords)[:,:2],axis=1)
         return np.asarray(valList)
+    def BNormTrans_Grad_At_Coords(self,coords):
+        assert np.all(np.sqrt(coords[:,0] ** 2 + coords[:,1] ** 2) < self.lens.minimum_Radius())
+        BNormTrans_Grad_List = np.linalg.norm(self.lens.BNorm_Gradient(coords)[:, :2], axis=1)
+        return np.asarray(BNormTrans_Grad_List)
     def field_Integral_And_CenterValue(self,x0, y0):
         valList = self.BNormGrad_Along_Line(x0, y0)
         centerIndex = np.argmin(np.abs(self._zArr - 0))
@@ -25,32 +30,32 @@ class GeneticLens_Analyzer:
         # plt.plot(self._zArr,valList)
         # plt.show()
         return centerVal,integral
-    def field_Quality(self):
+    def _make_Field_Quality_Coords(self):
         rArr = np.linspace(.1*self.apLens, self.apLens, 5)
         numAnglesArr=np.linspace(3,11,len(rArr)).astype(int)
-        # for numAngles in numAnglesArr:
-        fieldIntegralList=[]
-        rList=[]
-        for r,numAngles in zip(rArr,numAnglesArr):
-            angleArr=np.linspace(0.0,np.pi/6,numAngles)
+        xList = []
+        yList = []
+        for r, numAngles in zip(rArr, numAnglesArr):
+            angleArr = np.linspace(0.0, np.pi / 6, numAngles)
             for angle in angleArr:
-                x=r * np.cos(angle)
-                y=r*np.sin(angle)
-                rList.append(r)
-                centerVal,fieldIntegral=self.field_Integral_And_CenterValue(x,y)
-                fieldIntegralList.append(fieldIntegral)
-        rArr=np.asarray(rList)
-        fieldIntegralArr=np.asarray(fieldIntegralList)
-        m,b=np.polyfit(rList,fieldIntegralList,1)
+                xList.extend(r * np.cos(angle) * np.ones(len(self._zArr)))
+                yList.extend(r * np.sin(angle) * np.ones(len(self._zArr)))
+        numLines=int(len(xList)/len(self._zArr))
+        zArrRepeated = np.tile(self._zArr, numLines)
+        coords = np.column_stack((xList, yList, zArrRepeated))
+        return coords
+    def field_Quality(self):
+        fieldQualityCoords=self._make_Field_Quality_Coords()
+        valsAtCoords=self.BNormTrans_Grad_At_Coords(fieldQualityCoords)
+        valsAlongLines=valsAtCoords.reshape(-1,len(self._zArr))
+        fieldIntegralArr=np.trapz(valsAlongLines,axis=1)
+        xyArr=fieldQualityCoords[::50][:,:2]
+        rArr=np.linalg.norm(xyArr,axis=1)
+
+        m,b=np.polyfit(rArr,fieldIntegralArr,1)
         relativeResiduals=1e2*(fieldIntegralArr-(m*rArr+b))/fieldIntegralArr
         qualityFactor=np.sqrt(np.sum(relativeResiduals**2))/len(relativeResiduals)
         return qualityFactor
-
-        # plt.scatter(rArr,fieldIntegralArr)
-        # plt.plot(rArr,rArr*m+b)
-        # plt.show()
-        # plt.plot(rArr,relativeResiduals)
-        # plt.show()
     def field_Gradient_Strength(self):
         xArr = np.linspace(-self.apLens, self.apLens, 10)
         coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
@@ -80,22 +85,12 @@ def _cost(args0):
     cost=1e2*quality/fieldStrength
     return cost
 
-# Xi=np.array([0.05061419, 0.05315874, 0.05806932, 0.06425857])
-# _cost(Xi)
 Xi=[apMin*1.1]*(numSlices//2 + 1)
 cost0=_cost(Xi)
 def cost(args):
     cost=_cost(args)/cost0
-    print(args,cost)
     return cost
 
-
 bounds=[(apMin+1e-6,.075)]*(numSlices//2 + 1)
-sol=spo.differential_evolution(cost,bounds,polish=False,workers=9,disp=True,maxiter=30)
+sol=solve_Async(cost,bounds,100,tol=.03,surrogateMethodProb=.1)
 print(sol)
-
-# X0=np.array([0.0464599 , 0.04983626, 0.05269872, 0.05300803, 0.05456089,
-#        0.05668497, 0.05601397, 0.06005384, 0.06131109, 0.06931891,
-#        0.06288761])
-# sol=spo.minimize(cost,X0,bounds=bounds,method='Nelder-Mead')
-# print(sol)
