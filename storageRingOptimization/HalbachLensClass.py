@@ -455,7 +455,7 @@ class SegmentedBenderHalbach(HalbachLens):
         BArr=np.zeros(rEval0.shape)
         for lens in self.lensList:
             rEval=lens._transform_r(rEval0)
-            for layer in lens.concentricLayerList:
+            for layer in lens.layerList:
                 BArr += lens._transform_Vector(layer.B(rEval))
         if len(r.shape)==1:
             return BArr[0]
