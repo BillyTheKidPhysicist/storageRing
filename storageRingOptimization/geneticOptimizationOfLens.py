@@ -6,7 +6,7 @@ import numpy as np
 import scipy.optimize as spo
 from profilehooks import profile
 
-
+SMALL_NUMBER=1E-10
 class GeneticLens_Analyzer:
     def __init__(self,DNA_List,apLens):
         self.lens = GeneticLens(DNA_List)
@@ -35,12 +35,13 @@ class GeneticLens_Analyzer:
         numAnglesArr=np.linspace(3,11,len(rArr)).astype(int)
         xList = []
         yList = []
+
         for r, numAngles in zip(rArr, numAnglesArr):
             angleArr = np.linspace(0.0, np.pi / 6, numAngles)
             for angle in angleArr:
                 xList.extend(r * np.cos(angle) * np.ones(len(self._zArr)))
                 yList.extend(r * np.sin(angle) * np.ones(len(self._zArr)))
-        numLines=int(len(xList)/len(self._zArr))
+        numLines=sum(numAnglesArr)
         zArrRepeated = np.tile(self._zArr, numLines)
         coords = np.column_stack((xList, yList, zArrRepeated))
         return coords
@@ -49,9 +50,9 @@ class GeneticLens_Analyzer:
         valsAtCoords=self.BNormTrans_Grad_At_Coords(fieldQualityCoords)
         valsAlongLines=valsAtCoords.reshape(-1,len(self._zArr))
         fieldIntegralArr=np.trapz(valsAlongLines,axis=1)
-        xyArr=fieldQualityCoords[::50][:,:2]
+        xyArr=fieldQualityCoords[::len(self._zArr)][:,:2]
         rArr=np.linalg.norm(xyArr,axis=1)
-
+        assert np.all(rArr<self.apLens+SMALL_NUMBER)==True
         m,b=np.polyfit(rArr,fieldIntegralArr,1)
         relativeResiduals=1e2*(fieldIntegralArr-(m*rArr+b))/fieldIntegralArr
         qualityFactor=np.sqrt(np.sum(relativeResiduals**2))/len(relativeResiduals)
@@ -71,9 +72,9 @@ numSlicesTotal=12
 centerLayer=False
 numArgs=3
 if centerLayer==False:
-    assert numArgs*2==numSlicesTotal
+    numArgs=int(numSlicesTotal//2)
 else:
-    assert numArgs*2-1==numSlicesTotal
+    numArgs = int((numSlicesTotal+1) // 2)
 # @profile()
 def construct_Full_Args(args0):
     args0 = list(args0)

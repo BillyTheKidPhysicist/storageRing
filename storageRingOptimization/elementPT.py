@@ -150,13 +150,11 @@ class Element:
 
     def is_Coord_Inside(self, q):
         return None
-    def make_Interp_Functions(self, data,):
+    def make_Interp_Functions(self, data):
         # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
         # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
         # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
         # and the order of points doesn't matter
-
-        #todo: 10-30% of lattice generation time is spent here. I could reduce that to a factor of .25 by condensing
         #force function into someting that returns 3 scalars at once, and making the magnetic field component optional
         xArr=np.unique(data[:,0])
         yArr=np.unique(data[:,1])
@@ -1247,10 +1245,11 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.fill_Params()
     def fill_Params(self,externalDataProvided=False):
-        # longitudinalStepSize=1e-3
-        # transverseStepSize=500e-6
+        #todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
+        #of the bore radius
+
         numPointsLongitudinal=25
-        numPointsTransverse=30
+        numPointsTransverse=31
 
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
@@ -1274,7 +1273,7 @@ class HalbachLensSim(LensIdeal):
         # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
 
 
-        numXY=int((self.ap/self.rp)*numPointsTransverse)
+        numXY=numPointsTransverse
         #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
@@ -1304,7 +1303,10 @@ class HalbachLensSim(LensIdeal):
         zMin=-TINY_STEP
         zMax=self.Lcap+TINY_STEP
         zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
-
+        assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
+        assert len(xArr_Quadrant)%2==1 and len(yArr_Quadrant)%2==1
+        assert all((arr[-1]-arr[-2])/self.rp<.1 for arr in [xArr_Quadrant,yArr_Quadrant]),"" \
+                                                                    "spatial step size must be small compared to radius"
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
