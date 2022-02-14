@@ -68,30 +68,32 @@ class GeneticLens_Analyzer:
 apMin=.045
 rpCompare=.05
 L=.1524
-numSlicesTotal=12
+numSlicesTotal=6
 centerLayer=False
-numArgs=3
+magnetWidth=.0254
+numVarsPerLayer=2
 if centerLayer==False:
-    numArgs=int(numSlicesTotal//2)
+    numSlicesSymmetry=int(numSlicesTotal//2)
 else:
-    numArgs = int((numSlicesTotal+1) // 2)
+    numSlicesSymmetry = int((numSlicesTotal+1) // 2)
 # @profile()
 def construct_Full_Args(args0):
-    args0 = list(args0)
     args=args0.copy()
+    args=args.reshape(-1,numVarsPerLayer)
     if centerLayer==True:
-        argsBack = args0[:-1]
+        argsBack = args[:-1]
     else: #there is no center lens
-        argsBack = args0.copy()
-    argsBack.reverse()
-    args.extend(argsBack)
-    assert args[0] == args[-1] and len(args) == numSlicesTotal
+        argsBack = args.copy()
+    args=np.row_stack((args,np.flip(argsBack,axis=0)))
+    assert np.all(args[0] == args[-1]) and len(args) == numSlicesTotal
     return args
 def _cost(args0):
-    args=construct_Full_Args(args0)
+    args0=np.asarray(args0)
+    argsArr=np.asarray(construct_Full_Args(args0))
+    assert len(argsArr.shape)==2
     DNA_List=[]
-    for arg in args:
-        DNA_List.append({'rp':arg,'width':.0254,'length':L/len(args)})
+    for args in argsArr:
+        DNA_List.append({'rp':args[0],'width':magnetWidth*args[1],'length':L/len(argsArr)})
     Lens=GeneticLens_Analyzer(DNA_List,apMin)
     assert abs(Lens.lens.length-L)<1e-12
     quality=Lens.field_Quality()
@@ -100,14 +102,14 @@ def _cost(args0):
     cost=1e2*quality/fieldStrength
     return cost
 
-Xi=[rpCompare]*numArgs
+Xi=[rpCompare,1.0]*numSlicesSymmetry
 cost0=_cost(Xi)
 def cost(args):
     cost=_cost(args)/cost0
     return cost
 
-bounds=[(apMin+1e-6,.075)]*numArgs
-sol=solve_Async(cost,bounds,15*numArgs,tol=.001,surrogateMethodProb=.1)
+bounds=[(apMin+1e-6,.075),(.5,1.0)]*numSlicesSymmetry
+numDimensions=len(bounds)
+sol=solve_Async(cost,bounds,15*numDimensions,tol=.001,surrogateMethodProb=.1)
 print(sol)
 
-# args=[0.06327856 0.0555723  0.05146841]
