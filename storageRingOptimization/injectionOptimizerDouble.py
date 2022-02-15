@@ -1,6 +1,5 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-from elementPT import HalbachLensSim
 import random
 import time
 from asyncDE import solve_Async
@@ -10,7 +9,9 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Swarm
+from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
+
 
 V0=210
 def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
@@ -21,37 +22,44 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return False
     else:
         return True
-def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam,L1,L2)->ParticleTracerLattice:
-    fringeFrac=1.5
+def generate_Injector_Lattice(X) -> ParticleTracerLattice:
+    L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
+    LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
+    fringeFrac = 1.5
     apFrac=.95
-    L_InjectorMagnet=L_Injector-2*fringeFrac*rpInjector
-    if L_InjectorMagnet<1e-9:  # minimum fringe length must be respected.
+    LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
+    LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
+    if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
         return None
-    if loadBeamDiam>rpCombiner: #don't waste time exploring silly configurations
+    if loadBeamDiam>apFrac*rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
-    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector')
-    PTL_Injector.add_Drift(L1,ap=rpInjector)
+    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=False)
+    PTL_Injector.add_Drift(L1, ap=apFrac*rpInjectorMagnet1)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1, apFrac=apFrac)
+    PTL_Injector.add_Drift(L2, ap=apFrac*max([rpInjectorMagnet1,rpInjectorMagnet2]))
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2, apFrac=apFrac)
+    PTL_Injector.add_Drift(L3, ap=apFrac*rpInjectorMagnet2)
 
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjector,L_Injector,apFrac=apFrac)
-    PTL_Injector.add_Drift(L2,ap=apFrac*rpInjector)
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam)
-    PTL_Injector.end_Lattice(constrain=False,enforceClosedLattice=False)
+
+    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
+    PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     return PTL_Injector
+
+
+
 def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     jeremyGap=5e-2
     rpLensLast=.02
     rplensFirst=.02
     lastGap = 5e-2
-    L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2=X
+    L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
+    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,.5)
     PTL_Ring.add_Drift(lastGap)
-    try:
-        PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
-    except:
-        return None
+    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Ring.add_Drift(jeremyGap)
-    PTL_Ring.add_Halbach_Lens_Sim(rplensFirst, .1)
+    PTL_Ring.add_Halbach_Lens_Sim(rplensFirst, .2)
     PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False,surpressWarning=True)  # 17.8 % of time here
     return PTL_Ring
 
@@ -69,18 +77,20 @@ class Injection_Model(LatticeOptimizer):
         return cost
 
     def injected_Swarm_Cost(self):
+        fastMode=True
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             self.swarmInjectorInitial.quick_Copy()
             , self.h, 1.0, parallel=False,
-            fastMode=True, copySwarm=False,
+            fastMode=fastMode, copySwarm=False,
             accelerated=True)
         # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False)
         swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
         # print(swarmEnd.num_Particles(weighted=True))
         swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
 
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=True)
-        # self.latticeRing.show_Lattice(swarm=swarmRingTraced,finalCoords=False, showTraceLines=True, trueAspectRatio=False)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=fastMode)
+        # self.latticeRing.show_Lattice(swarm=swarmRingTraced,finalCoords=False, showTraceLines=True,
+        #                               trueAspectRatio=False)
         ne=self.latticeRing.elList[-1].ne
         endAngle=abs(ne[1]/ne[0])
         xMax=self.latticeRing.elList[-1].r2[0]
@@ -94,6 +104,7 @@ class Injection_Model(LatticeOptimizer):
         # print(numSurvivedWeighted)
         swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) - numSurvivedWeighted) \
                                 / self.swarmInjectorInitial.num_Particles(weighted=True)
+        # self.show_Floor_Plan()
         return swarmCost
     def floor_Plan_Cost(self):
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
@@ -111,21 +122,20 @@ class Injection_Model(LatticeOptimizer):
         plt.show()
     def floor_Plan_OverLap_mm(self):
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        assert len(injectorShapelyObjects)==4
-        overlapElIndex = 1
+        overlapElIndex=-3
         injectorLensShapely = injectorShapelyObjects[overlapElIndex]
-        assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
+        assert isinstance(self.latticeInjector.elList[overlapElIndex],HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
         area = 0
-        converTo_mm = (1e3) ** 2
+        converTo_mm=(1e3)**2
         for element in ringShapelyObjects:
-            area += element.intersection(injectorLensShapely).area * converTo_mm
-        area+=injectorShapelyObjects[2].intersection(ringShapelyObjects[0]).area*converTo_mm/10
+            area += element.intersection(injectorLensShapely).area*converTo_mm
+        area += injectorShapelyObjects[4].intersection(ringShapelyObjects[0]).area * converTo_mm / 10
         return area
 def injector_Cost(X):
     maximumCost=2.0
-    L_Injector_TotalMax = 1.0
-    PTL_I=generate_Injector_Lattice(*X)
+    L_Injector_TotalMax = 2.0
+    PTL_I=generate_Injector_Lattice(X)
     if PTL_I is None:
         return maximumCost
     if PTL_I.totalLength>L_Injector_TotalMax:
@@ -146,23 +156,19 @@ def main():
             np.set_printoptions(precision=100)
             print('failed with params',X)
             raise Exception()
-    # L_InjectorMagnet, rpInjectorMagnet, LmCombiner, rpCombiner,loadBeamDiam,L1,L2
-    bounds = [(.05, .5), (.005, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.03,.5),(.03,.5)]
-    for _ in range(1):
-        print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=0.1,tol=.01,disp=True,workers=8))
-    # args=[0.15630672 ,0.02294941, 0.14133239, 0.04233863, 0.01828147, 0.2481217,
- # 0.23321294]
- #    print(wrapper(args))
+
+    # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
+    # loadBeamDiam, L1, L2, L3
+    # bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
+    # (.01,.5),(.01,.3)]
+    # for _ in range(3):
+    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=8))
+    args = [0.29807248, 0.04453901 ,0.19418043, 0.03118965 ,0.19594843, 0.04991809,
+           0.02302727, 0.01  ,     0.16521442, 0.26193197]
+    print(wrapper(args))
 if __name__=="__main__":
     main()
 
 '''
-------ITERATIONS: 4410
-POPULATION VARIABILITY: [0.02002418 0.00735082 0.03328811 0.03747261 0.04054063 0.01262041
- 0.02359532]
-BEST MEMBER BELOW
----population member---- 
-DNA: [0.36759352 0.01463225 0.14569697 0.04130349 0.01488213 0.14432835
- 0.12596972]
-cost: 0.34753944232992556
+
 '''
