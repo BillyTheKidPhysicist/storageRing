@@ -222,7 +222,13 @@ class Layer:
         # M: magnetization, SI
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
-        assert width > 0.0 and length > 0.0  and M > 0.0 and rp>0.0
+        numMagsSymmetric=4
+        if isinstance(rp,Iterable):
+            assert len(rp)==numMagsSymmetric
+        else:
+            assert rp>0.0
+            rp=(rp,)*numMagsSymmetric
+        assert width > 0.0 and length > 0.0  and M > 0.0
         self.z = z
         self.width = width
         self.length = length
@@ -233,15 +239,21 @@ class Layer:
     def build(self):
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
-        thetaArr=np.linspace(0,2*np.pi,12,endpoint=False) #location of 12 magnets
-        phiArr=np.pi+np.arange(0,13)*2*np.pi/3 #orientation of 12 magnets. I add pi to make it the direction I like
-        r=self.rp+self.width/2 # need to add the magnet width because their coordinates are in the center
-        for theta,phi in zip(thetaArr,phiArr):
-            # x,y=r*np.cos(theta),r*np.sin(theta)
-            # plt.quiver(x,y,np.cos(phi),np.sin(phi))
-            magnet=RectangularPrism(self.width, self.length,self.M)
-            magnet.place(r,theta,self.z,phi)
-            self.RectangularPrismsList.append(magnet)
+        thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)  # location of 12 magnets
+        thetaArr=thetaArr.reshape(-1,4).T
+        phiArr = np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
+        phiArr=phiArr.reshape(-1,4).T
+
+        for r,r_phi,r_theta in zip(self.rp,phiArr,thetaArr):
+            for phi,theta in zip(r_phi,r_theta):
+                # x,y=r*np.cos(theta),r*np.sin(theta)
+                # plt.quiver(x,y,np.cos(phi),np.sin(phi))
+                magnet = RectangularPrism(self.width, self.length, self.M)
+                rCenter=r+self.width/2
+                magnet.place(rCenter, theta, self.z, phi)
+                self.RectangularPrismsList.append(magnet)
+        # plt.gca().set_aspect('equal')
+        # plt.show()
     def B(self, r):
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
         assert len(self.RectangularPrismsList)>0
@@ -470,21 +482,19 @@ class GeneticLens(HalbachLens):
         #[radius, magnet width,length]
         #lens is centered at z=0
         numDNA_Args=3
-        assert all(len(DNA)==numDNA_Args for DNA in DNA_List)
+        assert all(len(DNA)==numDNA_Args  for DNA in DNA_List)
         self.numLayers=len(DNA_List)
         self.length=sum([DNA['length'] for DNA in DNA_List])
         self.DNA_List=DNA_List
         self.theta=None
-
-        self.zArr=self.make_zArr()
+        self.zArrLayers=self.make_zArr_Layers()
         self.layerList=[] #genetic lens is modeled as a list of layers
         self.build()
     def build(self):
-        for DNA,z in zip(self.DNA_List,self.zArr):
+        for DNA,z in zip(self.DNA_List,self.zArrLayers):
             layer=Layer(z,DNA['width'],DNA['length'],DNA['rp'])
             self.layerList.append(layer)
-
-    def make_zArr(self):
+    def make_zArr_Layers(self):
         if self.numLayers==1:
             return np.zeros(1)
         else:
@@ -495,11 +505,26 @@ class GeneticLens(HalbachLens):
                 zList.append(L-DNA['length']/2)
             zArr=np.asarray(zList)-self.length/2
             return zArr
-    def minimum_Radius(self):
-        minRadius=min([DNA['rp'] for DNA in self.DNA_List])
-        assert minRadius>0.0
-        return minRadius
+    def _radius_Maxima(self,which):
+        radiusList=[]
+        for DNA in self.DNA_List:
+            if isinstance(DNA['rp'],Iterable):
+                radiusList.extend(DNA['rp'])
+            else: radiusList.append(DNA['rp'])
+        if which=='max':
+            return max(radiusList)
+        elif which=='min':
+            return min(radiusList)
     def maximum_Radius(self):
-        minRadius=max([DNA['rp'] for DNA in self.DNA_List])
-        assert minRadius>0.0
-        return minRadius
+        return self._radius_Maxima('max')
+    def minimum_Radius(self):
+        return self._radius_Maxima('min')
+# DNA_List=[{'rp':(.5,.05,.1,.1),'width':.0254,'length':.1}]
+# lens=GeneticLens(DNA_List)
+#
+# rp=.04
+# xArr=np.linspace(-rp,rp)
+# coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
+# image=np.asarray([lens.BNorm(coord) for coord in coords]).reshape(50,50)
+# plt.imshow(image)
+# plt.show()

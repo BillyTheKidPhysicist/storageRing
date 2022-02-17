@@ -27,7 +27,8 @@ def main():
         # (.02,.05)  #rpCombiner
         ]
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
-    print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
+    # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
+    # wrapper(X)
 if __name__=='__main__':
     main()
 '''

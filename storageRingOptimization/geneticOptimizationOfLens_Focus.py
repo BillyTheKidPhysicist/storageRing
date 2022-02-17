@@ -19,9 +19,9 @@ class GeneticLens_Analyzer:
 apMin=.045
 rpCompare=.05
 L=.3
-numSlicesTotal=15
+numSlicesTotal=6
 magnetWidth=.0254
-numVarsPerLayer=1
+numVarsPerLayer=4
 numSlicesSymmetry=int(numSlicesTotal//2 +numSlicesTotal%2)
 # @profile()
 def construct_Full_Args(args0):
@@ -42,11 +42,10 @@ def _initial_Focus_And_Cost(args0):
     assert len(argsArr.shape) == 2
     DNA_List = [{'rp': args[0], 'width': magnetWidth, 'length': L / len(argsArr)} for args in argsArr]
     Lens = GeneticLens(DNA_List)
-    assert abs(Lens.length - L) < 1e-12
     IPeak0, m0 = IPeak_And_Magnification(Lens, apMin)
     return IPeak0,m0
 
-Xi=[rpCompare]*numSlicesSymmetry
+Xi=[rpCompare]*numSlicesSymmetry*numVarsPerLayer
 IPeak0,m0=_initial_Focus_And_Cost(Xi)
 
 def cost_Function(args0):
@@ -61,11 +60,11 @@ def cost_Function(args0):
     magCost=1+abs(m/m0-1) #goal is to keep this the same
     cost=focusCost*magCost
     return cost
-
 bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry
-numDimensions=len(bounds)
-sol=solve_Async(cost_Function,bounds,15*numDimensions,tol=.01,surrogateMethodProb=.1,workers=8)
-print(sol)
+# spo.minimize(cost_Function,Xi,bounds=bounds)
+# numDimensions=len(bounds)
+# sol=solve_Async(cost_Function,bounds,15*numDimensions,tol=.01,surrogateMethodProb=.1,workers=8)
+# print(sol)
 
 """
 BEST MEMBER BELOW
