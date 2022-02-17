@@ -166,6 +166,11 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
+    def add_Genetic_lens(self,lens,ap):
+        from lensGeneticElement import geneticLensElement
+        el=geneticLensElement(self,lens,ap)
+        el.index = len(self.elList) #where the element is in the lattice
+        self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m

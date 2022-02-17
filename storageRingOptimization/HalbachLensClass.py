@@ -499,3 +499,7 @@ class GeneticLens(HalbachLens):
         minRadius=min([DNA['rp'] for DNA in self.DNA_List])
         assert minRadius>0.0
         return minRadius
+    def maximum_Radius(self):
+        minRadius=max([DNA['rp'] for DNA in self.DNA_List])
+        assert minRadius>0.0
+        return minRadius

@@ -135,7 +135,11 @@ class Injection_Model(LatticeOptimizer):
 def injector_Cost(X):
     maximumCost=2.0
     L_Injector_TotalMax = 2.0
-    PTL_I=generate_Injector_Lattice(X)
+    try:
+        PTL_I=generate_Injector_Lattice(X)
+    except:
+        print('exception')
+        return maximumCost
     if PTL_I is None:
         return maximumCost
     if PTL_I.totalLength>L_Injector_TotalMax:
@@ -159,13 +163,10 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    # bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
-    # (.01,.5),(.01,.3)]
-    # for _ in range(3):
-    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=8))
-    args = [0.29807248, 0.04453901 ,0.19418043, 0.03118965 ,0.19594843, 0.04991809,
-           0.02302727, 0.01  ,     0.16521442, 0.26193197]
-    print(wrapper(args))
+    bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
+    (.01,.5),(.01,.3)]
+    for _ in range(3):
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=8))
 if __name__=="__main__":
     main()
 

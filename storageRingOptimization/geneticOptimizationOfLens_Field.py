@@ -64,14 +64,14 @@ class GeneticLens_Analyzer:
         coords=np.column_stack((coords,np.zeros(len(coords))))
         BGradArr=self.lens.BNorm_Gradient(coords)[:,:2]
         return np.linalg.norm(BGradArr)
-
+#todo: dumb method with center layer
 apMin=.045
 rpCompare=.05
 L=.1524
 numSlicesTotal=6
 centerLayer=False
 magnetWidth=.0254
-numVarsPerLayer=2
+numVarsPerLayer=1
 if centerLayer==False:
     numSlicesSymmetry=int(numSlicesTotal//2)
 else:
@@ -93,7 +93,7 @@ def _cost(args0):
     assert len(argsArr.shape)==2
     DNA_List=[]
     for args in argsArr:
-        DNA_List.append({'rp':args[0],'width':magnetWidth*args[1],'length':L/len(argsArr)})
+        DNA_List.append({'rp':args[0],'width':magnetWidth,'length':L/len(argsArr)})
     Lens=GeneticLens_Analyzer(DNA_List,apMin)
     assert abs(Lens.lens.length-L)<1e-12
     quality=Lens.field_Quality()
@@ -102,14 +102,17 @@ def _cost(args0):
     cost=1e2*quality/fieldStrength
     return cost
 
-Xi=[rpCompare,1.0]*numSlicesSymmetry
+Xi=[rpCompare]*numSlicesSymmetry
 cost0=_cost(Xi)
-def cost(args):
-    cost=_cost(args)/cost0
-    return cost
+# print('------')
+# Xi=[rpCompare+.02]*numSlicesSymmetry
+# cost0=_cost(Xi)
+# def cost(args):
+#     cost=_cost(args)/cost0
+#     return cost
 
-bounds=[(apMin+1e-6,.075),(.5,1.0)]*numSlicesSymmetry
-numDimensions=len(bounds)
-sol=solve_Async(cost,bounds,15*numDimensions,tol=.001,surrogateMethodProb=.1)
-print(sol)
-
+# bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry
+# numDimensions=len(bounds)
+# sol=solve_Async(cost,bounds,15*numDimensions,tol=.01,surrogateMethodProb=.1,workers=8)
+# print(sol)
+# args=[0.06433653, 0.06447622, 0.05795036, 0.05538298, 0.05306453 ,0.05131647]

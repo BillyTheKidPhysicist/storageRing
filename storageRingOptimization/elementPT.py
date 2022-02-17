@@ -1314,7 +1314,9 @@ class HalbachLensSim(LensIdeal):
         self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func_Cap()
         self.compile_Fast_Numba_Force_Function()
-
+        F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
+        F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
+        assert F_edge/F_center<.01
 
     def fill_Field_Func_Cap(self):
         interpF, interpV = self.make_Interp_Functions(self.data3D)
@@ -1395,7 +1397,7 @@ class HalbachLensSim(LensIdeal):
 
 
 class CombinerHexapoleSim(Element):
-    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode):
+    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,fillParams=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -1426,7 +1428,8 @@ class CombinerHexapoleSim(Element):
         # the y, with angle self.ang, will exit at x,y=0,0
         self.force_Func=None
         self.magnetic_Potential_Func=None
-        self.fill_Params()
+        if fillParams==True:
+            self.fill_Params()
 
     def fill_Params(self):
         #todo: this is filthy
@@ -1468,6 +1471,9 @@ class CombinerHexapoleSim(Element):
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func(data3D)
+        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
+        assert F_edge / F_center < .01
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
 
