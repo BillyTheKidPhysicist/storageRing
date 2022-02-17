@@ -116,21 +116,25 @@ def generate_Lattice(configuration):
     else:
         raise Exception('no proper configuration name provided')
     return PTL
-def TEST_Lattice_Configuration(configuration,saveData=False):
+def TEST_Lattice_Configuration(configuration,fullTest,saveData):
     PTL=generate_Lattice(configuration)
     testSwarm=generate_Test_Swarm(configuration)
     TESTName='test_'+configuration
     if saveData==True:
         save_TEST_Data(PTL,testSwarm,TESTName)
-    else:
+    elif fullTest==True:
         for fastMode in [True,False]:
             for parallel in [True,False]:
                 for accelerated in [True,False]:
                     TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
-def TEST_All(saveData=False):
+    elif fullTest==False:
+        fastMode,accelerated,parallel=False,False,False
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
+
+def TEST_All(saveData=False,fullTest=True):
     tests=['1','2','3','4','5','6']
     for testNum in tests:
         print('Test number '+testNum)
-        TEST_Lattice_Configuration(testNum,saveData=saveData)
+        TEST_Lattice_Configuration(testNum,fullTest,saveData)
         print('Success')
 TEST_All()

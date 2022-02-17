@@ -1471,9 +1471,6 @@ class CombinerHexapoleSim(Element):
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func(data3D)
-        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
-        F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
-        assert F_edge / F_center < .01
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
 
@@ -1503,6 +1500,9 @@ class CombinerHexapoleSim(Element):
             "field region must extend past particle region"
 
         self.compile_Fast_Numba_Force_Function()
+        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
+        assert F_edge / F_center < .01
     def find_Ideal_Offset(self):
         #use newton's method to find where the minimum seperation between atomic beam PATH and lens is equal to the
         #beam diameter for INJECTED beam. This requires modeling high field seekers. A larger output offset produces

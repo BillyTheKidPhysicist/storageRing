@@ -10,6 +10,7 @@ from SwarmTracerClass import SwarmTracer
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Swarm
 from elementPT import HalbachLensSim
+from line_profiler_pycharm import profile
 import matplotlib.pyplot as plt
 
 
@@ -22,13 +23,16 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return False
     else:
         return True
-def generate_Injector_Lattice(X) -> ParticleTracerLattice:
+def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
-    apFrac=.95
+    apFrac=.98
     LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
     LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
+    aspect1,aspect2=LMagnet1/rpInjectorMagnet1,LMagnet2/rpInjectorMagnet2
+    if aspect1<1.0 or aspect2<1.0:
+        return None
     if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
         return None
     if loadBeamDiam>apFrac*rpCombiner: #silly if load beam doens't fit in half of magnet
@@ -46,7 +50,6 @@ def generate_Injector_Lattice(X) -> ParticleTracerLattice:
     return PTL_Injector
 
 
-
 def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     jeremyGap=5e-2
     rpLensLast=.02
@@ -55,7 +58,7 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,.5)
+    PTL_Ring.add_Drift(rpLensLast) #models the size of the lengs
     PTL_Ring.add_Drift(lastGap)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Ring.add_Drift(jeremyGap)
@@ -136,9 +139,9 @@ def injector_Cost(X):
     maximumCost=2.0
     L_Injector_TotalMax = 2.0
     try:
-        PTL_I=generate_Injector_Lattice(X)
+        PTL_I=generate_Injector_Lattice_Double_Lens(X)
     except:
-        print('exception')
+        print('exception',repr(X))
         return maximumCost
     if PTL_I is None:
         return maximumCost
@@ -158,18 +161,17 @@ def main():
             return injector_Cost(X)
         except:
             np.set_printoptions(precision=100)
-            print('failed with params',X)
+            print('failed with params',repr(X))
             raise Exception()
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
     bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
     (.01,.5),(.01,.3)]
-    for _ in range(3):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=8))
+    for _ in range(1):
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=9))
+    # X=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
+ # ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
+ #    wrapper(X)
 if __name__=="__main__":
     main()
-
-'''
-
-'''

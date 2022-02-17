@@ -101,8 +101,8 @@ def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1
 
 def solve_For_Lattice_Params(X):
 
-    XInjector=[0.29807248, 0.04453901 ,0.19418043, 0.03118965 ,0.19594843, 0.04991809,
-        0.02302727, 0.01  ,     0.16521442, 0.26193197]
+    XInjector=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
+        ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
 
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
     loadBeamDiam, L1, L2, L3=XInjector
