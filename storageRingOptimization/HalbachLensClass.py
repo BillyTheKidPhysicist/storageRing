@@ -222,12 +222,12 @@ class Layer:
         # M: magnetization, SI
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
-        numMagsSymmetric=4
+        self.numMagsSymmetric=3
         if isinstance(rp,Iterable):
-            assert len(rp)==numMagsSymmetric
+            assert len(rp)==self.numMagsSymmetric
         else:
             assert rp>0.0
-            rp=(rp,)*numMagsSymmetric
+            rp=(rp,)*self.numMagsSymmetric
         assert width > 0.0 and length > 0.0  and M > 0.0
         self.z = z
         self.width = width
@@ -240,10 +240,9 @@ class Layer:
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
         thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)  # location of 12 magnets
-        thetaArr=thetaArr.reshape(-1,4).T
+        thetaArr=thetaArr.reshape(-1,self.numMagsSymmetric).T
         phiArr = np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
-        phiArr=phiArr.reshape(-1,4).T
-
+        phiArr=phiArr.reshape(-1,self.numMagsSymmetric).T
         for r,r_phi,r_theta in zip(self.rp,phiArr,thetaArr):
             for phi,theta in zip(r_phi,r_theta):
                 # x,y=r*np.cos(theta),r*np.sin(theta)
@@ -519,12 +518,13 @@ class GeneticLens(HalbachLens):
         return self._radius_Maxima('max')
     def minimum_Radius(self):
         return self._radius_Maxima('min')
-# DNA_List=[{'rp':(.5,.05,.1,.1),'width':.0254,'length':.1}]
+# DNA_List=[{'rp':(.05,.055,.06),'width':.0254,'length':.1}]
 # lens=GeneticLens(DNA_List)
 #
-# rp=.04
+# rp=.03
 # xArr=np.linspace(-rp,rp)
 # coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
 # image=np.asarray([lens.BNorm(coord) for coord in coords]).reshape(50,50)
+# print(np.sum(image)) #455.17114875612043
 # plt.imshow(image)
 # plt.show()

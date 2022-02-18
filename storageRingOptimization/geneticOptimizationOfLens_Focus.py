@@ -1,11 +1,12 @@
 from asyncDE import solve_Async
 import matplotlib.pyplot as plt
 import time
+from parallel_Gradient_Descent import global_Descent_Optimize,solve_Grad_Descent
 from HalbachLensClass import GeneticLens
 import numpy as np
 import scipy.optimize as spo
 from profilehooks import profile
-from temp5 import IPeak_And_Magnification
+from temp5 import IPeak_And_Magnification_From_Lens
 
 SMALL_NUMBER=1E-10
 class GeneticLens_Analyzer:
@@ -21,7 +22,7 @@ rpCompare=.05
 L=.3
 numSlicesTotal=6
 magnetWidth=.0254
-numVarsPerLayer=4
+numVarsPerLayer=3
 numSlicesSymmetry=int(numSlicesTotal//2 +numSlicesTotal%2)
 # @profile()
 def construct_Full_Args(args0):
@@ -36,48 +37,34 @@ def construct_Full_Args(args0):
     return args
 
 
-def _initial_Focus_And_Cost(args0):
+def IPeak_And_Magnification(args0):
     args0 = np.asarray(args0)
     argsArr = np.asarray(construct_Full_Args(args0))
     assert len(argsArr.shape) == 2
-    DNA_List = [{'rp': args[0], 'width': magnetWidth, 'length': L / len(argsArr)} for args in argsArr]
+    DNA_List = [{'rp': args, 'width': magnetWidth, 'length': L / len(argsArr)} for args in argsArr]
     Lens = GeneticLens(DNA_List)
-    IPeak0, m0 = IPeak_And_Magnification(Lens, apMin)
-    return IPeak0,m0
-
+    IPeak, m = IPeak_And_Magnification_From_Lens(Lens,apMin)
+    return IPeak,m
 Xi=[rpCompare]*numSlicesSymmetry*numVarsPerLayer
-IPeak0,m0=_initial_Focus_And_Cost(Xi)
-
-def cost_Function(args0):
-    args0=np.asarray(args0)
-    argsArr=np.asarray(construct_Full_Args(args0))
-    assert len(argsArr.shape)==2
-    DNA_List=[{'rp':args[0],'width':magnetWidth,'length':L/len(argsArr)} for args in argsArr]
-    Lens=GeneticLens(DNA_List)
-    assert abs(Lens.length-L)<1e-12
-    IPeak,m=IPeak_And_Magnification(Lens,apMin)
+IPeak0,m0=IPeak_And_Magnification(Xi)
+print(IPeak0,m0)
+def cost_Function(args0,Print=False):
+    IPeak,m=IPeak_And_Magnification(args0)
+    if Print==True:
+        print(IPeak,m)
     focusCost=IPeak0/IPeak #goal to is shrink this
-    magCost=1+abs(m/m0-1) #goal is to keep this the same
+    magCost=1+10*abs(m/m0-1) #goal is to keep this the same
     cost=focusCost*magCost
     return cost
-bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry
-# spo.minimize(cost_Function,Xi,bounds=bounds)
-# numDimensions=len(bounds)
-# sol=solve_Async(cost_Function,bounds,15*numDimensions,tol=.01,surrogateMethodProb=.1,workers=8)
-# print(sol)
+bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry*numVarsPerLayer
 
-"""
-BEST MEMBER BELOW
----population member---- 
-DNA: [0.0595685  0.05907538 0.05646126 0.05523791 0.05474563 0.05335864
- 0.05261596 0.0536713 ]
-cost: 0.35990839436527183
-"""
+solve_Grad_Descent(cost_Function,Xi,.1e-3,30,disp=True)
 
 
+# args= np.array([0.04962562, 0.04827694, 0.05124014, 0.04978718, 0.05118007,
+#        0.05063867])
+# print(cost_Function(args,Print=True))
 
-# args= [0.0595685,  0.05907538, 0.05646126, 0.05523791, 0.05474563 ,0.05335864 ,0.05261596, 0.0536713 ]
-# print(_cost(args))
 
 
 
