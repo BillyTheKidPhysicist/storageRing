@@ -1,7 +1,7 @@
 from asyncDE import solve_Async
 import matplotlib.pyplot as plt
 import time
-from parallel_Gradient_Descent import solve_Gradient_Descent,batch_Gradient_Descent
+from parallel_Gradient_Descent import gradient_Descent,batch_Gradient_Descent
 from HalbachLensClass import GeneticLens
 import numpy as np
 import scipy.optimize as spo
@@ -20,7 +20,7 @@ class GeneticLens_Analyzer:
 apMin=.045
 rpCompare=.05
 L=.3
-numSlicesTotal=6
+numSlicesTotal=12
 magnetWidth=.0254
 numVarsPerLayer=3
 numSlicesSymmetry=int(numSlicesTotal//2 +numSlicesTotal%2)
@@ -58,7 +58,7 @@ def cost_Function(args0,Print=False):
     return cost
 bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry*numVarsPerLayer
 Xi=[x for x in Xcompare]
-solve_Gradient_Descent(cost_Function,Xi,100e-6,100,disp=True)
+gradient_Descent(cost_Function,Xi,100e-6,100,disp=True,gradMethod='forward',frictionFact=.1)
 # batch_Gradient_Descent(cost_Function,bounds,20,1e-3,50)
 
 # args= np.array([0.04962562, 0.04827694, 0.05124014, 0.04978718, 0.05118007,

@@ -1,5 +1,6 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
+from parallel_Gradient_Descent import gradient_Descent, global_Gradient_Descent
 import random
 import time
 from asyncDE import solve_Async
@@ -43,8 +44,6 @@ def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
     PTL_Injector.add_Drift(L2, ap=apFrac*max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2, apFrac=apFrac)
     PTL_Injector.add_Drift(L3, ap=apFrac*rpInjectorMagnet2)
-
-
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     return PTL_Injector
@@ -168,8 +167,14 @@ def main():
     # loadBeamDiam, L1, L2, L3
     bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
     (.01,.5),(.01,.3)]
-    for _ in range(1):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=9))
+    # for _ in range(1):
+    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=9))
+    global_Gradient_Descent(wrapper,bounds,300,100e-6,30,disp=True,gradMethod='forward')
+    # X=np.array([0.18343486, 0.02195529, 0.28051502, 0.03176977, 0.1993704 ,
+    #    0.05      , 0.03      , 0.22756322, 0.40135286, 0.07435526])
+    # gradient_Descent(wrapper,X,100e-6,30,disp=True,Plot=True)
+    # gradient_Descent(wrapper,X,100e-6,10)
+    # wrapper(X)
     # X=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
  # ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
  #    wrapper(X)

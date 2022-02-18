@@ -9,7 +9,8 @@ import skopt
 
 
 class GradientOptimizer:
-    def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,parallel,gradMethod,gradStepSampSize=1e-6):
+    def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod,
+                 gradStepSampSize=5e-6):
         if isinstance(xi, np.ndarray) == False:
             xi = np.asarray(xi)
             assert len(xi.shape) == 1
@@ -22,6 +23,7 @@ class GradientOptimizer:
         self.momentumFact=momentumFact
         self.frictionFact=frictionFact
         self.disp=disp
+        self.Plot=Plot
         self.gradStepSampSize=gradStepSampSize
         self.gradMethod=gradMethod
         self.parallel=parallel
@@ -81,33 +83,46 @@ class GradientOptimizer:
             if self.disp == True:
                 print(i, F0, repr(x), repr(deltaX))
             x = x + deltaX
-        # plt.plot(self.objValHistList)
-        # plt.xlabel("Iteration")
-        # plt.ylabel("Cost (goal is to minimize)")
-        # plt.show()
+        if self.Plot==True:
+            plt.plot(self.objValHistList)
+            plt.xlabel("Iteration")
+            plt.ylabel("Cost (goal is to minimize)")
+            plt.show()
         return self.xHistList[np.argmin(self.objValHistList)],np.min(self.objValHistList)
-def solve_Gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,gradMethod='central',disp=False,parallel=True):
-    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,parallel,gradMethod)
+def gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,gradMethod='central',disp=False,
+                     parallel=True,Plot=False):
+    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod)
     return solver.solve_Grad_Descent()
 
 def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,
-                           gradMethod='central'):
+                           gradMethod='central',Plot=False):
     samples=np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
-    wrap=lambda x: solve_Gradient_Descent(funcObj,x,stepSize,maxIters,momentumFact=momentumFact,
+    wrap=lambda x: gradient_Descent(funcObj,x,stepSize,maxIters,momentumFact=momentumFact,
                                           frictionFact=frictionFact,disp=disp
-                                    ,parallel=False,gradMethod=gradMethod)
+                                    ,parallel=False,gradMethod=gradMethod,Plot=Plot)
     with mp.Pool() as pool:
         results=pool.map(wrap,samples)
     return results
-
-
+def global_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,
+                           gradMethod='central',parallel=True):
+    samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
+    if parallel==True:
+        with mp.Pool() as pool:
+            vals=np.asarray(pool.map(funcObj,samples))
+    else:
+        vals=np.asarray([funcObj(x) for x in samples])
+    xOptimal=samples[np.argmin(vals)]
+    result= gradient_Descent(funcObj,xOptimal,stepSize,maxIters,momentumFact=momentumFact, frictionFact=frictionFact,
+                             disp=disp,parallel=parallel,gradMethod=gradMethod)
+    return result
 def _self_Test1():
     def test_Func(X):
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2
     Xi=[8.0,8.0]
-    x,f=solve_Gradient_Descent(test_Func,Xi,.05,300,.9,.01,gradMethod='central')
-    x0=np.asarray([-0.007751966334679762 ,0.004129096462041654])
-    f0=0.004391547110012801
+    x,f=gradient_Descent(test_Func,Xi,.05,1000,momentumFact=0.9,frictionFact=.01,gradMethod='central',parallel=False,
+                         Plot=True)
+    x0=np.asarray([0.00877348685725643 ,-0.0006770109943376595 ])
+    f0=0.004399785199224387
     assert np.all(x0==x)
     assert f==f0
-
+# _self_Test1()
