@@ -10,7 +10,7 @@ from SwarmTracerClass import SwarmTracer
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Swarm
 from elementPT import HalbachLensSim
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 import matplotlib.pyplot as plt
 
 

@@ -1,7 +1,7 @@
 from asyncDE import solve_Async
 import matplotlib.pyplot as plt
 import time
-from parallel_Gradient_Descent import global_Descent_Optimize,solve_Grad_Descent
+from parallel_Gradient_Descent import solve_Gradient_Descent,batch_Gradient_Descent
 from HalbachLensClass import GeneticLens
 import numpy as np
 import scipy.optimize as spo
@@ -45,8 +45,8 @@ def IPeak_And_Magnification(args0):
     Lens = GeneticLens(DNA_List)
     IPeak, m = IPeak_And_Magnification_From_Lens(Lens,apMin)
     return IPeak,m
-Xi=[rpCompare]*numSlicesSymmetry*numVarsPerLayer
-IPeak0,m0=IPeak_And_Magnification(Xi)
+Xcompare=[rpCompare]*numSlicesSymmetry*numVarsPerLayer
+IPeak0,m0=IPeak_And_Magnification(Xcompare)
 print(IPeak0,m0)
 def cost_Function(args0,Print=False):
     IPeak,m=IPeak_And_Magnification(args0)
@@ -57,9 +57,9 @@ def cost_Function(args0,Print=False):
     cost=focusCost*magCost
     return cost
 bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry*numVarsPerLayer
-
-solve_Grad_Descent(cost_Function,Xi,.1e-3,30,disp=True)
-
+Xi=[x for x in Xcompare]
+solve_Gradient_Descent(cost_Function,Xi,100e-6,100,disp=True)
+# batch_Gradient_Descent(cost_Function,bounds,20,1e-3,50)
 
 # args= np.array([0.04962562, 0.04827694, 0.05124014, 0.04978718, 0.05118007,
 #        0.05063867])

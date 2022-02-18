@@ -32,12 +32,13 @@ def main():
 if __name__=='__main__':
     main()
 '''
+
 ----------Solution-----------   
 injector element spacing optimum configuration: nan
-storage ring tuned params 1 optimum configuration: [0.01872991 0.01912455 0.01931468 0.01113904 0.1210144 ]
-storage ring tuned params 2 optimum configuration: [0.73878657 0.70949108]
-cost: 0.5419640702864256
-percent max flux multiplication: 45.803592971357446
+storage ring tuned params 1 optimum configuration: [0.01003313 0.01843031 0.01834712 0.00989281 0.18579258]
+storage ring tuned params 2 optimum configuration: [0.37154555 0.50950135]
+cost: 0.5311869592905618
+percent max flux multiplication: 46.88130407094382
 scipy message: Optimization terminated successfully.
-----------------------------
+
 '''

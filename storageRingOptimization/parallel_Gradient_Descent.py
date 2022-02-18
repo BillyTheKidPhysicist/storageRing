@@ -9,7 +9,7 @@ import skopt
 
 
 class GradientOptimizer:
-    def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,gradStepSampSize=1e-6):
+    def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,parallel,gradStepSampSize=1e-6):
         if isinstance(xi, np.ndarray) == False:
             xi = np.asarray(xi)
             assert len(xi.shape) == 1
@@ -23,6 +23,7 @@ class GradientOptimizer:
         self.frictionFact=frictionFact
         self.disp=disp
         self.gradStepSampSize=gradStepSampSize
+        self.parallel=parallel
         self.objValHistList=[]
         self.xHistList=[]
 
@@ -31,8 +32,11 @@ class GradientOptimizer:
         mask = np.repeat(mask, axis=0, repeats=2)
         mask[1::2] *= -1
         x_abArr = mask * self.gradStepSampSize + x0 #x upper and lower values for derivative calc
-        with mp.Pool() as pool:
-            vals_ab = np.asarray(pool.map(self.funcObj, x_abArr))
+        if self.parallel==True:
+            with mp.Pool() as pool:
+                vals_ab = np.asarray(pool.map(self.funcObj, x_abArr))
+        else:
+            vals_ab = np.asarray([self.funcObj(x) for x in x_abArr])
         vals_ab = vals_ab.reshape(-1, 2)
         meanF0 = np.mean(vals_ab)
         deltaVals = vals_ab[:, 0] - vals_ab[:, 1]
@@ -61,9 +65,20 @@ class GradientOptimizer:
         # plt.ylabel("Cost (goal is to minimize)")
         # plt.show()
         return self.xHistList[np.argmin(self.objValHistList)],np.min(self.objValHistList)
-def solve_Gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False):
-    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp)
+def solve_Gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,parallel=True):
+    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,parallel)
     return solver.solve_Grad_Descent()
+
+def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False):
+    samples=np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
+    wrap=lambda x: solve_Gradient_Descent(funcObj,x,stepSize,maxIters,momentumFact=momentumFact,
+                                          frictionFact=frictionFact,disp=disp
+                                    ,parallel=False)
+    with mp.Pool() as pool:
+        results=pool.map(wrap,samples)
+    return results
+
+
 def _self_Test1():
     def test_Func(X):
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2
