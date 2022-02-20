@@ -10,7 +10,7 @@ SMALL_NUMBER=1e-9
 
 class GradientOptimizer:
     def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod,
-                 gradStepSampSize=5e-6):
+                 gradStepSampSize):
         if isinstance(xi, np.ndarray) == False:
             xi = np.asarray(xi)
             assert len(xi.shape) == 1
@@ -92,8 +92,9 @@ class GradientOptimizer:
             plt.show()
         return self.xHistList[np.nanargmin(self.objValHistList)],np.nanmin(self.objValHistList)
 def gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,gradMethod='central',disp=False,
-                     parallel=True,Plot=False):
-    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod)
+                     parallel=True,Plot=False,gradStepSize=5e-6):
+    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod,
+                             gradStepSize)
     return solver.solve_Grad_Descent()
 
 def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,
@@ -106,7 +107,7 @@ def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumF
         results=pool.map(wrap,samples)
     return results
 def global_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,
-                           gradMethod='central',parallel=True,Plot=False):
+                           gradMethod='central',parallel=True,Plot=False,gradStepSize=5e-6):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
     if parallel==True:
         with mp.Pool() as pool:
@@ -115,7 +116,7 @@ def global_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentum
         vals=np.asarray([funcObj(x) for x in samples])
     xOptimal=samples[np.argmin(vals)]
     result= gradient_Descent(funcObj,xOptimal,stepSize,maxIters,momentumFact=momentumFact, frictionFact=frictionFact,
-                             disp=disp,parallel=parallel,gradMethod=gradMethod,Plot=Plot)
+                             disp=disp,parallel=parallel,gradMethod=gradMethod,Plot=Plot,gradStepSize=gradStepSize)
     return result
 def _self_Test1():
     def test_Func(X):
