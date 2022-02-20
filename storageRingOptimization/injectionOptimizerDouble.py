@@ -146,7 +146,10 @@ def injector_Cost(X):
         return maximumCost
     if PTL_I.totalLength>L_Injector_TotalMax:
         return maximumCost
-    PTL_R=generate_Ring_Surrogate_Lattice(X)
+    try:
+        PTL_R=generate_Ring_Surrogate_Lattice(X)
+    except:
+        return maximumCost
     if PTL_R is None:
         return maximumCost
     assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
@@ -167,16 +170,11 @@ def main():
     # loadBeamDiam, L1, L2, L3
     bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
     (.01,.5),(.01,.3)]
-    # for _ in range(1):
-    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.1, tol=.01, disp=True,workers=9))
-    global_Gradient_Descent(wrapper,bounds,300,100e-6,30,disp=True,gradMethod='forward')
+    for _ in range(1):
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=False,workers=9))
     # X=np.array([0.18343486, 0.02195529, 0.28051502, 0.03176977, 0.1993704 ,
     #    0.05      , 0.03      , 0.22756322, 0.40135286, 0.07435526])
     # gradient_Descent(wrapper,X,100e-6,30,disp=True,Plot=True)
-    # gradient_Descent(wrapper,X,100e-6,10)
-    # wrapper(X)
-    # X=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
- # ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
- #    wrapper(X)
+
 if __name__=="__main__":
     main()

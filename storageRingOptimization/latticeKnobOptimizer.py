@@ -145,8 +145,9 @@ class LatticeOptimizer:
     def mode_Match_Cost(self, X,useSurrogate,energyCorrection):
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
-        for val, bounds in zip(X, self.tuningBounds):
-            assert bounds[0] <= val <= bounds[1]
+        if X is not None:
+            for val, bounds in zip(X, self.tuningBounds):
+                assert bounds[0] <= val <= bounds[1]
         if self.floor_Plan_Cost(X)>0.0: #only permit small floor plan costs
             return 1.0+self.floor_Plan_Cost(X)
         if self.test_Stability(X) == False:
@@ -217,7 +218,9 @@ class LatticeOptimizer:
         return stable
 
     def update_Ring_And_Injector(self,X):
-        if self.whichKnobs=='all':
+        if X is None:
+            pass
+        elif self.whichKnobs=='all':
             assert len(X) == 4
             XRing,XInjector=X[:2],X[2:]
             self.update_Ring_Lattice(XRing)
@@ -243,7 +246,6 @@ class LatticeOptimizer:
         else: raise ValueError
 
     def update_Ring_Field_Values(self, X):
-        raise Exception('Not currently supported')
         for el, arg in zip(self.tunedElementList, X):
             el.fieldFact = arg
 
@@ -308,7 +310,8 @@ class LatticeOptimizer:
         if not all(isinstance(el,Drift) for el in injectorTuningElements):
             raise Exception("injector tuning elements must be drift region")
         if tuningChoice == 'field':
-            for el in self.tunedElementList:
+            for elIndex in tuningElementIndices:
+                el=self.latticeRing.elList[elIndex]
                 if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:
                     raise Exception("For field tuning elements must be LensIdeal or HalbachLensSim")
         elif tuningChoice == 'spacing':
@@ -379,7 +382,7 @@ class LatticeOptimizer:
         samples = skopt.sampler.Sobol().generate(self.tuningBounds, randomSamplePoints)
         vals=[self.mode_Match_Cost(sample,useSurrogateRoughPass,energyCorrection) for sample in samples]
         XInitial=samples[np.argmin(vals)]
-        useSurrogateScipyOptimer=True
+        useSurrogateScipyOptimer=False
         sol=spo.differential_evolution(self.mode_Match_Cost,self.tuningBounds,polish=False,x0=XInitial,tol=self.tolerance,
                                        maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
                                        args=(useSurrogateScipyOptimer,energyCorrection),popsize=self.optimalPopSize,init='halton')
@@ -421,3 +424,14 @@ class LatticeOptimizer:
             return sol
         sol=self._minimize()
         return sol
+        # wrapper = lambda x: self.mode_Match_Cost(x, False, False)
+        # xArr = np.linspace(self.tuningBounds[0][0], self.tuningBounds[0][1], 5)
+        # coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
+        # import multiprocess
+        # with multiprocess.Pool() as pool:
+        #     vals = np.asarray(pool.map(wrapper, coords))
+        # image = vals.reshape(len(xArr), len(xArr))
+        # if np.abs(np.mean(image)-1.0)<1e-2:
+        #     return None
+        # plt.imshow(image)
+        # plt.show()

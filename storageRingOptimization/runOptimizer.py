@@ -5,10 +5,11 @@ import numpy as np
 
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
+from parallel_Gradient_Descent import global_Gradient_Descent
 from profilehooks import profile
 def wrapper(args):
     try:
-        cost=solve_For_Lattice_Params(args).cost
+        cost=solve_For_Lattice_Params(args,).cost
     except:
         np.set_printoptions(precision=100)
         print('assert during evaluation on args: ',args)
@@ -28,6 +29,7 @@ def main():
         ]
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
     # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
+    global_Gradient_Descent(wrapper,bounds,50,300e-6)
     # wrapper(X)
 if __name__=='__main__':
     main()

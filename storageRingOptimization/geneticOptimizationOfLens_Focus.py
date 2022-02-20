@@ -6,7 +6,7 @@ from HalbachLensClass import GeneticLens
 import numpy as np
 import scipy.optimize as spo
 from profilehooks import profile
-from temp5 import IPeak_And_Magnification_From_Lens
+from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens
 
 SMALL_NUMBER=1E-10
 class GeneticLens_Analyzer:

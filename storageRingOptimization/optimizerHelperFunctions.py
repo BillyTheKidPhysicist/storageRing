@@ -26,7 +26,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
-                          LmCombiner, rpCombiner,loadBeamDiam)->ParticleTracerLattice:
+                          LmCombiner, rpCombiner,loadBeamDiam,tuning)->ParticleTracerLattice:
     tunableDriftGap=2.54e-2
     jeremyGap=.05
     Lm=.0254/2.0
@@ -39,17 +39,19 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
     rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)
     if rOffsetFact is None:
         return None
-    PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
-    PTL_Ring.add_Drift(tunableDriftGap/2)
+    if tuning=='spacing':
+        PTL_Ring.add_Drift(tunableDriftGap/2)
+        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
+        PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
     PTL_Ring.add_Drift(lastGap)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
-    PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
-    PTL_Ring.add_Drift(tunableDriftGap/2)
+    if tuning=='spacing':
+        PTL_Ring.add_Drift(tunableDriftGap/2)
+        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
+        PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
@@ -99,8 +101,8 @@ def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1
     return PTL_Injector
 
 
-def solve_For_Lattice_Params(X):
-
+def solve_For_Lattice_Params(X,tuning):
+    assert tuning in (None,'field','spacing')
     XInjector=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
         ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
 
@@ -109,7 +111,7 @@ def solve_For_Lattice_Params(X):
 
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
     #value2 from seperate optimizer
-    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam)
+    PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,tuning)
     if PTL_Ring is None:
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)
@@ -123,9 +125,15 @@ def solve_For_Lattice_Params(X):
         return sol
     assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset
     optimizer=LatticeOptimizer(PTL_Ring,PTL_Injector)
-    sol=optimizer.optimize((1,9),whichKnobs='ring')
+    if tuning is None:
+        sol = Solution()
+        knobParams=None
+        cost=optimizer.mode_Match_Cost(knobParams,False,True)
+        sol.fluxMultiplicationPercent=optimizer.flux_Percent_From_Cost(cost,knobParams)
+        sol.cost=cost
+    else:
+        sol=optimizer.optimize((1,9),whichKnobs='ring',tuningChoice=tuning)
     sol.xRing_TunedParams1=X
-    sol.description='Pseudorandom search'
     if sol.fluxMultiplicationPercent>1.0:
         print(sol)
     return sol

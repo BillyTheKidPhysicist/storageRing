@@ -222,12 +222,12 @@ class Layer:
         # M: magnetization, SI
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
-        self.numMagsSymmetric=3
+        maxLayerMagnets=12
         if isinstance(rp,Iterable):
-            assert len(rp)==self.numMagsSymmetric
+            assert len(rp)<=maxLayerMagnets
         else:
             assert rp>0.0
-            rp=(rp,)*self.numMagsSymmetric
+            rp=(rp,)
         assert width > 0.0 and length > 0.0  and M > 0.0
         self.z = z
         self.width = width
@@ -240,9 +240,9 @@ class Layer:
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
         thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)  # location of 12 magnets
-        thetaArr=thetaArr.reshape(-1,self.numMagsSymmetric).T
+        thetaArr=thetaArr.reshape(-1,len(self.rp)).T
         phiArr = np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
-        phiArr=phiArr.reshape(-1,self.numMagsSymmetric).T
+        phiArr=phiArr.reshape(-1,len(self.rp)).T
         for r,r_phi,r_theta in zip(self.rp,phiArr,thetaArr):
             for phi,theta in zip(r_phi,r_theta):
                 # x,y=r*np.cos(theta),r*np.sin(theta)
