@@ -10,23 +10,24 @@ import warnings
 SMALL_NUMBER=1e-9
 
 class GradientOptimizer:
-    def __init__(self,funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod,
-                 gradStepSampSize):
+    def __init__(self,funcObj,xi,stepSizeInitial,maxIters,momentumFact,disp,Plot,parallel,gradMethod,
+                 gradStepSampSize,maxStepSize):
         if isinstance(xi, np.ndarray) == False:
             xi = np.asarray(xi)
             assert len(xi.shape) == 1
         self.funcObj=funcObj
         self.xi=xi
         self.numDim=len(self.xi)
-        self.stepSize=stepSize
+        self.stepSizeInitial=stepSizeInitial
+        self.maxStepSize=maxStepSize
         self.maxIters=maxIters
         self.momentumFact=momentumFact
-        self.frictionFact=frictionFact
         self.disp=disp
         self.Plot=Plot
         self.gradStepSampSize=gradStepSampSize
         self.gradMethod=gradMethod
         self.parallel=parallel
+        self.hFrac=1.0
         self.objValHistList=[]
         self.xHistList=[]
 
@@ -65,15 +66,20 @@ class GradientOptimizer:
         deltaVals=vals_ab[1:]-F0
         grad = deltaVals / (2 * self.gradStepSampSize)
         return grad, F0
-    def _update_Speed(self,gradUnit,deltaXPrev):
-        deltaX = -gradUnit * self.stepSize + deltaXPrev * self.momentumFact
-        if np.linalg.norm(deltaX)<SMALL_NUMBER:
+    def _update_Speed(self,gradUnit,vPrev):
+        deltaV = -gradUnit * self.stepSizeInitial
+        deltaVDrag=(1.0-self.momentumFact)*vPrev*self.hFrac
+        vPrev=vPrev-deltaVDrag
+        v=deltaV+vPrev
+        if np.linalg.norm(v)<SMALL_NUMBER:
             return np.zeros(self.numDim)
-        deltaX = deltaX - self.frictionFact * (deltaX / np.linalg.norm(deltaX)) * np.linalg.norm(deltaX) ** 2
-        return deltaX
+        return v
+    def _update_Time_Step(self,v):
+        deltaX0=np.linalg.norm(v)*1.0
+        self.hFrac=self.maxStepSize/deltaX0 if deltaX0>self.maxStepSize else 1
     def solve_Grad_Descent(self):
         x = self.xi.copy()
-        deltaXPrev = np.zeros(self.numDim)
+        vPrev = np.zeros(self.numDim)
         for i in range(self.maxIters):
             grad, F0 = self._gradient_And_F0(x)
             self.objValHistList.append(F0)
@@ -88,16 +94,18 @@ class GradientOptimizer:
                 elif self.momentumFact==0.0:
                     print('Gradient is zero, and there is no momentum. Cannot proceed')
                 gradUnit=np.zeros(len(grad))
-            deltaX = self._update_Speed(gradUnit,deltaXPrev)
-            if np.all(np.abs(deltaX)<SMALL_NUMBER):
+            v = self._update_Speed(gradUnit,vPrev)
+            if np.all(np.abs(v)<SMALL_NUMBER):
                 warnings.warn("All step sizes are very small, and possibly result largely from numeric noise ")
-            deltaXPrev = deltaX.copy()
+            vPrev = v.copy()
             if self.disp == True:
                 print('-----------',
                     'iteration: '+str(i),
                     'Function value: ' + str(F0),
                     'at parameter space point: '+str(repr(x)),
                       'gradient: '+str(repr(grad)))
+            self._update_Time_Step(v)
+            deltaX=v*self.hFrac
             x = x + deltaX
         if self.Plot==True:
             plt.plot(self.objValHistList)
@@ -105,22 +113,22 @@ class GradientOptimizer:
             plt.ylabel("Cost (goal is to minimize)")
             plt.show()
         return self.xHistList[np.nanargmin(self.objValHistList)],np.nanmin(self.objValHistList)
-def gradient_Descent(funcObj,xi,stepSize,maxIters,momentumFact=.9,frictionFact=.01,gradMethod='central',disp=False,
-                     parallel=True,Plot=False,gradStepSize=5e-6):
-    solver=GradientOptimizer(funcObj,xi,stepSize,maxIters,momentumFact,frictionFact,disp,Plot,parallel,gradMethod,
-                             gradStepSize)
+def gradient_Descent(funcObj,xi,stepSizeInitial,maxIters,momentumFact=.9,gradMethod='central',disp=False,
+                     parallel=True,Plot=False,gradStepSize=5e-6,maxStepSize=np.inf):
+    solver=GradientOptimizer(funcObj,xi,stepSizeInitial,maxIters,momentumFact,disp,Plot,parallel,gradMethod,
+                             gradStepSize,maxStepSize)
     return solver.solve_Grad_Descent()
 
-def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,momentumFact=.9,frictionFact=.01,disp=False,
-                           gradMethod='central'):
+def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,momentumFact=.9,disp=False,
+                           gradMethod='central',maxStepSize=np.inf):
     samples=np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
-    wrap=lambda x: gradient_Descent(funcObj,x,stepSize,maxIters,momentumFact=momentumFact,
-                                          frictionFact=frictionFact,disp=disp
-                                    ,parallel=False,gradMethod=gradMethod,Plot=False)
+    wrap=lambda x: gradient_Descent(funcObj,x,stepSizeInitial,maxIters,momentumFact=momentumFact,
+                                        disp=disp
+                                    ,parallel=False,gradMethod=gradMethod,Plot=False,maxStepSize=maxStepSize)
     with mp.Pool() as pool:
         results=pool.map(wrap,samples)
     return results
-def global_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,gradStepSize,momentumFact=.9,frictionFact=.01,disp=False,
+def global_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,gradStepSize,momentumFact=.9,disp=False,
                            gradMethod='central',parallel=True,Plot=False):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
     if parallel==True:
@@ -129,16 +137,16 @@ def global_Gradient_Descent(funcObj,bounds,numSamples,stepSize,maxIters,gradStep
     else:
         vals=np.asarray([funcObj(x) for x in samples])
     xOptimal=samples[np.argmin(vals)]
-    result= gradient_Descent(funcObj,xOptimal,stepSize,maxIters,momentumFact=momentumFact, frictionFact=frictionFact,
+    result= gradient_Descent(funcObj,xOptimal,stepSizeInitial,maxIters,momentumFact=momentumFact,
                              disp=disp,parallel=parallel,gradMethod=gradMethod,Plot=Plot,gradStepSize=gradStepSize)
     return result
 def _self_Test1():
     def test_Func(X):
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2
     Xi=[8.0,8.0]
-    x,f=gradient_Descent(test_Func,Xi,.05,1000,momentumFact=0.9,frictionFact=.01,gradMethod='central',parallel=False,
-                         Plot=True,disp=True)
-    x0=np.asarray([0.00877348685725643 ,-0.0006770109943376595 ])
-    f0=0.004399785199224387
+    x,f=gradient_Descent(test_Func,Xi,.05,1000,momentumFact=0.9,gradMethod='central',parallel=False,
+                         Plot=True,disp=True,maxStepSize=.15)
+    x0=np.asarray([9.586321188035513e-05 ,-0.0026766080917656563])
+    f0=0.0013391632778202074
     assert np.all(x0==x)
     assert f==f0
