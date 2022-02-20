@@ -128,7 +128,7 @@ def solve_For_Lattice_Params(X,tuning):
     if tuning is None:
         sol = Solution()
         knobParams=None
-        cost=optimizer.mode_Match_Cost(knobParams,False,True)
+        cost=optimizer.mode_Match_Cost(knobParams,False,True,rejectIllegalFloorPlan=False,rejectUnstable=False)
         sol.fluxMultiplicationPercent=optimizer.flux_Percent_From_Cost(cost,knobParams)
         sol.cost=cost
     else:

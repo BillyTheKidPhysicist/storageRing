@@ -142,19 +142,22 @@ class LatticeOptimizer:
         plt.grid()
         plt.show()
 
-    def mode_Match_Cost(self, X,useSurrogate,energyCorrection):
+    def mode_Match_Cost(self, X,useSurrogate,energyCorrection,rejectUnstable=True,rejectIllegalFloorPlan=True):
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         if X is not None:
             for val, bounds in zip(X, self.tuningBounds):
                 assert bounds[0] <= val <= bounds[1]
-        if self.floor_Plan_Cost(X)>0.0: #only permit small floor plan costs
-            return 1.0+self.floor_Plan_Cost(X)
-        if self.test_Stability(X) == False:
-            swarmTraced=Swarm() #empty swarm
+        if rejectIllegalFloorPlan==True and self.floor_Plan_Cost(X)>0.0:
+            cost= 1.0+self.floor_Plan_Cost(X)
+        elif rejectUnstable==True and self.is_Stable(X) == False:
+            cost=2.0
         else:
             swarmTraced=self.inject_Swarm(X,useSurrogate,energyCorrection)
-        cost = self.cost_Function(swarmTraced,X)
+            swarmCost = self.swarm_Cost(swarmTraced)
+            floorPlanCost = self.floor_Plan_Cost(X)
+            cost = swarmCost + floorPlanCost
+        assert 0.0 <= cost <= 2.0
         return cost
     def inject_Swarm(self,X,useSurrogate,energyCorrection):
         self.update_Ring_And_Injector(X)
@@ -203,7 +206,7 @@ class LatticeOptimizer:
         swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         return swarmEnd
 
-    def test_Stability(self, X,minRevsToTest=5.0):
+    def is_Stable(self, X,minRevsToTest=5.0):
         self.update_Ring_And_Injector(X)
         maxInitialTransversePos=1e-3
         T_Max=1.1 * minRevsToTest * self.latticeRing.totalLength / self.latticeRing.v0Nominal
@@ -288,12 +291,11 @@ class LatticeOptimizer:
         cost = 2 / (1 + np.exp(-overlap / factor)) - 1
         assert 0.0<=cost<=1.0
         return cost
-    def cost_Function(self, swarm,X):
+    def swarm_Cost(self, swarm):
         fluxMultPerc=self.compute_Swarm_Flux_Mult_Percent(swarm)
-        fluxCost=(100.0-fluxMultPerc)/100.0
-        cost=fluxCost+self.floor_Plan_Cost(X)
-        assert 0.0<=cost<=2.0
-        return cost
+        swarmCost=(100.0-fluxMultPerc)/100.0
+        assert 0.0<=swarmCost<=1.0
+        return swarmCost
     def flux_Percent_From_Cost(self, cost,X):
         fluxCost=cost-self.floor_Plan_Cost(X)
         fluxMulPerc=100.0*(1.0-fluxCost)
@@ -356,10 +358,10 @@ class LatticeOptimizer:
         if self.whichKnobs=='all':
             testCoords=np.column_stack((testCoords,injectorKnob1Arr_Constant,injectorKnobA2rr_Constant))
         if parallel == False:
-            stabilityList = [self.test_Stability(coords) for coords in testCoords]
+            stabilityList = [self.is_Stable(coords) for coords in testCoords]
         else:
             with mp.Pool(mp.cpu_count()) as pool:
-                stabilityList=pool.map(self.test_Stability,testCoords)
+                stabilityList=pool.map(self.is_Stable,testCoords)
         assert len(stabilityList)==numEdgePoints**2
         if sum(stabilityList) == 0:
             return False

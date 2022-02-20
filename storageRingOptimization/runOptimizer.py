@@ -5,7 +5,7 @@ import numpy as np
 
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
-from parallel_Gradient_Descent import global_Gradient_Descent
+from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
 from profilehooks import profile
 def wrapper(args):
     try:
@@ -30,7 +30,8 @@ def main():
         ]
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
     # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
-    global_Gradient_Descent(wrapper,bounds,50,300e-6,30,gradStepSize=30-6,gradMethod='forward')
+    solve_Async(wrapper,bounds,15,timeOut_Seconds=100000,workers=8)
+    # gradient_Descent(wrapper,Xi,25e-6,100,momentumFact=0.0,frictionFact=0.0,gradStepSize=25e-6,disp=True)
     # wrapper(X)
 if __name__=='__main__':
     main()
