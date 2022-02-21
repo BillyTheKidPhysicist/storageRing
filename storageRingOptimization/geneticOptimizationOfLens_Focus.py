@@ -58,12 +58,28 @@ def cost_Function(args0,Print=False):
     return cost
 bounds=[(apMin+1e-6,.075)]*numSlicesSymmetry*numVarsPerLayer
 Xi=[x for x in Xcompare]
-gradient_Descent(cost_Function,Xi,100e-6,100,disp=True,gradMethod='forward',frictionFact=.1)
-# batch_Gradient_Descent(cost_Function,bounds,20,1e-3,50)
+stepSize=50e-6
 
-# args= np.array([0.04962562, 0.04827694, 0.05124014, 0.04978718, 0.05118007,
-#        0.05063867])
-# print(cost_Function(args,Print=True))
+
+def _forward_Difference_And_F0(x0):
+    mask=np.eye(len(x0))
+    mask=np.row_stack((np.zeros(len(x0)),mask))
+    x_abArr=mask*stepSize+x0  # x upper and lower values for derivative calc
+    with mp.Pool() as pool:
+        vals_ab=np.asarray(pool.map(cost_Function,x_abArr))
+    F0=vals_ab[0]
+    deltaVals=vals_ab[1:]-F0
+    grad=deltaVals/(2*stepSize)
+    return F0,grad
+_forward_Difference_And_F0(Xi)
+
+opt=descent.adam(stepSize)
+sol=opt.minimize(_forward_Difference_And_F0,Xi,maxiter=300)
+print(sol)
+plt.plot(sol['obj'])
+plt.xlabel("iterations")
+plt.ylabel('cost')
+plt.show()
 
 
 
