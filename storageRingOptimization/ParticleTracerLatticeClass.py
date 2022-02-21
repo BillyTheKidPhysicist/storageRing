@@ -95,9 +95,9 @@ class ParticleTracerLattice:
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,h,1.0,fastMode=False)
             qoArr=particle.qoArr
-            particleAng=np.arctan2(qoArr[-1][1],qoArr[-1][0]) #very close to zero, or negative, if particle made it to
+            particleAngEl=np.arctan2(qoArr[-1][1],qoArr[-1][0]) #very close to zero, or negative, if particle made it to
             #end
-            if particleAng<.01:
+            if particleAngEl<.01:
                 error=np.std(1e6*particle.qoArr[:,1])
                 return error
             else: return np.nan
@@ -127,9 +127,9 @@ class ParticleTracerLattice:
         outputOffsetFactArr=outputOffsetFactArr[~np.isnan(errorArr)]
         errorArr=errorArr[~np.isnan(errorArr)]
         fit=spi.RBFInterpolator(outputOffsetFactArr[:,np.newaxis],errorArr)
-        outputOffsetFactArrDense=np.linspace(outputOffsetFactArr[0],outputOffsetFactArr[-1],10000)
-        newerrorArr=fit(outputOffsetFactArrDense[:,np.newaxis])
-        rOptimal=outputOffsetFactArrDense[np.argmin(newerrorArr)]
+        outputOffsetFactArrDense=np.linspace(outputOffsetFactArr[0],outputOffsetFactArr[-1],10_000)
+        errorArrDense=fit(outputOffsetFactArrDense[:,np.newaxis])
+        rOptimal=outputOffsetFactArrDense[np.argmin(errorArrDense)]
         rMinDistFromEdge=np.min(outputOffsetFactArr[1:]-outputOffsetFactArr[:-1])/4
         if rOptimal>outputOffsetFactArr[-1]-rMinDistFromEdge or rOptimal<outputOffsetFactArr[0]+rMinDistFromEdge:
             # print('Invalid solution, rMin very near edge. ')

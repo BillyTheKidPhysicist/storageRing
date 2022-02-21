@@ -8,7 +8,7 @@ from ParticleTracerClass import ParticleTracer
 from SwarmTracerClass import SwarmTracer
 from latticeKnobOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
-
+SMALL_NUMBER=1E-9
 # XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
 V0=210
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
@@ -36,7 +36,11 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
         # minimum fringe length must be respected
         return None
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
-    rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)
+    if abs(rpBend-1e-2)<SMALL_NUMBER and abs(Lm-.0254/2.0)<SMALL_NUMBER:
+        rOffsetFact = 1.0106
+    else:
+        # rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)
+        raise ValueError
     if rOffsetFact is None:
         return None
     if tuning=='spacing':
@@ -103,13 +107,14 @@ def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1
 
 def solve_For_Lattice_Params(X,tuning):
     assert tuning in (None,'field','spacing')
+    rpBend=1e-2
     XInjector=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
         ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
 
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
     loadBeamDiam, L1, L2, L3=XInjector
 
-    rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
+    rpLens,rpLensFirst,rpLensLast,L_Lens=X
     #value2 from seperate optimizer
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,tuning)
     if PTL_Ring is None:
@@ -139,6 +144,6 @@ def solve_For_Lattice_Params(X,tuning):
     else:
         sol=optimizer.optimize((1,9),whichKnobs='ring',tuningChoice=tuning)
     sol.xRing_TunedParams1=X
-    # if sol.fluxMultiplicationPercent>1.0:
-    #     print(sol)
+    if sol.fluxMultiplicationPercent>10.0:
+        print(sol)
     return sol
