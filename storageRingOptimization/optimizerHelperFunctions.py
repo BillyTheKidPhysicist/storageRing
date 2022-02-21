@@ -128,12 +128,17 @@ def solve_For_Lattice_Params(X,tuning):
     if tuning is None:
         sol = Solution()
         knobParams=None
-        cost=optimizer.mode_Match_Cost(knobParams,False,True,rejectIllegalFloorPlan=False,rejectUnstable=False)
-        sol.fluxMultiplicationPercent=optimizer.flux_Percent_From_Cost(cost,knobParams)
-        sol.cost=cost
+        swarmCost,floorPlanCost=optimizer.mode_Match_Cost(knobParams,False,True,rejectIllegalFloorPlan=False,
+                                        rejectUnstable=False,returnCostsSeperate=True)
+        sol.cost=swarmCost+floorPlanCost
+        sol.floorPlanCost=floorPlanCost
+        sol.swarmCost=swarmCost
+        sol.fluxMultiplicationPercent=optimizer.flux_Percent_From_Cost(sol.cost,knobParams)
+    elif tuning =='field':
+        sol = optimizer.optimize((0, 4), whichKnobs='ring', tuningChoice=tuning,ringTuningBounds=[(.25,1.75)]*2)
     else:
         sol=optimizer.optimize((1,9),whichKnobs='ring',tuningChoice=tuning)
     sol.xRing_TunedParams1=X
-    if sol.fluxMultiplicationPercent>1.0:
-        print(sol)
+    # if sol.fluxMultiplicationPercent>1.0:
+    #     print(sol)
     return sol

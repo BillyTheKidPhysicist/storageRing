@@ -150,3 +150,13 @@ def _self_Test1():
     f0=0.0013391632778202074
     assert np.all(x0==x)
     assert f==f0
+# def test_Func(X):
+#     return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2
+# Xi=[7.5]
+# x,f=gradient_Descent(test_Func,Xi,.01,1000,momentumFact=0.99,gradMethod='central',parallel=False,
+#                          Plot=True,disp=True,maxStepSize=.02*100)
+# xArr=np.linspace(-8,8,100)
+# y=[test_Func([x]) for x in xArr]
+# plt.plot(xArr,y)
+# plt.axvline(x=x)
+# plt.show()

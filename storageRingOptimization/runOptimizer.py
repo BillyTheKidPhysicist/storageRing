@@ -1,40 +1,66 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-
+import multiprocess as mp
 import numpy as np
 
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
 from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
 from profilehooks import profile
-def wrapper(args):
-    try:
-        tuning=None
-        cost=solve_For_Lattice_Params(args,tuning).cost
-    except:
-        np.set_printoptions(precision=100)
-        print('assert during evaluation on args: ',args)
-        assert False
-    return cost
-def main():
-    bounds=[
-        (.005,.03), #rpLens
-        (.01,.03), #rpLensFirst
-        (.005,.02), #rplensLast
+def survival_Optimize(bounds,tuning,workers=-1):
+    def wrapper(args):
+        try:
+            cost=solve_For_Lattice_Params(args,tuning).cost
+        except:
+            np.set_printoptions(precision=100)
+            print('assert during evaluation on args: ',args)
+            assert False
+        return cost
+    #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
+    # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
+    solve_Async(wrapper,bounds,15,timeOut_Seconds=100000,workers=workers)
+    # gradient_Descent(wrapper,Xi,25e-6,100,momentumFact=0.0,frictionFact=0.0,gradStepSize=25e-6,disp=True)
+    # wrapper(X)
+def stability_And_Survival_Optimize(bounds,tuning,workers):
+    def get_Individual_Costs(args):
+        try:
+            sol=solve_For_Lattice_Params(args,tuning)
+            floorPlanCost=sol.floorPlanCost
+            swarmCost=sol.swarmCost
+        except:
+            np.set_printoptions(precision=100)
+            print('assert during evaluation on args: ',args)
+            assert False
+        return swarmCost,floorPlanCost
+    def wrapper(args0):
+        stabilityTestStep=500e-6
+        args0=np.asarray(args0)
+        mask = np.eye(len(args0))
+        mask = np.repeat(mask, axis=0, repeats=2)
+        mask = np.row_stack((np.zeros(len(args0)), mask))
+        mask[1::2] *= -1
+        testArr = mask * stabilityTestStep + args0
+        results=np.asarray([get_Individual_Costs(arg) for arg in testArr])
+        swarmCosts,floorPlanCosts=results[:,0],results[:,1]
+        nominalCost=swarmCosts[0]+floorPlanCosts[0]
+        variability=np.std(swarmCosts)
+        print(args0,nominalCost,variability)
+        return nominalCost+variability
+    solve_Async(wrapper, bounds, 60, timeOut_Seconds=100000, workers=workers,surrogateMethodProb=.1)
+
+if __name__=='__main__':
+    bounds = [
+        (.005, .03),  # rpLens
+        (.01, .03),  # rpLensFirst
+        (.005, .02),  # rplensLast
         (.0075, .0125),  # rpBend
-        (.1,.4) #L_Lens
+        (.1, .4)  # L_Lens
         # (.125,.2125), #L_Injector
         # (.01,.03), #rpInjector
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
-        ]
-    #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
-    # print(solve_Async(wrapper,bounds,15*len(bounds),surrogateMethodProb=.1,timeOut_Seconds=1e12,workers=8) )
-    solve_Async(wrapper,bounds,15,timeOut_Seconds=100000,workers=8)
-    # gradient_Descent(wrapper,Xi,25e-6,100,momentumFact=0.0,frictionFact=0.0,gradStepSize=25e-6,disp=True)
-    # wrapper(X)
-if __name__=='__main__':
-    main()
+    ]
+    stability_And_Survival_Optimize(bounds,None,8)
 '''
 
 ----------Solution-----------   

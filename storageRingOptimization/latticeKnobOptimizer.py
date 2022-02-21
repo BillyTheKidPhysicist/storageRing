@@ -28,6 +28,8 @@ class Solution:
         self.xRing_TunedParams2 = np.nan  # paramters tuned by the 'inner' gp minimize
         self.fluxMultiplicationPercent = np.nan
         self.cost=np.nan
+        self.swarmCost=np.nan
+        self.floorPlanCost=np.nan
         self.scipyMessage=None
         self.stable=None
         self.invalidInjector=None
@@ -37,9 +39,9 @@ class Solution:
 
     def __str__(self):  # method that gets called when you do print(Solution())
         string = '----------Solution-----------   \n'
-        string += 'injector element spacing optimum configuration: ' + str(self.xInjector_TunedParams) + '\n'
-        string += 'storage ring tuned params 1 optimum configuration: ' + str(self.xRing_TunedParams1) + '\n'
-        string += 'storage ring tuned params 2 optimum configuration: ' + str(self.xRing_TunedParams2) + '\n'
+        string += 'injector element spacing optimum configuration: ' + repr(self.xInjector_TunedParams) + '\n'
+        string += 'storage ring tuned params 1 optimum configuration: ' + repr(self.xRing_TunedParams1) + '\n'
+        string += 'storage ring tuned params 2 optimum configuration: ' + repr(self.xRing_TunedParams2) + '\n'
         # string+='stable configuration:'+str(self.stable)+'\n'
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
@@ -142,14 +144,17 @@ class LatticeOptimizer:
         plt.grid()
         plt.show()
 
-    def mode_Match_Cost(self, X,useSurrogate,energyCorrection,rejectUnstable=True,rejectIllegalFloorPlan=True):
+    def mode_Match_Cost(self, X,useSurrogate,energyCorrection,rejectUnstable=True,rejectIllegalFloorPlan=True,
+                        returnCostsSeperate=False):
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
+        swarmCost,floorPlanCost=None,None
         if X is not None:
             for val, bounds in zip(X, self.tuningBounds):
                 assert bounds[0] <= val <= bounds[1]
         if rejectIllegalFloorPlan==True and self.floor_Plan_Cost(X)>0.0:
-            cost= 1.0+self.floor_Plan_Cost(X)
+            floorPlanCost=self.floor_Plan_Cost(X)
+            cost= 1.0+floorPlanCost
         elif rejectUnstable==True and self.is_Stable(X) == False:
             cost=2.0
         else:
@@ -158,7 +163,8 @@ class LatticeOptimizer:
             floorPlanCost = self.floor_Plan_Cost(X)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= 2.0
-        return cost
+        if returnCostsSeperate==True: return swarmCost,floorPlanCost
+        else: return cost
     def inject_Swarm(self,X,useSurrogate,energyCorrection):
         self.update_Ring_And_Injector(X)
         swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End(useSurrogate)
@@ -426,14 +432,17 @@ class LatticeOptimizer:
             return sol
         sol=self._minimize()
         return sol
-        # wrapper = lambda x: self.mode_Match_Cost(x, False, False)
-        # xArr = np.linspace(self.tuningBounds[0][0], self.tuningBounds[0][1], 5)
+        # def wrapper(X):
+        #     swarmCost,floorPlanCost =self.mode_Match_Cost(X, False, False,rejectIllegalFloorPlan=False,rejectUnstable=False
+        #                                          ,returnCostsSeperate=True)
+        #     return swarmCost
+        # xArr = np.linspace(self.tuningBounds[0][0], self.tuningBounds[0][1], 30)
         # coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
         # import multiprocess
         # with multiprocess.Pool() as pool:
         #     vals = np.asarray(pool.map(wrapper, coords))
         # image = vals.reshape(len(xArr), len(xArr))
         # if np.abs(np.mean(image)-1.0)<1e-2:
-        #     return None
+        #     pass
         # plt.imshow(image)
         # plt.show()
