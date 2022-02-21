@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import time
 from parallel_Gradient_Descent import gradient_Descent,batch_Gradient_Descent
 from HalbachLensClass import GeneticLens
+import descent
 import numpy as np
 import scipy.optimize as spo
 from profilehooks import profile
