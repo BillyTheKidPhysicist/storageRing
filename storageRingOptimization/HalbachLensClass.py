@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numba
 # from profilehooks import profile
 from scipy.spatial.transform import Rotation
-from magpylib.magnet import Box,Sphere
+from magpylib.magnet import Box
 
 M_Default=1.018E6
 
@@ -30,14 +30,14 @@ def B_NUMBA(r,r0,m):
     return Bvec
 
 
-class SpherePop:
-    def __init__(self, radiusInInches=1.0 / 2,M=M_Default):
+class Sphere:
+    def __init__(self, radius,M=M_Default):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         #M: magnetization
-        assert radiusInInches>0 and M>0
+        assert radius>0 and M>0
         self.angle = None  # angular location of the magnet
-        self.radius = radiusInInches * .0254  # meters. RADIUS!!!
+        self.radius =radius
         self.volume=(4*np.pi/3)*self.radius**3 #m^3
         self.m0 = M * self.volume  # dipole moment
         self.r0 = None  # location of sphere
@@ -69,10 +69,13 @@ class SpherePop:
         self.m = self.m0 * self.n  # vector sphere moment
 
     def orient(self, theta, psi):
-        # tilt the sphere in spherical coordinates
+        # tilt the sphere in spherical coordinates. These are in the lab frame, there is no sphere frame
+        #theta,psi =(pi/2,0) is along +x
+        #theta,psi=(pi/2,pi/2) is along +y
+        #theta,psi=(0.0,anything) is along +z
         self.theta = theta
         self.psi = psi
-        self.n = np.asarray([np.sin(theta) * np.cos(psi), np.sin(theta) * np.sin(psi), np.cos(theta)])
+        self.n = np.asarray([np.sin(theta) * np.cos(psi), np.sin(theta) * np.sin(psi), np.cos(theta)])#x,y,z
         self.m = self.m0 * self.n
 
     def vary_Amplitude(self, fact):
@@ -109,54 +112,53 @@ class SpherePop:
         # planeSymmetry: Wether to exploit z symmetry or not
         arr = np.zeros(r.shape)
         arr += self.B(r)
-        arr += self.B_Symetry(r, "clockwise", factors=1, flipDipole=True)
-        arr += self.B_Symetry(r, "clockwise", factors=2, flipDipole=False)
-        arr += self.B_Symetry(r, "clockwise", factors=3, flipDipole=True)
-        arr += self.B_Symetry(r, "clockwise", factors=4, flipDipole=False)
-        arr += self.B_Symetry(r, "clockwise", factors=5, flipDipole=True)
+        arr += self.B_Symetry(r, "clockwise", factors=1, flipDipolexy=True)
+        arr += self.B_Symetry(r, "clockwise", factors=2, flipDipolexy=False)
+        arr += self.B_Symetry(r, "clockwise", factors=3, flipDipolexy=True)
+        arr += self.B_Symetry(r, "clockwise", factors=4, flipDipolexy=False)
+        arr += self.B_Symetry(r, "clockwise", factors=5, flipDipolexy=True)
 
         if planeSymmetry == True:
-            arr += self.B_Symetry(r, "clockwise", factors=0, flipDipole=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=1, flipDipole=True, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=2, flipDipole=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=3, flipDipole=True, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=4, flipDipole=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=5, flipDipole=True, planeReflection=True)
-
+            arr += self.B_Symetry(r, "clockwise", factors=0, flipDipolexy=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=1, flipDipolexy=True, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=2, flipDipolexy=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=3, flipDipolexy=True, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=4, flipDipolexy=False, planeReflection=True)
+            arr += self.B_Symetry(r, "clockwise", factors=5, flipDipolexy=True, planeReflection=True)
+        # plt.gca().set_aspect('equal')
+        # plt.show()
         return arr
 
-    def B_Symetry(self, r, orientation, factors=1, flipDipole=False, angle=np.pi / 2, fixedDipoleDirection=False,
+    def B_Symetry(self, r, orientation, factors=1, flipDipolexy=False, symmetryAngle=np.pi / 3, fixedDipoleDirection=False,
                   planeReflection=False):
         # orientation: String of "clockwise" or "counterclockwise" for orientation
         # factors: how many planes of symmetry to to reflect by. there are 6 total
         # fliSphere: wether to model the sphere as having the opposite orientation
         phi0 = np.arctan2(self.r0[1], self.r0[0])
-        # choose the correct reflection angle.
+        # choose the correct reflection symmetryAngle.
         if orientation == 'clockwise':  # mirror across the clockwise plane
-            phiSym = phi0 + (-angle) * factors  # angle to rotate the dipole position by
-            deltaTheta = -angle * factors  # angle to rotate the dipole direction vector by
+            phiSym = phi0 + (-symmetryAngle) * factors  # symmetryAngle to rotate the dipole position by
+            deltaTheta = -symmetryAngle * factors  # symmetryAngle to rotate the dipole direction vector by
         elif orientation == 'counterclockwise':  # mirror across the counterclockwise plane
-            phiSym = phi0 + angle * factors
-            deltaTheta = angle * factors
+            phiSym = phi0 + symmetryAngle * factors
+            deltaTheta = symmetryAngle * factors
         else:
             raise Exception('Improper orientation')
-        xSym = npl.norm(self.r0[:2]) * np.cos(phiSym)
-        ySym = npl.norm(self.r0[:2]) * np.sin(phiSym)
-        rSym = np.asarray([xSym, ySym, self.r0[2]])
+        x0Sym = npl.norm(self.r0[:2]) * np.cos(phiSym)
+        y0Sym = npl.norm(self.r0[:2]) * np.sin(phiSym)
+        r0Sym = np.asarray([x0Sym, y0Sym, self.r0[2]])
         mSym = self.m.copy()
         if fixedDipoleDirection == False:
             # rotate the dipole moment.
             MRot = np.array([[np.cos(deltaTheta), -np.sin(deltaTheta)], [np.sin(deltaTheta), np.cos(deltaTheta)]])
             mSym[:2] = MRot @ mSym[:2]
-        if flipDipole == True:
-            mSym = -mSym
+        if flipDipolexy == True:
+            mSym[:2] = -mSym[:2]
         if planeReflection == True:  # another dipole on the other side of the z=0 line
-            rSym[2] = -rSym[2]
-        BVecArr = B_NUMBA(r, rSym, mSym)
+            r0Sym[2] = -r0Sym[2]
+            mSym[-1]*=-1
+        BVecArr = B_NUMBA(r, r0Sym, mSym)
         return BVecArr
-
-
-
 class RectangularPrism:
     #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
     #are equal, but the length, in the z plane, can be anything.
@@ -472,59 +474,51 @@ class SegmentedBenderHalbach(HalbachLens):
             return BArr[0]
         else:
             return BArr
-
-class GeneticLens(HalbachLens):
-    def __init__(self,DNA_List):
-        #DNA: list of dictionaries to construct lens. each entry in the list corresponds to a single layer. Layers
-        #are assumed to be stacked on top of each other in the order they are entered. No support for multiple
-        #concentric layers. arguments in first list entry are:
-        #[radius, magnet width,length]
-        #lens is centered at z=0
-        numDNA_Args=3
-        assert all(len(DNA)==numDNA_Args  for DNA in DNA_List)
-        self.numLayers=len(DNA_List)
-        self.length=sum([DNA['length'] for DNA in DNA_List])
-        self.DNA_List=DNA_List
-        self.theta=None
-        self.zArrLayers=self.make_zArr_Layers()
-        self.layerList=[] #genetic lens is modeled as a list of layers
-        self.build()
-    def build(self):
-        for DNA,z in zip(self.DNA_List,self.zArrLayers):
-            layer=Layer(z,DNA['width'],DNA['length'],DNA['rp'])
-            self.layerList.append(layer)
-    def make_zArr_Layers(self):
-        if self.numLayers==1:
-            return np.zeros(1)
-        else:
-            L_List=[DNA['length'] for DNA in self.DNA_List]
-            L_Cumsum=np.cumsum(L_List)
-            zList=[]
-            for L,DNA in zip(L_Cumsum,self.DNA_List):
-                zList.append(L-DNA['length']/2)
-            zArr=np.asarray(zList)-self.length/2
-            return zArr
-    def _radius_Maxima(self,which):
-        radiusList=[]
-        for DNA in self.DNA_List:
-            if isinstance(DNA['rp'],Iterable):
-                radiusList.extend(DNA['rp'])
-            else: radiusList.append(DNA['rp'])
-        if which=='max':
-            return max(radiusList)
-        elif which=='min':
-            return min(radiusList)
-    def maximum_Radius(self):
-        return self._radius_Maxima('max')
-    def minimum_Radius(self):
-        return self._radius_Maxima('min')
-# DNA_List=[{'rp':(.05,.055,.06),'width':.0254,'length':.1}]
-# lens=GeneticLens(DNA_List)
-#
-# rp=.03
-# xArr=np.linspace(-rp,rp)
-# coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
-# image=np.asarray([lens.BNorm(coord) for coord in coords]).reshape(50,50)
-# print(np.sum(image)) #455.17114875612043
-# plt.imshow(image)
-# plt.show()
+class SphereTestHelper:
+    def __init__(self):
+        self.numericTol = 1e-14  # same approach should be this accurate on different machines
+    def run_Test(self):
+        self.test1()
+        self.test2()
+        self.test3()
+    def test1(self):
+        #Test that the field points in the right direction
+        sphere=Sphere(.0254)
+        sphere.position_Sphere(r=.05,phi=0.0,z=0.0)
+        sphere.orient(np.pi/2,0.0)
+        rCenter=np.zeros((1,3))
+        np.printoptions(precision=100)
+        BVec_0=np.asarray([0.11180404595756577 ,-0.0 ,-3.4230116753414134e-18]) #point along x only
+        BVec=sphere.B(rCenter)[0]
+        assert np.all(np.abs(BVec-BVec_0)<self.numericTol) and np.all(np.abs(BVec[1:])<self.numericTol )
+    def test2(self):
+        #test that symmetry works as expected
+        sphere1=Sphere(.0254)
+        sphere1.position_Sphere(r=.05,phi=0.0,z=0.0)
+        sphere1.orient(np.pi/2,0.0)
+        sphere2 = Sphere(.0254)
+        sphere2.position_Sphere(r=.05, phi=np.pi/3, z=0.0)
+        sphere2.orient(np.pi / 2, 4*np.pi/3)
+        rTest = np.ones((1,3))*.01
+        BVec1=sphere1.B_Shim(rTest,planeSymmetry=False)[0]
+        BVec2=sphere2.B_Shim(rTest,planeSymmetry=False)[0]
+        BVec1_0=np.asarray([-0.0011941881467123633 ,-0.16959218399899806 ,0.025757119925902405])
+        BVec2_0=np.asarray([-0.001194188146712627 ,-0.16959218399899786 ,0.025757119925902378])
+        assert np.all(np.abs(BVec1 - BVec1_0) < self.numericTol)
+        assert np.all(np.abs(BVec2 - BVec2_0) < self.numericTol)
+        assert np.all(np.abs(BVec2 - BVec1) < self.numericTol)
+    def test3(self):
+        sphere1 = Sphere(.0254)
+        sphere1.position_Sphere(r=.05, phi=0.0, z=.1)
+        sphere1.orient(np.pi / 4, 0.0)
+        sphere2 = Sphere(.0254)
+        sphere2.position_Sphere(r=.05, phi=0.0, z=-.1)
+        sphere2.orient(3*np.pi / 4, 0.0)
+        rTest = np.ones((1, 3)) * .01
+        BVec_Symm1=sphere1.B_Shim(rTest,planeSymmetry=True)[0]
+        BVec_Symm2=sphere1.B_Shim(rTest,planeSymmetry=False)[0]+sphere2.B_Shim(rTest,planeSymmetry=False)[0]
+        BVec_Symm1_0=np.asarray([-0.005073988068039584, -0.004641226428626564 ,0.010301384134222108])
+        BVec_Symm2_0=np.asarray([-0.005073988068039583, -0.004641226428626562 ,0.010301384134222113])
+        assert np.all(np.abs(BVec_Symm1 - BVec_Symm1_0) < self.numericTol)
+        assert np.all(np.abs(BVec_Symm2 - BVec_Symm2_0) < self.numericTol)
+        assert np.all(np.abs(BVec_Symm2 - BVec_Symm1) < self.numericTol)

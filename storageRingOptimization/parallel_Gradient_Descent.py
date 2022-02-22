@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from collections.abc import Iterable
+from asyncDE import solve_Async
 import multiprocess as mp
 import numpy as np
 import descent
@@ -56,6 +57,7 @@ class GradientOptimizer:
         meanF0 = np.mean(vals_ab)
         deltaVals = vals_ab[:, 0] - vals_ab[:, 1]
         grad = deltaVals / (2 * self.gradStepSampSize)
+        print(x0,meanF0)
         return meanF0,grad
     def _forward_Difference_And_F0(self,x0):
         mask = np.eye(len(x0))
@@ -123,9 +125,10 @@ class GradientOptimizer:
         func=self._forward_Difference_And_F0 if self.gradMethod=='forward' else self._central_Difference_And_F0
         sol = opt.minimize(func, self.xi,maxiter=self.maxIters)
         if self.Plot==True:
-            plt.plot(sol['obj'])
+            plt.semilogy(sol['obj'])
             plt.xlabel("Iteration")
             plt.ylabel("Cost (goal is to minimize)")
+            plt.tight_layout()
             plt.show()
         return sol.x,np.min(sol['obj'])
 
@@ -155,14 +158,15 @@ def global_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,g
                            gradMethod='central',parallel=True,Plot=False,descentMethod='momentum'):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
     if parallel==True:
-        with mp.Pool() as pool:
-            vals=np.asarray(pool.map(funcObj,samples))
+        with mp.Pool(maxtasksperchild=1) as pool:
+            vals=np.asarray(pool.map(funcObj,samples,chunksize=1))
     else:
         vals=np.asarray([funcObj(x) for x in samples])
     xOptimal=samples[np.argmin(vals)]
     result= gradient_Descent(funcObj,xOptimal,stepSizeInitial,maxIters,momentumFact=momentumFact,
     disp=disp,parallel=parallel,gradMethod=gradMethod,Plot=Plot,gradStepSize=gradStepSize,descentMethod=descentMethod)
     return result
+
 def _self_Test1():
     def test_Func(X):
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2

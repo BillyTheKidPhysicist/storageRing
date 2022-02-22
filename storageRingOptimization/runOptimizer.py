@@ -17,9 +17,10 @@ def survival_Optimize(bounds,tuning,workers):
             assert False
         return cost
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
-    global_Gradient_Descent(wrapper,bounds,100,50e-6,100,50e-6,descentMethod='adam',Plot=True)
-    solve_Async(wrapper,bounds,15,timeOut_Seconds=100000,workers=workers)
-
+    # global_Gradient_Descent(wrapper,bounds,500,25e-6,100,25e-6,descentMethod='adam',Plot=True)
+    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
+    args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
+    gradient_Descent(wrapper,args0,25e-6,100,descentMethod='adam',gradStepSize=25e-6)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
@@ -48,6 +49,8 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         print(args0,nominalCost,variability)
         return nominalCost+variability
     solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers,surrogateMethodProb=.1)
+    # args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
+    # gradient_Descent(wrapper,args0,25e-6,100,descentMethod='adam',gradStepSize=25e-6)
 if __name__=='__main__':
     bounds = [
         (.005, .03),  # rpLens
@@ -60,7 +63,7 @@ if __name__=='__main__':
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    # stability_And_Survival_Optimize(bounds,None,8)
+    # stability_And_Survival_Optimize(bounds,None,10)
     survival_Optimize(bounds,None,8)
 '''
 

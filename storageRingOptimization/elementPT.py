@@ -909,6 +909,8 @@ class BenderIdealSegmentedWithCap(BenderIdealSegmented):
         return qLab
 
 class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
+    #todo: a feature to prevent the interpolation introducing ridiculous fields into the bore by ending inside the
+    #magnet
     #this element is a model of a bending magnet constructed of segments. There are three models from which data is
     # extracted required to construct the element. All exported data must be in a grid, though it the spacing along
     #each dimension may be different.
@@ -927,6 +929,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
         #                  fillParams=False)
         super().__init__(None,None,None,None,None,None,None,None,None,None,None,fillParams=False)
+        assert apFrac<.98 # to prevent weird behaviour at edges
         self.sim = True
         self.PTL=PTL
         self.rb=rb
@@ -1213,6 +1216,7 @@ class HalbachLensSim(LensIdeal):
             if magnetWidth is not None:
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
+        assert apFrac<=.95
         super().__init__(PTL, None, None, min(rpLayers), None, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L

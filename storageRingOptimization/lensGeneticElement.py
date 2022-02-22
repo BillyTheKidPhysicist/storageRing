@@ -1,20 +1,9 @@
-from numbers import Number
-import scipy.interpolate as spi
 import time
 import matplotlib.pyplot as plt
-import joblib
 import numpy as np
-from math import sqrt
-import warnings
-from InterpFunction import generate_3DInterp_Function_NUMBA, generate_2DInterp_Function_NUMBA
-import pandas as pd
 import numba
-from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from HalbachLensClass import SegmentedBenderHalbach\
-    as _SegmentedBenderHalbachLensFieldGenerator
-from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION_MAGNETON
-from elementPT import CombinerHexapoleSim,LensIdeal
-from HalbachLensClass import GeneticLens
+from elementPT import LensIdeal
+from geneticLensClass import GeneticLens
 
 
 
@@ -48,13 +37,13 @@ class geneticLensElement(LensIdeal):
         #to accomdate the new rp such as force values and positions
         # super().__init__(PTL, geneticLens.length, geneticLens.maximum_Radius(), np.nan,np.nan,'injector',fillParams=False)
         super().__init__(PTL, geneticLens.length, None,geneticLens.maximum_Radius(), ap,fillParams=False)
-        self.fringeFracOuter=1.5
+        self.fringeFracOuter=4.0
         self.L=geneticLens.length+2*self.fringeFracOuter*self.rp
         self.Lo=None
         self.type = 'STRAIGHT'
         self.lens=geneticLens
         assert self.lens.minimum_Radius()>=ap
-        self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
+        self.fringeFracInnerMin=np.inf #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
@@ -73,7 +62,7 @@ class geneticLensElement(LensIdeal):
         #todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
         #of the bore radius
 
-        numPointsLongitudinal=25
+        numPointsLongitudinal=35
         numPointsTransverse=31
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
@@ -159,18 +148,5 @@ class geneticLensElement(LensIdeal):
         else:
             raise Exception(ValueError)
         return V
-    #
-    #
-    #
-    # def force(self, q):
-    #
-    #     F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(*q,self.Lcap,self.L,self.ap,self.force_Func_Inner
-    #                                                               ,self.force_Func_Outer)
-    #     # if np.isnan(F[0])==False:
-    #     #     cutoff=2*self.fringeFracOuter*self.rp
-    #     #     assert cutoff<self.L
-    #     #     if q[0]<cutoff or q[0]>self.L-cutoff:
-    #     #         return np.zeros(3)
-    #     return self.fieldFact*np.asarray(F)
 
 
