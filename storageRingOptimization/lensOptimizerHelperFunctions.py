@@ -82,9 +82,9 @@ class helper:
         assert self.PTL.elList[1].fringeFracOuter==self.fringeFrac and self.PTL.elList[1].rp==self.lens.maximum_Radius()
     def make_Interp_Function(self):
         swarmTracer=SwarmTracer(self.PTL)
-        angle=.1
+        angle=.09
         v0=210.0
-        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,3000,sameSeed=True)
+        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,1000,sameSeed=True)
         h=1e-5
         fastMode=True
         swarmTraced=swarmTracer.trace_Swarm_Through_Lattice(swarm,h,1.0,fastMode=fastMode,

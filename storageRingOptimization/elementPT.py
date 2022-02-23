@@ -929,7 +929,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
         #                  fillParams=False)
         super().__init__(None,None,None,None,None,None,None,None,None,None,None,fillParams=False)
-        assert apFrac<.98 # to prevent weird behaviour at edges
         self.sim = True
         self.PTL=PTL
         self.rb=rb
