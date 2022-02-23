@@ -132,18 +132,6 @@ def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
         TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1, parallel1)
         fastMode2,accelerated2,parallel2=False,False,False
         TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2, parallel2)
-def test1():
-    TEST_Lattice_Configuration('1')
-def test2():
-    TEST_Lattice_Configuration('2')
-def test3():
-    TEST_Lattice_Configuration('3')
-def test4():
-    TEST_Lattice_Configuration('4')
-def test5():
-    TEST_Lattice_Configuration('5')
-def test6():
-    TEST_Lattice_Configuration('6')
 def _save_New_Data():
     tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
@@ -156,3 +144,7 @@ def _full_Test():
         print('Test number ' + testNum)
         TEST_Lattice_Configuration(testNum, fullTest=True)
         print('Success')
+def test():
+    tests = ['1', '2', '3', '4', '5', '6']
+    for testNum in tests:
+        TEST_Lattice_Configuration(testNum, fullTest=False)

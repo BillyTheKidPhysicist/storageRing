@@ -122,11 +122,8 @@ class HalbachLensTestHelper:
         assert abs(residuals-residuals0)<self.numericTol
         # plt.scatter(rArr,BNormVals)
         # plt.show()
-def test_Sphere():
+def test():
     SphereTestHelper().run_Tests()
-def test_Rectangular_Prism():
     RectangularPrismTestHelper().run_Tests()
-def test_Layer():
     LayerTestHelper().run_Tests()
-def test_Halbach_Lens():
     HalbachLensTestHelper().run_Tests()

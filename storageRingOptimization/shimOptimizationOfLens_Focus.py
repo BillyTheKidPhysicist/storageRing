@@ -8,20 +8,25 @@ from geneticLensClass import GeneticLens
 import numpy as np
 from profilehooks import profile
 from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens
-
+import copy
 
 class ShimHelper:
     def __init__(self, paramsBounds, paramsLocked, shimID):
+        #todo: It doesn't really make sense that I attached shimID to param strings here.
+
         # bounds: Dict of bounds for shim arguments
         # params: Dict of bounds for shim params
-        paramKeysNoID = ['radius', 'r', 'phi', 'z', 'theta', 'psi', 'planeSymmetry']
-        assert all(key in {**paramsLocked, **paramsBounds} for key in paramKeysNoID)
+        paramsBounds, paramsLocked = copy.copy(paramsBounds), copy.copy(paramsLocked)
+        paramKeysNoID = ['radius', 'r', 'phi', 'deltaZ', 'theta', 'psi', 'planeSymmetry']
+        assert 'planeSymmetry' in paramsLocked
+        if paramsLocked['planeSymmetry']==False:
+            paramKeysNoID.append('location') #users needs to specificy where the shim is
+        assert all(key in paramsLocked|paramsBounds for key in paramKeysNoID)
         assert len(paramsLocked | paramsBounds) == len(paramKeysNoID)
-        assert 'planeSymmetry' not in paramsBounds
-        assert isinstance(paramsLocked['planeSymmetry'], bool)
         assert all(len(value) == 2 for key, value in paramsBounds.items())
+        self.ID=shimID
         self.paramKeys = [key + shimID for key in paramKeysNoID]
-        self.paramsLocked = {'component': 'shim'}
+        self.paramsLocked = {'component'+shimID: 'shim'}
         # self.paramsLocked['component']='shim'
         self.paramsBounds = {}
         for key, value in paramsLocked.items():
@@ -32,6 +37,7 @@ class ShimHelper:
 
 class LensHelper:
     def __init__(self, paramsBounds, paramsLocked):
+        paramsBounds, paramsLocked = copy.copy(paramsBounds), copy.copy(paramsLocked)
         self.paramKeys = ['rp', 'width', 'length']
         assert all(key in {**paramsLocked, **paramsBounds} for key in self.paramKeys)
         assert len(paramsLocked | paramsBounds) == len(self.paramKeys)
@@ -81,19 +87,27 @@ class ShimOptimizer:
         return lensDNADict, argsConsumed
 
     def make_Shim_DNA_Dict(self, shim, args, lensDNA_Dict):
-        shimDNA_Dict_Temp = shim.paramsLocked
-        argsConsumed = 0
-        for key, arg in zip(self.boundsKeys, args):
+        shimDNA_Dict_With_ID = shim.paramsLocked
+        argsConsumed = 0 #track when args are used to make sure it adds up
+        for key, arg in zip(self.boundsKeys, args): #unload relevant args into shim DNA. Params still have ID
             if key in shim.paramKeys:
-                shimDNA_Dict_Temp[key] = arg
+                shimDNA_Dict_With_ID[key] = arg
                 argsConsumed += 1
-        shimDNA_Dict = {}
-        for key, val in shimDNA_Dict_Temp.items():
-            key = key[:-1] if key != 'component' else key
-            if key == 'z':
-                val += lensDNA_Dict['length'] / 2
-            shimDNA_Dict[key] = val
-        assert len(shimDNA_Dict) == 8
+        shimDNA_Dict = {} #Genetic lens can't work with params with ID tags
+        for key, val in shimDNA_Dict_With_ID.items(): #make
+            keyNoID = key[:-1]
+            shimDNA_Dict[keyNoID] = val
+        #change deltaz to z and adjust z position of shim depending on location param
+        lensZ_End = lensDNA_Dict['length'] / 2  # lens is centered with z=0
+        if shim.paramsLocked['planeSymmetry'+shim.ID] == True or shim.paramsLocked['location'+shim.ID] == 'top':
+            zLoc = lensZ_End + shimDNA_Dict['deltaZ']
+        else:
+            assert shim.paramsLocked['location' + shim.ID] == 'bottom'
+            zLoc = -(lensZ_End + shimDNA_Dict['deltaZ'])  # flip shim to bottom
+        shimDNA_Dict.pop('deltaZ')
+        shimDNA_Dict['z']=zLoc
+        if shim.paramsLocked['planeSymmetry'+shim.ID]==True: assert len(shimDNA_Dict) == 8
+        else: assert len(shimDNA_Dict) == 9
         return shimDNA_Dict, argsConsumed
 
     def make_DNA_List_From_Args(self, args):
@@ -136,6 +150,10 @@ class ShimOptimizer:
     def optimize(self, lensBaseLineParams):
         self.make_Bounds()
         self.initialize_Baseline_Values(lensBaseLineParams)
+        # import scipy.optimize as spo
+        # import multiprocess as mp
+        # sol=spo.differential_evolution(self.cost_Function,self.bounds,polish=False,workers=mp.Pool().map,disp=True)
+        # print(sol)
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), timeOut_Seconds=3600 * 4, workers=10)
         print(sol)
 
@@ -148,13 +166,13 @@ def run():
     lensParams = {'rp': rp, 'width': magnetWidth}
     lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
 
-    shim1ParamBounds = {'r': (rp, rp + magnetWidth), 'phi':(0.0,np.pi/6),'z': (0.0, rp), 'theta': (0.0, np.pi),
+    shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
-    shim1LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False}
+    shim1LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False, 'location':'bottom','phi':np.pi/6}
 
-    shim2ParamBounds = {'r': (rp, rp + magnetWidth), 'phi':(0.0,np.pi/6),'z': (-(L0/2+rp), -L0/2), 'theta': (0.0, np.pi),
+    shim2ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
-    shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False}
+    shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False,'location':'top','phi':np.pi/6}
     shimOptimizer = ShimOptimizer()
     shimOptimizer.set_Lens(lensBounds, lensParams)
     shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
