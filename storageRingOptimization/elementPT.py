@@ -17,7 +17,7 @@ from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION
 
 #Todo: there has to be a more logical way to do all this numba stuff
 
-#Todo: set numpy array to unwritabel
+#todo: this is just awful
 
 # from profilehooks import profile
 
