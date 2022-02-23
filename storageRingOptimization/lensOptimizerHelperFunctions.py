@@ -66,7 +66,10 @@ class Interpolater:
 class helper:
     def __init__(self,lens,apMin):
         self.lens=lens
-        self.apMin=apMin
+        if apMin is None:
+            self.apMin=self.lens.minimum_Radius()*.95
+        else:
+            self.apMin=apMin
         self.L_Object=.72
         self.L_Image=.8
         self.fringeFrac=4.0
@@ -92,7 +95,7 @@ class helper:
         # for particle in swarmTraced:
         #     particle.plot_Energies()
         if fastMode==False:
-            self.PTL.show_Lattice(swarm=swarmTraced,trueAspectRatio=False,showTraceLines=True)
+            self.PTL.show_Lattice(swarm=swarmTraced,trueAspectRatio=False,showTraceLines=True,traceLineAlpha=.1)
         interpFunc=Interpolater(swarmTraced,self.PTL)
         return interpFunc
     def atom_focus_Intensity(self,x,interpFunc,Print=False):
@@ -124,6 +127,6 @@ class helper:
         IPeak=np.max(IDense)
         m=self.get_Magnification(xFocus)
         return IPeak,m
-def IPeak_And_Magnification_From_Lens(lens,apMin):
+def IPeak_And_Magnification_From_Lens(lens,apMin=None):
     return helper(lens,apMin).IPeak_And_Magnification_From_Lens()
 

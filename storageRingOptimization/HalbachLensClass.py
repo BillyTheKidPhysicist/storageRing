@@ -157,6 +157,7 @@ class Sphere:
         if planeReflection == True:  # another dipole on the other side of the z=0 line
             r0Sym[2] = -r0Sym[2]
             mSym[-1]*=-1
+        # plt.quiver(r0Sym[0],r0Sym[1],mSym[0],mSym[1])
         BVecArr = B_NUMBA(r, r0Sym, mSym)
         return BVecArr
 class RectangularPrism:

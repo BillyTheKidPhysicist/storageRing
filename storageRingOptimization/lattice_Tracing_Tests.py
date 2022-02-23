@@ -116,7 +116,7 @@ def generate_Lattice(configuration):
     else:
         raise Exception('no proper configuration name provided')
     return PTL
-def TEST_Lattice_Configuration(configuration,fullTest,saveData):
+def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
     PTL=generate_Lattice(configuration)
     testSwarm=generate_Test_Swarm(configuration)
     TESTName='test_'+configuration
@@ -128,13 +128,31 @@ def TEST_Lattice_Configuration(configuration,fullTest,saveData):
                 for accelerated in [True,False]:
                     TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
     elif fullTest==False:
-        fastMode,accelerated,parallel=False,False,False
-        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
-
-def TEST_All(saveData=False,fullTest=True):
-    tests=['1','2','3','4','5','6']
+        fastMode1,accelerated1,parallel1=True,True,True
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1, parallel1)
+        fastMode2,accelerated2,parallel2=False,False,False
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2, parallel2)
+def test1():
+    TEST_Lattice_Configuration('1')
+def test2():
+    TEST_Lattice_Configuration('2')
+def test3():
+    TEST_Lattice_Configuration('3')
+def test4():
+    TEST_Lattice_Configuration('4')
+def test5():
+    TEST_Lattice_Configuration('5')
+def test6():
+    TEST_Lattice_Configuration('6')
+def _save_New_Data():
+    tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
-        print('Test number '+testNum)
-        TEST_Lattice_Configuration(testNum,fullTest,saveData)
+        print('Test number ' + testNum)
+        TEST_Lattice_Configuration(testNum, saveData=True)
         print('Success')
-TEST_All()
+def _full_Test():
+    tests = ['1', '2', '3', '4', '5', '6']
+    for testNum in tests:
+        print('Test number ' + testNum)
+        TEST_Lattice_Configuration(testNum, fullTest=True)
+        print('Success')
