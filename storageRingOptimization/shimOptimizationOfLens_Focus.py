@@ -163,7 +163,7 @@ class ShimOptimizer:
     def optimize(self):
         self.make_Bounds()
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
-                          tol=.03,disp=False)
+                          tol=.03,disp=True)
         print(sol)
 '''
 ----baseline----
@@ -175,14 +175,14 @@ class ShimOptimizer:
 def run():
     np.random.seed(int(time.time()))
     rp = .05
-    L0 = .23+.02
+    L0 = .23
     magnetWidth = .0254
     lensBounds = {'length': (L0 - rp, L0)}
     lensParams = {'rp': rp, 'width': magnetWidth}
     lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
     shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-                        'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
-    shim1LockedParams = { 'planeSymmetry': True}
+                        'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254)}
+    shim1LockedParams = { 'planeSymmetry': True,'phi':np.pi/6}
     # shim2ParamBounds = {'r': (rp, rp + magnetWidth),'phi':(0.0,np.pi/6),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
     #                     'psi': (0.0, 2 * np.pi)}
     # shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False,'location':'top','phi':np.pi/6}
@@ -190,10 +190,7 @@ def run():
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
     # shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
-    # shimOptimizer.optimize()
-    args=np.array([0.1939315 +.021, 0.07428757, 0.04422756, 1.66873427, 5.3013776 ,
-       0.02519861, 0.38656361])
-    shimOptimizer.characterize_Results(args)
+    shimOptimizer.optimize()
 run() #1.162830449711638
 # def run2():
 #     np.random.seed(int(time.time()))
