@@ -25,6 +25,8 @@ class TestHelper:
         absMean1,absMean2=np.mean(np.abs(BNormGrad1)),np.mean(np.abs(BNormGrad2))
         RMS1_0,RMS2_0=5.051401935138513 ,5.051401935258421
         absMean1_0,absMean2_0=3.180307805389812 ,3.180307805708118
+        assert lens1.geometry_Frac_Overlap() + lens2.geometry_Frac_Overlap() == 0.0
+        assert abs(np.mean(BNormGrad1)) < self.algoTol and abs(np.mean(BNormGrad2)) < self.algoTol
         self.assert_Fields_And_Length(RMS1,RMS2,absMean1,absMean2,RMS1_0,RMS2_0,absMean1_0,absMean2_0,lens1,lens2)
     def test2(self):
         #Test that the same configuration of shims gives the same result even if done differently by using or
@@ -41,6 +43,8 @@ class TestHelper:
         absMean1,absMean2=np.mean(np.abs(BNormGrad1)),np.mean(np.abs(BNormGrad2))
         RMS1_0,RMS2_0=1.259261565490003, 1.2592615654896586
         absMean1_0,absMean2_0=0.6293849561810528 ,0.6293849561809091
+        print(abs(np.mean(BNormGrad1)) ,abs(np.mean(BNormGrad2)))
+        assert lens1.geometry_Frac_Overlap()+lens2.geometry_Frac_Overlap()==0.0
         self.assert_Fields_And_Length(RMS1,RMS2,absMean1,absMean2,RMS1_0,RMS2_0,absMean1_0,absMean2_0,lens1,lens2)
     def assert_Fields_And_Length(self,RMS1,RMS2,absMean1,absMean2,RMS1_0,RMS2_0,absMean1_0,absMean2_0,lens1,lens2):
         assert abs(RMS1 - RMS1_0) < self.numericTol and abs(RMS2 - RMS2_0) < self.numericTol

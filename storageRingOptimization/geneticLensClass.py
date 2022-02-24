@@ -1,4 +1,5 @@
 from HalbachLensClass import HalbachLens,Layer,Sphere
+from shapely.geometry import Polygon,Point
 import matplotlib.pyplot as plt
 import numpy as np
 from collections.abc import Iterable
@@ -88,21 +89,25 @@ class GeneticLens(HalbachLens):
     def is_Geometry_Valid(self):
         for sphere in self.sphereList:
             for layer in self.layerList:
-                if self._does_Sphere_Overlap_With_Layer(sphere,layer)==True:
+                if self._sphere_Frac_Overlap_With_Layer(sphere,layer)>1e-6:
                     return False
         return True
-    def _does_Sphere_Overlap_With_Layer(self,sphere:Sphere,layer:Layer):
-        # enforce geometric constraints of spheres and layer disk
-        if sphere.z - sphere.radius > layer.z+layer.length/2:  # bottom of spher is above top of layer, so it's clear
-            return False
-        elif sphere.z+ sphere.radius < layer.z-layer.length/2:  #top of sphere is below bottom of layer, so it's clear
-            return False
-        elif sphere.r-sphere.radius>min(layer.rp)+layer.width: #sphere is outside the outer edge of the layer
-            return False
-        elif sphere.r+sphere.radius<min(layer.rp): #sphere is outside the outer edge of the layer
-            return False
-        elif layer.z-layer.length/2<sphere.z<layer.z+layer.length/2 and min(layer.rp)<sphere.r<min(layer.rp)+\
-                layer.width: #sphere is inside the layer
-            return True
-        else: #intermediate region. Can be rolling off the edge so to speak
-            return True
+    def geometry_Frac_Overlap(self):
+        totalFrac=0
+        for sphere in self.sphereList:
+            for layer in self.layerList:
+                totalFrac+=self._sphere_Frac_Overlap_With_Layer(sphere,layer)
+        return totalFrac
+    def _sphere_Frac_Overlap_With_Layer(self,sphere:Sphere,layer:Layer):
+        assert len(layer.rp)==1 # this does not work for goofy shapes of layers yet
+        r = sphere.r
+        z = sphere.z
+        radius = sphere.radius
+        z0 = layer.z
+        L = layer.length
+        rp = min(layer.rp)
+        width = layer.width
+        profile = Polygon([(rp, z0 - L / 2), (rp + width, z0 - L / 2), (rp + width, z0 + L / 2), (rp, z0 + L / 2)])
+        shim = Point(r, z).buffer(radius)
+        overlapFrac = profile.intersection(shim).area / shim.area
+        return overlapFrac

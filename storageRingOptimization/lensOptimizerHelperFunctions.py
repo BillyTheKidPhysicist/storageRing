@@ -85,7 +85,7 @@ class helper:
         assert self.PTL.elList[1].fringeFracOuter==self.fringeFrac and self.PTL.elList[1].rp==self.lens.maximum_Radius()
     def make_Interp_Function(self):
         swarmTracer=SwarmTracer(self.PTL)
-        angle=.09
+        angle=.08
         v0=210.0
         swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,1000,sameSeed=True)
         h=1e-5
@@ -98,35 +98,40 @@ class helper:
             self.PTL.show_Lattice(swarm=swarmTraced,trueAspectRatio=False,showTraceLines=True,traceLineAlpha=.1)
         interpFunc=Interpolater(swarmTraced,self.PTL)
         return interpFunc
-    def atom_focus_Intensity(self,x,interpFunc,Print=False):
-        yArr, zArr,pArr = interpFunc(x,returnP=True)
-        beamArea=np.std(yArr)*np.std(zArr)
-        if Print==True:
-            print(':',beamArea,len(yArr))
-        return len(yArr)/beamArea
+    def atom_Beam_Intensity(self,x,interpFunc):
+        I= self.beam_Characterization(x,interpFunc)[0]
+        return I
+    def beam_Characterization(self,x,interpFunc):
+        yArr, zArr, pArr = interpFunc(x, returnP=True)
+        rArr=np.sqrt(yArr**2+zArr**2)
+        beamAreaRMS = np.std(yArr) * np.std(zArr)
+        beamAreaD90=np.sort(np.sqrt(yArr**2+zArr**2))[int(len(yArr)*.9)]
+        I=len(yArr)/(np.pi*np.mean(rArr)**2)
+        numD90=int(len(yArr)*.9)
+        return I,beamAreaRMS,beamAreaD90,numD90
 
-        # rArr = np.sqrt(yArr ** 2 + zArr ** 2)
-        # numParticles = len(yArr)
-        # D_90 = np.sort(rArr)[int(numParticles * .9)]
-        # return numParticles*.9/D_90
     def get_Magnification(self,xFocus):
         L_Focus=xFocus-(abs(self.PTL.elList[1].r2[0])-self.fringeFrac*self.PTL.elList[1].rp)
         return L_Focus/self.L_Object
     def IPeak_And_Magnification_From_Lens(self):
+        results=self.characterize_Focus()
+        return results['I'],results['m']
+    def characterize_Focus(self):
         self.make_Lattice()
-        interpFunc=self.make_Interp_Function()
-        xArr=np.linspace(-self.PTL.elList[-1].r1[0]+2e-3,-self.PTL.elList[-1].r2[0]-2e-3,300)
-        IArr=np.asarray([self.atom_focus_Intensity(x,interpFunc) for x in xArr])
-        RBF_Func=spi.Rbf(xArr,IArr)
-        xDense=np.linspace(xArr.min(),xArr.max(),10_000)
-        IDense=RBF_Func(xDense)
+        interpFunc = self.make_Interp_Function()
+        xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 2e-3, -self.PTL.elList[-1].r2[0] - 2e-3, 300)
+        IArr = np.asarray([self.atom_Beam_Intensity(x, interpFunc) for x in xArr])
+        RBF_Func = spi.Rbf(xArr, IArr)
+        xDense = np.linspace(xArr.min(), xArr.max(), 10_000)
+        IDense = RBF_Func(xDense)
         # plt.plot(xArr,IArr)
         # plt.show()
-        xFocus=xDense[np.argmax(IDense)]
-
-        IPeak=np.max(IDense)
-        m=self.get_Magnification(xFocus)
-        return IPeak,m
+        xFocus = xDense[np.argmax(IDense)]
+        IPeak,beamAreaRMS,beamAreaD90,numD90 = self.beam_Characterization(xFocus, interpFunc)
+        m = self.get_Magnification(xFocus)
+        results={'I':IPeak,'m':m,'beamAreaRMS':beamAreaRMS,'beamAreaD90':beamAreaD90,'particles in D90':numD90}
+        return results
 def IPeak_And_Magnification_From_Lens(lens,apMin=None):
     return helper(lens,apMin).IPeak_And_Magnification_From_Lens()
-
+def characterize_Focus(lens,apMin=None):
+    return helper(lens, apMin).characterize_Focus()

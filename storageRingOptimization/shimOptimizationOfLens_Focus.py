@@ -7,7 +7,7 @@ from geneticLensClass import GeneticLens
 
 import numpy as np
 from profilehooks import profile
-from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens
+from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens,characterize_Focus
 import copy
 
 class ShimHelper:
@@ -22,8 +22,9 @@ class ShimHelper:
         if paramsLocked['planeSymmetry']==False:
             paramKeysNoID.append('location') #users needs to specificy where the shim is
         assert all(key in paramsLocked|paramsBounds for key in paramKeysNoID)
-        assert len(paramsLocked | paramsBounds) == len(paramKeysNoID)
+        assert len(paramsLocked) +len(paramsBounds) == len(paramKeysNoID)
         assert all(len(value) == 2 for key, value in paramsBounds.items())
+        assert all(key not in paramsLocked for key,value in paramsBounds.items())
         self.ID=shimID
         self.paramKeys = [key + shimID for key in paramKeysNoID]
         self.paramsLocked = {'component'+shimID: 'shim'}
@@ -35,13 +36,15 @@ class ShimHelper:
             self.paramsBounds[key + shimID] = value
 
 
+
 class LensHelper:
     def __init__(self, paramsBounds, paramsLocked):
         paramsBounds, paramsLocked = copy.copy(paramsBounds), copy.copy(paramsLocked)
         self.paramKeys = ['rp', 'width', 'length']
         assert all(key in {**paramsLocked, **paramsBounds} for key in self.paramKeys)
-        assert len(paramsLocked | paramsBounds) == len(self.paramKeys)
+        assert len(paramsLocked) +len(paramsBounds) == len(self.paramKeys)
         assert all(len(value) == 2 for key, value in paramsBounds.items())
+        assert all(key not in paramsLocked for key, value in paramsBounds.items())
         self.paramsLocked = paramsLocked
         self.paramsBounds = paramsBounds
         self.paramsLocked['component'] = 'layer'
@@ -54,11 +57,14 @@ class ShimOptimizer:
         self.bounds = []
         self.boundsKeys = []
         self.makeBoundsCalled = False
-        self.IPeak0 = None
-        self.m0 = None
+        self.addedLens=False
+        self.baseLineFocusDict=None
 
-    def set_Lens(self, paramsBounds, paramsLocked):
+    def set_Lens(self, paramsBounds, paramsLocked, baseLineParams):
+        assert self.addedLens==False
         self.lens = LensHelper(paramsBounds, paramsLocked)
+        self.initialize_Baseline_Values(baseLineParams)
+        self.addedLens=True
 
     def add_Shim(self, paramsBounds, paramsLocked):
         shimID = str(len(self.shimsList))
@@ -130,14 +136,15 @@ class ShimOptimizer:
         return lens
 
     def cost_Function(self, args, Print=False):
+        assert self.baseLineFocusDict is not None
         lens = self.make_Lens(args)
         if lens.is_Geometry_Valid() == False:
             return np.inf
         IPeak, m = IPeak_And_Magnification_From_Lens(lens)
         if Print == True:
-            print(IPeak, m)  # 29.189832542115177 0.9739048904890494
-        focusCost = self.IPeak0 / IPeak  # goal to is shrink this
-        magCost = 1 + 5.0 * abs(m / self.m0 - 1)  # goal is to keep this the same
+            print('INew:',IPeak,"mNew: ", m)  # 29.189832542115177 0.9739048904890494
+        focusCost = self.baseLineFocusDict['I'] / IPeak  # goal to is shrink this
+        magCost = 1 + 5.0 * abs(m / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
         cost = focusCost * magCost
         return cost
 
@@ -145,76 +152,118 @@ class ShimOptimizer:
         assert len(lensBaseLineParams) == 3
         lensBaseLineParams['component'] = 'layer'
         lensBaseLine = GeneticLens([lensBaseLineParams])
-        self.IPeak0, self.m0 = IPeak_And_Magnification_From_Lens(lensBaseLine)
-
-    def optimize(self, lensBaseLineParams):
+        self.baseLineFocusDict = characterize_Focus(lensBaseLine)
+    def characterize_Results(self,args):
         self.make_Bounds()
-        self.initialize_Baseline_Values(lensBaseLineParams)
-        # import scipy.optimize as spo
-        # import multiprocess as mp
-        # sol=spo.differential_evolution(self.cost_Function,self.bounds,polish=False,workers=mp.Pool().map,disp=True)
-        # print(sol)
-        sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), timeOut_Seconds=3600 * 4, workers=10)
+        results=characterize_Focus(self.make_Lens(args))
+        print('----baseline----')
+        print(self.baseLineFocusDict)
+        print('----proposed lens----')
+        print(results)
+    def optimize(self):
+        self.make_Bounds()
+        sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
+                          tol=.03,disp=False)
         print(sol)
-
+'''
+----baseline----
+{'I': 23.092876870739236, 'm': 0.9781364247535868, 'beamAreaRMS': 24.942756297715512, 'beamAreaD90': 12.297600978035153, 'particles in D90': 518}
+----proposed lens----
+{'I': 38.13961438169031, 'm': 0.9781364247535868, 'beamAreaRMS': 16.46581933721606, 'beamAreaD90': 10.156935839084213, 'particles in D90': 565}
+'''
 
 def run():
+    np.random.seed(int(time.time()))
     rp = .05
-    L0 = .23
+    L0 = .23+.02
     magnetWidth = .0254
     lensBounds = {'length': (L0 - rp, L0)}
     lensParams = {'rp': rp, 'width': magnetWidth}
     lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
-
     shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-                        'psi': (0.0, 2 * np.pi)}
-    shim1LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False, 'location':'bottom','phi':np.pi/6}
-
-    shim2ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-                        'psi': (0.0, 2 * np.pi)}
-    shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False,'location':'top','phi':np.pi/6}
+                        'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
+    shim1LockedParams = { 'planeSymmetry': True}
+    # shim2ParamBounds = {'r': (rp, rp + magnetWidth),'phi':(0.0,np.pi/6),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
+    #                     'psi': (0.0, 2 * np.pi)}
+    # shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False,'location':'top','phi':np.pi/6}
     shimOptimizer = ShimOptimizer()
-    shimOptimizer.set_Lens(lensBounds, lensParams)
+    shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
-    shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
-    shimOptimizer.optimize(lensBaseLineParams)
+    # shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
+    # shimOptimizer.optimize()
+    args=np.array([0.1939315 +.021, 0.07428757, 0.04422756, 1.66873427, 5.3013776 ,
+       0.02519861, 0.38656361])
+    shimOptimizer.characterize_Results(args)
+run() #1.162830449711638
+# def run2():
+#     np.random.seed(int(time.time()))
+#     rp = .05
+#     L0 = .23
+#     magnetWidth = .0254
+#     lensBounds = {'length': (L0 - rp, L0)}
+#     lensParams = {'rp': rp, 'width': magnetWidth}
+#     lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
+#     shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
+#                         'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
+#     shim1LockedParams = { 'planeSymmetry': True}
+#     shim2ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
+#                         'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
+#     shim2LockedParams = { 'planeSymmetry': True}
+#     shimOptimizer = ShimOptimizer()
+#     shimOptimizer.set_Lens(lensBounds, lensParams)
+#     shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
+#     shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
+#     shimOptimizer.optimize(lensBaseLineParams)
+# print('1 shim')
+# run()
+# run()
+# run()
+#
+# print('2 shim, symetruc')
+# run2()
+# run2()
+# run2()
 
-
-run()
 
 '''
-1 sphere
-has z symmetry
-
-POPULATION VARIABILITY: [0.009579   0.007715   0.00096799 0.01281744 0.03542631 0.02044798]
-BEST MEMBER BELOW
+/opt/homebrew/Caskroom/miniforge/base/bin/python3.9 /Users/williamdebenham/Desktop/addHexapoleCombiner/storageRing/storageRingOptimization/shimOptimizationOfLens_Focus.py
+1 shim
+finished with total evals:  3885
 ---population member---- 
-DNA: array([ 0.2181784 ,  0.05971335, -0.52356326,  0.013647  ,  1.57591938,
-        1.75151608])
-cost: 0.5892802938504855
-'''
-
-'''
-2 sphere
-each has z symmetry
-one is set to phi=0.0 and the other phi=pi/6.
-
-------ITERATIONS:  2430
-POPULATION VARIABILITY: [0.05763707 0.06745681 0.11878127 0.12529942 0.09902359 0.05341342
- 0.09657387 0.10569297 0.08088745]
-BEST MEMBER BELOW
+DNA: array([0.1939315 , 0.07428757, 0.04422756, 1.66873427, 5.3013776 ,
+       0.02519861, 0.38656361])
+cost: 0.5504259509623759
+finished with total evals:  3625
 ---population member---- 
-DNA: array([0.20239452, 0.0595642 , 0.02210917, 1.45808684, 2.93923315,
-       0.05699902, 0.01929926, 1.62861884, 5.21635232])
-cost: 0.268153059157226
+DNA: array([0.19428933, 0.07510745, 0.03820404, 1.66726418, 5.28433483,
+       0.0254    , 0.42090581])
+cost: 0.5625337467072316
+finished with total evals:  5064
+---population member---- 
+DNA: array([0.19533868, 0.0754    , 0.05      , 1.56032094, 0.        ,
+       0.0241335 , 0.48542109])
+cost: 0.6301312323755456
+2 shim, symetruc
+finished with total evals:  7761
+---population member---- 
+DNA: array([1.95347647e-01, 7.54000000e-02, 5.00000000e-02, 2.68940224e-01,
+       4.86574178e+00, 3.20941832e-03, 1.11977353e-01, 7.54000000e-02,
+       5.00000000e-02, 1.55973633e+00, 5.33403202e+00, 2.53089433e-02,
+       3.83785791e-01])
+cost: 0.5495495523461477
+finished with total evals:  37276
+---population member---- 
+DNA: array([0.18367999, 0.05995075, 0.01601266, 1.74390493, 5.18542745,
+       0.0157448 , 0.52359878, 0.0628019 , 0.01692008, 1.38215415,
+       2.96171379, 0.01631584, 0.        ])
+cost: 0.17021441587379293
+finished with total evals:  10573
+---population member---- 
+DNA: array([0.22372376, 0.05740049, 0.01148197, 1.59717523, 0.        ,
+       0.01048941, 0.52359878, 0.0754    , 0.02617879, 3.14159265,
+       0.99574616, 0.00335234, 0.39877509])
+cost: 0.5613275361249144
 
-stopped early, but previously observed minima is ~.2
-'''
-
-'''
-2 sphere
-one at each end, unique
-
-
+Process finished with exit code 0
 
 '''
