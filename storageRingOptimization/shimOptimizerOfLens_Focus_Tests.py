@@ -25,30 +25,30 @@ def test():
     shimCLockedParams = {'radius': .0254 / 2, 'planeSymmetry': True}
 
     shimOptimizerAB = ShimOptimizer()
-    shimOptimizerAB.set_Lens(lensBounds, lensParams)
+    shimOptimizerAB.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerAB.add_Shim(shimAParamBounds, shimALockedParams)
     shimOptimizerAB.add_Shim(shimBParamBounds, shimBLockedParams)
     shimOptimizerAB.make_Bounds()
 
     shimOptimizerC = ShimOptimizer()
-    shimOptimizerC.set_Lens(lensBounds, lensParams)
+    shimOptimizerC.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerC.add_Shim(shimCParamBounds, shimCLockedParams)
     shimOptimizerC.make_Bounds()
-
-    shimAParamBounds = shimOptimizerAB.shimsList[0].paramsBounds()
-    shimBParamBounds = shimOptimizerAB.shimsList[1].paramsBounds()
+    shimAParamBounds = shimOptimizerAB.shimsList[0].paramsBounds
+    shimBParamBounds = shimOptimizerAB.shimsList[1].paramsBounds
 
     assert 'length' in shimOptimizerAB.boundsKeys
     for key, val in shimAParamBounds.items():
-        assert key + '0' in shimOptimizerAB.boundsKeys
+        assert key[-1]=='0'
+        assert key in shimOptimizerAB.boundsKeys
     for key, val in shimBParamBounds.items():
-        assert key + '1' in shimOptimizerAB.boundsKeys
+        assert key[-1] == '1'
+        assert key  in shimOptimizerAB.boundsKeys
     args = np.ones(len(shimOptimizerAB.boundsKeys)) * .75
     args[0] = L0
     DNA_List = shimOptimizerAB.make_DNA_List_From_Args(args)
     z1 = (L0 / 2 + .75)
     z2 = -(L0 / 2 + .75)
-    print(DNA_List[1]['z'], z1)
     assert abs(DNA_List[1]['z'] - z1) < tol and abs(DNA_List[2]['z'] - z2) < tol
     assert len(shimOptimizerAB.bounds)==len(args)
 
@@ -61,9 +61,9 @@ def test():
     shimOptimizerC.initialize_Baseline_Values(lensBaseLineParams)
     costC = shimOptimizerC.cost_Function(argsC)
 
-    costAB_0 = 4.947420349891128
-    costC_0 = 4.94742034988602
-    print(abs(costAB - costC))
+    costAB_0 =7.779006018655473
+    costC_0 = 7.779006018655318
+    print(costAB)
+    print(costC)
     assert abs(costAB - costC) < tol
     assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol
-

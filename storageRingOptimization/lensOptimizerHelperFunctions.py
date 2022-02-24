@@ -106,9 +106,10 @@ class helper:
         rArr=np.sqrt(yArr**2+zArr**2)
         beamAreaRMS = np.std(yArr) * np.std(zArr)
         beamAreaD90=np.sort(np.sqrt(yArr**2+zArr**2))[int(len(yArr)*.9)]
-        I=len(yArr)/(np.pi*np.mean(rArr)**2)
+        radiusRMS=np.sqrt(np.mean(rArr**2))
+        I=len(yArr)/(np.pi*radiusRMS**2)
         numD90=int(len(yArr)*.9)
-        return I,beamAreaRMS,beamAreaD90,numD90
+        return I,beamAreaRMS,beamAreaD90,numD90,radiusRMS
 
     def get_Magnification(self,xFocus):
         L_Focus=xFocus-(abs(self.PTL.elList[1].r2[0])-self.fringeFrac*self.PTL.elList[1].rp)
@@ -124,12 +125,15 @@ class helper:
         RBF_Func = spi.Rbf(xArr, IArr)
         xDense = np.linspace(xArr.min(), xArr.max(), 10_000)
         IDense = RBF_Func(xDense)
+        xFocus = xDense[np.argmax(IDense)]
+        if abs(xFocus-xArr.max()) < .1: #if peak is too close, answer is invalid
+            return None
         # plt.plot(xArr,IArr)
         # plt.show()
-        xFocus = xDense[np.argmax(IDense)]
-        IPeak,beamAreaRMS,beamAreaD90,numD90 = self.beam_Characterization(xFocus, interpFunc)
+        IPeak,beamAreaRMS,beamAreaD90,numD90,radiusRMS = self.beam_Characterization(xFocus, interpFunc)
         m = self.get_Magnification(xFocus)
-        results={'I':IPeak,'m':m,'beamAreaRMS':beamAreaRMS,'beamAreaD90':beamAreaD90,'particles in D90':numD90}
+        results={'I':IPeak,'m':m,'beamAreaRMS':beamAreaRMS,'beamAreaD90':beamAreaD90,'particles in D90':numD90,
+                 'radius RMS':radiusRMS,'L_Image':m*self.L_Object}
         return results
 def IPeak_And_Magnification_From_Lens(lens,apMin=None):
     return helper(lens,apMin).IPeak_And_Magnification_From_Lens()

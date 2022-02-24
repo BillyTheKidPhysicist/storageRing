@@ -165,7 +165,7 @@ class ParticleTracer:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if False:#type(self.currentEl)==elementPT.Drift :
+            if False:#isinstance(self.currentEl,elementPT.Drift):
                 self.handle_Drift_Region()
                 if self.particle.clipped==True:
                     break
@@ -264,7 +264,6 @@ class ParticleTracer:
         return x0
     def handle_Drift_Region(self):
         #TODO: currently not used, of dubious value. Hopefully to be used soon, otherwise to be discarded
-        assert False
         # it is more efficient to explote the fact that there is no field inside the drift region to project the
         #paricle through it rather than timestep if through.
         driftEl=self.currentEl #to  record the drift element for logging params
@@ -290,7 +289,7 @@ class ParticleTracer:
             self.T += dt
             if clipped==False:
                 qEl=qi+pi*dt
-                self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl+pi*1e-10) #put the particle just on the other
+                self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl,qi,pi) #put the particle just on the other
                 #side. This is how this is done with other elements, so I am resuing code. really I don't need to do
                 #because I know the particle finished
                 if self.particle.clipped==True:

@@ -140,7 +140,10 @@ class ShimOptimizer:
         lens = self.make_Lens(args)
         if lens.is_Geometry_Valid() == False:
             return np.inf
-        IPeak, m = IPeak_And_Magnification_From_Lens(lens)
+        results = IPeak_And_Magnification_From_Lens(lens)
+        if results is None:
+            return np.inf
+        IPeak,m=results
         if Print == True:
             print('INew:',IPeak,"mNew: ", m)  # 29.189832542115177 0.9739048904890494
         focusCost = self.baseLineFocusDict['I'] / IPeak  # goal to is shrink this
@@ -150,6 +153,7 @@ class ShimOptimizer:
 
     def initialize_Baseline_Values(self, lensBaseLineParams):
         assert len(lensBaseLineParams) == 3
+        lensBaseLineParams=copy.copy(lensBaseLineParams)
         lensBaseLineParams['component'] = 'layer'
         lensBaseLine = GeneticLens([lensBaseLineParams])
         self.baseLineFocusDict = characterize_Focus(lensBaseLine)
@@ -160,107 +164,12 @@ class ShimOptimizer:
         print(self.baseLineFocusDict)
         print('----proposed lens----')
         print(results)
+        focusCost = self.baseLineFocusDict['I'] / results['I']  # goal to is shrink this
+        magCost = 1 + 5.0 * abs(results['m'] / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
+        cost = focusCost * magCost
+        print('cost:',cost)
     def optimize(self):
         self.make_Bounds()
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
                           tol=.03,disp=True)
         print(sol)
-'''
-----baseline----
-{'I': 23.092876870739236, 'm': 0.9781364247535868, 'beamAreaRMS': 24.942756297715512, 'beamAreaD90': 12.297600978035153, 'particles in D90': 518}
-----proposed lens----
-{'I': 38.13961438169031, 'm': 0.9781364247535868, 'beamAreaRMS': 16.46581933721606, 'beamAreaD90': 10.156935839084213, 'particles in D90': 565}
-'''
-
-def run():
-    np.random.seed(int(time.time()))
-    rp = .05
-    L0 = .23
-    magnetWidth = .0254
-    lensBounds = {'length': (L0 - rp, L0)}
-    lensParams = {'rp': rp, 'width': magnetWidth}
-    lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
-    shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-                        'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254)}
-    shim1LockedParams = { 'planeSymmetry': True,'phi':np.pi/6}
-    # shim2ParamBounds = {'r': (rp, rp + magnetWidth),'phi':(0.0,np.pi/6),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-    #                     'psi': (0.0, 2 * np.pi)}
-    # shim2LockedParams = {'radius': .0254 / 2, 'planeSymmetry': False,'location':'top','phi':np.pi/6}
-    shimOptimizer = ShimOptimizer()
-    shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
-    shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
-    # shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
-    shimOptimizer.optimize()
-run() #1.162830449711638
-# def run2():
-#     np.random.seed(int(time.time()))
-#     rp = .05
-#     L0 = .23
-#     magnetWidth = .0254
-#     lensBounds = {'length': (L0 - rp, L0)}
-#     lensParams = {'rp': rp, 'width': magnetWidth}
-#     lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
-#     shim1ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-#                         'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
-#     shim1LockedParams = { 'planeSymmetry': True}
-#     shim2ParamBounds = {'r': (rp, rp + magnetWidth),'deltaZ': (0.0, rp), 'theta': (0.0, np.pi),
-#                         'psi': (0.0, 2 * np.pi),'radius': (.0254/8,.0254),'phi':(0.0,np.pi/6)}
-#     shim2LockedParams = { 'planeSymmetry': True}
-#     shimOptimizer = ShimOptimizer()
-#     shimOptimizer.set_Lens(lensBounds, lensParams)
-#     shimOptimizer.add_Shim(shim1ParamBounds, shim1LockedParams)
-#     shimOptimizer.add_Shim(shim2ParamBounds, shim2LockedParams)
-#     shimOptimizer.optimize(lensBaseLineParams)
-# print('1 shim')
-# run()
-# run()
-# run()
-#
-# print('2 shim, symetruc')
-# run2()
-# run2()
-# run2()
-
-
-'''
-/opt/homebrew/Caskroom/miniforge/base/bin/python3.9 /Users/williamdebenham/Desktop/addHexapoleCombiner/storageRing/storageRingOptimization/shimOptimizationOfLens_Focus.py
-1 shim
-finished with total evals:  3885
----population member---- 
-DNA: array([0.1939315 , 0.07428757, 0.04422756, 1.66873427, 5.3013776 ,
-       0.02519861, 0.38656361])
-cost: 0.5504259509623759
-finished with total evals:  3625
----population member---- 
-DNA: array([0.19428933, 0.07510745, 0.03820404, 1.66726418, 5.28433483,
-       0.0254    , 0.42090581])
-cost: 0.5625337467072316
-finished with total evals:  5064
----population member---- 
-DNA: array([0.19533868, 0.0754    , 0.05      , 1.56032094, 0.        ,
-       0.0241335 , 0.48542109])
-cost: 0.6301312323755456
-2 shim, symetruc
-finished with total evals:  7761
----population member---- 
-DNA: array([1.95347647e-01, 7.54000000e-02, 5.00000000e-02, 2.68940224e-01,
-       4.86574178e+00, 3.20941832e-03, 1.11977353e-01, 7.54000000e-02,
-       5.00000000e-02, 1.55973633e+00, 5.33403202e+00, 2.53089433e-02,
-       3.83785791e-01])
-cost: 0.5495495523461477
-finished with total evals:  37276
----population member---- 
-DNA: array([0.18367999, 0.05995075, 0.01601266, 1.74390493, 5.18542745,
-       0.0157448 , 0.52359878, 0.0628019 , 0.01692008, 1.38215415,
-       2.96171379, 0.01631584, 0.        ])
-cost: 0.17021441587379293
-finished with total evals:  10573
----population member---- 
-DNA: array([0.22372376, 0.05740049, 0.01148197, 1.59717523, 0.        ,
-       0.01048941, 0.52359878, 0.0754    , 0.02617879, 3.14159265,
-       0.99574616, 0.00335234, 0.39877509])
-cost: 0.5613275361249144
-
-Process finished with exit code 0
-
-'''
