@@ -116,7 +116,10 @@ class helper:
         return L_Focus/self.L_Object
     def IPeak_And_Magnification_From_Lens(self):
         results=self.characterize_Focus()
-        return results['I'],results['m']
+        if results is None:
+            return None
+        else:
+            return results['I'],results['m']
     def characterize_Focus(self):
         self.make_Lattice()
         interpFunc = self.make_Interp_Function()

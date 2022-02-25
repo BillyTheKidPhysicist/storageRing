@@ -10,5 +10,5 @@ def test_GeneticLensClass():
     geneticLensClass_Tests.test()
 def test_shimOptimizerOfLens_Focus():
     shimOptimizerOfLens_Focus_Tests.test()
-# def test_Lattice_Tracing_Full_Integration():
-#     lattice_Tracing_Tests.test()
+def test_Lattice_Tracing_Full_Integration():
+    lattice_Tracing_Tests.test()

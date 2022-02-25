@@ -168,8 +168,8 @@ class ShimOptimizer:
         magCost = 1 + 5.0 * abs(results['m'] / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
         cost = focusCost * magCost
         print('cost:',cost)
-    def optimize(self):
+    def optimize(self,saveData=None):
         self.make_Bounds()
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
-                          tol=.03,disp=True)
+                          tol=.03,disp=False,saveData=saveData)
         print(sol)
