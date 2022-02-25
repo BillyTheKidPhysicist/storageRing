@@ -10,7 +10,7 @@ class SphereTestHelper:
         self.test2()
         self.test3()
     def test1(self):
-        #Test that the field points in the right direction
+        #test that the field points in the right direction
         sphere=Sphere(.0254)
         sphere.position_Sphere(r=.05,phi=0.0,z=0.0)
         sphere.orient(np.pi/2,0.0)
@@ -31,6 +31,7 @@ class SphereTestHelper:
         BVec2=sphere2.B_Shim(rTest,planeSymmetry=False)[0]
         BVec1_0=np.asarray([-0.0011941881467123633 ,-0.16959218399899806 ,0.025757119925902405])
         BVec2_0=np.asarray([-0.001194188146712627 ,-0.16959218399899786 ,0.025757119925902378])
+        print(BVec2)
         assert np.all(np.abs(BVec1 - BVec1_0) < self.numericTol)
         assert np.all(np.abs(BVec2 - BVec2_0) < self.numericTol)
         assert np.all(np.abs(BVec2 - BVec1) < self.numericTol)
@@ -38,15 +39,15 @@ class SphereTestHelper:
         # test that reflection symmetry works as expected
         sphere1 = Sphere(.0254)
         sphere1.position_Sphere(r=.05, phi=0.0, z=.1)
-        sphere1.orient(np.pi / 4, 0.0)
+        sphere1.orient(np.pi / 4, np.pi/3)
         sphere2 = Sphere(.0254)
         sphere2.position_Sphere(r=.05, phi=0.0, z=-.1)
-        sphere2.orient(3*np.pi / 4, 0.0)
+        sphere2.orient(3*np.pi / 4,np.pi/3)
         rTest = np.ones((1, 3)) * .01
         BVec_Symm1=sphere1.B_Shim(rTest,planeSymmetry=True)[0]
         BVec_Symm2=sphere1.B_Shim(rTest,planeSymmetry=False)[0]+sphere2.B_Shim(rTest,planeSymmetry=False)[0]
-        BVec_Symm1_0=np.asarray([-0.005073988068039584, -0.004641226428626564 ,0.010301384134222108])
-        BVec_Symm2_0=np.asarray([-0.005073988068039583, -0.004641226428626562 ,0.010301384134222113])
+        BVec_Symm1_0=np.asarray([-0.0058071761934043635, -0.004844616334816022 ,0.010212674466403442])
+        BVec_Symm2_0=np.asarray([-0.005807176193404366, -0.004844616334816021 ,0.010212674466403436])
         assert np.all(np.abs(BVec_Symm1 - BVec_Symm1_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm2_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm1) < self.numericTol)
@@ -56,7 +57,7 @@ class RectangularPrismTestHelper:
     def run_Tests(self):
         self.test1()
     def test1(self):
-        #Test that fields point as expected
+        #test that fields point as expected
         prism=RectangularPrism(.0254,.1)
         prism.place(.07,0.0,0.0,np.pi)
         rCenter=np.zeros((1,3))

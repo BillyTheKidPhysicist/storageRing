@@ -95,71 +95,45 @@ class Sphere:
     def B(self, r):
         return B_NUMBA(r, self.r0, self.m)
 
-    def B_Symmetric(self, r):
-        arr = np.zeros(r.shape)
-        arr += self.B(r)
-        arr += self.B_Symetry(r, "counterclockwise", factors=0, fixedDipoleDirection=True, planeReflection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=1, fixedDipoleDirection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=1, fixedDipoleDirection=True, planeReflection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=2, fixedDipoleDirection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=2, fixedDipoleDirection=True, planeReflection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True)
-        arr += self.B_Symetry(r, "counterclockwise", factors=3, fixedDipoleDirection=True, planeReflection=True)
-        return arr
-    def B_Shim(self, r, planeSymmetry=True):
+    def B_Shim(self, r, planeSymmetry=True,negativeSymmetry=True,rotationAngle=np.pi/3):
         # a single magnet actually represents 12 magnet
         # r: array of N position vectors to get field at. Shape (N,3)
         # planeSymmetry: Wether to exploit z symmetry or not
-        # plt.quiver(self.r0[0],self.r0[1],self.m[0],self.m[1],color='r')
+        plt.quiver(self.r0[0],self.r0[1],self.m[0],self.m[1],color='r')
         arr = np.zeros(r.shape)
         arr += self.B(r)
-        arr += self.B_Symetry(r, "clockwise", factors=1, flipDipolexy=True)
-        arr += self.B_Symetry(r, "clockwise", factors=2, flipDipolexy=False)
-        arr += self.B_Symetry(r, "clockwise", factors=3, flipDipolexy=True)
-        arr += self.B_Symetry(r, "clockwise", factors=4, flipDipolexy=False)
-        arr += self.B_Symetry(r, "clockwise", factors=5, flipDipolexy=True)
+        arr+=self.B_Symmetry(r,1,negativeSymmetry,rotationAngle,not planeSymmetry)
+        arr+=self.B_Symmetry(r,2,negativeSymmetry,rotationAngle,not planeSymmetry)
+        arr+=self.B_Symmetry(r,3,negativeSymmetry,rotationAngle,not planeSymmetry)
+        arr+=self.B_Symmetry(r,4,negativeSymmetry,rotationAngle,not planeSymmetry)
+        arr+=self.B_Symmetry(r,5,negativeSymmetry,rotationAngle,not planeSymmetry)
 
         if planeSymmetry == True:
-            arr += self.B_Symetry(r, "clockwise", factors=0, flipDipolexy=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=1, flipDipolexy=True, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=2, flipDipolexy=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=3, flipDipolexy=True, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=4, flipDipolexy=False, planeReflection=True)
-            arr += self.B_Symetry(r, "clockwise", factors=5, flipDipolexy=True, planeReflection=True)
+            arr += self.B_Symmetry(r, 0, negativeSymmetry, rotationAngle,planeSymmetry)
+            arr += self.B_Symmetry(r, 1, negativeSymmetry, rotationAngle,planeSymmetry)
+            arr += self.B_Symmetry(r, 2, negativeSymmetry, rotationAngle,planeSymmetry)
+            arr += self.B_Symmetry(r, 3, negativeSymmetry, rotationAngle,planeSymmetry)
+            arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle,planeSymmetry)
+            arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle,planeSymmetry)
+
         # plt.gca().set_aspect('equal')
         # plt.grid()
         # plt.show()
         return arr
 
-    def B_Symetry(self, r, orientation, factors=1, flipDipolexy=False, symmetryAngle=np.pi / 3, fixedDipoleDirection=False,
-                  planeReflection=False):
-        # orientation: String of "clockwise" or "counterclockwise" for orientation
-        # factors: how many planes of symmetry to to reflect by. there are 6 total
-        # fliSphere: wether to model the sphere as having the opposite orientation
-        phi0 = np.arctan2(self.r0[1], self.r0[0])
-        # choose the correct reflection symmetryAngle.
-        if orientation == 'clockwise':  # mirror across the clockwise plane
-            phiSym = phi0 + (-symmetryAngle) * factors  # symmetryAngle to rotate the dipole position by
-            deltaTheta = -symmetryAngle * factors  # symmetryAngle to rotate the dipole direction vector by
-        elif orientation == 'counterclockwise':  # mirror across the counterclockwise plane
-            phiSym = phi0 + symmetryAngle * factors
-            deltaTheta = symmetryAngle * factors
-        else:
-            raise Exception('Improper orientation')
-        x0Sym = npl.norm(self.r0[:2]) * np.cos(phiSym)
-        y0Sym = npl.norm(self.r0[:2]) * np.sin(phiSym)
-        r0Sym = np.asarray([x0Sym, y0Sym, self.r0[2]])
-        mSym = self.m.copy()
-        if fixedDipoleDirection == False:
-            # rotate the dipole moment.
-            MRot = np.array([[np.cos(deltaTheta), -np.sin(deltaTheta)], [np.sin(deltaTheta), np.cos(deltaTheta)]])
-            mSym[:2] = MRot @ mSym[:2]
-        if flipDipolexy == True:
-            mSym[:2] = -mSym[:2]
+    def B_Symmetry(self,r, rotations,negativeSymmetry, rotationAngle,planeReflection):
+        rotAngle = rotationAngle * rotations
+        M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
+        r0Sym=self.r0.copy()
+        r0Sym[:2]=M_Rot@r0Sym[:2]
+        mSym =self.m.copy()
+        mSym[:2] = M_Rot @ mSym[:2]
+        if negativeSymmetry==True:
+            mSym[:2] *= (-1) ** rotations
         if planeReflection == True:  # another dipole on the other side of the z=0 line
             r0Sym[2] = -r0Sym[2]
-            mSym[-1]*=-1
-        # plt.quiver(r0Sym[0],r0Sym[1],mSym[0],mSym[1])
+            mSym[-1] *= -1
+        # plt.quiver(r0Sym[0], r0Sym[1], mSym[0], mSym[1])
         BVecArr = B_NUMBA(r, r0Sym, mSym)
         return BVecArr
 class RectangularPrism:

@@ -61,8 +61,8 @@ def test():
     shimOptimizerC.initialize_Baseline_Values(lensBaseLineParams)
     costC = shimOptimizerC.cost_Function(argsC)
 
-    costAB_0 =21.193482602161573
-    costC_0 = 21.193482602176324
+    costAB_0 =21.19348260214658
+    costC_0 = 21.19348260208691
     print(costAB)
     print(costC)
     assert abs(costAB - costC) < tol

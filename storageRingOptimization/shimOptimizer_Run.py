@@ -35,9 +35,9 @@ def optimize_1Shim_Symmetric(variableRadius,variablePhi,saveData=None):
     shimOptimizer = ShimOptimizer()
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
-    shimOptimizer.optimize(saveData=saveData)
+    # shimOptimizer.optimize(saveData=saveData)
     # args0=np.array([0.22556419, 0.05623946, 0.01095473, 1.39222029, 0.        ])
-    # print(shimOptimizer.optimize1())
+    print(shimOptimizer.optimize1())
     # shimOptimizer.characterize_Results(args0)
 
 def optimize_2Shim_NonSymmetric(variableRadius,variablePhi,saveData=None):
@@ -63,8 +63,6 @@ def optimize_2Shim_Symmetric(variableRadius,variablePhi,saveData=None):
     print(shimOptimizer.optimize1())
 
 optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
-optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0,saveData='run2_1Shim')
-optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0,saveData='run3_1Shim')
 
 # optimize_2Shim_Symmetric(True,True)#,saveData='run1_2Shim')
 # optimize_2Shim_Symmetric(True,True)#,saveData='run2_2Shim')
@@ -74,21 +72,14 @@ optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0,saveData='run3_1Shim')
 '''
 1 shim
 Tru True
-finished with total evals:  5256
----population member---- 
-DNA: array([0.22469908, 0.05459526, 0.01088656, 1.71126511, 5.37597293,
-       0.00911954, 0.51417334])
-cost: 0.5046830756884966
-finished with total evals:  5556
----population member---- 
-DNA: array([0.1923749 , 0.07431393, 0.03455355, 1.58521529, 5.32509403,
-       0.02536473, 0.43163293])
-cost: 0.5908714273303177
-finished with total evals:  5471
----population member---- 
-DNA: array([0.22499909, 0.05374655, 0.01137538, 1.58994084, 5.1274135 ,
-       0.00848553, 0.52165971])
-cost: 0.514339990084301
+
+
+array([0.22335083, 0.05468504, 0.01778291, 1.86398975, 5.89642321]) 0.3819820289449764
+
+array([0.22336635, 0.05398954, 0.01994955, 2.174386  , 5.1246072 ]) 0.4063641058343459
+
+array([0.22336904, 0.05486956, 0.01967456, 1.16595304, 4.66104557]) 0.43165054561094596
+
 '''
 
 

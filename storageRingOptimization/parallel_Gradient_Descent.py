@@ -61,7 +61,6 @@ class GradientOptimizer:
         gradForward=(vals_ab[:, 0]-F0)/self.gradStepSampSize
         gradBackward=(F0-vals_ab[:, 1])/self.gradStepSampSize
         gradMean=(gradForward+gradBackward)/2.0
-        print(repr(gradMean),repr(x0),F0)
         return F0,gradMean
     def _forward_Difference_And_F0(self,x0):
         assert len(x0)==self.numDim
@@ -178,7 +177,7 @@ def test1():
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2
     Xi=[8.0,8.0]
     x,f=gradient_Descent(func,Xi,.05,1000,momentumFact=0.9,gradMethod='central',parallel=False,
-                         Plot=False,disp=True,maxStepSize=.15)
+                         Plot=False,disp=False,maxStepSize=.15)
     x0=np.asarray([9.586316311112342e-05 ,-0.002676608081999296])
     f0=0.001339162105293223
     assert np.all(x0==x)
