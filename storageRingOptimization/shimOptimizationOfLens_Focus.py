@@ -4,7 +4,7 @@ import multiprocess as mp
 import time
 # from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 from geneticLensClass import GeneticLens
-
+from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 import numpy as np
 from profilehooks import profile
 from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens,characterize_Focus
@@ -70,7 +70,7 @@ class ShimOptimizer:
         shimID = str(len(self.shimsList))
         self.shimsList.append(ShimHelper(paramsBounds, paramsLocked, shimID))
 
-    def make_Bounds(self):
+    def initialize_Optimization(self):
         assert self.makeBoundsCalled == False
         self.makeBoundsCalled = True
         for key, val in self.lens.paramsBounds.items():
@@ -117,8 +117,8 @@ class ShimOptimizer:
         return shimDNA_Dict, argsConsumed
 
     def make_DNA_List_From_Args(self, args):
-        assert len(args) == len(self.boundsKeys)
         assert self.makeBoundsCalled == True
+        assert len(args) == len(self.boundsKeys)
         lensDNA_Dict, argsConsumedTotal = self.make_Lens_DNA_Dict(args)
         DNA_List = [lensDNA_Dict]
         # build shim dict
@@ -135,12 +135,15 @@ class ShimOptimizer:
         lens = GeneticLens(DNA_List)
         return lens
 
-    def cost_Function(self, args, Print=False):
+    def cost_Function(self, args, Print=False,rejectOutOfRange=True,continuousGeomCost=False):
         assert self.baseLineFocusDict is not None
         lens = self.make_Lens(args)
-        if lens.is_Geometry_Valid() == False:
+        cost=0
+        if lens.is_Geometry_Valid() == False and continuousGeomCost==False:
             return np.inf
-        results = IPeak_And_Magnification_From_Lens(lens)
+        else:
+            cost+=lens.geometry_Frac_Overlap()
+        results = IPeak_And_Magnification_From_Lens(lens,rejectOutOfRange=rejectOutOfRange)
         if results is None:
             return np.inf
         IPeak,m=results
@@ -148,9 +151,11 @@ class ShimOptimizer:
             print('INew:',IPeak,"mNew: ", m)  # 29.189832542115177 0.9739048904890494
         focusCost = self.baseLineFocusDict['I'] / IPeak  # goal to is shrink this
         magCost = 1 + 5.0 * abs(m / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
-        cost = focusCost * magCost
+        cost+= focusCost * magCost
         return cost
-
+    def continuous_Cost(self,args):
+        cost=self.cost_Function(args, rejectOutOfRange=False, continuousGeomCost=True)
+        return cost
     def initialize_Baseline_Values(self, lensBaseLineParams):
         assert len(lensBaseLineParams) == 3
         lensBaseLineParams=copy.copy(lensBaseLineParams)
@@ -158,7 +163,7 @@ class ShimOptimizer:
         lensBaseLine = GeneticLens([lensBaseLineParams])
         self.baseLineFocusDict = characterize_Focus(lensBaseLine)
     def characterize_Results(self,args):
-        self.make_Bounds()
+        self.initialize_Optimization()
         results=characterize_Focus(self.make_Lens(args))
         print('----baseline----')
         print(self.baseLineFocusDict)
@@ -169,7 +174,14 @@ class ShimOptimizer:
         cost = focusCost * magCost
         print('cost:',cost)
     def optimize(self,saveData=None):
-        self.make_Bounds()
+        self.initialize_Optimization()
+        initialVals=[(np.array([0.22556419, 0.05623946, 0.01095473, 1.39222029, 0.        ]),None)]
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
-                          tol=.03,disp=False,saveData=saveData)
+                          tol=.03,disp=True,saveData=saveData,initialVals=initialVals)
         print(sol)
+    def optimize1(self):
+        self.initialize_Optimization()
+        return global_Gradient_Descent(self.continuous_Cost,self.bounds,500,200e-6,100,gradStepSize=50e-6,gradMethod='central',
+                                descentMethod='adam',disp=True)
+        # return gradient_Descent(self.continuous_Cost,Xi,200e-6,50,gradStepSize=50e-6,gradMethod='central',
+        #                         descentMethod='adam',disp=True)

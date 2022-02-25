@@ -26,11 +26,12 @@ class Interpolater:
         self.swarm=swarm
         self.PTL=PTL
         self.endDriftLength=abs(self.PTL.elList[-1].r2[0]-self.PTL.elList[-1].r1[0])
-    def __call__(self,xOrbit,maxRadius=np.inf,vTMax=np.inf,returnP=False,useAssert=True,useInitial=False):
+    def __call__(self,xOrbit,maxRadius=np.inf,vTMax=np.inf,returnP=False,useAssert=True,useInitial=False,cutoff=True):
         #xOrbit: Distance in orbit frame, POSITIVE to ease with analyze. Know that the tracing is done with x being negative
         #returns in units of mm
         #vTMax: maximum transverse velocity for interpolation
         #useAssert: I can use this interplater elsewhere if I turn this off
+        #cutoff: Remove particles that didn't reach the end of the simulation region
         if useAssert==True:
             assert -self.PTL.elList[-1].r2[0]>xOrbit>-self.PTL.elList[-1].r1[0]
         yList=[]
@@ -42,7 +43,9 @@ class Interpolater:
             else:
                 p,q=particle.pf,particle.qf
             vT=np.sqrt(p[1]**2+p[2]**2)
-            if (q[0]<-xOrbit and vT<vTMax) or useInitial==True:
+            if cutoff==True and  abs(q[0]-self.PTL.elList[-1].r2[0])>5e-3:
+                pass
+            elif (q[0]<-xOrbit and vT<vTMax) or useInitial==True:
                 stepFrac=(abs(q[0])-xOrbit)/self.endDriftLength
                 ySlope=p[1]/p[0]
                 y=q[1]+stepFrac*self.endDriftLength*ySlope
@@ -83,11 +86,13 @@ class helper:
         self.PTL.add_Drift(1.5*(self.L_Image-self.fringeFrac*self.lens.maximum_Radius()),ap=.07)
         self.PTL.end_Lattice()
         assert self.PTL.elList[1].fringeFracOuter==self.fringeFrac and self.PTL.elList[1].rp==self.lens.maximum_Radius()
+        assert abs(abs(self.PTL.elList[1].r2[0])-(self.L_Object+self.lens.length+
+                   self.fringeFrac*self.lens.maximum_Radius()))<1e-12
     def make_Interp_Function(self):
         swarmTracer=SwarmTracer(self.PTL)
-        angle=.08
+        angle=.9*self.lens.minimum_Radius()/(self.L_Object+self.lens.length/2)
         v0=210.0
-        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,1000,sameSeed=True)
+        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,500,sameSeed=True)
         h=1e-5
         fastMode=True
         swarmTraced=swarmTracer.trace_Swarm_Through_Lattice(swarm,h,1.0,fastMode=fastMode,
@@ -114,13 +119,13 @@ class helper:
     def get_Magnification(self,xFocus):
         L_Focus=xFocus-(abs(self.PTL.elList[1].r2[0])-self.fringeFrac*self.PTL.elList[1].rp)
         return L_Focus/self.L_Object
-    def IPeak_And_Magnification_From_Lens(self):
-        results=self.characterize_Focus()
+    def IPeak_And_Magnification_From_Lens(self,rejectOutOfRange):
+        results=self.characterize_Focus(rejectOutOfRange)
         if results is None:
             return None
         else:
             return results['I'],results['m']
-    def characterize_Focus(self):
+    def characterize_Focus(self,rejectOutOfRange=True):
         self.make_Lattice()
         interpFunc = self.make_Interp_Function()
         xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 2e-3, -self.PTL.elList[-1].r2[0] - 2e-3, 300)
@@ -129,7 +134,7 @@ class helper:
         xDense = np.linspace(xArr.min(), xArr.max(), 10_000)
         IDense = RBF_Func(xDense)
         xFocus = xDense[np.argmax(IDense)]
-        if abs(xFocus-xArr.max()) < .1: #if peak is too close, answer is invalid
+        if abs(xFocus-xArr.max()) < .1 and rejectOutOfRange==True: #if peak is too close, answer is invalid
             return None
         # plt.plot(xArr,IArr)
         # plt.show()
@@ -138,7 +143,7 @@ class helper:
         results={'I':IPeak,'m':m,'beamAreaRMS':beamAreaRMS,'beamAreaD90':beamAreaD90,'particles in D90':numD90,
                  'radius RMS':radiusRMS,'L_Image':m*self.L_Object}
         return results
-def IPeak_And_Magnification_From_Lens(lens,apMin=None):
-    return helper(lens,apMin).IPeak_And_Magnification_From_Lens()
+def IPeak_And_Magnification_From_Lens(lens,apMin=None,rejectOutOfRange=True):
+    return helper(lens,apMin).IPeak_And_Magnification_From_Lens(rejectOutOfRange)
 def characterize_Focus(lens,apMin=None):
     return helper(lens, apMin).characterize_Focus()

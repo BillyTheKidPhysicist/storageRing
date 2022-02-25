@@ -44,22 +44,27 @@ class GradientOptimizer:
         else:
             raise ValueError
     def _central_Difference_And_F0(self,x0):
+        assert len(x0) == self.numDim
         mask = np.eye(len(x0))
         mask = np.repeat(mask, axis=0, repeats=2)
         mask[1::2] *= -1
+        mask = np.row_stack((np.zeros(self.numDim), mask))
         x_abArr = mask * self.gradStepSampSize + x0  # x upper and lower values for derivative calc
         if self.parallel == True:
             with mp.Pool() as pool:
                 vals_ab = np.asarray(pool.map(self.funcObj, x_abArr))
         else:
             vals_ab = np.asarray([self.funcObj(x) for x in x_abArr])
-        vals_ab = vals_ab.reshape(-1, 2)
-        meanF0 = np.mean(vals_ab)
-        deltaVals = vals_ab[:, 0] - vals_ab[:, 1]
-        grad = deltaVals / (2 * self.gradStepSampSize)
-        print(x0,meanF0)
-        return meanF0,grad
+        assert len(vals_ab.shape) == 1 and len(vals_ab) == 2*self.numDim + 1
+        F0 = vals_ab[0]
+        vals_ab = vals_ab[1:].reshape(-1, 2)
+        gradForward=(vals_ab[:, 0]-F0)/self.gradStepSampSize
+        gradBackward=(F0-vals_ab[:, 1])/self.gradStepSampSize
+        gradMean=(gradForward+gradBackward)/2.0
+        print(repr(gradMean),repr(x0),F0)
+        return F0,gradMean
     def _forward_Difference_And_F0(self,x0):
+        assert len(x0)==self.numDim
         mask = np.eye(len(x0))
         mask=np.row_stack((np.zeros(self.numDim),mask))
         x_abArr = mask * self.gradStepSampSize + x0  # x upper and lower values for derivative calc
@@ -68,9 +73,10 @@ class GradientOptimizer:
                 vals_ab = np.asarray(pool.map(self.funcObj, x_abArr))
         else:
             vals_ab = np.asarray([self.funcObj(x) for x in x_abArr])
+        assert len(vals_ab.shape)==1 and len(vals_ab)==self.numDim+1
         F0=vals_ab[0]
         deltaVals=vals_ab[1:]-F0
-        grad = deltaVals / (2 * self.gradStepSampSize)
+        grad = deltaVals / self.gradStepSampSize
         return F0,grad
     def _update_Speed(self,gradUnit,vPrev):
         deltaV = -gradUnit * self.stepSizeInitial
@@ -167,18 +173,35 @@ def global_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,g
     disp=disp,parallel=parallel,gradMethod=gradMethod,Plot=Plot,gradStepSize=gradStepSize,descentMethod=descentMethod)
     return result
 
-def _self_Test1():
-    def test_Func(X):
+def test1():
+    def func(X):
         return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2 * np.sin(X[1] * 3) ** 2
     Xi=[8.0,8.0]
-    x,f=gradient_Descent(test_Func,Xi,.05,1000,momentumFact=0.9,gradMethod='central',parallel=False,
-                         Plot=True,disp=True,maxStepSize=.15)
-    x0=np.asarray([9.586321188035513e-05 ,-0.0026766080917656563])
-    f0=0.0013391632778202074
+    x,f=gradient_Descent(func,Xi,.05,1000,momentumFact=0.9,gradMethod='central',parallel=False,
+                         Plot=False,disp=True,maxStepSize=.15)
+    x0=np.asarray([9.586316311112342e-05 ,-0.002676608081999296])
+    f0=0.001339162105293223
     assert np.all(x0==x)
     assert f==f0
-def test_Func(X):
-    return np.linalg.norm(X) / 2 + np.sin(X[0]) ** 2
+def test2():
+    tolF=5e-5
+    tolC=5e-9
+    xArr=np.linspace(0,np.pi,100)
+    yDifAnalytic=np.cos(xArr)
+    def func(X):
+        return np.sin(X[0])
+    opt=GradientOptimizer(func,[0],1,1,1,1,1,False,'central',100e-6,1,'adam')
+    yDifNumericF=[]
+    yDifNumericC=[]
+    for x in xArr:
+        F0F,gradF=opt._forward_Difference_And_F0([x])
+        F0C,gradC=opt._central_Difference_And_F0([x])
+        yDifNumericF.append(gradF[0])
+        yDifNumericC.append(gradC[0])
+    yDifNumericF=np.asarray(yDifNumericF)
+    yDifNumericC=np.asarray(yDifNumericC)
+    assert np.all(np.abs(yDifNumericF-yDifAnalytic)<tolF)
+    assert np.all(np.abs(yDifNumericC-yDifAnalytic)<tolC)
 # Xi=[7.5]
 # x,f=global_Gradient_Descent(test_Func,[(-10.0,10.0)],100,.01,10,.001,descentMethod='adam',Plot=True)
 # x,f=gradient_Descent(test_Func,Xi,.01,1000,momentumFact=0.99,gradMethod='central',parallel=False,

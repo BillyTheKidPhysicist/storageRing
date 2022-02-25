@@ -1,7 +1,7 @@
 from shimOptimizationOfLens_Focus import ShimOptimizer
 import numpy as np
 def test():
-    tol = 1e-11
+    tol = 1e-10
     rp = .05
     L0 = .23
     magnetWidth = .0254
@@ -28,12 +28,12 @@ def test():
     shimOptimizerAB.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerAB.add_Shim(shimAParamBounds, shimALockedParams)
     shimOptimizerAB.add_Shim(shimBParamBounds, shimBLockedParams)
-    shimOptimizerAB.make_Bounds()
+    shimOptimizerAB.initialize_Optimization()
 
     shimOptimizerC = ShimOptimizer()
     shimOptimizerC.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerC.add_Shim(shimCParamBounds, shimCLockedParams)
-    shimOptimizerC.make_Bounds()
+    shimOptimizerC.initialize_Optimization()
     shimAParamBounds = shimOptimizerAB.shimsList[0].paramsBounds
     shimBParamBounds = shimOptimizerAB.shimsList[1].paramsBounds
 
@@ -61,8 +61,8 @@ def test():
     shimOptimizerC.initialize_Baseline_Values(lensBaseLineParams)
     costC = shimOptimizerC.cost_Function(argsC)
 
-    costAB_0 =7.779006018655473
-    costC_0 = 7.779006018655318
+    costAB_0 =21.193482602161573
+    costC_0 = 21.193482602176324
     print(costAB)
     print(costC)
     assert abs(costAB - costC) < tol
