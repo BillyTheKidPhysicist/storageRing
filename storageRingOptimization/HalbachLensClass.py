@@ -99,7 +99,7 @@ class Sphere:
         # a single magnet actually represents 12 magnet
         # r: array of N position vectors to get field at. Shape (N,3)
         # planeSymmetry: Wether to exploit z symmetry or not
-        plt.quiver(self.r0[0],self.r0[1],self.m[0],self.m[1],color='r')
+        # plt.quiver(self.r0[0],self.r0[1],self.m[0],self.m[1],color='r')
         arr = np.zeros(r.shape)
         arr += self.B(r)
         arr+=self.B_Symmetry(r,1,negativeSymmetry,rotationAngle,not planeSymmetry)

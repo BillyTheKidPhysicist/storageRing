@@ -9,6 +9,7 @@ import numpy as np
 from profilehooks import profile
 from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens,characterize_Focus
 import copy
+import skopt
 
 class ShimHelper:
     def __init__(self, paramsBounds, paramsLocked, shimID):
@@ -181,7 +182,10 @@ class ShimOptimizer:
         print(sol)
     def optimize1(self):
         self.initialize_Optimization()
-        return global_Gradient_Descent(self.continuous_Cost,self.bounds,500,200e-6,100,gradStepSize=50e-6,gradMethod='central',
+        numSamples=1000
+        samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))
+        with mp.Pool(maxtasksperchild=1) as pool:
+            vals = np.asarray(pool.map(self.cost_Function, samples, chunksize=1))
+        xOptimal = samples[np.argmin(vals)]
+        return gradient_Descent(self.continuous_Cost,xOptimal,200e-6,50,gradStepSize=50e-6,gradMethod='central',
                                 descentMethod='adam',disp=True)
-        # return gradient_Descent(self.continuous_Cost,Xi,200e-6,50,gradStepSize=50e-6,gradMethod='central',
-        #                         descentMethod='adam',disp=True)

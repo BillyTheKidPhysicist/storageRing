@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from lensGeneticElement import geneticLensElement
 from geneticLensClass import GeneticLens
 import scipy.interpolate as spi
+import scipy.optimize as spo
 
 
 t=time.time()
@@ -26,7 +27,7 @@ class Interpolater:
         self.swarm=swarm
         self.PTL=PTL
         self.endDriftLength=abs(self.PTL.elList[-1].r2[0]-self.PTL.elList[-1].r1[0])
-    def __call__(self,xOrbit,maxRadius=np.inf,vTMax=np.inf,returnP=False,useAssert=True,useInitial=False,cutoff=True):
+    def __call__(self,xOrbit,maxRadius=np.inf,vTMax=np.inf,returnP=False,useAssert=True,useInitial=False,cutoff=False):
         #xOrbit: Distance in orbit frame, POSITIVE to ease with analyze. Know that the tracing is done with x being negative
         #returns in units of mm
         #vTMax: maximum transverse velocity for interpolation
@@ -34,6 +35,7 @@ class Interpolater:
         #cutoff: Remove particles that didn't reach the end of the simulation region
         if useAssert==True:
             assert -self.PTL.elList[-1].r2[0]>xOrbit>-self.PTL.elList[-1].r1[0]
+        assert isinstance(xOrbit,float)
         yList=[]
         zList=[]
         pList=[]
@@ -91,8 +93,8 @@ class helper:
     def make_Interp_Function(self):
         swarmTracer=SwarmTracer(self.PTL)
         angle=.9*self.lens.minimum_Radius()/(self.L_Object+self.lens.length/2)
-        v0=210.0
-        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1.0,500,sameSeed=True)
+        v0=self.PTL.v0Nominal
+        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1e-6,500,sameSeed=True)
         h=1e-5
         fastMode=True
         swarmTraced=swarmTracer.trace_Swarm_Through_Lattice(swarm,h,1.0,fastMode=fastMode,
@@ -128,13 +130,13 @@ class helper:
     def characterize_Focus(self,rejectOutOfRange=True):
         self.make_Lattice()
         interpFunc = self.make_Interp_Function()
-        xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 2e-3, -self.PTL.elList[-1].r2[0] - 2e-3, 300)
+        xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 2e-3, -self.PTL.elList[-1].r2[0] - 2e-3, 50)
         IArr = np.asarray([self.atom_Beam_Intensity(x, interpFunc) for x in xArr])
-        RBF_Func = spi.Rbf(xArr, IArr)
-        xDense = np.linspace(xArr.min(), xArr.max(), 10_000)
-        IDense = RBF_Func(xDense)
-        xFocus = xDense[np.argmax(IDense)]
-        if abs(xFocus-xArr.max()) < .1 and rejectOutOfRange==True: #if peak is too close, answer is invalid
+        xi=xArr[np.argmax(IArr)]
+        wrapper= lambda x: 1/self.atom_Beam_Intensity(x[0], interpFunc)
+        sol=spo.minimize(wrapper,xi,bounds=[(xArr.min(),xArr.max())],options={'gtol':1e-10})
+        xFocus=sol.x[0]
+        if abs(xFocus-xArr.max()) < .1 or abs(xFocus-xArr.min()) < .1 and rejectOutOfRange==True: #if peak is too close, answer is invalid
             return None
         # plt.plot(xArr,IArr)
         # plt.show()
