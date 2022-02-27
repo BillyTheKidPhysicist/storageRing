@@ -7,7 +7,7 @@ from geneticLensClass import GeneticLens
 from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 import numpy as np
 from profilehooks import profile
-from lensOptimizerHelperFunctions import IPeak_And_Magnification_From_Lens,characterize_Focus
+from lensOptimizerHelperFunctions import characterize_Focus
 import copy
 import skopt
 
@@ -136,26 +136,30 @@ class ShimOptimizer:
         lens = GeneticLens(DNA_List)
         return lens
 
-    def cost_Function(self, args, Print=False,rejectOutOfRange=True,continuousGeomCost=False):
+    def cost_Function(self, args, Print=False,rejectOutOfRange=True,smoothGeometryCost=False):
         assert self.baseLineFocusDict is not None
         lens = self.make_Lens(args)
         cost=0
-        if lens.is_Geometry_Valid() == False and continuousGeomCost==False:
+        if lens.is_Geometry_Valid() == False and smoothGeometryCost==False:
             return np.inf
         else:
             cost+=lens.geometry_Frac_Overlap()
-        results = IPeak_And_Magnification_From_Lens(lens,rejectOutOfRange=rejectOutOfRange)
+        results = characterize_Focus(lens,rejectOutOfRange=rejectOutOfRange)
         if results is None:
             return np.inf
-        IPeak,m=results
         if Print == True:
-            print('INew:',IPeak,"mNew: ", m)  # 29.189832542115177 0.9739048904890494
+            print('INew:',results['m'],"mNew: ", results['m'])  # 29.189832542115177 0.9739048904890494
+        cost+=self._peformance_Cost(results)
+        return cost
+    def _peformance_Cost(self,results):
+        IPeak,m=results['I'],results['m']
+        assert IPeak>0.0
         focusCost = self.baseLineFocusDict['I'] / IPeak  # goal to is shrink this
-        magCost = 1 + 5.0 * abs(m / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
-        cost+= focusCost * magCost
+        magCost = 1000.0 * (m / self.baseLineFocusDict['m'] - 1)**2  # goal is to keep magnification the same
+        cost=focusCost + magCost
         return cost
     def continuous_Cost(self,args):
-        cost=self.cost_Function(args, rejectOutOfRange=False, continuousGeomCost=True)
+        cost=self.cost_Function(args, rejectOutOfRange=False, smoothGeometryCost=True)
         return cost
     def initialize_Baseline_Values(self, lensBaseLineParams):
         assert len(lensBaseLineParams) == 3
@@ -170,21 +174,20 @@ class ShimOptimizer:
         print(self.baseLineFocusDict)
         print('----proposed lens----')
         print(results)
-        focusCost = self.baseLineFocusDict['I'] / results['I']  # goal to is shrink this
-        magCost = 1 + 5.0 * abs(results['m'] / self.baseLineFocusDict['m'] - 1)  # goal is to keep this the same
-        cost = focusCost * magCost
-        print('cost:',cost)
+        performanceCost=self._peformance_Cost(results)
+        lens = self.make_Lens(args)
+        print('performance cost:',performanceCost)
+        print('geometry cost:',lens.geometry_Frac_Overlap())
     def optimize(self,saveData=None):
         self.initialize_Optimization()
-        initialVals=[(np.array([0.22556419, 0.05623946, 0.01095473, 1.39222029, 0.        ]),None)]
         sol = solve_Async(self.cost_Function, self.bounds, 15 * len(self.bounds), workers=10,
-                          tol=.03,disp=True,saveData=saveData,initialVals=initialVals)
+                          tol=.03,disp=True,saveData=saveData)
         print(sol)
     def optimize1(self):
         self.initialize_Optimization()
         numSamples=1000
         samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))
-        with mp.Pool(maxtasksperchild=1) as pool:
+        with mp.Pool(maxtasksperchild=4) as pool:
             vals = np.asarray(pool.map(self.cost_Function, samples, chunksize=1))
         xOptimal = samples[np.argmin(vals)]
         return gradient_Descent(self.continuous_Cost,xOptimal,200e-6,50,gradStepSize=50e-6,gradMethod='central',

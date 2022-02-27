@@ -145,7 +145,5 @@ class helper:
         results={'I':IPeak,'m':m,'beamAreaRMS':beamAreaRMS,'beamAreaD90':beamAreaD90,'particles in D90':numD90,
                  'radius RMS':radiusRMS,'L_Image':m*self.L_Object}
         return results
-def IPeak_And_Magnification_From_Lens(lens,apMin=None,rejectOutOfRange=True):
-    return helper(lens,apMin).IPeak_And_Magnification_From_Lens(rejectOutOfRange)
-def characterize_Focus(lens,apMin=None):
-    return helper(lens, apMin).characterize_Focus()
+def characterize_Focus(lens,apMin=None,rejectOutOfRange=True):
+    return helper(lens, apMin).characterize_Focus(rejectOutOfRange=rejectOutOfRange)
