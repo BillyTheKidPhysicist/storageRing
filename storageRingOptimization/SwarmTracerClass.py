@@ -204,7 +204,14 @@ class SwarmTracer:
             px=-np.sqrt(p0**2-(py**2+pz**2))
             particle.pi=np.asarray([px,py,pz])
         return swarmPseudoRandom
-
+    def initialize_Ring_Swarm(self,angle,num):
+        assert 0.0<angle<np.pi/2
+        pr=np.tan(angle)*self.lattice.v0Nominal
+        thetaArr=np.linspace(0.0,2*np.pi,num+1)[:-1]
+        swarm=Swarm()
+        for theta in thetaArr:
+            swarm.add_Particle(pi=np.asarray([-self.lattice.v0Nominal,pr*np.cos(theta),pr*np.sin(theta)]))
+        return swarm
     def generate_Probe_Sample(self,v0,seed=None,rpPoints=3,rqPoints=3):
         # value of 3 for points is a good value from testing to give qualitative results
         if type(seed)==int:

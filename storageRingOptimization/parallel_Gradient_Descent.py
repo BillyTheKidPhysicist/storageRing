@@ -62,7 +62,7 @@ class GradientOptimizer:
         gradBackward=(F0-vals_ab[:, 1])/self.gradStepSampSize
         gradMean=(gradForward+gradBackward)/2.0
         if self.disp==True and self.descentMethod=='adam':
-            print(x0,F0)
+            print(repr(x0),F0)
         return F0,gradMean
     def _forward_Difference_And_F0(self,x0):
         assert len(x0)==self.numDim
@@ -79,7 +79,7 @@ class GradientOptimizer:
         deltaVals=vals_ab[1:]-F0
         grad = deltaVals / self.gradStepSampSize
         if self.disp==True and self.descentMethod=='adam':
-            print(x0,F0)
+            print(repr(x0),F0)
         return F0,grad
     def _update_Speed(self,gradUnit,vPrev):
         deltaV = -gradUnit * self.stepSizeInitial

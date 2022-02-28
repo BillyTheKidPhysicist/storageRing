@@ -1,4 +1,4 @@
-from HalbachLensClass import HalbachLens,Layer,Sphere
+from HalbachLensClass import HalbachLens,Layer,Sphere,RectangularPrism
 from shapely.geometry import Polygon,Point
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,6 +12,7 @@ class GeneticLens(HalbachLens):
         #[radius, magnet width,length]
         #lens is centered at z=0
         assert isinstance(DNA_List,list)
+        assert all('component' in DNA for DNA in DNA_List)
         self.DNA_List=DNA_List
         self.shimDNA_List=[]
         self.layerDNA_List=[]
@@ -100,6 +101,7 @@ class GeneticLens(HalbachLens):
         return totalFrac
     def _sphere_Frac_Overlap_With_Layer(self,sphere:Sphere,layer:Layer):
         assert len(layer.rp)==1 # this does not work for goofy shapes of layers yet
+        assert isinstance(sphere,Sphere) and isinstance(layer,Layer)
         r = sphere.r
         z = sphere.z
         radius = sphere.radius

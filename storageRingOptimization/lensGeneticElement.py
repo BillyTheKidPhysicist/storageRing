@@ -63,7 +63,7 @@ class geneticLensElement(LensIdeal):
         #of the bore radius
 
         numPointsLongitudinal=35
-        numPointsTransverse=31
+        numPointsTransverse=51
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         assert np.abs(self.Lm-self.lens.length)<1e-6
@@ -99,7 +99,16 @@ class geneticLensElement(LensIdeal):
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.L/2, self.ap / 2, .0])))
-        # assert F_edge / F_center < .01
+        assert F_edge / F_center < .01
+        # num=50
+        # xArr=np.linspace(-self.ap,self.ap,num)*.25
+        # coords=np.asarray(np.meshgrid(self.L/2,xArr,xArr)).T.reshape(-1,3)
+        # vals=np.asarray([self.force(coord) for coord in coords])
+        # vals=np.linalg.norm(vals,axis=1)
+        # print(np.std(vals))
+        # image=vals.reshape(num,num)
+        # plt.imshow(image)
+        # plt.show()
 
 
     def compile_Fast_Numba_Force_Function(self):

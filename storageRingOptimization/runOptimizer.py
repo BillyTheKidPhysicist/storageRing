@@ -48,10 +48,10 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         variability=np.std(swarmCosts)
         print(args0,nominalCost,variability)
         return nominalCost+variability
-    solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers,surrogateMethodProb=.1)
+    solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
     # args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
     # gradient_Descent(wrapper,args0,25e-6,100,descentMethod='adam',gradStepSize=25e-6)
-if __name__=='__main__':
+def main():
     bounds = [
         (.005, .03),  # rpLens
         (.01, .03),  # rpLensFirst
@@ -63,8 +63,10 @@ if __name__=='__main__':
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    # stability_And_Survival_Optimize(bounds,None,10)
-    survival_Optimize(bounds,None,8)
+    stability_And_Survival_Optimize(bounds,None,32)
+    # survival_Optimize(bounds,None,31)
+if __name__=='__main__':
+    main()
 '''
 
 ----------Solution-----------   

@@ -24,13 +24,13 @@ def test():
                         'psi': (0.0, 2 * np.pi)}
     shimCLockedParams = {'radius': .0254 / 2, 'planeSymmetry': True}
 
-    shimOptimizerAB = ShimOptimizer()
+    shimOptimizerAB = ShimOptimizer('full')
     shimOptimizerAB.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerAB.add_Shim(shimAParamBounds, shimALockedParams)
     shimOptimizerAB.add_Shim(shimBParamBounds, shimBLockedParams)
     shimOptimizerAB.initialize_Optimization()
 
-    shimOptimizerC = ShimOptimizer()
+    shimOptimizerC = ShimOptimizer('full')
     shimOptimizerC.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerC.add_Shim(shimCParamBounds, shimCLockedParams)
     shimOptimizerC.initialize_Optimization()
@@ -54,17 +54,15 @@ def test():
 
     r0, phi0, deltaz0, theta0, psi0 = rp, np.pi / 13, .02, np.pi / 3, np.pi / 7
     argsAB = [L0, r0, phi0, deltaz0, theta0, psi0, r0, phi0, deltaz0, np.pi - theta0, psi0]
-    shimOptimizerAB.initialize_Baseline_Values(lensBaseLineParams)
-    costAB = shimOptimizerAB.cost_Function(argsAB)
+    costAB = shimOptimizerAB.cost_Function(argsAB,True,True)
 
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
-    shimOptimizerC.initialize_Baseline_Values(lensBaseLineParams)
-    costC = shimOptimizerC.cost_Function(argsC)
+    costC = shimOptimizerC.cost_Function(argsC,True,True)
 
-    costAB_0 =21.62180844471688
-    costC_0 = 21.62180844465764
-    print(costAB)
-    print(costC)
+    costAB_0 =43.698991718912154
+    costC_0 = 43.69899171892975
+    # print(costAB)
+    # print(costC)
     print(abs(costAB-costC))
     assert abs(costAB - costC) < tol
-    assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol
+    assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol #failed
