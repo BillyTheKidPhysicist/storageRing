@@ -4,6 +4,7 @@ def test():
     tol = 1e-9
     rp = .05
     L0 = .23
+    sphereDiam=.0254
     magnetWidth = .0254
     lensBounds = {'length': (L0 - rp, L0)}
     lensParams = {'rp': rp, 'width': magnetWidth}
@@ -12,17 +13,17 @@ def test():
     shimAParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
-    shimALockedParams = {'radius': .0254 / 2, 'planeSymmetry': False, 'location': 'top'}
+    shimALockedParams = {'diameter': sphereDiam,'shape':'sphere', 'planeSymmetry': False, 'location': 'top'}
 
     shimBParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
-    shimBLockedParams = {'radius': .0254 / 2, 'planeSymmetry': False, 'location': 'bottom'}
+    shimBLockedParams = {'diameter': sphereDiam,'shape':'sphere', 'planeSymmetry': False, 'location': 'bottom'}
 
     shimCParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
-    shimCLockedParams = {'radius': .0254 / 2, 'planeSymmetry': True}
+    shimCLockedParams = {'diameter': sphereDiam,'shape':'sphere', 'planeSymmetry': True}
 
     shimOptimizerAB = ShimOptimizer('full')
     shimOptimizerAB.set_Lens(lensBounds, lensParams,lensBaseLineParams)
@@ -47,8 +48,8 @@ def test():
     args = np.ones(len(shimOptimizerAB.boundsKeys)) * .75
     args[0] = L0
     DNA_List = shimOptimizerAB.make_DNA_List_From_Args(args)
-    z1 = (L0 / 2 + .75)
-    z2 = -(L0 / 2 + .75)
+    z1 = (L0 / 2 + .75+sphereDiam/2)
+    z2 = -(L0 / 2 + .75+sphereDiam/2)
     assert abs(DNA_List[1]['z'] - z1) < tol and abs(DNA_List[2]['z'] - z2) < tol
     assert len(shimOptimizerAB.bounds)==len(args)
 
@@ -59,10 +60,7 @@ def test():
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
     costC = shimOptimizerC.cost_Function(argsC,True,True)
 
-    costAB_0 =43.698991718912154
-    costC_0 = 43.69899171892975
-    # print(costAB)
-    # print(costC)
-    print(abs(costAB-costC))
+    costAB_0 =3.8691643645914207
+    costC_0 = 3.8691643645949343
     assert abs(costAB - costC) < tol
     assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol #failed

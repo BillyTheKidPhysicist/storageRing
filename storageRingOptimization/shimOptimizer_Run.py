@@ -13,17 +13,24 @@ lensParams = {'rp': rp, 'width': magnetWidth}
 lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
 
 
-def make_Shim_Params(variableRadius,variablePhi,symmetric=True,location=None):
-    shim1ParamBounds = {'r': (rp, rp + magnetWidth), 'deltaZ': (0.0, rp),
-                        'psi': (0.0, 2 * np.pi),'theta':(0.0,np.pi)}
-    shim1LockedParams = {'planeSymmetry': symmetric}
+def make_Shim_Params(variableDiam,variablePhi,shape,symmetric=True,location=None):
+    if shape=='sphere':
+        shim1ParamBounds = {'r': (rp, rp + magnetWidth), 'deltaZ': (0.0, .75*rp),
+                            'psi': (0.0, 2 * np.pi),'theta':(0.0,np.pi)}
+        shim1LockedParams = {'planeSymmetry': symmetric,'shape':'sphere'}
+    elif shape=='cube':
+        shim1ParamBounds = {'r': (rp, rp + magnetWidth),
+                            'psi': (0.0, 2 * np.pi)}
+        shim1LockedParams = {'planeSymmetry': symmetric, 'shape': 'cube','deltaZ':1e-3}
+        pass
+    else: raise ValueError
     if symmetric==False:
         shim1LockedParams['location']=location
-    if variableRadius == True:
-        shim1ParamBounds['radius'] = (.0254 / 8, .0254)
+    if variableDiam == True:
+        shim1ParamBounds['diameter'] = (.0254 / 16, .0254)
     else:
-        assert isinstance(variableRadius, float)
-        shim1LockedParams['radius'] = variableRadius
+        assert isinstance(variableDiam, float)
+        shim1LockedParams['diameter'] = variableDiam
     if variablePhi == True:
         shim1ParamBounds['phi'] = (0, np.pi / 6)
     else:
@@ -31,44 +38,27 @@ def make_Shim_Params(variableRadius,variablePhi,symmetric=True,location=None):
         shim1LockedParams['phi'] = variablePhi
     return shim1ParamBounds, shim1LockedParams
 
-def optimize_1Shim_Symmetric(variableRadius,variablePhi,saveData=None):
-    method='concentric'
+def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
+    method='full'
     np.random.seed(int(time.time()))
-    deltaL=-.01
-    lensBaseLineParams['length']-=deltaL
-    shimParamBounds, shimLockedParams=make_Shim_Params(variableRadius,variablePhi)
+    shimParamBounds, shimLockedParams=make_Shim_Params(variableDiam,variablePhi,shape)
     shimOptimizer = ShimOptimizer(method)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
     shimOptimizer.optimize(saveData=saveData)
-    # args0=np.array([0.21273044, 0.0754    , 0.04451173, 3.85420667, 1.55787181,
-    #    0.0254    , 0.39590319])
     # shimOptimizer.initialize_Optimization()
     # shimOptimizer.cost_Function(args0,True,False)
-    # print(shimOptimizer.optimize_Descent())
+    # print(shimOptimizer.optimize_Descent(Xi=args0))
     # shimOptimizer.characterize_Results(args0)
-def optimize_2Shim_NonSymmetric(variableRadius,variablePhi,saveData=None):
-    raise Exception("does not work with using symmetric force approach")
-    np.random.seed(int(time.time()))
-    shimTopParamBounds, shimTopLockedParams = make_Shim_Params(variableRadius, variablePhi,symmetric=False,
-                                                               location='top')
-    shimBotParamBounds, shimBotLockedParams = make_Shim_Params(variableRadius, variablePhi,symmetric=False,
-                                                               location='bottom')
-    shimOptimizer = ShimOptimizer()
-    shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
-    shimOptimizer.add_Shim(shimTopParamBounds, shimTopLockedParams)
-    shimOptimizer.add_Shim(shimBotParamBounds, shimBotLockedParams)
-    shimOptimizer.optimize(saveData=saveData)
-
-def optimize_2Shim_Symmetric(variableRadius,variablePhi,saveData=None):
+def optimize_2Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     method='full'
     np.random.seed(int(time.time()))
     if variablePhi==True:
         variablePhi=[True,True]
     else:
         assert len(variablePhi)==2 and isinstance(variablePhi,list)
-    shimTopParamBounds, shimTopLockedParams = make_Shim_Params(variableRadius, variablePhi.pop(0))
-    shimBotParamBounds, shimBotLockedParams = make_Shim_Params(variableRadius, variablePhi.pop(0))
+    shimTopParamBounds, shimTopLockedParams = make_Shim_Params(variableDiam, variablePhi.pop(0),shape)
+    shimBotParamBounds, shimBotLockedParams = make_Shim_Params(variableDiam, variablePhi.pop(0),shape)
     shimOptimizer = ShimOptimizer(method)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimTopParamBounds, shimTopLockedParams)
@@ -81,9 +71,7 @@ def optimize_2Shim_Symmetric(variableRadius,variablePhi,saveData=None):
     # shimOptimizer.optimize_Descent(args)
 # optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
 
-optimize_1Shim_Symmetric(True,True)
-optimize_1Shim_Symmetric(True,True)
-optimize_1Shim_Symmetric(True,True)
+optimize_2Shim_Symmetric(True,True,'cube')
 
 
 '''
@@ -92,6 +80,24 @@ finished with total evals:  8796
 DNA: array([0.18820769, 0.0709656 , 0.03091131, 5.15298971, 1.56922431,
        0.0254    , 0.46719183])
 cost: 0.2506882673972071
+'''
+
+
+
+'''
+squares at surface of magnet limited to inner edge at r
+---population member---- 
+DNA: array([0.21538552, 0.05635463, 4.99963203, 0.02439401])
+cost: 0.3537612155055272
+
+---population member---- 
+DNA: array([0.22410779, 0.05688831, 4.84742278, 0.0254    ])
+cost: 0.3453000230362722
+
+---population member---- 
+DNA: array([0.23234612, 0.0553846 , 4.98302385, 0.02531952])
+cost: 0.349140482632951
+
 '''
 
 

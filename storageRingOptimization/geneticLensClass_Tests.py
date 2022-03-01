@@ -31,11 +31,11 @@ class testHelper:
     def test2(self):
         #test that the same configuration of shims gives the same result even if done differently by using or
         #not using symmetry and rotations
-        DNA_List1=[{'component':'shim','radius':.01,'r':self.rp,'phi':0.1,'z':self.length/2,'theta':np.pi/4,
+        DNA_List1=[{'component':'shim','shape':'sphere','diameter':.02,'r':self.rp,'phi':0.1,'z':self.length/2,'theta':np.pi/4,
                     'psi':np.pi/3,'planeSymmetry':True}]
-        DNA_List2=[{'component':'shim','radius':.01,'r':self.rp,'phi':0.1,'z':self.length/2,'theta':np.pi/4,
+        DNA_List2=[{'component':'shim','shape':'sphere','diameter':.02,'r':self.rp,'phi':0.1,'z':self.length/2,'theta':np.pi/4,
                     'psi':np.pi/3,'planeSymmetry':False},
-                   {'component':'shim','radius':.01,'r':self.rp,'phi':0.1,'z':-self.length/2,'theta':3*np.pi/4,
+                   {'component':'shim','shape':'sphere','diameter':.02,'r':self.rp,'phi':0.1,'z':-self.length/2,'theta':3*np.pi/4,
                     'psi':np.pi/3,'planeSymmetry':False}]
         lens1, lens2 = GeneticLens(DNA_List1), GeneticLens(DNA_List2)
         BNormGrad1,BNormGrad2=lens1.BNorm_Gradient(self.coords),lens2.BNorm_Gradient(self.coords)

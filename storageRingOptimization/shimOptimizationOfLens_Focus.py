@@ -18,7 +18,11 @@ class ShimHelper:
         # bounds: Dict of bounds for shim arguments
         # params: Dict of bounds for shim params
         paramsBounds, paramsLocked = copy.copy(paramsBounds), copy.copy(paramsLocked)
-        paramKeysNoID = ['radius', 'r', 'phi', 'deltaZ', 'theta', 'psi', 'planeSymmetry']
+        if paramsLocked['shape']=='cube':
+            paramKeysNoID = ['diameter', 'r', 'phi', 'deltaZ', 'psi', 'planeSymmetry','shape']
+        elif paramsLocked['shape']=='sphere':
+            paramKeysNoID = ['diameter', 'r', 'phi', 'deltaZ', 'theta', 'psi', 'planeSymmetry','shape']
+        else: raise ValueError
         assert 'planeSymmetry' in paramsLocked
         if paramsLocked['planeSymmetry']==False:
             paramKeysNoID.append('location') #users needs to specificy where the shim is
@@ -26,6 +30,7 @@ class ShimHelper:
         assert len(paramsLocked) +len(paramsBounds) == len(paramKeysNoID)
         assert all(len(value) == 2 for key, value in paramsBounds.items())
         assert all(key not in paramsLocked for key,value in paramsBounds.items())
+        assert isinstance(shimID,str)
         self.ID=shimID
         self.paramKeys = [key + shimID for key in paramKeysNoID]
         self.paramsLocked = {'component'+shimID: 'shim'}
@@ -111,14 +116,16 @@ class ShimOptimizer:
         #change deltaz to z and adjust z position of shim depending on location param
         lensZ_End = lensDNA_Dict['length'] / 2  # lens is centered with z=0
         if shim.paramsLocked['planeSymmetry'+shim.ID] == True or shim.paramsLocked['location'+shim.ID] == 'top':
-            zLoc = lensZ_End + shimDNA_Dict['deltaZ']
+            zLoc = lensZ_End + shimDNA_Dict['deltaZ']+shimDNA_Dict['diameter']/2.0
         else:
             assert shim.paramsLocked['location' + shim.ID] == 'bottom'
-            zLoc = -(lensZ_End + shimDNA_Dict['deltaZ'])  # flip shim to bottom
+            zLoc = -(lensZ_End + shimDNA_Dict['deltaZ']+shimDNA_Dict['diameter']/2.0)  # flip shim to bottom
         shimDNA_Dict.pop('deltaZ')
+        shimDNA_Dict['r']+=shimDNA_Dict['diameter']/2.0
         shimDNA_Dict['z']=zLoc
-        if shim.paramsLocked['planeSymmetry'+shim.ID]==True: assert len(shimDNA_Dict) == 8
-        else: assert len(shimDNA_Dict) == 9
+        numArgsWithSymmetry=9 if shim.paramsLocked['shape'+shim.ID]=='sphere' else 8
+        if shim.paramsLocked['planeSymmetry'+shim.ID]==True: assert len(shimDNA_Dict) == numArgsWithSymmetry
+        else: assert len(shimDNA_Dict) == numArgsWithSymmetry+1 #if not symmetry, need to specify which side
         return shimDNA_Dict, argsConsumed
 
     def make_DNA_List_From_Args(self, args):
@@ -169,6 +176,11 @@ class ShimOptimizer:
         m_New=np.asarray([result['m'] for result in results])
         I_Baseline=np.asarray([result['I'] for result in self.baseLineFocusDict])
         m_Baseline=np.asarray([result['m'] for result in self.baseLineFocusDict])
+        # print(I_New/I_Baseline)
+        # print(np.std(m_New))
+        # print(np.std(m_Baseline))
+        # print(np.mean(m_New))
+        # print(np.mean(m_Baseline))
         magSpread_Baseline=np.std(m_Baseline)
         magSpread_New=np.std(m_New)
         magSpreadCost=magSpread_New/magSpread_Baseline
@@ -176,7 +188,7 @@ class ShimOptimizer:
         focusInvarBaseline=I_Baseline*m_Baseline
         focusInvarNew=I_New*m_New
         focusCost=1/np.mean(focusInvarNew/focusInvarBaseline)
-        cost=(magDriftCost+magSpreadCost+focusCost)/3.0 #normalize to one
+        cost=(magDriftCost+10*magSpreadCost+focusCost)/12.0 #normalize to one
         return cost
     def _single_Swarm_Cost(self,results):
         IPeak, m = results['I'], results['m']
@@ -208,6 +220,7 @@ class ShimOptimizer:
         print('geometry cost:',lens.geometry_Frac_Overlap())
     def optimize(self,saveData=None):
         self.initialize_Optimization()
+        print(self.boundsKeys)
         rejectOutOfRange, smoothGeometryCost=True,False
         costFunc=lambda x: self.cost_Function(x,rejectOutOfRange,smoothGeometryCost)
         sol = solve_Async(costFunc, self.bounds, 15 * len(self.bounds),
@@ -215,12 +228,12 @@ class ShimOptimizer:
         print(sol)
     def optimize_Descent(self,Xi=None):
         self.initialize_Optimization()
-        numSamples=1000
-        samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))
-        costFuncGlobal = lambda x: self.cost_Function(x,True, False)
-        with mp.Pool(maxtasksperchild=10) as pool:
-            vals = np.asarray(pool.map(costFuncGlobal, samples))
-        Xi = samples[np.argmin(vals)]
+        # numSamples=1000
+        # samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))
+        # costFuncGlobal = lambda x: self.cost_Function(x,True, False)
+        # with mp.Pool(maxtasksperchild=10) as pool:
+        #     vals = np.asarray(pool.map(costFuncGlobal, samples))
+        # Xi = samples[np.argmin(vals)]
         costFunc = lambda x: self.cost_Function(x,False, True)
         return gradient_Descent(costFunc,Xi,100e-6,100,gradStepSize=10e-6,gradMethod='central',
                                 descentMethod='adam',disp=True)

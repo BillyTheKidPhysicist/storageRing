@@ -29,6 +29,22 @@ def B_NUMBA(r,r0,m):
     Bvec=(MAGNETIC_PERMEABILITY/(4*np.pi))*(3*r*mrDot/rNorm**5-m/rNorm**3)
     return Bvec
 
+class magpy_Prism:
+    def __init__(self,x0,y0,z0,phi,width,length,M):
+        self.magnet=self._build_magpy_Prism(x0,y0,z0,phi,width,length,M)
+    def _build_magpy_Prism(self, x0, y0, z0, phi, width, length,M):
+        dimensions_mm = 1e3 * np.asarray([width, width, length])
+        position_mm = 1e3 * np.asarray([x0, y0, z0])
+        R = Rotation.from_rotvec([0, 0, phi])
+        M_MagpyUnit = 1e3 * M * MAGNETIC_PERMEABILITY  # uses units of mT for magnetization.
+        magnet = Box(magnetization=(M_MagpyUnit, 0, 0.0), dimension=dimensions_mm, position=position_mm,
+                     orientation=R)
+        return magnet
+    def B(self,evalCoords):
+        evalCoords_mm = 1e3 * evalCoords
+        BVec_mT = self.magnet.getB(evalCoords_mm)  # need to convert to mm
+        BVec_T = 1e-3 * BVec_mT  # convert to tesla from milliTesla
+        return BVec_T
 
 class Sphere:
     def __init__(self, radius,M=M_Default):
@@ -164,14 +180,11 @@ class RectangularPrism:
         #phi: position in polar/cylinderical coordinates
         #z: vertical distance in cylinderical coordinates
         #theta: rotation rectuangular prism about body axis
-        self.theta=theta
-        self.phi = phi
-        self.z = z
-        self.r = r
+        self.r,self.theta,self.z,self.phi=r,theta,z,phi
         self.x = self.r * np.cos(self.theta)
         self.y = self.r * np.sin(self.theta)
         self.r0 = np.asarray([self.x, self.y, self.z])
-        self._build_RectangularPrism()
+        self.magnet=magpy_Prism(self.x,self.y,self.z,self.phi,self.width,self.length,self.M)
     def _build_RectangularPrism(self):
         # build a rectangular prism made of multiple spheres
         # make rotation matrices
@@ -185,16 +198,49 @@ class RectangularPrism:
     def B(self, evalCoords):
         # (n,3) array to evaluate coords at. SI
         assert len(evalCoords.shape)==2 and evalCoords.shape[1]==3
-        evalCoords_mm=1e3*evalCoords
-        BVec_mT = self.magnet.getB(evalCoords_mm) #need to convert to mm
-        BVec_T=1e-3*BVec_mT #convert to tesla from milliTesla
-        if len(BVec_T.shape)==1:
-            BVec_T=np.asarray([BVec_T])
-        return BVec_T
+        BVec=self.magnet.B(evalCoords)
+        if len(BVec.shape)==1:
+            BVec=np.asarray([BVec])
+        return BVec
+    def B_Shim(self, r, planeSymmetry=True,negativeSymmetry=True,rotationAngle=np.pi/3):
+        # a single magnet actually represents 12 magnet
+        # r: array of N position vectors to get field at. Shape (N,3)
+        # planeSymmetry: Wether to exploit z symmetry or not
+        # plt.quiver(self.r0[0],self.r0[1],np.cos(self.phi),np.sin(self.phi),color='r')
+        arr = np.zeros(r.shape)
+        arr += self.B(r)
+        arr+=self.B_Symmetry(r,1,negativeSymmetry,rotationAngle,False)
+        arr+=self.B_Symmetry(r,2,negativeSymmetry,rotationAngle,False)
+        arr+=self.B_Symmetry(r,3,negativeSymmetry,rotationAngle,False)
+        arr+=self.B_Symmetry(r,4,negativeSymmetry,rotationAngle,False)
+        arr+=self.B_Symmetry(r,5,negativeSymmetry,rotationAngle,False)
+
+        if planeSymmetry == True:
+            arr += self.B_Symmetry(r, 0, negativeSymmetry, rotationAngle,True)
+            arr += self.B_Symmetry(r, 1, negativeSymmetry, rotationAngle,True)
+            arr += self.B_Symmetry(r, 2, negativeSymmetry, rotationAngle,True)
+            arr += self.B_Symmetry(r, 3, negativeSymmetry, rotationAngle,True)
+            arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle,True)
+            arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle,True)
+        return arr
+    def B_Symmetry(self,r, rotations,negativeSymmetry, rotationAngle,planeSymmetry):
+        rotAngle = rotationAngle * rotations
+        phiSymm=rotAngle
+        M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
+        r0Sym=self.r0.copy()
+        r0Sym[:2]=M_Rot@r0Sym[:2]
+        if negativeSymmetry==True:
+            phiSymm+=rotations*np.pi
+        if planeSymmetry==True:
+            r0Sym[2] = -r0Sym[2]
+        # plt.quiver(r0Sym[0], r0Sym[1], np.cos(self.phi+phiSymm),np.sin(self.phi+phiSymm))
+        magnet=magpy_Prism(*r0Sym,self.phi+phiSymm,self.width,self.length,self.M)
+        B=magnet.B(r)
+        return B
 
 class Layer:
     # class object for a layer of the magnet. Uses the RectangularPrism object
-    def __init__(self, z, width, length,rp, M=M_Default):
+    def __init__(self, z, width, length,rp, M=M_Default,phase=0.0):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
         # width: width of the rectangular prism in the xy plane
         # length: length of the rectangular prism in the z axis
@@ -213,14 +259,15 @@ class Layer:
         self.length = length
         self.rp=rp
         self.M = M
+        self.phase=phase #this will rotate the layer about z this amount
         self.RectangularPrismsList = []  # list of RectangularPrisms
         self.build()
     def build(self):
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
-        thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)  # location of 12 magnets
+        thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)+self.phase  # location of 12 magnets.
         thetaArr=thetaArr.reshape(-1,len(self.rp)).T
-        phiArr = np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
+        phiArr =self.phase+ np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
         phiArr=phiArr.reshape(-1,len(self.rp)).T
         for r,r_phi,r_theta in zip(self.rp,phiArr,thetaArr):
             for phi,theta in zip(r_phi,r_theta):

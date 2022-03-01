@@ -62,8 +62,8 @@ class geneticLensElement(LensIdeal):
         #todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
         #of the bore radius
 
-        numPointsLongitudinal=35
-        numPointsTransverse=51
+        numPointsLongitudinal=31
+        numPointsTransverse=31
 
         self.Lm=self.L-2*self.fringeFracOuter*self.rp  #hard edge length of magnet
         assert np.abs(self.Lm-self.lens.length)<1e-6

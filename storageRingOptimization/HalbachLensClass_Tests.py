@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from HalbachLensClass import Sphere,RectangularPrism,Layer,HalbachLens
 import scipy.optimize as spo
-class SphereTestHelper:
+class SpheretestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
-    def run_Tests(self):
+    def run_tests(self):
         self.test1()
         self.test2()
         self.test3()
@@ -26,9 +26,9 @@ class SphereTestHelper:
         sphere2 = Sphere(.0254)
         sphere2.position_Sphere(r=.05, phi=np.pi/3, z=0.0)
         sphere2.orient(np.pi / 2, 4*np.pi/3)
-        rTest = np.ones((1,3))*.01
-        BVec1=sphere1.B_Shim(rTest,planeSymmetry=False)[0]
-        BVec2=sphere2.B_Shim(rTest,planeSymmetry=False)[0]
+        rtest = np.ones((1,3))*.01
+        BVec1=sphere1.B_Shim(rtest,planeSymmetry=False)[0]
+        BVec2=sphere2.B_Shim(rtest,planeSymmetry=False)[0]
         BVec1_0=np.asarray([-0.0011941881467123633 ,-0.16959218399899806 ,0.025757119925902405])
         BVec2_0=np.asarray([-0.001194188146712627 ,-0.16959218399899786 ,0.025757119925902378])
         print(BVec2)
@@ -43,19 +43,20 @@ class SphereTestHelper:
         sphere2 = Sphere(.0254)
         sphere2.position_Sphere(r=.05, phi=0.0, z=-.1)
         sphere2.orient(3*np.pi / 4,np.pi/3)
-        rTest = np.ones((1, 3)) * .01
-        BVec_Symm1=sphere1.B_Shim(rTest,planeSymmetry=True)[0]
-        BVec_Symm2=sphere1.B_Shim(rTest,planeSymmetry=False)[0]+sphere2.B_Shim(rTest,planeSymmetry=False)[0]
+        rtest = np.ones((1, 3)) * .01
+        BVec_Symm1=sphere1.B_Shim(rtest,planeSymmetry=True)[0]
+        BVec_Symm2=sphere1.B_Shim(rtest,planeSymmetry=False)[0]+sphere2.B_Shim(rtest,planeSymmetry=False)[0]
         BVec_Symm1_0=np.asarray([-0.0058071761934043635, -0.004844616334816022 ,0.010212674466403442])
         BVec_Symm2_0=np.asarray([-0.005807176193404366, -0.004844616334816021 ,0.010212674466403436])
         assert np.all(np.abs(BVec_Symm1 - BVec_Symm1_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm2_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm1) < self.numericTol)
-class RectangularPrismTestHelper:
+class RectangularPrismtestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
-    def run_Tests(self):
+    def run_tests(self):
         self.test1()
+        self.test2()
     def test1(self):
         #test that fields point as expected
         prism=RectangularPrism(.0254,.1)
@@ -65,26 +66,61 @@ class RectangularPrismTestHelper:
         BVec_0=np.asarray([-0.026118798585274296 ,3.1986303085030583e-18 ,0.0])
         assert np.all(np.abs(BVec[1:])<self.numericTol) and BVec[0]<0.0
         assert np.all(np.abs(BVec-BVec_0)<self.numericTol)
-class LayerTestHelper:
+    def test2(self):
+        #test that shim symmetry works as expected
+        prismA = RectangularPrism(.0254, .0254)
+        prismB = RectangularPrism(.0254, .0254)
+        prismC = RectangularPrism(.0254, .0254)
+        prismA.place(.05, -np.pi/5, 0.05, np.pi/7)
+        prismB.place(.05, -np.pi/5, -0.05, np.pi/7)
+        prismC.place(.05, -np.pi/5, 0.05, np.pi/7)
+        xArr=np.linspace(-.01,.01,10)
+        coords=np.asarray(np.meshgrid(xArr,xArr,xArr)).T.reshape(-1,3)
+        vals1=prismA.B_Shim(coords,planeSymmetry=False)+prismB.B_Shim(coords,planeSymmetry=False)
+        vals2=prismC.B_Shim(coords,planeSymmetry=True)
+        vals1_0=0.0016452085474342394
+        vals2_0=0.0016452085474342394
+        assert np.mean(np.abs(vals1-vals2))<self.numericTol
+        assert abs(np.std(vals2)-vals2_0)<self.numericTol and abs(np.std(vals1)-vals1_0)<self.numericTol
+class LayertestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
-    def run_Tests(self):
+    def run_tests(self):
         self.test1()
+        self.test2()
     def test1(self):
         #test that fields point as expected
         layer1=Layer(1.0,.02,.5,.05)
-        rTest=np.asarray([[.02,.02,1.0]])
-        BVec=layer1.B(rTest)[0]
+        rtest=np.asarray([[.02,.02,1.0]])
+        BVec=layer1.B(rtest)[0]
         BVec_0=np.asarray([7.04735665657541e-09 ,0.1796475065591648 ,0.0])
         assert abs(BVec[2])<self.numericTol
         assert np.all(np.abs(BVec_0-BVec)<self.numericTol)
-class HalbachLensTestHelper:
+    def test2(self):
+        width = .0254
+        rp = .05
+        xArr = np.linspace(-rp / 2, rp / 2, 50)
+        coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
+        prism = RectangularPrism(width, width)
+        prism.place(rp + width / 2, 0.0, 0.0, np.pi)
+        prism1 = RectangularPrism(width, width)
+        prism1.place(rp + width / 2, np.pi / 6, 0.0, np.pi + 2 * np.pi / 3)
+        layer = Layer(0.0, width, width, rp)
+        layerBVec = layer.B(coords)
+        prismBVec = prism.B_Shim(coords, planeSymmetry=False) + prism1.B_Shim(coords, planeSymmetry=False)
+        layerBVecRMS0=0.045531041274931655
+        prismBVecRMS0=0.045531041274931655
+        print(np.std(prismBVec),np.std(layerBVec))
+        assert np.abs(np.std(layerBVec)-layerBVecRMS0)<self.numericTol
+        assert np.abs(np.std(prismBVec)-prismBVecRMS0)<self.numericTol
+        assert np.std(prismBVec-layerBVec)<self.numericTol
+class HalbachLenstestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
         self.rp=5e-2
         self.length=.15
         self.magnetWidth=.0254
-    def run_Tests(self):
+    def run_tests(self):
         self.test1()
         self.test2()
     def hexapole_Fit(self,r,B0):
@@ -124,7 +160,7 @@ class HalbachLensTestHelper:
         # plt.scatter(rArr,BNormVals)
         # plt.show()
 def test():
-    SphereTestHelper().run_Tests()
-    RectangularPrismTestHelper().run_Tests()
-    LayerTestHelper().run_Tests()
-    HalbachLensTestHelper().run_Tests()
+    SpheretestHelper().run_tests()
+    RectangularPrismtestHelper().run_tests()
+    LayertestHelper().run_tests()
+    HalbachLenstestHelper().run_tests()
