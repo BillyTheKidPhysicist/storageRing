@@ -93,7 +93,7 @@ class helper:
                    self.fringeFrac*self.lens.maximum_Radius()))<1e-12
     def make_Interp_Function_Full_Swarm(self):
         swarmTracer=SwarmTracer(self.PTL)
-        angle=.9*self.lens.minimum_Radius()/(self.L_Object+self.lens.length/2)
+        angle=self.apMin/(self.L_Object+self.lens.length/2)
         v0=self.PTL.v0Nominal
         swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1e-6,500,sameSeed=True)
         h=1e-5

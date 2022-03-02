@@ -51,14 +51,14 @@ class ShimHelper:
 
 
 class LensHelper:
-    def __init__(self, paramsBoundsLayers, paramsLockedLayers):
+    def __init__(self, paramsBoundsLayers, paramsLockedLayers,longitudinalSymm):
         paramsBoundsLayers, paramsLockedLayers = copy.copy(paramsBoundsLayers), copy.copy(paramsLockedLayers)
         assert isinstance(paramsBoundsLayers,list) and isinstance(paramsLockedLayers,list)
         assert len(paramsBoundsLayers)==len(paramsLockedLayers)
         paramKeys = ['rp', 'width', 'length']
         self.paramsLockedLayers=[]
         self.paramsBoundsLayers=[]
-        self.numLayers=len(paramsBoundsLayers)
+        self.numLayers=2*len(paramsBoundsLayers) if longitudinalSymm==True else len(paramsBoundsLayers)
         for paramsLocked,paramsBounds,i in zip(paramsLockedLayers,paramsBoundsLayers,range(self.numLayers)):
             assert i<=9
             ID=str(i)
@@ -78,7 +78,7 @@ class LensHelper:
 
 
 class ShimOptimizer:
-    def __init__(self,swarmModel):
+    def __init__(self,swarmModel,lensLongitudinalSymm):
         assert swarmModel in ('concentric', 'full')
         self.swarmModel=swarmModel
         self.lens = None #may be variable
@@ -89,19 +89,22 @@ class ShimOptimizer:
         self.makeBoundsCalled = False
         self.addedLens=False
         self.baseLineFocusDict=None
+        self.apBase=None
+        self.lensLongitudnalSymm=lensLongitudinalSymm
 
     def set_Lens(self, paramsBounds, paramsLocked, baseLineParams):
         assert self.addedLens==False
-        assert len(baseLineParams)==1 #I asuume length 1 when making the lens DNA
-        self.lens = LensHelper(paramsBounds, paramsLocked)
-        self.lensBaseLine=LensHelper([{}],baseLineParams)
+        assert len(baseLineParams)==1 #I asuume base lens is made of 1 layer
+        self.apBase=baseLineParams[0]['rp']*.9
+        self.lens = LensHelper(paramsBounds, paramsLocked,self.lensLongitudnalSymm)
+        self.lensBaseLine=LensHelper([{}],baseLineParams,self.lensLongitudnalSymm)
         self.addedLens=True
 
     def add_Shim(self, paramsBounds, paramsLocked):
         shimID = str(len(self.shimsList))
         self.shimsList.append(ShimHelper(paramsBounds, paramsLocked, shimID))
 
-    def initialize_Optimization(self,overRideBoundsError=False):
+    def initialize_Optimization(self,overRideNumBoundsError=False):
         assert self.makeBoundsCalled == False
         self.initialize_Baseline_Values()
         self.makeBoundsCalled = True
@@ -113,7 +116,7 @@ class ShimOptimizer:
             for key, val in shim.paramsBounds.items():
                 self.bounds.append(val)
                 self.boundsKeys.append(key)
-        if overRideBoundsError==False:
+        if overRideNumBoundsError==False:
             assert len(self.bounds) != 0
 
     def make_Lens_DNA_Dict(self, args):
@@ -125,6 +128,10 @@ class ShimOptimizer:
                     argsConsumed += 1
                     lensDNAList[i][key] = arg
         lensDNAList=[strip_ID_From_Dict(lensDNAList[i]) for i in range(len(lensDNAList))]
+        if self.lensLongitudnalSymm==True:
+            lensDNAListFlipped=copy.copy(lensDNAList)
+            lensDNAListFlipped.reverse()
+            lensDNAList.extend(lensDNAListFlipped)
         assert all(len(lensDNA_Dict)==4 for lensDNA_Dict in lensDNAList)
         return lensDNAList, argsConsumed
 
@@ -170,6 +177,8 @@ class ShimOptimizer:
     def make_Lens(self, args):
         DNA_List = self.make_DNA_List_From_Args(args)
         assert len(DNA_List) == self.lens.numLayers+ len(self.shimsList)
+        L=sum(DNA['length'] if DNA['component']=='layer' else 0 for DNA in DNA_List)
+        assert abs(L-self.lensBaseLine.paramsLockedLayers[0]['length0'])<1e-6 #too many layers possibly
         lens = GeneticLens(DNA_List)
         return lens
 
@@ -183,9 +192,9 @@ class ShimOptimizer:
         else:
             cost+=lens.geometry_Frac_Overlap()
         if self.swarmModel=='concentric':
-            results = characterize_Lens_Concentric_Swarms(lens,rejectOutOfRange)
+            results = characterize_Lens_Concentric_Swarms(lens,rejectOutOfRange,apMin=self.apBase)
         else:
-            results=characterize_Lens_Full_Swarm(lens,rejectOutOfRange)
+            results=characterize_Lens_Full_Swarm(lens,rejectOutOfRange,apMin=self.apBase)
         if results is None:
             return np.inf
         cost+=self._peformance_Cost(results)
@@ -202,11 +211,6 @@ class ShimOptimizer:
         m_New=np.asarray([result['m'] for result in results])
         I_Baseline=np.asarray([result['I'] for result in self.baseLineFocusDict])
         m_Baseline=np.asarray([result['m'] for result in self.baseLineFocusDict])
-        # print(I_New/I_Baseline)
-        # print(np.std(m_New))
-        # print(np.std(m_Baseline))
-        # print(np.mean(m_New))
-        # print(np.mean(m_Baseline))
         magSpread_Baseline=np.std(m_Baseline)
         magSpread_New=np.std(m_New)
         magSpreadCost=magSpread_New/magSpread_Baseline
@@ -227,15 +231,16 @@ class ShimOptimizer:
         baseLine_DNA_List=[strip_ID_From_Dict(self.lensBaseLine.paramsLockedLayers[0])]
         lensBaseLine = GeneticLens(baseLine_DNA_List)
         if self.swarmModel=='concentric':
-            self.baseLineFocusDict = characterize_Lens_Concentric_Swarms(lensBaseLine,True)
+            self.baseLineFocusDict = characterize_Lens_Concentric_Swarms(lensBaseLine,True,apMin=self.apBase)
         else:
-            self.baseLineFocusDict=characterize_Lens_Full_Swarm(lensBaseLine,True)
+            self.baseLineFocusDict=characterize_Lens_Full_Swarm(lensBaseLine,True,apMin=self.apBase)
+
     def characterize_Results(self,args,display=True):
-        self.initialize_Optimization(overRideBoundsError=True)
+        self.initialize_Optimization(overRideNumBoundsError=True)
         if self.swarmModel=='full':
-            results=characterize_Lens_Full_Swarm(self.make_Lens(args),True)
+            results=characterize_Lens_Full_Swarm(self.make_Lens(args),True,apMin=self.apBase)
         elif self.swarmModel=='concentric':
-            results=characterize_Lens_Concentric_Swarms(self.make_Lens(args),True)
+            results=characterize_Lens_Concentric_Swarms(self.make_Lens(args),True,apMin=self.apBase)
         else: raise ValueError
         performanceCost = self._peformance_Cost(results)
         lens = self.make_Lens(args)
@@ -247,10 +252,7 @@ class ShimOptimizer:
             print('performance cost:',performanceCost)
             print('geometry cost:',lens.geometry_Frac_Overlap())
         return results,performanceCost
-    def optimize_Genetic(self):
-        # self.initialize_Optimization()
-        self.characterize_Results(np.asarray([.05,.05]))
-    def optimize_Shims(self,saveData=None):
+    def optimize(self,saveData=None):
         self.initialize_Optimization()
         print(self.boundsKeys)
         rejectOutOfRange, smoothGeometryCost=True,False
@@ -258,7 +260,7 @@ class ShimOptimizer:
         sol = solve_Async(costFunc, self.bounds, 15 * len(self.bounds),
                           tol=.03,disp=True,saveData=saveData,workers=9)
         print(sol)
-    def optimize_Shims_Descent(self,Xi=None):
+    def optimize_Descent(self,Xi=None):
         self.initialize_Optimization()
         # numSamples=1000
         # samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))

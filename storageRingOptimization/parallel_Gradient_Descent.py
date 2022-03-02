@@ -205,12 +205,6 @@ def test2():
     yDifNumericC=np.asarray(yDifNumericC)
     assert np.all(np.abs(yDifNumericF-yDifAnalytic)<tolF)
     assert np.all(np.abs(yDifNumericC-yDifAnalytic)<tolC)
-# Xi=[7.5]
-# x,f=global_Gradient_Descent(test_Func,[(-10.0,10.0)],100,.01,10,.001,descentMethod='adam',Plot=True)
-# x,f=gradient_Descent(test_Func,Xi,.01,1000,momentumFact=0.99,gradMethod='central',parallel=False,
-#                          Plot=True,disp=True,maxStepSize=.02*100,descentMethod='adam')
-# xArr=np.linspace(-8,8,100)
-# y=[test_Func([x]) for x in xArr]
-# plt.plot(xArr,y)
-# plt.axvline(x=x)
-# plt.show()
+def run_Tests():
+    test1()
+    test2()

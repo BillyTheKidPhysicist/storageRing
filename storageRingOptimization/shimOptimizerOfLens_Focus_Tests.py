@@ -25,13 +25,13 @@ def test1():
                         'psi': (0.0, 2 * np.pi)}
     shimCLockedParams = {'diameter': sphereDiam,'shape':'sphere', 'planeSymmetry': True}
 
-    shimOptimizerAB = ShimOptimizer('full')
+    shimOptimizerAB = ShimOptimizer('full',False)
     shimOptimizerAB.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerAB.add_Shim(shimAParamBounds, shimALockedParams)
     shimOptimizerAB.add_Shim(shimBParamBounds, shimBLockedParams)
     shimOptimizerAB.initialize_Optimization()
 
-    shimOptimizerC = ShimOptimizer('full')
+    shimOptimizerC = ShimOptimizer('full',False)
     shimOptimizerC.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizerC.add_Shim(shimCParamBounds, shimCLockedParams)
     shimOptimizerC.initialize_Optimization()
@@ -59,24 +59,25 @@ def test1():
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
     costC = shimOptimizerC.cost_Function(argsC,True,True)
 
-    costAB_0 =3.872252394975772
-    costC_0 = 3.8722523949792858
+    costAB_0 =3.8726429044208093
+    costC_0 = 3.8726429044315305
     assert abs(costAB - costC) < tol
     assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol #failed
 
 def test2():
     #test that layer works as expected
     tol=1e-6
-    rp,magnetWidth,L0,numLayers=.05,.02,.35,3
-    lensBounds = [{}]*numLayers
-    lensParamsLocked = [{'width': magnetWidth, 'length': L0 / numLayers,'rp':rp} for _ in range(numLayers)]
+    lensLongitudinalSymmetry=True
+    rp,magnetWidth,L0,numLayers=.05,.02,.35,6
+    lensBounds = [{}]*(numLayers//2)
+    lensParamsLocked = [{'width': magnetWidth, 'length': L0 / numLayers,'rp':rp} for _ in range(numLayers//2)]
     lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
-    shimOptimizer = ShimOptimizer('full')
+    shimOptimizer = ShimOptimizer('full',lensLongitudinalSymmetry)
     shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
     emptyArgs=[]
     results,cost=shimOptimizer.characterize_Results(emptyArgs,display=False)
-    I0=112.82515698850708
-    m0=0.787152935546122
+    I0=112.76966030069069
+    m0=0.7871635545330284
     assert abs(results['I']-I0)<tol and abs(results['m']-m0)<tol
     assert abs(shimOptimizer.baseLineFocusDict['I']-I0)<tol and abs(shimOptimizer.baseLineFocusDict['m']-m0)<tol
 def run_Tests():

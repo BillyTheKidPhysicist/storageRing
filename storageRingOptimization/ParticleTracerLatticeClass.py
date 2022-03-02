@@ -1,4 +1,3 @@
-from lensShimElement import ShimmedInjectorLens
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 import warnings
@@ -138,10 +137,6 @@ class ParticleTracerLattice:
     def set_Constrained_Linear_Element(self,el):
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)
-    def add_Halbach_Lens_Sim_Shim(self,rp,Lm,apFrac=.8):
-        el=ShimmedInjectorLens(self, rp,Lm,apFrac)
-        el.index = len(self.elList) #where the element is in the lattice
-        self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Combiner_Sim(self,file,sizeScale=1.0):
         #file: name of the file that contains the simulation data from comsol. must be in a very specific format
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)

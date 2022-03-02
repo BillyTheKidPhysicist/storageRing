@@ -38,14 +38,16 @@ def make_Shim_Params(variableDiam,variablePhi,shape,symmetric=True,location=None
         shim1LockedParams['phi'] = variablePhi
     return shim1ParamBounds, shim1LockedParams
 def optimize_Radial_Profile(numlayers):
-
-    lensBounds = [{'rp': (.75*rp,1.5*rp)} for _ in range(numlayers)]
-    lensParamsLocked = [{'width': magnetWidth,'length':L0/numlayers} for _ in range(numlayers)]
+    assert numlayers%2==0
+    lensLengthSymmetry=True
+    lensBounds = [{'rp': (.9*rp,1.5*rp)} for _ in range(numlayers//2)]
+    lensParamsLocked = [{'width': magnetWidth,'length':L0/numlayers} for _ in range(numlayers//2)]
     lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
-    shimOptimizer = ShimOptimizer('full')
+    shimOptimizer = ShimOptimizer('full',lensLengthSymmetry)
     shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
-    shimOptimizer.optimize_Genetic()
-optimize_Radial_Profile(2)
+    shimOptimizer.optimize()
+    # args0=np.array([0.05401033, 0.0507947 , 0.04620604])
+    # shimOptimizer.characterize_Results(args0)
 def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     method='full'
     np.random.seed(int(time.time()))
@@ -53,7 +55,7 @@ def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     shimOptimizer = ShimOptimizer(method)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
-    shimOptimizer.optimize_Shims(saveData=saveData)
+    shimOptimizer.optimize(saveData=saveData)
     # args0=np.array([0.21411904, 0.05195688, 5.63036833, 0.0250395 , 0.46592191])
 
     # shimOptimizer.cost_Function(args0,True,False)
@@ -79,6 +81,7 @@ def optimize_2Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     # shimOptimizer.characterize_Results(args)
     # shimOptimizer.optimize_Descent(args)
 # optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
+optimize_Radial_Profile(12)
 
 # optimize_1Shim_Symmetric(True,True,'cube')
 # optimize_1Shim_Symmetric(True,True,'cube')
