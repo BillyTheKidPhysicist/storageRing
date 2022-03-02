@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numba
 from elementPT import LensIdeal
-from geneticLensClass import GeneticLens
+from geneticLensElement_Wrapper import GeneticLens
 
 
 

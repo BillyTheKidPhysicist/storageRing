@@ -12,7 +12,7 @@ from ParticleClass import Particle as ParticleBase
 from ParticleTracerLatticeClass import ParticleTracerLattice
 import matplotlib.pyplot as plt
 from lensGeneticElement import geneticLensElement
-from geneticLensClass import GeneticLens
+from geneticLensElement_Wrapper import GeneticLens
 import scipy.interpolate as spi
 import scipy.optimize as spo
 
@@ -148,7 +148,8 @@ class helper:
         IArr = np.asarray([self.atom_Beam_Intensity(x, interpFunc) for x in xArr])
         xi=xArr[np.argmax(IArr)]
         wrapper= lambda x: 1/self.atom_Beam_Intensity(x[0], interpFunc)
-        sol=spo.minimize(wrapper,xi,bounds=[(xArr.min(),xArr.max())],method='Nelder-Mead')
+        sol=spo.minimize(wrapper,xi,bounds=[(xArr.min(),xArr.max())],method='Nelder-Mead',options=
+        {'fatol':1e6,'xatol':1e-6})
         xFocus=sol.x[0]
         # xFocus=xArr[np.argmax(IArr)]
         if abs(xFocus-xArr.max()) < .1 or abs(xFocus-xArr.min()) < .1 and rejectOutOfRange==True: #if peak is too close, answer is invalid

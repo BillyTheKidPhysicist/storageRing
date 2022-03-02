@@ -1,5 +1,5 @@
 import numpy as np
-from geneticLensClass import GeneticLens
+from geneticLensElement_Wrapper import GeneticLens
 class testHelper:
     def __init__(self):
         self.rp, self.magWidth, self.length = .05, .0254, .1

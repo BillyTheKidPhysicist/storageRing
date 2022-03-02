@@ -112,7 +112,8 @@ class GeneticLens(HalbachLens):
         width = layer.width
         profile = Polygon([(rp, z0 - L / 2), (rp + width, z0 - L / 2), (rp + width, z0 + L / 2), (rp, z0 + L / 2)])
         return profile
-    def make_Cube_Profile(self,cube:RectangularPrism):
+    def make_Cube_Profile_Radial(self,cube:RectangularPrism):
+        #approximately the profile. Will be different because the cube can be rotated about itself
         assert isinstance(cube,RectangularPrism)
         width=cube.width 
         r=cube.r
@@ -123,7 +124,7 @@ class GeneticLens(HalbachLens):
     def cube_Frac_Overlap_With_Layer(self, cube:RectangularPrism, layer: Layer):
         assert len(layer.rp) == 1  # this does not work for goofy shapes of layers yet
         assert isinstance(cube,RectangularPrism) and isinstance(layer, Layer)
-        cubeProfile=self.make_Cube_Profile(cube)
+        cubeProfile=self.make_Cube_Profile_Radial(cube)
         layerProfile=self.make_Layer_Profile(layer)
         overlapFrac = layerProfile.intersection(cubeProfile).area / cubeProfile.area
         return overlapFrac

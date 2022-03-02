@@ -193,7 +193,7 @@ def test2():
     yDifAnalytic=np.cos(xArr)
     def func(X):
         return np.sin(X[0])
-    opt=GradientOptimizer(func,[0],1,1,1,1,1,False,'central',100e-6,1,'adam')
+    opt=GradientOptimizer(func,[0],1,1,1,False,False,False,'central',100e-6,1,'adam')
     yDifNumericF=[]
     yDifNumericC=[]
     for x in xArr:

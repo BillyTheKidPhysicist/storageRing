@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 import numpy as np
 import time
-from shimOptimizationOfLens_Focus import ShimOptimizer
+from shimAndGeneticLensOptimization import ShimOptimizer
 from profilehooks import profile
 
 rp = .05
@@ -37,7 +37,15 @@ def make_Shim_Params(variableDiam,variablePhi,shape,symmetric=True,location=None
         assert isinstance(variablePhi, float)
         shim1LockedParams['phi'] = variablePhi
     return shim1ParamBounds, shim1LockedParams
+def optimize_Radial_Profile(numlayers):
 
+    lensBounds = [{'rp': (.75*rp,1.5*rp)} for _ in range(numlayers)]
+    lensParamsLocked = [{'width': magnetWidth,'length':L0/numlayers} for _ in range(numlayers)]
+    lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
+    shimOptimizer = ShimOptimizer('full')
+    shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
+    shimOptimizer.optimize_Genetic()
+optimize_Radial_Profile(2)
 def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     method='full'
     np.random.seed(int(time.time()))
@@ -45,8 +53,9 @@ def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     shimOptimizer = ShimOptimizer(method)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
-    shimOptimizer.optimize(saveData=saveData)
-    # shimOptimizer.initialize_Optimization()
+    shimOptimizer.optimize_Shims(saveData=saveData)
+    # args0=np.array([0.21411904, 0.05195688, 5.63036833, 0.0250395 , 0.46592191])
+
     # shimOptimizer.cost_Function(args0,True,False)
     # print(shimOptimizer.optimize_Descent(Xi=args0))
     # shimOptimizer.characterize_Results(args0)
@@ -63,15 +72,23 @@ def optimize_2Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimTopParamBounds, shimTopLockedParams)
     shimOptimizer.add_Shim(shimBotParamBounds, shimBotLockedParams)
-    # print(shimOptimizer.optimize())
-    args=np.array([0.18508568, 0.05081386, 0.01449753, 5.10141806, 1.65634719,
-       0.00769773, 0.50978621, 0.07465047, 0.03511048, 4.27038296,
-       1.56204413, 0.0254    , 0.14343609])
-    shimOptimizer.characterize_Results(args)
+    shimOptimizer.optimize_Shims()
+    # args=np.array([0.18508568, 0.05081386, 0.01449753, 5.10141806, 1.65634719,
+    #    0.00769773, 0.50978621, 0.07465047, 0.03511048, 4.27038296,
+    #    1.56204413, 0.0254    , 0.14343609])
+    # shimOptimizer.characterize_Results(args)
     # shimOptimizer.optimize_Descent(args)
 # optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
 
-optimize_2Shim_Symmetric(True,True,'cube')
+# optimize_1Shim_Symmetric(True,True,'cube')
+# optimize_1Shim_Symmetric(True,True,'cube')
+# optimize_1Shim_Symmetric(True,True,'cube')
+# optimize_2Shim_Symmetric(True,True,'cube')
+# optimize_2Shim_Symmetric(True,True,'cube')
+# optimize_2Shim_Symmetric(True,True,'cube')
+
+
+
 
 
 '''
@@ -86,17 +103,31 @@ cost: 0.2506882673972071
 
 '''
 squares at surface of magnet limited to inner edge at r
+['length', 'r0', 'psi0', 'diameter0', 'phi0']
+finished with total evals:  3882
 ---population member---- 
-DNA: array([0.21538552, 0.05635463, 4.99963203, 0.02439401])
-cost: 0.3537612155055272
+DNA: array([0.21322827, 0.05126325, 5.570695  , 0.02520376, 0.45238814])
+cost: 0.31805188101011805
+['length', 'r0', 'psi0', 'diameter0', 'phi0']
+finished with total evals:  4012
+---population member---- 
+DNA: array([0.21635269, 0.05130414, 5.64479054, 0.02306725, 0.47461783])
+cost: 0.319582841138564
+['length', 'r0', 'psi0', 'diameter0', 'phi0']
+finished with total evals:  3244
+---population member---- 
+DNA: array([0.21411904, 0.05195688, 5.63036833, 0.0250395 , 0.46592191])
+cost: 0.3162646705994698
+['length', 'r0', 'psi0', 'diameter0', 'phi0', 'r1', 'psi1', 'diameter1', 'phi1']
+finished with total evals:  33844
+---population member---- 
+DNA: array([0.19570573, 0.05073938, 4.38488839, 0.02400479, 0.12549998,
+       0.05007446, 5.84860153, 0.02422526, 0.50790065])
+cost: 0.19265703380369373
+'''
 
----population member---- 
-DNA: array([0.22410779, 0.05688831, 4.84742278, 0.0254    ])
-cost: 0.3453000230362722
-
----population member---- 
-DNA: array([0.23234612, 0.0553846 , 4.98302385, 0.02531952])
-cost: 0.349140482632951
+'''
+square limited to surface of magnet, but locking the angle
 
 '''
 

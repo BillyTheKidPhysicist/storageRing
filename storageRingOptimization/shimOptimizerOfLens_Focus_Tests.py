@@ -1,14 +1,14 @@
-from shimOptimizationOfLens_Focus import ShimOptimizer
+from shimAndGeneticLensOptimization import ShimOptimizer
 import numpy as np
-def test():
+def test1():
     tol = 1e-9
     rp = .05
     L0 = .23
     sphereDiam=.0254
     magnetWidth = .0254
-    lensBounds = {'length': (L0 - rp, L0)}
-    lensParams = {'rp': rp, 'width': magnetWidth}
-    lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
+    lensBounds = [{'length': (L0 - rp, L0)}]
+    lensParams = [{'rp': rp, 'width': magnetWidth}]
+    lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
 
     shimAParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
@@ -37,8 +37,7 @@ def test():
     shimOptimizerC.initialize_Optimization()
     shimAParamBounds = shimOptimizerAB.shimsList[0].paramsBounds
     shimBParamBounds = shimOptimizerAB.shimsList[1].paramsBounds
-
-    assert 'length' in shimOptimizerAB.boundsKeys
+    assert 'length0' in shimOptimizerAB.boundsKeys
     for key, val in shimAParamBounds.items():
         assert key[-1]=='0'
         assert key in shimOptimizerAB.boundsKeys
@@ -60,7 +59,26 @@ def test():
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
     costC = shimOptimizerC.cost_Function(argsC,True,True)
 
-    costAB_0 =3.8691643645914207
-    costC_0 = 3.8691643645949343
+    costAB_0 =3.872252394975772
+    costC_0 = 3.8722523949792858
     assert abs(costAB - costC) < tol
     assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol #failed
+
+def test2():
+    #test that layer works as expected
+    tol=1e-6
+    rp,magnetWidth,L0,numLayers=.05,.02,.35,3
+    lensBounds = [{}]*numLayers
+    lensParamsLocked = [{'width': magnetWidth, 'length': L0 / numLayers,'rp':rp} for _ in range(numLayers)]
+    lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
+    shimOptimizer = ShimOptimizer('full')
+    shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
+    emptyArgs=[]
+    results,cost=shimOptimizer.characterize_Results(emptyArgs,display=False)
+    I0=112.82515698850708
+    m0=0.787152935546122
+    assert abs(results['I']-I0)<tol and abs(results['m']-m0)<tol
+    assert abs(shimOptimizer.baseLineFocusDict['I']-I0)<tol and abs(shimOptimizer.baseLineFocusDict['m']-m0)<tol
+def run_Tests():
+    test1()
+    test2()
