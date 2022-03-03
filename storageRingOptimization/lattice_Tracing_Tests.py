@@ -19,7 +19,7 @@ def generate_Test_Swarm(configuration):
         raise Exception('no valid configuration given')
     return testSwarm
 
-def save_TEST_Data(PTL,testSwarm,TESTDataFileName):
+def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):
     #swarm is traced through the lattice with all fancy features turned off
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     if os.path.exists(TESTDataFilePath) == True:
@@ -121,7 +121,7 @@ def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
     testSwarm=generate_Test_Swarm(configuration)
     TESTName='test_'+configuration
     if saveData==True:
-        save_TEST_Data(PTL,testSwarm,TESTName)
+        _save_TEST_Data(PTL,testSwarm,TESTName)
     elif fullTest==True:
         for fastMode in [True,False]:
             for parallel in [True,False]:

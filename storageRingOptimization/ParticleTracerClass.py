@@ -263,9 +263,6 @@ class ParticleTracer:
         #that the particle clips the aperture at
         return x0
     def handle_Drift_Region(self):
-        #TODO: currently not used, of dubious value. Hopefully to be used soon, otherwise to be discarded
-        # it is more efficient to explote the fact that there is no field inside the drift region to project the
-        #paricle through it rather than timestep if through.
         driftEl=self.currentEl #to  record the drift element for logging params
         self.particle.currentEl=driftEl
         pi=self.pEl.copy() #position at beginning of drift in drift frame
