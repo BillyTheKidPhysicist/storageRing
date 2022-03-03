@@ -42,11 +42,14 @@ def optimize_Radial_Profile(numlayers):
     lensLengthSymmetry=True
     lensBounds = [{'rp': (.9*rp,1.5*rp)} for _ in range(numlayers//2)]
     lensParamsLocked = [{'width': magnetWidth,'length':L0/numlayers} for _ in range(numlayers//2)]
+    lensHomoParamBounds={'length':(L0-rp/2,L0+rp/2)}
     lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
     shimOptimizer = ShimOptimizer('full',lensLengthSymmetry)
-    shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
+    shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams,lensHomoParamBounds=lensHomoParamBounds)
     shimOptimizer.optimize()
-    # args0=np.array([0.05401033, 0.0507947 , 0.04620604])
+    # arg=[.0505]*6
+    # arg[0]=L0
+    # shimOptimizer.optimize_Descent(arg)
     # shimOptimizer.characterize_Results(args0)
 def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     method='full'
@@ -55,7 +58,7 @@ def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     shimOptimizer = ShimOptimizer(method)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
-    shimOptimizer.optimize(saveData=saveData)
+    # shimOptimizer.optimize(saveData=saveData)
     # args0=np.array([0.21411904, 0.05195688, 5.63036833, 0.0250395 , 0.46592191])
 
     # shimOptimizer.cost_Function(args0,True,False)
@@ -81,7 +84,7 @@ def optimize_2Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     # shimOptimizer.characterize_Results(args)
     # shimOptimizer.optimize_Descent(args)
 # optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
-optimize_Radial_Profile(12)
+optimize_Radial_Profile(10)
 
 # optimize_1Shim_Symmetric(True,True,'cube')
 # optimize_1Shim_Symmetric(True,True,'cube')

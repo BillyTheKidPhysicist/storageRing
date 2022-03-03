@@ -7,7 +7,7 @@ import parallel_Gradient_Descent
 
 def test_HalbachLensClass():
     HalbachLensClass_Tests.test()
-def poop_GeneticLensClass():
+def test_GeneticLensClass():
     geneticLensClass_Tests.test()
 def test_shimOptimizerOfLens_Focus():
     shimOptimizerOfLens_Focus_Tests.run_Tests()

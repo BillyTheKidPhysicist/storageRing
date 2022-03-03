@@ -155,7 +155,7 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=None,
+    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=0.0,
                              magnetWidth=None):
         el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,magnetWidth)
         el.index = len(self.elList) #where the element is in the lattice
@@ -166,7 +166,7 @@ class ParticleTracerLattice:
         el=geneticLensElement(self,lens,ap)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False):
+    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #L: Length of lens, m
         #Bp: field strength at pole face of lens, T
@@ -178,7 +178,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
+        el=LensIdeal(self, L, Bp, rp, ap,bumpOffset) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True:
@@ -584,27 +584,29 @@ class ParticleTracerLattice:
 
         for el in self.elList: #loop through elements in the lattice
             if i==0: #if the element is the first in the lattice
-                xb=0.0#set beginning coords
-                yb=0.0#set beginning coords
-                if el.bumpOffset is not None:
-                    raise Exception('First element cannot be bump element')
+                el.bumpVector[0] = 0
+                el.bumpVector[1] = -el.bumpOffset
+                xb=el.bumpVector[0]#set beginning coords
+                yb=el.bumpVector[1]#set beginning coords
+                # if el.bumpOffset is not None:
+                #     raise Exception('First element cannot be bump element')
                 if self.latticeType=='storageRing' or self.latticeType=='injector':
                     el.theta=np.pi #first element is straight. It can't be a bender
                 else:
                     el.theta=0.0
-                xe=el.L*np.cos(el.theta) #set ending coords
-                ye=el.L*np.sin(el.theta) #set ending coords
+                xe=el.L*np.cos(el.theta)+el.bumpVector[0] #set ending coords
+                ye=el.L*np.sin(el.theta)+el.bumpVector[1] #set ending coords
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input
                 el.ne=-el.nb
             else: #if element is not the first
                 prevEl = self.elList[i - 1]
                 if el.type!='STRAIGHT' and np.all(el.bumpVector!=0.0):
                     raise Exception('Bump offset is only allowed on straight elements')
-                if el.bumpOffset is not None:  # a bump element, need to ad transverse displacement
-                    angle=np.arctan2(prevEl.ne[1],prevEl.ne[0])
-                    anglePerp=angle+np.pi/2
-                    el.bumpVector[0]=el.bumpOffset*np.cos(anglePerp)
-                    el.bumpVector[1]=el.bumpOffset*np.sin(anglePerp)
+                angle=np.arctan2(prevEl.ne[1],prevEl.ne[0])
+                anglePerp=angle+np.pi/2
+                el.bumpVector[0]=el.bumpOffset*np.cos(anglePerp)
+                el.bumpVector[1]=el.bumpOffset*np.sin(anglePerp)
+
                 xb=self.elList[i-1].r2[0]#set beginning coordinates to end of last
                 yb=self.elList[i-1].r2[1]#set beginning coordinates to end of last
                 xb=xb-prevEl.bumpVector[0] #move element back to trajectory from bump offset of previous

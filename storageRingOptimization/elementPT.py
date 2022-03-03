@@ -90,7 +90,7 @@ class Element:
         self.apR = None  # apeture on the'right'.
         self.type = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         # constructed in particleTracerLattice
-        self.bumpOffset=None # the transverse translational. Only applicable to bump lenses now
+        self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
         self.sim = None  # wether the field values are from simulations
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
@@ -183,7 +183,7 @@ class Element:
 class LensIdeal(Element):
     # ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
     # F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
-    def __init__(self, PTL, L, Bp, rp, ap, fillParams=True):
+    def __init__(self, PTL, L, Bp, rp, ap,bumpOffset, fillParams=True):
         # fillParams is used to avoid filling the parameters in inherited classes
         super().__init__(PTL)
         self.Bp = Bp  # field strength at pole face
@@ -191,6 +191,7 @@ class LensIdeal(Element):
         self.L = L  # lenght of magnet
         self.ap = ap  # size of apeture radially
         self.type = 'STRAIGHT'  # The element's geometry
+        self.bumpOffset=bumpOffset
 
         if fillParams == True:
             self.fill_Params()
@@ -279,7 +280,7 @@ class LensIdeal(Element):
 
 class Drift(LensIdeal):
     def __init__(self, PTL, L, ap):
-        super().__init__(PTL, L, 0, np.inf, ap)
+        super().__init__(PTL, L, 0, np.inf, ap,0.0)
 
     def force(self, q):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
@@ -1216,7 +1217,7 @@ class HalbachLensSim(LensIdeal):
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
         assert apFrac<=.95
-        super().__init__(PTL, None, None, min(rpLayers), None, fillParams=False)
+        super().__init__(PTL, None, None, min(rpLayers), None,bumpOffset, fillParams=False)
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset

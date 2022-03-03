@@ -1,3 +1,4 @@
+import sys
 import matplotlib.pyplot as plt
 from collections.abc import Iterable
 from asyncDE import solve_Async
@@ -132,7 +133,8 @@ class GradientOptimizer:
     def adam_Method(self):
         opt = descent.adam(self.stepSizeInitial)
         func=self._forward_Difference_And_F0 if self.gradMethod=='forward' else self._central_Difference_And_F0
-        sol = opt.minimize(func, self.xi,maxiter=self.maxIters)
+        display=None if self.disp==False else sys.stdout
+        sol = opt.minimize(func, self.xi,maxiter=self.maxIters,display=display)
         if self.Plot==True:
             plt.semilogy(sol['obj'])
             plt.xlabel("Iteration")
@@ -149,7 +151,7 @@ class GradientOptimizer:
 
         return xOptimal,objOptimal
 def gradient_Descent(funcObj,xi,stepSizeInitial,maxIters,momentumFact=.9,gradMethod='central',disp=False,
-                     parallel=True,Plot=False,gradStepSize=5e-6,maxStepSize=np.inf,descentMethod='momentum'):
+                     parallel=True,Plot=False,gradStepSize=5e-6,maxStepSize=np.inf,descentMethod='adam'):
     solver=GradientOptimizer(funcObj,xi,stepSizeInitial,maxIters,momentumFact,disp,Plot,parallel,gradMethod,
                              gradStepSize,maxStepSize,descentMethod)
     return solver.solve_Grad_Descent()
@@ -182,8 +184,9 @@ def test1():
     Xi=[8.0,8.0]
     x,f=gradient_Descent(func,Xi,.05,1000,momentumFact=0.9,gradMethod='central',parallel=False,
                          Plot=False,disp=False,maxStepSize=.15)
-    x0=np.asarray([9.586316311112342e-05 ,-0.002676608081999296])
-    f0=0.001339162105293223
+    x0=np.asarray([-0.0033649623312369302 ,1.8697646129320236e-11])
+    f0=0.00033280573104994056
+    print(f)
     assert np.all(x0==x)
     assert f==f0
 def test2():

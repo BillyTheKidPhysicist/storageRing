@@ -149,7 +149,7 @@ class helper:
         xi=xArr[np.argmax(IArr)]
         wrapper= lambda x: 1/self.atom_Beam_Intensity(x[0], interpFunc)
         sol=spo.minimize(wrapper,xi,bounds=[(xArr.min(),xArr.max())],method='Nelder-Mead',options=
-        {'fatol':1e6,'xatol':1e-6})
+        {'fatol':1e-9,'xatol':1e-9})
         xFocus=sol.x[0]
         # xFocus=xArr[np.argmax(IArr)]
         if abs(xFocus-xArr.max()) < .1 or abs(xFocus-xArr.min()) < .1 and rejectOutOfRange==True: #if peak is too close, answer is invalid

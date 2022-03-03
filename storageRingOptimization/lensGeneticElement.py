@@ -36,7 +36,7 @@ class geneticLensElement(LensIdeal):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         # super().__init__(PTL, geneticLens.length, geneticLens.maximum_Radius(), np.nan,np.nan,'injector',fillParams=False)
-        super().__init__(PTL, geneticLens.length, None,geneticLens.maximum_Radius(), ap,fillParams=False)
+        super().__init__(PTL, geneticLens.length, None,geneticLens.maximum_Radius(), ap,0.0,fillParams=False)
         self.fringeFracOuter=4.0
         self.L=geneticLens.length+2*self.fringeFracOuter*self.rp
         self.Lo=None

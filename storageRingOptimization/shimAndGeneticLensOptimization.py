@@ -24,7 +24,7 @@ class ShimHelper:
         assert int(shimID)<=9
         # bounds: Dict of bounds for shim arguments
         # params: Dict of bounds for shim params
-        paramsBounds, paramsLocked = copy.copy(paramsBounds), copy.copy(paramsLocked)
+        paramsBounds, paramsLocked = copy.deepcopy(paramsBounds), copy.deepcopy(paramsLocked)
         if paramsLocked['shape']=='cube':
             paramKeysNoID = ['diameter', 'r', 'phi', 'deltaZ', 'psi', 'planeSymmetry','shape']
         elif paramsLocked['shape']=='sphere':
@@ -52,7 +52,7 @@ class ShimHelper:
 
 class LensHelper:
     def __init__(self, paramsBoundsLayers, paramsLockedLayers,longitudinalSymm):
-        paramsBoundsLayers, paramsLockedLayers = copy.copy(paramsBoundsLayers), copy.copy(paramsLockedLayers)
+        paramsBoundsLayers, paramsLockedLayers = copy.deepcopy(paramsBoundsLayers), copy.deepcopy(paramsLockedLayers)
         assert isinstance(paramsBoundsLayers,list) and isinstance(paramsLockedLayers,list)
         assert len(paramsBoundsLayers)==len(paramsLockedLayers)
         paramKeys = ['rp', 'width', 'length']
@@ -91,10 +91,16 @@ class ShimOptimizer:
         self.baseLineFocusDict=None
         self.apBase=None
         self.lensLongitudnalSymm=lensLongitudinalSymm
+        self.lensHomoParamBounds= {} #parameters for tuning that effect ever layer in the lens
 
-    def set_Lens(self, paramsBounds, paramsLocked, baseLineParams):
+    def set_Lens(self, paramsBounds, paramsLocked, baseLineParams,lensHomoParamBounds=None):
         assert self.addedLens==False
         assert len(baseLineParams)==1 #I asuume base lens is made of 1 layer
+        if lensHomoParamBounds is not None:
+            assert isinstance(lensHomoParamBounds,dict)
+            viableParams=['length'] #options allowed for tuning every layer in the lens
+            assert viableParams[0] in lensHomoParamBounds and len(lensHomoParamBounds)==1
+            self.lensHomoParamBounds=lensHomoParamBounds
         self.apBase=baseLineParams[0]['rp']*.9
         self.lens = LensHelper(paramsBounds, paramsLocked,self.lensLongitudnalSymm)
         self.lensBaseLine=LensHelper([{}],baseLineParams,self.lensLongitudnalSymm)
@@ -108,6 +114,9 @@ class ShimOptimizer:
         assert self.makeBoundsCalled == False
         self.initialize_Baseline_Values()
         self.makeBoundsCalled = True
+        if 'length' in self.lensHomoParamBounds:
+            self.bounds.append(self.lensHomoParamBounds['length'])
+            self.boundsKeys.append('length')
         for paramsBounds in self.lens.paramsBoundsLayers:
             for key, val in paramsBounds.items():
                 self.bounds.append(val)
@@ -118,7 +127,6 @@ class ShimOptimizer:
                 self.boundsKeys.append(key)
         if overRideNumBoundsError==False:
             assert len(self.bounds) != 0
-
     def make_Lens_DNA_Dict(self, args):
         lensDNAList = self.lens.paramsLockedLayers #list of dicts for each layer
         argsConsumed = 0
@@ -129,9 +137,15 @@ class ShimOptimizer:
                     lensDNAList[i][key] = arg
         lensDNAList=[strip_ID_From_Dict(lensDNAList[i]) for i in range(len(lensDNAList))]
         if self.lensLongitudnalSymm==True:
-            lensDNAListFlipped=copy.copy(lensDNAList)
+            lensDNAListFlipped=copy.deepcopy(lensDNAList)
             lensDNAListFlipped.reverse()
             lensDNAList.extend(lensDNAListFlipped)
+        for key, arg in zip(self.boundsKeys, args):
+            if key=='length':
+                assert arg>0.0
+                for DNA in lensDNAList: DNA[key]=arg/self.lens.numLayers
+                assert abs(arg-sum(DNA['length'] for DNA in lensDNAList))<1e-12
+                argsConsumed+=1
         assert all(len(lensDNA_Dict)==4 for lensDNA_Dict in lensDNAList)
         return lensDNAList, argsConsumed
 
@@ -165,7 +179,7 @@ class ShimOptimizer:
         assert self.makeBoundsCalled == True
         assert len(args) == len(self.boundsKeys)
         lensDNA_List, argsConsumedTotal = self.make_Lens_DNA_Dict(args)
-        DNA_List = copy.copy(lensDNA_List)
+        DNA_List = copy.deepcopy(lensDNA_List)
         # build shim dict
         for shim in self.shimsList:
             shimDNA_Dict, argsConsumed = self.make_Shim_DNA_Dict(shim, args, lensDNA_List)
@@ -178,8 +192,11 @@ class ShimOptimizer:
         DNA_List = self.make_DNA_List_From_Args(args)
         assert len(DNA_List) == self.lens.numLayers+ len(self.shimsList)
         L=sum(DNA['length'] if DNA['component']=='layer' else 0 for DNA in DNA_List)
-        assert abs(L-self.lensBaseLine.paramsLockedLayers[0]['length0'])<1e-6 #too many layers possibly
         lens = GeneticLens(DNA_List)
+        if 'length' not in self.lensHomoParamBounds: #otherwise length is being varied
+            assert abs(L-self.lensBaseLine.paramsLockedLayers[0]['length0'])<1e-12 #too many layers possibly
+        else:
+            assert self.lensHomoParamBounds['length'][0]-1e-6<=L<=self.lensHomoParamBounds['length'][1]+1e-6
         return lens
 
     def cost_Function(self, args,rejectOutOfRange,smoothGeometryCost):
@@ -260,7 +277,7 @@ class ShimOptimizer:
         sol = solve_Async(costFunc, self.bounds, 15 * len(self.bounds),
                           tol=.03,disp=True,saveData=saveData,workers=9)
         print(sol)
-    def optimize_Descent(self,Xi=None):
+    def optimize_Descent(self,Xi):
         self.initialize_Optimization()
         # numSamples=1000
         # samples = np.asarray(skopt.sampler.Sobol().generate(self.bounds, numSamples))
@@ -269,5 +286,5 @@ class ShimOptimizer:
         #     vals = np.asarray(pool.map(costFuncGlobal, samples))
         # Xi = samples[np.argmin(vals)]
         costFunc = lambda x: self.cost_Function(x,False, True)
-        return gradient_Descent(costFunc,Xi,100e-6,100,gradStepSize=10e-6,gradMethod='central',
+        return gradient_Descent(costFunc,Xi,50e-6,100,gradStepSize=10e-6,gradMethod='central',
                                 descentMethod='adam',disp=True)
