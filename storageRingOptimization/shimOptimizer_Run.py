@@ -8,9 +8,9 @@ from profilehooks import profile
 rp = .05
 L0 = .23
 magnetWidth = .0254
-lensBounds = {'length': (L0- rp, L0+rp)}
-lensParams = {'rp': rp, 'width': magnetWidth}
-lensBaseLineParams = {'rp': rp, 'width': magnetWidth, 'length': L0}
+lensBounds = [{'length': (L0- rp, L0+rp)}]
+lensParams = [{'rp': rp, 'width': magnetWidth}]
+lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
 
 
 def make_Shim_Params(variableDiam,variablePhi,shape,symmetric=True,location=None):
@@ -39,12 +39,11 @@ def make_Shim_Params(variableDiam,variablePhi,shape,symmetric=True,location=None
     return shim1ParamBounds, shim1LockedParams
 def optimize_Radial_Profile(numlayers):
     assert numlayers%2==0
-    lensLengthSymmetry=True
     lensBounds = [{'rp': (.9*rp,1.5*rp)} for _ in range(numlayers//2)]
     lensParamsLocked = [{'width': magnetWidth,'length':L0/numlayers} for _ in range(numlayers//2)]
     lensHomoParamBounds={'length':(L0-rp/2,L0+rp/2)}
     lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
-    shimOptimizer = ShimOptimizer('full',lensLengthSymmetry)
+    shimOptimizer = ShimOptimizer('full')
     shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams,lensHomoParamBounds=lensHomoParamBounds)
     shimOptimizer.optimize()
     # arg=[.0505]*6
@@ -52,14 +51,14 @@ def optimize_Radial_Profile(numlayers):
     # shimOptimizer.optimize_Descent(arg)
     # shimOptimizer.characterize_Results(args0)
 def optimize_1Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
-    method='full'
+    method='concentric'
     np.random.seed(int(time.time()))
     shimParamBounds, shimLockedParams=make_Shim_Params(variableDiam,variablePhi,shape)
-    shimOptimizer = ShimOptimizer(method)
+    shimOptimizer = ShimOptimizer(method,False)
     shimOptimizer.set_Lens(lensBounds, lensParams,lensBaseLineParams)
     shimOptimizer.add_Shim(shimParamBounds, shimLockedParams)
-    # shimOptimizer.optimize(saveData=saveData)
-    # args0=np.array([0.21411904, 0.05195688, 5.63036833, 0.0250395 , 0.46592191])
+    shimOptimizer.optimize(saveData=saveData)
+    # args0=np.array([0.2113076 , 0.05118679, 4.64006658, 0.0254    , 0.5219992 ])
 
     # shimOptimizer.cost_Function(args0,True,False)
     # print(shimOptimizer.optimize_Descent(Xi=args0))
@@ -84,11 +83,11 @@ def optimize_2Shim_Symmetric(variableDiam,variablePhi,shape,saveData=None):
     # shimOptimizer.characterize_Results(args)
     # shimOptimizer.optimize_Descent(args)
 # optimize_1Shim_Symmetric(.0254*3/8,np.pi/6.0)#,saveData='run1_1Shim')
-optimize_Radial_Profile(10)
+# optimize_Radial_Profile(10)
 
-# optimize_1Shim_Symmetric(True,True,'cube')
-# optimize_1Shim_Symmetric(True,True,'cube')
-# optimize_1Shim_Symmetric(True,True,'cube')
+optimize_1Shim_Symmetric(True,True,'cube')
+optimize_1Shim_Symmetric(True,True,'cube')
+optimize_1Shim_Symmetric(True,True,'cube')
 # optimize_2Shim_Symmetric(True,True,'cube')
 # optimize_2Shim_Symmetric(True,True,'cube')
 # optimize_2Shim_Symmetric(True,True,'cube')
@@ -133,7 +132,17 @@ cost: 0.19265703380369373
 '''
 
 '''
-square limited to surface of magnet, but locking the angle
+---population member---- 
+DNA: array([0.2103743 , 0.05      , 5.52823454, 0.0254    , 0.45103393])
+cost: 0.38736858778797617
+
+---population member---- 
+DNA: array([0.21051204, 0.05002446, 5.53609901, 0.0254    , 0.45130888])
+cost: 0.38741890972904985
+
+---population member---- 
+DNA: array([0.21140278, 0.05060425, 5.72525444, 0.02539227, 0.47953782])
+cost: 0.38997083547688977
 
 '''
 

@@ -1,12 +1,8 @@
 from asyncDE import solve_Async
 import matplotlib.pyplot as plt
-import multiprocess as mp
-import time
-# from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 from geneticLensElement_Wrapper import GeneticLens
 from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 import numpy as np
-from profilehooks import profile
 from lensOptimizerHelperFunctions import characterize_Lens_Full_Swarm,characterize_Lens_Concentric_Swarms
 import copy
 import skopt
@@ -78,7 +74,7 @@ class LensHelper:
 
 
 class ShimOptimizer:
-    def __init__(self,swarmModel,lensLongitudinalSymm):
+    def __init__(self,swarmModel,lensLayerMirrorSymm):
         assert swarmModel in ('concentric', 'full')
         self.swarmModel=swarmModel
         self.lens = None #may be variable
@@ -90,7 +86,7 @@ class ShimOptimizer:
         self.addedLens=False
         self.baseLineFocusDict=None
         self.apBase=None
-        self.lensLongitudnalSymm=lensLongitudinalSymm
+        self.lensLayerMirrorSymm=lensLayerMirrorSymm
         self.lensHomoParamBounds= {} #parameters for tuning that effect ever layer in the lens
 
     def set_Lens(self, paramsBounds, paramsLocked, baseLineParams,lensHomoParamBounds=None):
@@ -102,8 +98,8 @@ class ShimOptimizer:
             assert viableParams[0] in lensHomoParamBounds and len(lensHomoParamBounds)==1
             self.lensHomoParamBounds=lensHomoParamBounds
         self.apBase=baseLineParams[0]['rp']*.9
-        self.lens = LensHelper(paramsBounds, paramsLocked,self.lensLongitudnalSymm)
-        self.lensBaseLine=LensHelper([{}],baseLineParams,self.lensLongitudnalSymm)
+        self.lens = LensHelper(paramsBounds, paramsLocked,self.lensLayerMirrorSymm)
+        self.lensBaseLine=LensHelper([{}],baseLineParams,self.lensLayerMirrorSymm)
         self.addedLens=True
 
     def add_Shim(self, paramsBounds, paramsLocked):
@@ -136,7 +132,7 @@ class ShimOptimizer:
                     argsConsumed += 1
                     lensDNAList[i][key] = arg
         lensDNAList=[strip_ID_From_Dict(lensDNAList[i]) for i in range(len(lensDNAList))]
-        if self.lensLongitudnalSymm==True:
+        if self.lensLayerMirrorSymm==True:
             lensDNAListFlipped=copy.deepcopy(lensDNAList)
             lensDNAListFlipped.reverse()
             lensDNAList.extend(lensDNAListFlipped)
@@ -191,12 +187,15 @@ class ShimOptimizer:
     def make_Lens(self, args):
         DNA_List = self.make_DNA_List_From_Args(args)
         assert len(DNA_List) == self.lens.numLayers+ len(self.shimsList)
-        L=sum(DNA['length'] if DNA['component']=='layer' else 0 for DNA in DNA_List)
+        # L=sum(DNA['length'] if DNA['component']=='layer' else 0 for DNA in DNA_List)
         lens = GeneticLens(DNA_List)
-        if 'length' not in self.lensHomoParamBounds: #otherwise length is being varied
-            assert abs(L-self.lensBaseLine.paramsLockedLayers[0]['length0'])<1e-12 #too many layers possibly
-        else:
-            assert self.lensHomoParamBounds['length'][0]-1e-6<=L<=self.lensHomoParamBounds['length'][1]+1e-6
+        #todo: obnoxious convention with lens length has caused a collision. I need to refactor to be consisten somehow
+        #I don't anticipate making individual layer lengths, so I should refaactor assuming that won't happen
+
+        # if 'length' not in self.lensHomoParamBounds: #otherwise length is being varied
+        #     assert abs(L-self.lensBaseLine.paramsLockedLayers[0]['length0'])<1e-12 #too many layers possibly
+        # else:
+        #     assert self.lensHomoParamBounds['length'][0]-1e-6<=L<=self.lensHomoParamBounds['length'][1]+1e-6
         return lens
 
     def cost_Function(self, args,rejectOutOfRange,smoothGeometryCost):
@@ -228,14 +227,14 @@ class ShimOptimizer:
         m_New=np.asarray([result['m'] for result in results])
         I_Baseline=np.asarray([result['I'] for result in self.baseLineFocusDict])
         m_Baseline=np.asarray([result['m'] for result in self.baseLineFocusDict])
-        magSpread_Baseline=np.std(m_Baseline)
-        magSpread_New=np.std(m_New)
-        magSpreadCost=magSpread_New/magSpread_Baseline
+        # magSpread_Baseline=np.std(m_Baseline)
+        # magSpread_New=np.std(m_New)
+        # magSpreadCost=magSpread_New/magSpread_Baseline
         magDriftCost = 1000.0 * (np.mean(m_New) / np.mean(m_Baseline) - 1) ** 2
         focusInvarBaseline=I_Baseline*m_Baseline
         focusInvarNew=I_New*m_New
         focusCost=1/np.mean(focusInvarNew/focusInvarBaseline)
-        cost=(magDriftCost+10*magSpreadCost+focusCost)/12.0 #normalize to one
+        cost=magDriftCost+focusCost
         return cost
     def _single_Swarm_Cost(self,results):
         IPeak, m = results['I'], results['m']

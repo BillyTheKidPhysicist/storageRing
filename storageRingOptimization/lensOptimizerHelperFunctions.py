@@ -1,19 +1,8 @@
-import dill
-from ParticleTracerClass import ParticleTracer
-from phaseSpaceAnalyzer import SwarmSnapShot
-import dill
-from tqdm import tqdm
 import time
 from SwarmTracerClass import SwarmTracer
-import warnings
 import numpy as np
-from ParticleClass import Swarm,Particle
-from ParticleClass import Particle as ParticleBase
 from ParticleTracerLatticeClass import ParticleTracerLattice
 import matplotlib.pyplot as plt
-from lensGeneticElement import geneticLensElement
-from geneticLensElement_Wrapper import GeneticLens
-import scipy.interpolate as spi
 import scipy.optimize as spo
 
 
@@ -91,11 +80,11 @@ class helper:
         assert self.PTL.elList[1].fringeFracOuter==self.fringeFrac and self.PTL.elList[1].rp==self.lens.maximum_Radius()
         assert abs(abs(self.PTL.elList[1].r2[0])-(self.L_Object+self.lens.length+
                    self.fringeFrac*self.lens.maximum_Radius()))<1e-12
-    def make_Interp_Function_Full_Swarm(self):
+    def make_Interp_Function_Full_Swarm(self,apFrac=1.0,particles=500):
         swarmTracer=SwarmTracer(self.PTL)
-        angle=self.apMin/(self.L_Object+self.lens.length/2)
+        angle=apFrac*self.apMin/(self.L_Object+self.lens.length/2)
         v0=self.PTL.v0Nominal
-        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1e-6,500,sameSeed=True)
+        swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*v0,1e-6,particles,sameSeed=True)
         h=1e-5
         fastMode=True
         swarmTraced=swarmTracer.trace_Swarm_Through_Lattice(swarm,h,1.0,fastMode=fastMode,
@@ -106,15 +95,16 @@ class helper:
             self.PTL.show_Lattice(swarm=swarmTraced,trueAspectRatio=False,showTraceLines=True,traceLineAlpha=.1)
         interpFunc=Interpolater(swarmTraced,self.PTL)
         return interpFunc
-    def make_Interp_Function_Concentric_Swarms(self,apArr):
-        assert np.all(apArr<1.0) and np.all(0.0<apArr)
+    def make_Interp_Function_Concentric_Swarms(self,apArr,particles=125):
+        assert np.all(apArr<=1.0) and np.all(0.0<apArr)
         swarmTracer=SwarmTracer(self.PTL)
         h=1e-5
         fastMode=True
         interpFuncList=[]
         for ap in apArr:
-            angle=ap*self.lens.minimum_Radius()/(self.L_Object+self.lens.length/2)
-            swarm=swarmTracer.initialize_Ring_Swarm(angle,100)
+            angle=ap*self.apMin/(self.L_Object+self.lens.length/2)
+            swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(1e-6,angle*self.PTL.v0Nominal,1e-6,particles
+                                                                          ,sameSeed=True)
             swarmTraced=swarmTracer.trace_Swarm_Through_Lattice(swarm,h,1.0,fastMode=fastMode,
                                                                 jetCollision=False)
             if fastMode==False:
@@ -144,7 +134,7 @@ class helper:
         else:
             return results['I'],results['m']
     def characterize_Focus(self,interpFunc,rejectOutOfRange):
-        xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 2e-3, -self.PTL.elList[-1].r2[0] - 2e-3, 10)
+        xArr = np.linspace(-self.PTL.elList[-1].r1[0] + 5e-3, -self.PTL.elList[-1].r2[0] - 5e-3, 10)
         IArr = np.asarray([self.atom_Beam_Intensity(x, interpFunc) for x in xArr])
         xi=xArr[np.argmax(IArr)]
         wrapper= lambda x: 1/self.atom_Beam_Intensity(x[0], interpFunc)
@@ -166,7 +156,7 @@ class helper:
         return results
     def characterize_Lens_Concentric_Swarms(self,rejectOutOfRange):
         self.make_Lattice()
-        apArr=np.asarray([.1,.2,.3,.4,.5,.6,.7,.8])
+        apArr=np.asarray([.25,.5,.75,1.0])
         interpFuncList=self.make_Interp_Function_Concentric_Swarms(apArr)
         resultsList=[]
         for ap,interpFunc in zip(apArr,interpFuncList):

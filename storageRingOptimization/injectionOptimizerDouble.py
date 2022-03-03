@@ -1,17 +1,11 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-from parallel_Gradient_Descent import gradient_Descent, global_Gradient_Descent
-import random
 import time
 from asyncDE import solve_Async
 import numpy as np
 from latticeKnobOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracerClass import SwarmTracer
-from ParticleTracerClass import ParticleTracer
-from ParticleClass import Swarm
 from elementPT import HalbachLensSim
-# from line_profiler_pycharm import profile
 import matplotlib.pyplot as plt
 
 

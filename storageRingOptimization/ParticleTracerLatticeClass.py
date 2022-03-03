@@ -1,16 +1,12 @@
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
-import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-import numba
 from shapely.geometry import Polygon
 import scipy.interpolate as spi
 import numpy.linalg as npl
 from joblib import Parallel,delayed
-from profilehooks import profile
-from elementPT import LensIdeal,BenderIdeal,CombinerIdeal,BenderIdealSegmentedWithCap,BenderIdealSegmented,Drift \
-    ,HalbachBenderSimSegmentedWithCap,HalbachLensSim,CombinerSim,CombinerHexapoleSim
+from elementPT import *
 
 #todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 #people, I need to change that. This was before my cleaner code approach
@@ -162,8 +158,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
     def add_Genetic_lens(self,lens,ap):
-        from lensGeneticElement import geneticLensElement
-        el=geneticLensElement(self,lens,ap)
+        el=geneticLens(self,lens,ap)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0):

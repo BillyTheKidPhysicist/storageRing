@@ -4,7 +4,6 @@ import time
 import numpy.linalg as npl
 import numpy as np
 import copy
-from math import sqrt
 class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):

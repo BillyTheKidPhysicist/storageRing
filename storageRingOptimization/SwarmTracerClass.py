@@ -1,5 +1,3 @@
-import joblib
-from joblib import Parallel,delayed
 from collections.abc import Iterable
 from ParticleTracerClass import ParticleTracer
 import numpy as np

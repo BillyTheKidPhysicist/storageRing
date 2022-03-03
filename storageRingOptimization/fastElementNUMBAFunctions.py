@@ -1,6 +1,8 @@
 import numba
 import numpy as np
 
+#todo: File of numba magic for making function to evaluate forces. This is really messy and I regret doing it in this manner.
+#A more elegant solution, or using jitclass which I now know how to use, is preferred
 
 @numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64, numba.float64,numba.float64,
                                                    numba.types.Array(numba.types.float64, 2, 'C', readonly=True),
@@ -270,5 +272,24 @@ def combiner_Sim_Force_NUMBA(x,y,z, La, Lb, Lm, space, ang, apz, apL, apR, searc
     Fx = xFact * Fx
     Fz = zFact * Fz
     return Fx, Fy, Fz
-
+@numba.njit()
+def genetic_Lens_Force_NUMBA(x,y,z, L,ap,  force_Func):
+    FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
+    FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
+    y = abs(y)  # confine to upper right quadrant
+    z = abs(z)
+    if np.sqrt(y**2+z**2)>ap:
+        return np.nan,np.nan,np.nan
+    if 0<=x <=L/2:
+        x = L/2 - x
+        Fx,Fy,Fz= force_Func(x, y, z)
+        Fx=-Fx
+    elif L/2<x<L:
+        x=x-L/2
+        Fx,Fy,Fz = force_Func(x, y, z)
+    else:
+        return np.nan,np.nan,np.nan
+    Fy = Fy * FySymmetryFact
+    Fz = Fz * FzSymmetryFact
+    return Fx,Fy,Fz
 

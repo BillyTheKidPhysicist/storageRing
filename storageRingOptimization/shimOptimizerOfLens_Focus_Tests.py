@@ -59,8 +59,8 @@ def test1():
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
     costC = shimOptimizerC.cost_Function(argsC,True,True)
 
-    costAB_0 =3.872599955310633
-    costC_0 = 3.872599955321354
+    costAB_0 =3.8725999982697887
+    costC_0 = 3.87259999828051
     assert abs(costAB - costC) < tol
     assert abs(costAB - costAB_0) < tol and abs(costC - costC_0) < tol #failed
 

@@ -6,7 +6,6 @@ import numpy as np
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
 from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
-from profilehooks import profile
 def survival_Optimize(bounds,tuning,workers):
     def wrapper(args):
         try:

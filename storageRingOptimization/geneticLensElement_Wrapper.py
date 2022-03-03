@@ -3,7 +3,6 @@ from shapely.geometry import Polygon,Point
 import matplotlib.pyplot as plt
 import numpy as np
 from collections.abc import Iterable
-import time
 class GeneticLens(HalbachLens):
     def __init__(self,DNA_List):
         #DNA: list of dictionaries to construct lens. each entry in the list corresponds to a single layer. Layers

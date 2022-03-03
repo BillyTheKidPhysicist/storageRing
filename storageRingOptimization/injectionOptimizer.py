@@ -7,9 +7,6 @@ from asyncDE import solve_Async
 import numpy as np
 from latticeKnobOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracerClass import SwarmTracer
-from ParticleTracerClass import ParticleTracer
-from ParticleClass import Swarm
 import matplotlib.pyplot as plt
 
 V0=210

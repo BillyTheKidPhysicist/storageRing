@@ -1,15 +1,11 @@
 from numbers import Number
 from collections.abc import Iterable
 import time
-import warnings
 from constants import MAGNETIC_PERMEABILITY
 import numpy as np
 import numpy.linalg as npl
-import sys
-import pandas as pd
 import matplotlib.pyplot as plt
 import numba
-# from profilehooks import profile
 from scipy.spatial.transform import Rotation
 from magpylib.magnet import Box
 
