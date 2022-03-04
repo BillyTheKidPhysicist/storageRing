@@ -200,7 +200,7 @@ class Particle:
             qel=currentEl.transform_Lab_Coords_Into_Element_Frame(q)
             elIndex=currentEl.index
             self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(q, self.cumulativeLength))
-            # self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
+            self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
     def get_Energy(self,currentEl,qEl,pEl):
         V=currentEl.magnetic_Potential(qEl)
         T=np.sum(pEl**2)/2.0
@@ -246,23 +246,23 @@ class Particle:
     def fill_Energy_Array_And_Dicts(self):
         self.TArr=np.asarray([entry[1] for entry in self._TList])
         self.VArr=np.asarray([entry[1] for entry in self._VList])
-        # self.EArr=self.TArr.copy()+self.VArr.copy()
-        #
-        # if self.EArr.shape[0]>1:
-        #     elementIndexPrev=self._TList[0][0]
-        #     E_AfterEnteringEl=self.EArr[0]
-        #     for i in range(len(self._TList)):
-        #         if self._TList[i][0]!=elementIndexPrev:
-        #             E_BeforeLeavingEl=self.EArr[i-1]
-        #             deltaE=E_BeforeLeavingEl-E_AfterEnteringEl
-        #             if (str(elementIndexPrev) in self.elDeltaEDict) == False: #need to make a list entry for this element
-        #                 self.elDeltaEDict[str(elementIndexPrev)]=[deltaE]
-        #             else:
-        #                 self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
-        #             E_AfterEnteringEl=self.EArr[i]
-        #             elementIndexPrev=self._TList[i][0]
-        # self._TList=[]
-        # self._VList=[]
+        self.EArr=self.TArr.copy()+self.VArr.copy()
+
+        if self.EArr.shape[0]>1:
+            elementIndexPrev=self._TList[0][0]
+            E_AfterEnteringEl=self.EArr[0]
+            for i in range(len(self._TList)):
+                if self._TList[i][0]!=elementIndexPrev:
+                    E_BeforeLeavingEl=self.EArr[i-1]
+                    deltaE=E_BeforeLeavingEl-E_AfterEnteringEl
+                    if (str(elementIndexPrev) in self.elDeltaEDict) == False: #need to make a list entry for this element
+                        self.elDeltaEDict[str(elementIndexPrev)]=[deltaE]
+                    else:
+                        self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
+                    E_AfterEnteringEl=self.EArr[i]
+                    elementIndexPrev=self._TList[i][0]
+        self._TList=[]
+        self._VList=[]
 
     def finished(self,currentEl,qEl,pEl,totalLatticeLength=None):
         #finish tracing with the particle, tie up loose ends

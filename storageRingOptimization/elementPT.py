@@ -6,7 +6,7 @@ import numpy as np
 from math import sqrt
 import warnings
 import fastElementNUMBAFunctions
-from InterpFunction import generate_3DInterp_Function_NUMBA, generate_2DInterp_Function_NUMBA
+from InterpFunction1 import LensHalbachFieldHelper_Numba
 import pandas as pd
 import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
@@ -84,7 +84,7 @@ class Element:
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fastForceHelper=None
+        self.fastFieldHelper=None
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
@@ -1294,10 +1294,6 @@ class HalbachLensSim(LensIdeal):
         yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP,numXY)
         xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP),TINY_STEP,numXY)
 
-
-
-
-
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
             planeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,0)).T.reshape(-1,3)
@@ -1308,7 +1304,6 @@ class HalbachLensSim(LensIdeal):
             #still need to make the force function
             self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
             data2D=None
-
 
         zMin=-TINY_STEP
         zMax=self.Lcap+TINY_STEP
@@ -1322,57 +1317,34 @@ class HalbachLensSim(LensIdeal):
         #input coordinates will be shifted in a wrapper function
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
-        self.build_Force_Helper(data3D,data2D)
-
+        self.build_Force_And_Field_Interpolations(data3D,data2D)
         F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
         F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
         assert F_edge/F_center<.01
-    def build_Force_Helper(self,data3D,data2D):
-        VEdge,FxEdge,FyEdge,FzEdge,xEdge,yEdge,zEdge=self.shape_Field_Data(data3D)
-        FxEdge=np.ravel(FxEdge)
-        FyEdge=np.ravel(FyEdge)
-        FzEdge=np.ravel(FzEdge)
-        # FxEdge=np.ascontiguousarray(FxEdge)
-        # exit()
-        if data2D is not None:
+    def build_Force_And_Field_Interpolations(self,data3D,data2D):
+        VEnd,FxEnd,FyEnd,FzEnd,xEnd,yEnd,zEnd=self.shape_Field_Data(data3D) #field components near end and outside lens
+        VEnd, FxEnd, FyEnd, FzEnd=np.ravel(VEnd),np.ravel(FxEnd),np.ravel(FyEnd),np.ravel(FzEnd)
+        if data2D is not None: #if no inner plane being used
             VIn,FxIn,FyIn,xIn,yIn=self.fill_Field_Func_2D(data2D)
         else:
-            VIn, FxIn, FyIn, xIn, yIn=[np.ones((1,1))*np.nan]*5
-        FxIn=np.ravel(FxIn)
-        FyIn=np.ravel(FyIn)
+            VIn, FxIn, FyIn=[np.ones((1,1))*np.nan]*3
+            xIn, yIn=[np.ones((1,))*np.nan]*2
+        VIn,FxIn,FyIn=np.ravel(VIn),np.ravel(FxIn),np.ravel(FyIn)
         from numba.typed import List
-        F_Edge=List([FxEdge,FyEdge,FzEdge])
-        qEdge=List([xEdge,yEdge,zEdge])
-        F_In=List([FxIn,FyIn])
+        fieldsEnd=List([VEnd,FxEnd,FyEnd,FzEnd])
+        qEnd=List([xEnd,yEnd,zEnd])
+        fieldsIn=List([VIn,FxIn,FyIn])
         qIn=List([xIn,yIn])
-        from InterpFunction1 import LensHalbachForceHelper_Numba
-        print(F_In)
-        print(qIn)
-        exit()
-        self.fastForceHelper=LensHalbachForceHelper_Numba(F_Edge,qEdge,F_In,qIn,self.L,self.Lcap,self.ap)
+        self.fastFieldHelper=LensHalbachFieldHelper_Numba(fieldsEnd,qEnd,fieldsIn,qIn,self.L,self.Lcap,self.ap)
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
-    def magnetic_Potential(self, q):
-        x,y,z=q
-        y = abs(y)  # confine to upper right quadrant
-        z = abs(z)
-        if q[0] <= self.Lcap:
-            x = self.Lcap - x
-            V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
-        elif self.Lcap < q[0] <= self.L - self.Lcap:
-            V0 = self.magnetic_Potential_Func_Inner(x,y,z)
-        elif q[0] <= self.L: #this one is tricky with the scaling
-            x=self.Lcap-(self.L-x)
-            V0 = self.magnetic_Potential_Func_Fringe(x, y, z)
-        else:
-            V0=0
-        return V0*self.fieldFact
-
 
     def force(self, q):
-        F=self.fieldFact*np.asarray(self.fastForceHelper.force(*q))
+        F=self.fieldFact*np.asarray(self.fastFieldHelper.force(*q))
         return F
 
+    def magnetic_Potential(self, q):
+        return self.fastFieldHelper.magnetic_Potential(*q)
 
 class CombinerHexapoleSim(Element):
     def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,fillParams=True):

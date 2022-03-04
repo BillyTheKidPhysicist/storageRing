@@ -170,7 +170,7 @@ class ParticleTracer:
                 if self.particle.clipped==True:
                     break
             else:
-                if self.fastMode==False or self.currentEl.fastForceHelper is None: #either recording data at each step
+                if self.fastMode==False or self.currentEl.fastFieldHelper is None: #either recording data at each step
                     #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                     self.time_Step_Verlet()
                     if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
@@ -184,7 +184,7 @@ class ParticleTracer:
                 self.particle.T=self.T
     def multi_Step_Verlet(self):
         results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact,
-                                        self.currentEl.fastForceHelper)
+                                        self.currentEl.fastFieldHelper)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
