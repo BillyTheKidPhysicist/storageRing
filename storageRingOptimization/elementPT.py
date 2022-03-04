@@ -1185,8 +1185,6 @@ class HalbachLensSim(LensIdeal):
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
         fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
         self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap)
-    def set_BpFact(self,BpFact):
-        self.fieldFact=BpFact
 
     def force(self, q):
         F=self.fieldFact*np.asarray(self.fastFieldHelper.force(*q))
@@ -1269,11 +1267,14 @@ class CombinerHexapoleSim(Element):
         #input coordinates will be shifted in a wrapper function
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
-        self.fill_Field_Func(data3D)
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
 
-
+        fieldData=self.shape_Field_Data_3D(data3D)
+        self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
+                                                                self.space,self.ap,np.nan)
+        # print(self.fastFieldHelper.force_NoSearchInside(1e-3,1e-3,1e-3))
+        # exit()
         self.outputOffset=self.find_Ideal_Offset()
         inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(self.outputOffset)
         # to find the length
@@ -1298,16 +1299,21 @@ class CombinerHexapoleSim(Element):
         assert np.abs(xArr_Quadrant).max()>yzMax and np.abs(yArr_Quadrant).max()>yzMax, \
             "field region must extend past particle region"
 
-        self.compile_fast_Force_Function()
+        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
+                                                                                             self.Lm,
+                                                                                             self.space, self.ap,self.ang)
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
         assert F_edge / F_center < .01
+    def update_Field_Fact(self,val):
+        self.fastFieldHelper.fieldFact=val
+        self.fieldFact=val
     def find_Ideal_Offset(self):
         #use newton's method to find where the minimum seperation between atomic beam PATH and lens is equal to the
         #beam diameter for INJECTED beam. This requires modeling high field seekers. A larger output offset produces
         # a smaller input seperation, and a larger loading/circulating beam angular speration. Particle is traced
         # backwards from the end of the combiner to the input. Uses forward difference.
-        self.fieldFact=-1.0
+        self.update_Field_Fact(-1.0)
 
         #try and find an initial gradient that works
         keepTrying=True
@@ -1323,7 +1329,6 @@ class CombinerHexapoleSim(Element):
                 dxInitial*=.5
             numTries+=1
             assert numTries<maxTries
-
 
         x=0.0 #initial value of output offset
         f=self.ap #initial value of lens/atom seperation. This should be equal to input deam diamter/2 eventuall
@@ -1341,35 +1346,12 @@ class CombinerHexapoleSim(Element):
             i+=1
             assert i<iterMax
         assert x>0
-        self.fieldFact = -1.0 if self.mode == 'injector' else 1.0
+        fieldFact = -1.0 if self.mode == 'injector' else 1.0
+        self.update_Field_Fact(fieldFact)
         return x
-    def fill_Field_Func(self,data):
-        interpF, interpV = self.make_Interp_Functions(data)
-        # wrap the function in a more convenietly accesed function
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_Func(x,y,z):
-            Fx0,Fy0,Fz0=interpF(-z, y,x)
-            Fx=Fz0
-            Fy=Fy0
-            Fz=-Fx0
-            return Fx,Fy,Fz
-        self.force_Func=force_Func
-        self.magnetic_Potential_Func = lambda x, y, z: interpV(-z, y, x)
-    def force(self, q,searchIsCoordInside=True):
-        #todo: this is really messed up and needs to change for all three
 
-        # this function uses the symmetry of the combiner to extract the force everywhere.
-        #I believe there are some redundancies here that could be trimmed to save time.
-
-        if searchIsCoordInside==False: # the inlet length of the combiner, La, can only be computed after tracing
-            #through the combiner. Thus, it should be set to zero to use the force function for tracing purposes
-            La=0.0
-        else:
-            La=self.La
-        F=fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA(*q, La,self.Lb,self.Lm,self.space,self.ang,
-                                            self.ap,searchIsCoordInside,self.force_Func)
-        F=self.fieldFact*np.asarray(F)
-        return F
+    def force(self, q):
+        return np.asarray(self.fastFieldHelper.force(*q))
 
     def compute_Input_Angle_And_Offset(self, inputOffset,h=1e-6):
         # this computes the output angle and offset for a combiner magnet.
@@ -1388,9 +1370,8 @@ class CombinerHexapoleSim(Element):
         def force(x):
             if x[0]<self.Lm+self.space and sqrt(x[1]**2+x[2]**2)>self.ap:
                     return np.empty(3)*np.nan
-            return self.force(x,searchIsCoordInside=False)
+            return np.asarray(self.fastFieldHelper.force_NoSearchInside(x[0],x[1],x[2]))
         limit = self.Lm + 2 * self.space
-
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
         while True:
             F = forcePrev
@@ -1404,6 +1385,7 @@ class CombinerHexapoleSim(Element):
                 coordList.append(q)
                 break
             F_n = force(q_n)
+            # print(F_n)
             # if np.all(np.isnan(F_n)==False)==False:
             #     temp=np.asarray(temp)
             #     plt.plot(temp[:,0],temp[:,1])
@@ -1503,21 +1485,7 @@ class CombinerHexapoleSim(Element):
                 return False
     def magnetic_Potential(self, q):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
-        x,y,z=q
-        y = abs(y)  # confine to upper right quadrant
-        z = abs(z)
-        if self.is_Coord_Inside(q)==False:
-            raise Exception(ValueError)
-        symmetryLength=self.Lm+2*self.space
-        if 0<=x <=symmetryLength/2:
-            x = symmetryLength/2 - x
-            V=self.magnetic_Potential_Func(x,y,z)
-        elif symmetryLength/2<x:
-            x=x-symmetryLength/2
-            V=self.magnetic_Potential_Func(x,y,z)
-        else:
-            raise Exception(ValueError)
-        return V
+        return self.fastFieldHelper.magnetic_Potential(*q)
 
 class geneticLens(LensIdeal):
     def __init__(self, PTL, geneticLens, ap):
