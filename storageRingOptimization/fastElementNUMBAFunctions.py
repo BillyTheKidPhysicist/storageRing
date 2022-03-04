@@ -137,29 +137,6 @@ def lens_Ideal_Force_NUMBA(x,y,z, L, ap, K):
     else:
         return np.nan, np.nan, np.nan
 
-
-@numba.njit()
-def lens_Halbach_Force_NUMBA(x,y,z, Lcap, L, ap, force_Func_Inner, force_Func_Outer):
-    if np.sqrt(y ** 2 + z ** 2) > ap:
-        return np.nan, np.nan, np.nan
-    FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
-    FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
-    y = abs(y)  # confine to upper right quadrant
-    z = abs(z)
-    if 0 <= x <= Lcap:
-        x = Lcap - x
-        Fx, Fy, Fz = force_Func_Outer(x, y, z)
-        Fx = -Fx
-    elif Lcap < x <= L - Lcap:
-        Fx, Fy, Fz = force_Func_Inner(x, y, z)
-    elif 0 <= x <= L:
-        x = Lcap - (L - x)
-        Fx, Fy, Fz = force_Func_Outer(x, y, z)
-    else:
-        return np.nan, np.nan, np.nan
-    Fy = Fy * FySymmetryFact
-    Fz = Fz * FzSymmetryFact
-    return Fx, Fy, Fz
 @numba.njit()
 def lens_Shim_Halbach_Force_NUMBA(x,y,z,L,ap,force_Func):
     if np.sqrt(y**2+z**2)>=ap:

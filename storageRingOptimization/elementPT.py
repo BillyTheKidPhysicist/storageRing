@@ -84,12 +84,12 @@ class Element:
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fast_Numba_Force_Function=None #function that takes in only position and returns force. This is based on
-        #arguments at the time of calling the function compile_Fast_Numba_Force_Function
+        self.fastForceHelper=None
+
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
-    def compile_Fast_Numba_Force_Function(self):
-        #function that generates the fast_Numba_Force_Function based on existing parameters. It compiles it as well
+    def compile_fast_Force_Function(self):
+        #function that generates the fast_Force_Function based on existing parameters. It compiles it as well
         #by passing dummy arguments
         pass
     def magnetic_Potential(self, q):
@@ -138,12 +138,13 @@ class Element:
 
     def is_Coord_Inside(self, q):
         return None
-    def make_Interp_Functions(self, data):
+    def shape_Field_Data(self, data):
         # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
         # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
         # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
         # and the order of points doesn't matter
         #force function into someting that returns 3 scalars at once, and making the magnetic field component optional
+        assert data.shape[1]==7
         xArr=np.unique(data[:,0])
         yArr=np.unique(data[:,1])
         zArr=np.unique(data[:,2])
@@ -162,10 +163,28 @@ class Element:
         FyMatrix[xIndices,yIndices,zIndices]=-SIMULATION_MAGNETON*data[:,4]
         FzMatrix[xIndices,yIndices,zIndices]=-SIMULATION_MAGNETON*data[:,5]
         VMatrix[xIndices,yIndices,zIndices]=SIMULATION_MAGNETON*data[:,6]
-        interpF=generate_3DInterp_Function_NUMBA(FxMatrix,FyMatrix,FzMatrix,xArr,yArr,zArr)
-        interpV=spi.RegularGridInterpolator((xArr,yArr,zArr),VMatrix)
-        interpVWrap=lambda x,y,z:interpV((x,y,z))
-        return interpF,interpVWrap
+        return VMatrix,FxMatrix,FyMatrix,FzMatrix,xArr,yArr,zArr
+
+    def fill_Field_Func_2D(self, data2D):
+        # Data is provided for lens that points in the positive z, so the force functions need to be rotated
+        assert data2D.shape[1]==5
+        xArr = np.unique(data2D[:, 0])
+        yArr = np.unique(data2D[:, 1])
+        numx = xArr.shape[0]
+        numy = yArr.shape[0]
+        BGradxMatrix = np.zeros((numx, numy))
+        BGradyMatrix = np.zeros((numx, numy))
+        B0Matrix = np.zeros((numx, numy))
+        xIndices = np.argwhere(data2D[:, 0][:, None] == xArr)[:, 1]
+        yIndices = np.argwhere(data2D[:, 1][:, None] == yArr)[:, 1]
+
+        BGradxMatrix[xIndices, yIndices] = data2D[:, 2]
+        BGradyMatrix[xIndices, yIndices] = data2D[:, 3]
+        B0Matrix[xIndices, yIndices] = data2D[:, 4]
+        FxMatrix = -SIMULATION_MAGNETON * BGradxMatrix
+        FyMatrix = -SIMULATION_MAGNETON * BGradyMatrix
+        VMatrix=SIMULATION_MAGNETON * B0Matrix
+        return VMatrix,FxMatrix, FyMatrix, xArr, yArr
 
 
 class LensIdeal(Element):
@@ -192,7 +211,7 @@ class LensIdeal(Element):
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
-        self.compile_Fast_Numba_Force_Function()
+        self.compile_fast_Force_Function()
 
     def magnetic_Potential(self, q):
         # potential energy at provided coordinates
@@ -236,7 +255,7 @@ class LensIdeal(Element):
             return F
         else:
             return np.asarray([np.nan,np.nan,np.nan])
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         L = self.L
         ap = self.ap
         K = self.K
@@ -244,7 +263,7 @@ class LensIdeal(Element):
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_NUMBA_Wrapper(x,y,z):
             return forceNumba(x,y,z, L, ap, K)
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Force_Function=force_NUMBA_Wrapper
 
 
     def set_Length(self, L):
@@ -276,7 +295,7 @@ class Drift(LensIdeal):
             return np.zeros(3)
         else:
             return np.asarray([np.nan,np.nan,np.nan])
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         #todo: this is not optimal. Some work is needed here
         #because the length of drift regions can change, and they are very short, this is much faster. Otherwise,
         #naively, everything needs to be recompiled again in the ParticleTracerClass
@@ -288,7 +307,7 @@ class Drift(LensIdeal):
         #         return np.zeros(3)
         #     else:
         #         return np.asarray([np.nan, np.nan, np.nan])
-        self.fast_Numba_Force_Function=None#force_NUMBA_Wrapper
+        self.fast_Force_Function=None#force_NUMBA_Wrapper
 
 
 class BenderIdeal(Element):
@@ -617,7 +636,7 @@ class CombinerSim(CombinerIdeal):
 
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.data = None  # to save memory and pickling time
-        self.compile_Fast_Numba_Force_Function()
+        self.compile_fast_Force_Function()
 
     def compute_Trajectory_Length(self, qTracedArr):
         # TODO: CHANGE THAT X DOESN'T START AT ZERO
@@ -645,7 +664,7 @@ class CombinerSim(CombinerIdeal):
                                             self.apz,self.apL,self.apR,searchIsCoordInside,self.force_Func)
         F=self.fieldFact*np.asarray(F)
         return F
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.combiner_Sim_Force_NUMBA
         La=self.La
         Lb=self.Lb
@@ -660,7 +679,7 @@ class CombinerSim(CombinerIdeal):
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_NUMBA_Wrapper(x,y,z):
             return forceNumba(x,y,z,La,Lb,Lm,space,ang,apz,apL,apR,searchIsCoordInside,force_Func)
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Force_Function=force_NUMBA_Wrapper
 
     def magnetic_Potential(self, q):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
@@ -1020,7 +1039,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
-        self.compile_Fast_Numba_Force_Function()
+        self.compile_fast_Force_Function()
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
         assert Max>Min and Max-Min>TINY_STEP
@@ -1114,7 +1133,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                 self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
                                                                           ,self.Force_Func_Cap)
         return self.fieldFact*np.asarray(F)
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         ang=self.ang
         ucAng=self.ucAng
         M_uc=self.M_uc
@@ -1132,7 +1151,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         def force_NUMBA_Wrapper(x,y,z):
             return forceNumba(x,y,z, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
                                      Force_Func_Internal_Fringe, Force_Func_Cap)
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Force_Function=force_NUMBA_Wrapper
 
 
     def magnetic_Potential(self, q):
@@ -1191,6 +1210,11 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
             raise Exception('INVALID POSITION SUPPLIED')
         return V0*self.fieldFact
 
+
+
+
+
+
 class HalbachLensSim(LensIdeal):
     def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
@@ -1220,13 +1244,11 @@ class HalbachLensSim(LensIdeal):
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=None
 
-        self.data2D = None
-        self.data3D = None
+
         self.force_Func_Outer=None #function that returns 3D vector of force values towards the end of the magnet, if
         #the magent is short, then it returns the values for one half, otherwise symmetry is used  to model interior as
         #2D
         self.magnetic_Potential_Func_Fringe = None
-        self.force_Func_Inner=None
         self.magnetic_Potential_Func_Inner = None
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
         if self.L is not None:
@@ -1280,16 +1302,12 @@ class HalbachLensSim(LensIdeal):
             # portion inside then use a 2D plane to represent the inner portion to save resources
             planeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,0)).T.reshape(-1,3)
             BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
-            self.data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
+            data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
-            self.fill_Field_Func_2D()
         else:
             #still need to make the force function
-            @numba.njit()
-            def force_Func_Inner(x, y, z):
-                return 0.0,0.0,0.0
-            self.force_Func_Inner = force_Func_Inner
             self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
+            data2D=None
 
 
         zMin=-TINY_STEP
@@ -1303,53 +1321,35 @@ class HalbachLensSim(LensIdeal):
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
         BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
-        self.data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
-        self.fill_Field_Func_Cap()
-        self.compile_Fast_Numba_Force_Function()
+        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        self.build_Force_Helper(data3D,data2D)
+
         F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
         F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
         assert F_edge/F_center<.01
-
-    def fill_Field_Func_Cap(self):
-        interpF, interpV = self.make_Interp_Functions(self.data3D)
-        # wrap the function in a more convenietly accesed function
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_Func_Outer(x,y,z):
-            Fx0,Fy0,Fz0=interpF(-z, y,x)
-            Fx=Fz0
-            Fy=Fy0
-            Fz=-Fx0
-            return Fx,Fy,Fz
-        self.force_Func_Outer=force_Func_Outer
-        self.magnetic_Potential_Func_Fringe = lambda x, y, z: interpV(-z, y, x)
-
-    def fill_Field_Func_2D(self):
-        #Data is provided for lens that points in the positive z, so the force functions need to be rotated
-        xArr = np.unique(self.data2D[:, 0])
-        yArr = np.unique(self.data2D[:, 1])
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        BGradxMatrix = np.empty((numx, numy))
-        BGradyMatrix = np.empty((numx, numy))
-        B0Matrix = np.zeros((numx, numy))
-        xIndices = np.argwhere(self.data2D[:, 0][:, None] == xArr)[:, 1]
-        yIndices = np.argwhere(self.data2D[:, 1][:, None] == yArr)[:, 1]
-
-        BGradxMatrix[xIndices, yIndices] = self.data2D[:, 2]
-        BGradyMatrix[xIndices, yIndices] = self.data2D[:, 3]
-        B0Matrix[xIndices, yIndices] = self.data2D[:, 4]
-
-        interpFx=generate_2DInterp_Function_NUMBA(-SIMULATION_MAGNETON*BGradxMatrix,xArr,yArr)
-        interpFy=generate_2DInterp_Function_NUMBA(-SIMULATION_MAGNETON*BGradyMatrix,xArr,yArr)
-        interpV=generate_2DInterp_Function_NUMBA(SIMULATION_MAGNETON*B0Matrix,xArr,yArr)
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_Func_Inner(x,y,z):
-            Fx=0.0
-            Fy=interpFy(-z, y) #model is rotated in particle tracing frame
-            Fz=-interpFx(-z, y)
-            return Fx,Fy,Fz
-        self.force_Func_Inner=force_Func_Inner
-        self.magnetic_Potential_Func_Inner = lambda x, y, z: interpV(-z, y)#[0][0]
+    def build_Force_Helper(self,data3D,data2D):
+        VEdge,FxEdge,FyEdge,FzEdge,xEdge,yEdge,zEdge=self.shape_Field_Data(data3D)
+        FxEdge=np.ravel(FxEdge)
+        FyEdge=np.ravel(FyEdge)
+        FzEdge=np.ravel(FzEdge)
+        # FxEdge=np.ascontiguousarray(FxEdge)
+        # exit()
+        if data2D is not None:
+            VIn,FxIn,FyIn,xIn,yIn=self.fill_Field_Func_2D(data2D)
+        else:
+            VIn, FxIn, FyIn, xIn, yIn=[np.ones((1,1))*np.nan]*5
+        FxIn=np.ravel(FxIn)
+        FyIn=np.ravel(FyIn)
+        from numba.typed import List
+        F_Edge=List([FxEdge,FyEdge,FzEdge])
+        qEdge=List([xEdge,yEdge,zEdge])
+        F_In=List([FxIn,FyIn])
+        qIn=List([xIn,yIn])
+        from InterpFunction1 import LensHalbachForceHelper_Numba
+        print(F_In)
+        print(qIn)
+        exit()
+        self.fastForceHelper=LensHalbachForceHelper_Numba(F_Edge,qEdge,F_In,qIn,self.L,self.Lcap,self.ap)
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
     def magnetic_Potential(self, q):
@@ -1369,23 +1369,9 @@ class HalbachLensSim(LensIdeal):
         return V0*self.fieldFact
 
 
-
-
     def force(self, q):
-        F= fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA(*q,self.Lcap,self.L,self.ap,self.force_Func_Inner
-                                                                  ,self.force_Func_Outer)
-        return self.fieldFact*np.asarray(F)
-    def compile_Fast_Numba_Force_Function(self):
-        forceNumba = fastElementNUMBAFunctions.lens_Halbach_Force_NUMBA
-        Lcap=self.Lcap
-        L=self.L
-        ap=self.ap
-        force_Func_Inner=self.force_Func_Inner
-        force_Func_Outer=self.force_Func_Outer
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_NUMBA_Wrapper(x,y,z):
-            return forceNumba(x,y,z,Lcap,L,ap,force_Func_Inner,force_Func_Outer)
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        F=self.fieldFact*np.asarray(self.fastForceHelper.force(*q))
+        return F
 
 
 class CombinerHexapoleSim(Element):
@@ -1491,7 +1477,7 @@ class CombinerHexapoleSim(Element):
         assert np.abs(xArr_Quadrant).max()>yzMax and np.abs(yArr_Quadrant).max()>yzMax, \
             "field region must extend past particle region"
 
-        self.compile_Fast_Numba_Force_Function()
+        self.compile_fast_Force_Function()
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
         assert F_edge / F_center < .01
@@ -1632,7 +1618,7 @@ class CombinerHexapoleSim(Element):
         dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
         Lo = np.sum(dLArr)
         return Lo
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA
         La=self.La
         Lb=self.Lb
@@ -1645,7 +1631,7 @@ class CombinerHexapoleSim(Element):
         @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
         def force_NUMBA_Wrapper(x,y,z):
             return forceNumba(x,y,z,La,Lb,Lm,space,ang,ap,searchIsCoordInside,force_Func)
-        self.fast_Numba_Force_Function=force_NUMBA_Wrapper
+        self.fast_Force_Function=force_NUMBA_Wrapper
     def transform_Lab_Coords_Into_Element_Frame(self, q):
          qNew = q.copy()
          qNew = qNew - self.r2
@@ -1775,7 +1761,7 @@ class geneticLens(LensIdeal):
         BNormGrad, BNorm = self.lens.BNorm_Gradient(volumeCoords, returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.fill_Field_Func(data3D)
-        # self.compile_Fast_Numba_Force_Function()
+        # self.compile_fast_Force_Function()
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.L / 2, self.ap / 2, .0])))
@@ -1790,7 +1776,7 @@ class geneticLens(LensIdeal):
         # plt.imshow(image)
         # plt.show()
 
-    def compile_Fast_Numba_Force_Function(self):
+    def compile_fast_Force_Function(self):
         forceNumba = fastElementNUMBAFunctions.genetic_Lens_Force_NUMBA
         L = self.L
         ap = self.ap
@@ -1800,7 +1786,7 @@ class geneticLens(LensIdeal):
         def force_NUMBA_Wrapper(x, y, z):
             return forceNumba(x, y, z, L, ap, force_Func)
 
-        self.fast_Numba_Force_Function = force_NUMBA_Wrapper
+        self.fast_Force_Function = force_NUMBA_Wrapper
 
     def force(self, q, searchIsCoordInside=True):
         F = fastElementNUMBAFunctions.genetic_Lens_Force_NUMBA(q[0], q[1], q[2], self.L, self.ap, self.force_Func)

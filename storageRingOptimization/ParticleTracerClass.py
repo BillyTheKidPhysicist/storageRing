@@ -53,7 +53,7 @@ class ParticleTracer:
         self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=lattice.totalLength
         self.numbaMultiStepCache=[]
-        self.generate_Multi_Step_Cache()
+        # self.generate_Multi_Step_Cache()
 
         self.tau_Collision=np.inf #collision time constant
         self.T_CollisionLast=0.0 # time since last collision
@@ -170,7 +170,7 @@ class ParticleTracer:
                 if self.particle.clipped==True:
                     break
             else:
-                if self.fastMode==False or self.numbaMultiStepCache[self.currentEl.index] is None: #either recording data at each step
+                if self.fastMode==False or self.currentEl.fastForceHelper is None: #either recording data at each step
                     #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                     self.time_Step_Verlet()
                     if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
@@ -183,35 +183,16 @@ class ParticleTracer:
                 self.T+=self.h
                 self.particle.T=self.T
     def multi_Step_Verlet(self):
-        results=self.numbaMultiStepCache[self.currentEl.index](self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact)
+        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact,
+                                        self.currentEl.fastForceHelper)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
-            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl) #it doesn't quite make sense
-            #that I'm doing it like this. The outside the element system could be revamped.
-    def generate_Multi_Step_Cache(self):
-        self.numbaMultiStepCache = []
-        for el in self.latticeElementList:
-            if el.fast_Numba_Force_Function is None:
-                self.numbaMultiStepCache.append(None)
-            else:
-                func = self.generate_Multi_Step_Verlet(el.fast_Numba_Force_Function)
-                self.numbaMultiStepCache.append(func)
-
-
-    def generate_Multi_Step_Verlet(self,forceFunc):
-        func=self._multi_Step_Verlet
-        @numba.njit()
-        def wrap(qEl,pEl,T,T0,h,forceFact):
-            return func(qEl,pEl,T,T0,h,forceFact,forceFunc)
-        test=np.empty(3)
-        test[:]=np.nan
-        wrap(test,test,0.0,0.0,0.0,0.0) #force numba to compile
-        return wrap
-
+            self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEln, pEln, T, T0, h, forceFact, force):
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, forceFact, helper):
         # copy the input arrays to prevent modifying them outside the function
+        force=helper.force
         x, y, z = qEln
         px, py, pz = pEln
         Fx, Fy, Fz = force(x,y,z)
