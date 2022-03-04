@@ -205,50 +205,7 @@ def combiner_Sim_Hexapole_Force_NUMBA(x,y,z, La, Lb, Lm, space, ang, ap, searchI
 
 
 
-@numba.njit()
-def combiner_Sim_Force_NUMBA(x,y,z, La, Lb, Lm, space, ang, apz, apL, apR, searchIsCoordInside, force_Func):
-    # this function uses the symmetry of the combiner to extract the force everywhere.
-    # I believe there are some redundancies here that could be trimmed to save time.
-    if searchIsCoordInside == True:
-        if not -apz <= z <= apz:  # if outside the z apeture (vertical)
-            return np.nan, np.nan, np.nan
-        elif 0 <= x <= Lb:  # particle is in the horizontal section (in element frame) that passes
-            # through the combiner. Simple square apeture
-            if -apL <= y <= apR:  # if inside the y (width) apeture
-                pass
-            else:
-                return np.nan, np.nan, np.nan
-        elif x < 0:
-            return np.nan, np.nan, np.nan
-        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-            #todo: better modeled as a simpler rotation
-            m = np.tan(ang)
-            Y1 = m * x + (apR - m * Lb)  # upper limit
-            Y2 = (-1 / m) * x + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m
-            Y3 = m * x + (-apL - m * Lb)
-            if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
-                pass
-            elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
-                pass
-            else:
-                return np.nan, np.nan, np.nan
-    xFact = 1  # value to modify the force based on symmetry
-    zFact = 1
-    if 0 <= x <= (Lm / 2 + space):  # if the particle is in the first half of the magnet
-        if z < 0:  # if particle is in the lower plane
-            z = -z  # flip position to upper plane
-            zFact = -1  # z force is opposite in lower half
-    elif (Lm / 2 + space) < x:  # if the particle is in the last half of the magnet
-        x = (Lm / 2 + space) - (
-                x - (Lm / 2 + space))  # use the reflection of the particle
-        xFact = -1  # x force is opposite in back plane
-        if z < 0:  # if in the lower plane, need to use symmetry
-            z = -z
-            zFact = -1  # z force is opposite in lower half
-    Fx, Fy, Fz = force_Func(x, y, z)
-    Fx = xFact * Fx
-    Fz = zFact * Fz
-    return Fx, Fy, Fz
+
 @numba.njit()
 def genetic_Lens_Force_NUMBA(x,y,z, L,ap,  force_Func):
     FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
