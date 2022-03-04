@@ -6,7 +6,7 @@ import numpy as np
 from math import sqrt
 import warnings
 import fastElementNUMBAFunctions
-from InterpFunction1 import LensHalbachFieldHelper_Numba
+import fastNumbaMethodsAndClass
 import pandas as pd
 import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
@@ -211,27 +211,7 @@ class LensIdeal(Element):
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
-        self.compile_fast_Force_Function()
-
-    def magnetic_Potential(self, q):
-        # potential energy at provided coordinates
-        # q coords in element frame
-        r = sqrt(q[1] ** 2 + +q[2] ** 2)
-        if r < self.ap:
-            return .5*self.K * r ** 2
-        else:
-            return 0.0
-    def calculate_Steps_To_Collision(self,q,p,h):
-        #based on the current position and trajectory, in the element frame, how many timesteps would be required
-        # to have a collision
-        r0=self.ap
-        y,z=q[1:]
-        vy,vz=p[1:]
-        #time to collision with wall transversally
-        dtT=(-vy*y - vz*z + sqrt(r0**2*vy**2 + r0**2*vz**2 - vy**2*z**2 + 2*vy*vz*y*z - vz**2*y**2))/(vy**2 + vz**2)
-        dtL=(-self.r2[0]-q[0])/p[0] #longitudinal time to collision
-        dt=min(dtT,dtL)
-        return dt/h
+        self.fastFieldHelper=fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L,self.K,self.ap)
 
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
@@ -246,32 +226,15 @@ class LensIdeal(Element):
         qNew[1] = qNew[1] +self.r1[1]
         return qNew
 
-    def force(self, q):
-        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        F=np.zeros(3)
-        if 0 <= q[0] <= self.L and q[1] ** 2 + q[2] ** 2 < self.ap**2:
-            F[1] = -self.K * q[1]
-            F[2] = -self.K * q[2]
-            return F
-        else:
-            return np.asarray([np.nan,np.nan,np.nan])
-    def compile_fast_Force_Function(self):
-        L = self.L
-        ap = self.ap
-        K = self.K
-        forceNumba = fastElementNUMBAFunctions.lens_Ideal_Force_NUMBA
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_NUMBA_Wrapper(x,y,z):
-            return forceNumba(x,y,z, L, ap, K)
-        self.fast_Force_Function=force_NUMBA_Wrapper
-
-
     def set_Length(self, L):
         # this is used typically for setting the length after satisfying constraints
         assert L>0.0
         self.L = L
         self.Lo = self.L
-
+    def force(self,q):
+        return np.asarray(self.fastFieldHelper.force(*q))
+    def magnetic_Potential(self, q):
+        return self.fastFieldHelper.magnetic_Potential(*q)
     def is_Coord_Inside(self, q):
         # check with fast geometric arguments if the particle is inside the element. This won't necesarily work for all
         # elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
@@ -288,26 +251,12 @@ class LensIdeal(Element):
 class Drift(LensIdeal):
     def __init__(self, PTL, L, ap):
         super().__init__(PTL, L, 0, np.inf, ap,0.0)
-
+        self.fastFieldHelper=fastNumbaMethodsAndClass.DriftFieldHelper_Numba(L,ap)
     def force(self, q):
-        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        if 0 <= q[0] <= self.L and sqrt(q[1] ** 2 + q[2] ** 2) < self.ap:
-            return np.zeros(3)
-        else:
-            return np.asarray([np.nan,np.nan,np.nan])
-    def compile_fast_Force_Function(self):
-        #todo: this is not optimal. Some work is needed here
-        #because the length of drift regions can change, and they are very short, this is much faster. Otherwise,
-        #naively, everything needs to be recompiled again in the ParticleTracerClass
-        # L = self.L
-        # ap = self.ap
-        # @numba.njit()
-        # def force_NUMBA_Wrapper(q):
-        #     if 0 <= q[0] <= L and sqrt(q[1] ** 2 + q[2] ** 2) < ap:
-        #         return np.zeros(3)
-        #     else:
-        #         return np.asarray([np.nan, np.nan, np.nan])
-        self.fast_Force_Function=None#force_NUMBA_Wrapper
+        F= np.asarray(self.fastFieldHelper.force(*q))
+        return F
+    def magnetic_Potential(self, q):
+        return self.fastFieldHelper.magnetic_Potential(*q)
 
 
 class BenderIdeal(Element):
@@ -339,18 +288,9 @@ class BenderIdeal(Element):
         self.outputOffset = self.outputOffsetFunc(self.rb)
         self.ro = self.rb + self.outputOffset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
-
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
-    def magnetic_Potential(self, q):
-        # potential energy at provided coordinates
-        # q coords in element frame
-        r = sqrt(q[0] ** 2 + +q[1] ** 2)
-        if self.rb + self.rp > r > self.rb - self.rp and np.abs(q[2]) < self.ap:
-            rNew = sqrt((r - self.rb) ** 2 + q[2] ** 2)
-            return self.Bp * SIMULATION_MAGNETON * rNew ** 2 / self.rp ** 2
-        else:
-            return 0.0
+        self.fastFieldHelper=fastNumbaMethodsAndClass.BenderFieldHelper_Numba(self.ang,self.K,self.rp,self.rb,self.ap)
 
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
@@ -376,20 +316,7 @@ class BenderIdeal(Element):
         qo[1] = qox
         return qo
 
-    def force(self, q):
-        # force at point q in element frame
-        # q: particle's position in element frame
-        F = np.zeros(3)
-        phi = full_Arctan2(q)
-        if phi < self.ang:
-            r = sqrt(q[0] ** 2 + q[1] ** 2)  # radius in x y frame
-            F0 = -self.K * (r - self.rb)  # force in x y plane
-            F[0] = np.cos(phi) * F0
-            F[1] = np.sin(phi) * F0
-            F[2] = -self.K * q[2]
-        else:
-            F = np.asarray([np.nan,np.nan,np.nan])
-        return F
+
     def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
         #qo: orbit frame coords, [xo,yo,zo]. xo is distance along orbit, yo is displacement perpindicular to orbit and
         #horizontal. zo is vertical
@@ -415,7 +342,10 @@ class BenderIdeal(Element):
                 return True
         else:
             return False
-
+    def force(self,q):
+        return np.asarray(self.fastFieldHelper.force(*q))
+    def magnetic_Potential(self, q):
+        return np.asarray(self.fastFieldHelper.magnetic_Potential(*q))
 
 class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
@@ -452,15 +382,17 @@ class CombinerIdeal(Element):
             self.fieldFact=-1.0 #reverse field to model high field seeker
         else:
             lowField=True
-
+        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2,np.nan, self.Lb,
+                                                                            self.apL,self.apR, np.nan, np.nan)
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
-
         self.apz = self.ap / 2
         self.La = self.ap * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
+        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2, self.La,self.Lb,
+                                                                                       self.apL,self.apR, self.apz, self.ang)
 
     def compute_Input_Angle_And_Offset(self, h=1e-7):
         # this computes the output angle and offset for a combiner magnet.
@@ -477,7 +409,7 @@ class CombinerIdeal(Element):
         # #of orbit.
 
 
-        force = lambda x: self.force(x,searchIsCoordInside=False)
+        force = lambda X: np.asarray(self.fastFieldHelper.force_NoSearchInside(*X))
         limit = self.Lm + 2 * self.space
 
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
@@ -519,47 +451,14 @@ class CombinerIdeal(Element):
         qo[1] = 0  # qo[1]
         return qo
 
-    def force(self, q,searchIsCoordInside=True):
-        # force at point q in element frame
-        # q: particle's position in element frame
-        if searchIsCoordInside==True:
-            if self.is_Coord_Inside(q) is False:
-                return np.asarray([np.nan])
-        F = np.zeros(3)  # force vector starts out as zero
-        if 0<q[0] < self.Lb:
-            B0 = sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
-            F[1] = SIMULATION_MAGNETON * self.c2 * (self.c1 + self.c2 * q[1]) / B0
-            F[2] = SIMULATION_MAGNETON * self.c2 ** 2 * q[2] / B0
-        return F*self.fieldFact
+    def force(self, q):
+        F=np.asarray(self.fastFieldHelper.force(*q))
+        return F
     def magnetic_Potential(self, q):
-        V0=0
-        if 0<q[0] < self.Lb:
-            V0 = SIMULATION_MAGNETON*sqrt((self.c2 * q[2]) ** 2 + (self.c1 + self.c2 * q[1]) ** 2)
-        return V0
-
-
+        return self.fastFieldHelper.magnetic_Potential(*q)
     def is_Coord_Inside(self, q):
         # q: coordinate to test in element's frame
-        if not -self.apz <= q[2] <= self.apz:  # if outside the z apeture (vertical)
-            return False
-        elif 0 <= q[0] <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
-            # through the combiner. Simple square apeture
-            if -self.apL < q[1] < self.apR:  # if inside the y (width) apeture
-                return True
-        elif q[0] < 0:
-            return False
-        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-            m = np.tan(self.ang)
-            Y1 = m * q[0] + (self.apR - m * self.Lb)  # upper limit
-            Y2 = (-1 / m) * q[0] + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * q[0] + (-self.apL - m * self.Lb)
-            if np.sign(m)<0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3): #if the inlet is tilted 'down'
-                return True
-            elif np.sign(m)>0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3): #if the inlet is tilted 'up'
-                return True
-            else:
-                return False
-
+        return self.fastFieldHelper.is_Coord_Inside(*q)
     def transform_Element_Coords_Into_Lab_Frame(self,q):
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
@@ -1335,7 +1234,8 @@ class HalbachLensSim(LensIdeal):
         qEnd=List([xEnd,yEnd,zEnd])
         fieldsIn=List([VIn,FxIn,FyIn])
         qIn=List([xIn,yIn])
-        self.fastFieldHelper=LensHalbachFieldHelper_Numba(fieldsEnd,qEnd,fieldsIn,qIn,self.L,self.Lcap,self.ap)
+        self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldsEnd,qEnd,fieldsIn,
+                                                                                   qIn,self.L,self.Lcap,self.ap)
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
 

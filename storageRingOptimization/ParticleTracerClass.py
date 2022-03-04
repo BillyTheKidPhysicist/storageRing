@@ -165,7 +165,7 @@ class ParticleTracer:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if isinstance(self.currentEl,elementPT.Drift):
+            if False:#isinstance(self.currentEl,elementPT.Drift):
                 self.handle_Drift_Region()
                 if self.particle.clipped==True:
                     break
