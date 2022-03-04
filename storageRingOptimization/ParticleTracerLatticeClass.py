@@ -186,45 +186,12 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Bender_Ideal_Segmented_With_Cap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,outputOffsetFact=1.0,ap=None):
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-        el=BenderIdealSegmentedWithCap(self,numMagnets,Lm,Lcap,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap)
-        el.index = len(self.elList)  # where the element is in the lattice
-        self.benderIndices.append(el.index)
-        self.elList.append(el)
     def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
         el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
-        el.index = len(self.elList)  # where the element is in the lattice
-        self.benderIndices.append(el.index)
-        self.elList.append(el)
-    def add_Bender_Ideal_Segmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap=None):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #L: hard edge Length of individual magnet.
-        #Bp: Field strength at pole face
-        # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
-        #outside this, m
-        #rp: Bore radius of element
-        #yokeWidth: width of the yoke, but also refers to the width of the magnetic material
-        #numMagnet: number of magnets in segmented bender
-        #space: extra space from magnet holder in the direction of the length of the magnet. This effectively add length
-        #to the magnet. total length will be changed by TWICE this value, the space is on each end
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
-
-        el=BenderIdealSegmented(self,numMagnets,Lm,Bp,rp,rb,yokeWidth,space,outputOffsetFact,ap)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)

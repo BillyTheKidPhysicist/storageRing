@@ -551,228 +551,7 @@ class CombinerSim(CombinerIdeal):
         return self.fastFieldHelper.magnetic_Potential(*q)
 
 
-class BenderIdealSegmented(BenderIdeal):
-    # -very similiar to ideal bender, but force is not a continuous
-    # function of theta and r. It is instead a series of discrete magnets which are represented as a unit cell. A
-    # full magnet would be modeled as two unit cells, instead of a single unit cell, to exploit symmetry and thus
-    # save memory. Half the time the symetry is exploited by using a simple rotation, the other half of the time the
-    # symmetry requires a reflection, then rotation.
-    def __init__(self, PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, rOffsetFact, ap, fillParams=True):
-        super().__init__(PTL, None, Bp, rp, rb, ap, fillParams=False)
-        self.numMagnets = numMagnets
-        self.Lm = Lm
-        self.space = space
-        self.yokeWidth = yokeWidth
-        self.ucAng = None
-        self.segmented = True
-        self.cap = False
-        self.ap = ap
-        self.rOffsetFact = rOffsetFact
-        self.RIn_Ang = None
-        self.Lseg = None
-        self.M_uc = None  # matrix for reflection used in exploting segmented symmetry. This is 'inside' a single magnet element
-        self.M_ang = None  # matrix for reflection used in exploting segmented symmetry. This is reflecting out from the unit cell
-        if fillParams == True:
-            self.fill_Params()
-
-    def fill_Params(self):
-        super().fill_Params()
-        self.outputOffsetFunc = lambda rb: self.rOffsetFact * (sqrt(
-            rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2)
-        self.outputOffset = self.outputOffsetFunc(self.rb)
-        self.Lseg = self.Lm + 2 * self.space
-        if self.numMagnets is not None:
-            self.ucAng = np.arctan((self.Lm / 2 + self.space) / (self.rb - self.yokeWidth - self.rp))
-            self.ang = 2 * self.ucAng * self.numMagnets
-            self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
-            self.Lo = self.ro * self.ang
-            m = np.tan(self.ucAng)
-            self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)
-
-    def transform_Lab_Coords_Into_Element_Frame(self, q):
-        qNew = q - self.r0
-        qNew[:2]=self.RIn@qNew[:2]
-        return qNew
-
-    def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
-        # vec: 3D vector in lab frame to rotate into element frame
-        vecNew=vec.copy()
-        vecNew[:2]=self.RIn@vecNew[:2]
-        return vecNew
-
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
-        qo = q.copy()
-        phi = self.ang - full_Arctan2(q) # angle swept out by particle in trajectory. This is zero
-        # when the particle first enters
-        ds = self.ro * phi
-        qos = ds
-        qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
-        qo[0] = qos
-        qo[1] = qox
-        return qo
-
-    def force(self, q):
-        # force at point q in element frame
-        # q: particle's position in element frame
-        F=np.zeros(3)
-        quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-        if quc[1] < self.Lm / 2:  # if particle is inside the magnet region
-            F[0] = -self.K * (quc[0] - self.rb)
-            F[2] = -self.K * quc[2]
-            F = self.transform_Unit_Cell_Force_Into_Element_Frame(F,q)  # transform unit cell coordinates into
-            # element frame
-        return F
-
-    # @profile() #.497
-    def transform_Unit_Cell_Force_Into_Element_Frame(self, F, q):
-        # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
-        # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
-        # or leaving the element interface as mirror images of each other.
-        # F: Force to be rotated out of unit cell frame
-        # q: particle's position in the element frame where the force is acting
-        x,y,z=q
-        F= fastElementNUMBAFunctions.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(F[0],F[1],F[2], x,y, self.M_uc, self.ucAng)
-        return np.asarray(F)
-
-
-
-    # @profile()
-    def transform_Element_Coords_Into_Unit_Cell_Frame(self, q):
-        # As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
-        # and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
-        # q: particle coords in element frame
-        # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
-        # used for including unit cell fringe fields
-        # return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTH(qNew, self.ang, self.ucAng)
-        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
-
-
-    def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(self,q):
-        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
-
-
-class BenderIdealSegmentedWithCap(BenderIdealSegmented):
-    def __init__(self, PTL, numMagnets, Lm, Lcap, Bp, rp, rb, yokeWidth, space, rOffsetfact, ap, fillParams=True):
-        super().__init__(PTL, numMagnets, Lm, Bp, rp, rb, yokeWidth, space, rOffsetfact, ap, fillParams=False)
-        self.Lcap = Lcap
-        self.cap = True
-        if fillParams == True:
-            self.fill_Params()
-
-    def fill_Params(self):
-        super().fill_Params()
-        if self.numMagnets is not None:
-            if self.ang > 3 * np.pi / 2 or self.ang < np.pi / 2:  # this is done so that finding where the particle is inside the
-                # bender is not a huge chore. There is almost no chance it would have this shape anyways. Changing this
-                # would affect force, orbit coordinates and isinside at least
-                raise Exception('DIMENSIONS OF BENDER ARE OUTSIDE OF ACCEPTABLE BOUNDS')
-            self.Lo = self.ro * self.ang + 2 * self.Lcap
-
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
-        # q: element coordinates (x,y,z)
-        # returns qo: the coordinates in the orbit frame (s,xo,yo)
-
-        qo = q.copy()
-        angle = full_Arctan2(qo)#np.arctan2(qo[1], qo[0])
-        if angle < 0:  # restrict range to between 0 and 2pi
-            angle += 2 * np.pi
-
-        if angle < self.ang:  # if particle is in the bending angle section. Could still be outside though
-            phi = self.ang - angle  # angle swept out by particle in trajectory. This is zero
-            # when the particle first enters
-            qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
-            qo[0] = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
-            qo[1] = qox
-        else:  # if particle is outside of the bending segment angle so it could be in the caps, or elsewhere
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
-                # the eastward side
-                qo[0] = self.Lcap + self.ang * self.ro + (-q[1])
-                qo[1] = q[0] - self.ro
-            else:
-                qTest = q.copy()
-                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                # if in the westard side cap
-                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
-                    qo[0] = self.Lcap - qTest[1]
-                    qo[1] = qTest[0] - self.ro
-                else:  # if in neither then it must be outside
-                    qo[:] = np.nan
-        return qo
-
-    def force(self, q):
-        # force at point q in element frame
-        # q: particle's position in element frame (x,y,z)
-        if self.is_Coord_Inside(q)==False:
-            return np.asarray([np.nan,np.nan,np.nan])
-        F=np.zeros(3)
-        phi = full_Arctan2(q)  # numba version
-        if phi < self.ang:  # if inside the bbending segment
-            return super().force(q)
-        elif phi > self.ang:  # if outside bender's angle range
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
-                # the eastward side
-                F[0] = -self.K * (q[0] - self.rb)
-            else:  # if in the westward segment maybe
-                qTest = q.copy()
-                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (
-                        self.Lcap > qTest[1] > 0):  # definitely in the
-                    # westard segment
-                    forcex = -self.K * (qTest[0] - self.rb)
-                    F[0] = self.RIn_Ang[0, 0] * forcex
-                    F[1] = -self.RIn_Ang[1, 0] * forcex
-                else:
-                    F = np.zeros(3)
-                    warnings.warn('PARTICLE IS OUTSIDE ELEMENT')
-        return F
-
-    # @profile()
-    def is_Coord_Inside(self, q):
-        # q: particle's position in element frame
-        if np.any(np.isnan(q))==True:
-            raise Exception('issue')
-        phi = full_Arctan2(q)  # calling a fast numba version that is global
-        if phi < self.ang:  # if particle is inside bending angle region
-            if (sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2 < self.ap**2:
-                return True
-            else:
-                return False
-        else:  # if outside bender's angle range
-            if (q[0]-self.rb)**2+q[2]**2 <= self.ap**2 and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
-                # eastward side
-                return True
-            else:
-                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (qTestx-self.rb)**2+q[2]**2 <= self.ap**2 and (self.Lcap >= qTesty >= 0):  # if on the westwards side
-                    return True
-                else:  # if not in either cap, then outside the bender
-                    return False
-    def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
-        #qo: orbit frame coords, [xo,yo,zo]. xo is distance along orbit, yo is displacement perpindicular to orbit and
-        #horizontal. zo is vertical
-        xo,yo,zo=qo
-        if xo<=self.Lcap: #in the beginning cap
-            m=np.tan(self.ang)
-            thetaEnd=np.arctan(-1/m)
-            xLab=self.ro*np.cos(self.ang)-np.cos(thetaEnd)*(self.Lcap-xo)
-            yLab=self.ro*np.sin(self.ang)-np.sin(thetaEnd)*(self.Lcap-xo)
-        elif xo<=self.ang*self.ro+self.Lcap: #in the bending segment
-            phi=self.ang-(xo-self.Lcap)/self.ro
-            xLab=self.ro*np.cos(phi)
-            yLab=self.ro*np.sin(phi)
-        else: #in the ending cap
-            xLab=self.ro
-            yLab=-(xo-(self.Lo-self.Lcap))
-        zLab=zo
-        qLab=np.asarray([xLab,yLab,zLab])
-        qLab[:2]=self.ROut@qLab[:2]
-        qLab+=self.r0
-        return qLab
-
-class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
+class HalbachBenderSimSegmentedWithCap(BenderIdeal):
     #todo: a feature to prevent the interpolation introducing ridiculous fields into the bore by ending inside the
     #magnet
     #this element is a model of a bending magnet constructed of segments. There are three models from which data is
@@ -792,7 +571,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
         # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
         #                  fillParams=False)
-        super().__init__(None,None,None,None,None,None,None,None,None,None,None,fillParams=False)
+        super().__init__(None,None,None,None,None,None,fillParams=False)
         self.sim = True
         self.PTL=PTL
         self.rb=rb
@@ -812,22 +591,8 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.numPointsTransverse=30
         self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
+        self.cap = True
         self.K = None #spring constant of field strength to set the offset of the lattice
-        self.Fx_Func_Seg = None
-        self.Fy_Func_Seg = None
-        self.Fz_Func_Seg = None
-        self.Force_Func_Seg=None
-        self.magnetic_Potential_Func_Seg = None
-        self.Fx_Func_Cap = None
-        self.Fy_Func_Cap = None
-        self.Fz_Func_Cap = None
-        self.Force_Func_Cap=None
-        self.magnetic_Potential_Func_Cap = None
-        self.Fx_Func_Internal_Fringe = None
-        self.Fy_Func_Internal_Fringe = None
-        self.Fz_Func_Internal_Fringe = None
-        self.Force_Func_Internal_Fringe=None
-        self.magnetic_Potential_Func_Fringe = None
         self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
         #constraint solver
         if numMagnets is not None:
@@ -879,14 +644,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         #500um works very well, but 1mm may be acceptable
         numModelLenes=3 #3 turns out to be a good number
         assert numModelLenes%2==1
-        #fill periodic segment data
-        self.fill_Force_Func_Seg()
-        # #fill first segment magnet that comes before the repeating segments that can be modeled the same
-        self.fill_Force_Func_Internal_Fringe()
-        #fill the first magnet (the cap) and its fringe field
-        self.fill_Field_Func_Cap()
-
-        self.K=self.K_Func(self.rb)
+        fieldDataSeg=self.generate_Segment_Field_Data()
+        fieldDataInternal=self.generate_Internal_Fringe_Field_Data()
+        fieldDataCap=self.generate_Cap_Field_Data()
 
 
         self.ang = 2 * self.numMagnets * self.ucAng
@@ -895,7 +655,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
-        self.compile_fast_Force_Function()
+        self.K=self.K_Func(self.rb)
+        self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
+            fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,self.M_ang,self.RIn_Ang)
+        # print(self.force(np.asarray((-self.rb,-1e-3,-1e-3))))
+        # print(self.magnetic_Potential(np.asarray((-self.rb,-1e-3,-1e-3))))
+        # exit()
+
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
         assert Max>Min and Max-Min>TINY_STEP
@@ -924,7 +690,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
     def update_rOffset_Fact(self,rOffsetFact):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
-    def fill_Field_Func_Cap(self):
+    def generate_Cap_Field_Data(self):
         lensCap=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
         #x and y bounds should match with internal fringe bounds
@@ -934,15 +700,13 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         yMax=TINY_STEP
         zMin=-self.Lcap-TINY_STEP
         zMax=TINY_STEP
-
-
         fieldCoordsCap=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         BNormGradArr,BNormArr=lensCap.BNorm_Gradient(fieldCoordsCap,returnNorm=True)
         # BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsCap,BNormGradArr,BNormArr))
-        self.Force_Func_Cap,self.magnetic_Potential_Func_Cap=self.make_Force_And_Potential_Functions(dataCap)
+        return self.shape_Field_Data_3D(dataCap)
 
-    def fill_Force_Func_Internal_Fringe(self):
+    def generate_Internal_Fringe_Field_Data(self):
         lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
                                                 numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
         #x and y bounds should match with cap bounds
@@ -955,10 +719,9 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
         fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
         BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
         dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
-        self.Force_Func_Internal_Fringe,self.magnetic_Potential_Func_Fringe=\
-        self.make_Force_And_Potential_Functions(dataCap)
+        return self.shape_Field_Data_3D(dataCap)
 
-    def fill_Force_Func_Seg(self):
+    def generate_Segment_Field_Data(self):
         xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
         xMax=self.rb+self.ap+TINY_STEP
         yMin=-(self.ap+TINY_STEP)
@@ -970,105 +733,44 @@ class HalbachBenderSimSegmentedWithCap(BenderIdealSegmentedWithCap):
                                                                           numLenses=self.numModelLenses+2)
         BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(fieldCoordsPeriodic,returnNorm=True)
         dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
-        self.Force_Func_Seg,self.magnetic_Potential_Func_Seg=self.make_Force_And_Potential_Functions(dataSeg)
-    def make_Force_And_Potential_Functions(self,data):
-        interpF,interpV=self.make_Interp_Functions(data)
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_Seg_Wrap(x,y,z):
-            Fx0,Fy0,Fz0=interpF(x,-z,y)
-            Fx=Fx0
-            Fy=Fz0
-            Fz=-Fy0
-            return Fx,Fy,Fz
-        interpV_Wrap=lambda x,y,z:interpV(x,-z,y)
-        return force_Seg_Wrap,interpV_Wrap
+        return self.shape_Field_Data_3D(dataSeg)
     def force(self, q):
         # force at point q in element frame
         # q: particle's position in element frame
-        F= fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA(*q,self.ang,self.ucAng,self.numMagnets,self.rb,
-                self.ap,self.M_ang,self.M_uc,self.RIn_Ang,self.Lcap,self.Force_Func_Seg,self.Force_Func_Internal_Fringe
-                                                                          ,self.Force_Func_Cap)
-        return self.fieldFact*np.asarray(F)
-    def compile_fast_Force_Function(self):
-        ang=self.ang
-        ucAng=self.ucAng
-        M_uc=self.M_uc
-        numMagnets=self.numMagnets
-        rb=self.rb
-        ap=self.ap
-        M_ang=self.M_ang
-        RIn_Ang=self.RIn_Ang
-        Lcap=self.Lcap
-        Force_Func_Seg=self.Force_Func_Seg
-        Force_Func_Internal_Fringe=self.Force_Func_Internal_Fringe
-        Force_Func_Cap=self.Force_Func_Cap
-        forceNumba = fastElementNUMBAFunctions.segmented_Bender_Sim_Force_NUMBA
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_NUMBA_Wrapper(x,y,z):
-            return forceNumba(x,y,z, ang, ucAng, numMagnets, rb, ap, M_ang,M_uc, RIn_Ang, Lcap,Force_Func_Seg,
-                                     Force_Func_Internal_Fringe, Force_Func_Cap)
-        self.fast_Force_Function=force_NUMBA_Wrapper
-
-
+        return np.asarray(self.fastFieldHelper.force(*q))
     def magnetic_Potential(self, q):
-        # magnetic potential at point q in element frame
+        return np.asarray(self.fastFieldHelper.magnetic_Potential(*q))
+
+    # @profile()
+    def transform_Element_Coords_Into_Unit_Cell_Frame(self, q):
+        # As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
+        # and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
+        # q: particle coords in element frame
+        # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
+        # used for including unit cell fringe fields
+        # return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTH(qNew, self.ang, self.ucAng)
+        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
+    def is_Coord_Inside(self, q):
         # q: particle's position in element frame
-        q=q.copy()
-        q[2]=abs(q[2])
+        if np.any(np.isnan(q))==True:
+            raise Exception('issue')
         phi = full_Arctan2(q)  # calling a fast numba version that is global
-        V0 = 0.0
         if phi < self.ang:  # if particle is inside bending angle region
-            revs = int((self.ang - phi) // self.ucAng)  # number of revolutions through unit cell
-            if revs == 0 or revs == 1:
-                position = 'FIRST'
-            elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
-                position = 'LAST'
+            if (sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2 < self.ap**2:
+                return True
             else:
-                position = 'INNER'
-            if position == 'INNER':
-                quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(q)  # get unit cell coords
-                V0 = self.magnetic_Potential_Func_Seg(*quc)
-            elif position == 'FIRST' or position == 'LAST':
-                V0 = self.magnetic_Potential_First_And_Last(q, position)
-            else:
-                warnings.warn('PARTICLE IS OUTSIDE LATTICE')
-                V0=np.nan
-        elif phi > self.ang:  # if outside bender's angle range
-            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
+                return False
+        else:  # if outside bender's angle range
+            if (q[0]-self.rb)**2+q[2]**2 <= self.ap**2 and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
                 # eastward side
-                x, y, z = q
-                V0 = self.magnetic_Potential_Func_Cap(x, y, z)
+                return True
             else:
-                qTest = q.copy()
-                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (
-                        self.Lcap > qTest[1] > 0):  # if on the westwards side
-                    x, y, z = qTest
-                    y = -y
-                    V0 = self.magnetic_Potential_Func_Cap(x, y, z)
-                else:  # if not in either cap
-                    V0=np.nan
-        return V0*self.fieldFact
-
-    def magnetic_Potential_First_And_Last(self, q, position):
-        qNew = q.copy()
-
-        if position == 'FIRST':
-            qx = qNew[0]
-            qy = qNew[1]
-            qNew[0] = self.M_ang[0, 0] * qx + self.M_ang[0, 1] * qy
-            qNew[1] = self.M_ang[1, 0] * qx + self.M_ang[1, 1] * qy
-            V0 = self.magnetic_Potential_Func_Fringe(*qNew)
-        elif position == 'LAST':
-            V0 = self.magnetic_Potential_Func_Fringe(*qNew)
-        else:
-            raise Exception('INVALID POSITION SUPPLIED')
-        return V0*self.fieldFact
-
-
-
-
+                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                if (qTestx-self.rb)**2+q[2]**2 <= self.ap**2 and (self.Lcap >= qTesty >= 0):  # if on the westwards side
+                    return True
+                else:  # if not in either cap, then outside the bender
+                    return False
 
 
 class HalbachLensSim(LensIdeal):
