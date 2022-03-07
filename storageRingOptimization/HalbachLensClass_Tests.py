@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from HalbachLensClass import Sphere,RectangularPrism,Layer,HalbachLens
 import scipy.optimize as spo
+import multiprocess as mp
 class SpheretestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
@@ -159,8 +160,13 @@ class HalbachLenstestHelper:
         assert abs(residuals-residuals0)<self.numericTol
         # plt.scatter(rArr,BNormVals)
         # plt.show()
-def test():
-    SpheretestHelper().run_tests()
-    RectangularPrismtestHelper().run_tests()
-    LayertestHelper().run_tests()
-    HalbachLenstestHelper().run_tests()
+def run_Tests(parallel=False):
+    def run(func):
+        func()
+    funcList=[SpheretestHelper().run_tests,RectangularPrismtestHelper().run_tests,LayertestHelper().run_tests,
+              HalbachLenstestHelper().run_tests]
+    if parallel==True:
+        with mp.Pool() as pool:
+            pool.map(run,funcList)
+    else:
+        list(map(run,funcList))

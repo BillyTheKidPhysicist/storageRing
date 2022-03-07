@@ -15,6 +15,7 @@ import sys
 from shapely.geometry import Polygon,Point
 import elementPT
 from constants import BOLTZMANN_CONSTANT,MASS_HELIUM
+from line_profiler_pycharm import profile
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
 
@@ -165,7 +166,7 @@ class ParticleTracer:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if False:#isinstance(self.currentEl,elementPT.Drift):
+            if isinstance(self.currentEl,elementPT.Drift):
                 self.handle_Drift_Region()
                 if self.particle.clipped==True:
                     break
@@ -200,7 +201,7 @@ class ParticleTracer:
             particleOutside = True
             return qEln, qEln, pEln, T, particleOutside
         particleOutside = False
-        while (True):
+        while True:
             if T >= T0:
                 pEl = np.asarray([px, py, pz])
                 qEl = np.asarray([x, y, z])
@@ -218,7 +219,6 @@ class ParticleTracer:
                 yo = y - (py * h + .5 * Fy * h ** 2)
                 zo = z - (pz * h + .5 * Fz * h ** 2)
                 qEl_o = np.asarray([xo, yo, zo])
-
                 particleOutside = True
                 return qEl, qEl_o, pEl, T, particleOutside
             px =px+.5 * (Fx_n + Fx) * h
@@ -308,7 +308,6 @@ class ParticleTracer:
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
-
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n,qEl,pEl):
         #qEl_n: coordinates that are outside the current element and possibley in the next
         #qEl: coordinates right before this method was called, should still be in the element

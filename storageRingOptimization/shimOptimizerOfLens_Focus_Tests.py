@@ -1,5 +1,6 @@
 from shimAndGeneticLensOptimization import ShimOptimizer
 import numpy as np
+import multiprocess as mp
 def test1():
     tol = 1e-9
     rp = .05
@@ -80,6 +81,12 @@ def test2():
     m0=0.7871635545330284
     assert abs(results['I']-I0)<tol and abs(results['m']-m0)<tol
     assert abs(shimOptimizer.baseLineFocusDict['I']-I0)<tol and abs(shimOptimizer.baseLineFocusDict['m']-m0)<tol
-def run_Tests():
-    test1()
-    test2()
+def run_Tests(parallel=False):
+    def run(func):
+        func()
+    funcList=[test1,test2]
+    if parallel==True:
+        with mp.Pool() as pool:
+            pool.map(run,funcList)
+    else:
+        list(map(run,funcList))

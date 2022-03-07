@@ -147,6 +147,6 @@ def solve_For_Lattice_Params(X,tuning,bumpOffsetAmp=0.0):
     else:
         sol=optimizer.optimize((1,9),whichKnobs='ring',tuningChoice=tuning)
     sol.xRing_TunedParams1=X
-    if sol.fluxMultiplicationPercent>10.0:
-        print(sol)
+    # if sol.fluxMultiplicationPercent>10.0:
+    #     print(sol)
     return sol

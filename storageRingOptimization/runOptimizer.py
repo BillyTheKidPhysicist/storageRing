@@ -9,17 +9,18 @@ from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
 def survival_Optimize(bounds,tuning,workers):
     def wrapper(args):
         try:
-            cost=solve_For_Lattice_Params(args,tuning).cost
+            sol=solve_For_Lattice_Params(args,tuning)
+            if sol.fluxMultiplicationPercent>1.0:
+                print(sol)
         except:
             np.set_printoptions(precision=100)
-            print('assert during evaluation on args: ',args)
+            print('assert during evaluation on args: ',repr(args))
             assert False
-        return cost
+        return sol.cost
     #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
-    # global_Gradient_Descent(wrapper,bounds,500,25e-6,100,25e-6,descentMethod='adam',Plot=True)
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
-    args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
-    gradient_Descent(wrapper,args0,25e-6,100,descentMethod='adam',gradStepSize=25e-6)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
+    # args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
+    # wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
@@ -48,8 +49,6 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         print(args0,nominalCost,variability)
         return nominalCost+variability
     solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
-    # args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
-    # gradient_Descent(wrapper,args0,25e-6,100,descentMethod='adam',gradStepSize=25e-6)
 def main():
     bounds = [
         (.005, .03),  # rpLens
@@ -62,8 +61,8 @@ def main():
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    stability_And_Survival_Optimize(bounds,None,32)
-    # survival_Optimize(bounds,None,31)
+    stability_And_Survival_Optimize(bounds,None,8)
+    # survival_Optimize(bounds,None,8)
 if __name__=='__main__':
     main()
 '''

@@ -144,3 +144,12 @@ def _full_Test():
         print('Test number ' + testNum)
         TEST_Lattice_Configuration(testNum, fullTest=True)
         print('Success')
+def test(parallelTesting=False,fullTest=False):
+    def wrap(x):
+        return TEST_Lattice_Configuration(x,fullTest=fullTest)
+    testNameList = ['1', '2', '3', '4', '5', '6']
+    if parallelTesting==False:
+        [wrap(test) for test in testNameList]
+    else:
+        with mp.Pool(10) as pool:
+            pool.map(wrap,testNameList)

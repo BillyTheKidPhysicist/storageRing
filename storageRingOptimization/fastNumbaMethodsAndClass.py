@@ -788,6 +788,24 @@ class SegmentedBenderSimFieldHelper_Numba:
         x = r * np.cos(theta)  # cartesian coords in unit cell frame
         y = r * np.sin(theta)  # cartesian coords in unit cell frame
         return x,y,z
+    def is_Coord_Inside(self,x,y,z):
+        phi = full_Arctan2(y,x)  # calling a fast numba version that is global
+        if phi < self.ang:  # if particle is inside bending angle region
+            if (np.sqrt(x**2+y ** 2)-self.rb)**2 + z ** 2 < self.ap**2:
+                return True
+            else:
+                return False
+        else:  # if outside bender's angle range
+            if (x-self.rb)**2+z**2 <= self.ap**2 and (0 >= y >= -self.Lcap):  # If inside the cap on
+                # eastward side
+                return True
+            else:
+                qTestx = self.RIn_Ang[0, 0] * x + self.RIn_Ang[0, 1] * y
+                qTesty = self.RIn_Ang[1, 0] * x + self.RIn_Ang[1, 1] * y
+                if (qTestx-self.rb)**2+z**2 <= self.ap**2 and (self.Lcap >= qTesty >= 0):  # if on the westwards side
+                    return True
+                else:  # if not in either cap, then outside the bender
+                    return False
     def magnetic_Potential(self, x,y,z):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
@@ -816,8 +834,8 @@ class SegmentedBenderSimFieldHelper_Numba:
             else:
                 xTest = self.RIn_Ang[0, 0] * x + self.RIn_Ang[0, 1] * y
                 yTest = self.RIn_Ang[1, 0] * x + self.RIn_Ang[1, 1] * y
-                if (self.rb - self.ap < x < self.rb + self.ap) and (
-                        self.Lcap > y > 0):  # if on the westwards side
+                if (self.rb - self.ap < xTest < self.rb + self.ap) and (
+                        self.Lcap > yTest > 0):  # if on the westwards side
                     yTest = -yTest
                     V0 = self._magnetic_Potential_Func_Cap(xTest, yTest, z)
                 else:  # if not in either cap

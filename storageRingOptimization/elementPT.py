@@ -739,9 +739,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         # q: particle's position in element frame
         return np.asarray(self.fastFieldHelper.force(*q))
     def magnetic_Potential(self, q):
-        return np.asarray(self.fastFieldHelper.magnetic_Potential(*q))
-
-    # @profile()
+        return self.fastFieldHelper.magnetic_Potential(*q)
     def transform_Element_Coords_Into_Unit_Cell_Frame(self, q):
         # As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
         # and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
@@ -752,25 +750,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
     def is_Coord_Inside(self, q):
         # q: particle's position in element frame
-        if np.any(np.isnan(q))==True:
-            raise Exception('issue')
-        phi = full_Arctan2(q)  # calling a fast numba version that is global
-        if phi < self.ang:  # if particle is inside bending angle region
-            if (sqrt(q[0]**2+q[1] ** 2)-self.rb)**2 + q[2] ** 2 < self.ap**2:
-                return True
-            else:
-                return False
-        else:  # if outside bender's angle range
-            if (q[0]-self.rb)**2+q[2]**2 <= self.ap**2 and (0 >= q[1] >= -self.Lcap):  # If inside the cap on
-                # eastward side
-                return True
-            else:
-                qTestx = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
-                qTesty = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
-                if (qTestx-self.rb)**2+q[2]**2 <= self.ap**2 and (self.Lcap >= qTesty >= 0):  # if on the westwards side
-                    return True
-                else:  # if not in either cap, then outside the bender
-                    return False
+        return self.fastFieldHelper.is_Coord_Inside(*q)
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # q: element coordinates (x,y,z)
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
