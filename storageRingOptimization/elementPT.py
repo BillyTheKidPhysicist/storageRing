@@ -515,7 +515,7 @@ class CombinerSim(CombinerIdeal):
         # to the hard edge of the input
         fieldData=List(self.shape_Field_Data_3D(data))
         self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
-                                                                        self.space,self.apL,self.apR,self.apz,np.nan)
+                                                                        self.space,self.apL,self.apR,self.apz,np.nan,self.fieldFact)
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
          # 0.07891892567413786
@@ -531,8 +531,8 @@ class CombinerSim(CombinerIdeal):
 
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData, self.La, self.Lb,
-                                                            self.Lm,self.space, self.apL, self.apR,self.apz, self.ang)
-
+                                                            self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
+        self.update_Field_Fact(self.fieldFact)
     def compute_Trajectory_Length(self, qTracedArr):
         # TODO: CHANGE THAT X DOESN'T START AT ZERO
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
@@ -549,6 +549,9 @@ class CombinerSim(CombinerIdeal):
         return np.asarray(self.fastFieldHelper.force(*q))
     def magnetic_Potential(self, q):
         return self.fastFieldHelper.magnetic_Potential(*q)
+    def update_Field_Fact(self,val):
+        self.fastFieldHelper.fieldFact=val
+        self.fieldFact=val
 
 
 class HalbachBenderSimSegmentedWithCap(BenderIdeal):
@@ -586,6 +589,7 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
+        self.segmented=True
         self.apFrac=apFrac
         self.longitudinalSpatialStepSize=1e-3  #target step size for spatial field interpolate.
         self.numPointsTransverse=30
@@ -658,10 +662,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         self.K=self.K_Func(self.rb)
         self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
             fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,self.M_ang,self.RIn_Ang)
-        # print(self.force(np.asarray((-self.rb,-1e-3,-1e-3))))
-        # print(self.magnetic_Potential(np.asarray((-self.rb,-1e-3,-1e-3))))
-        # exit()
-
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
         assert Max>Min and Max-Min>TINY_STEP
@@ -771,7 +771,37 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
                     return True
                 else:  # if not in either cap, then outside the bender
                     return False
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
+        # q: element coordinates (x,y,z)
+        # returns qo: the coordinates in the orbit frame (s,xo,yo)
 
+        qo = q.copy()
+        angle = full_Arctan2(qo)#np.arctan2(qo[1], qo[0])
+        if angle < 0:  # restrict range to between 0 and 2pi
+            angle += 2 * np.pi
+
+        if angle < self.ang:  # if particle is in the bending angle section. Could still be outside though
+            phi = self.ang - angle  # angle swept out by particle in trajectory. This is zero
+            # when the particle first enters
+            qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
+            qo[0] = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
+            qo[1] = qox
+        else:  # if particle is outside of the bending segment angle so it could be in the caps, or elsewhere
+            if (self.rb - self.ap < q[0] < self.rb + self.ap) and (0 > q[1] > -self.Lcap):  # If inside the cap on
+                # the eastward side
+                qo[0] = self.Lcap + self.ang * self.ro + (-q[1])
+                qo[1] = q[0] - self.ro
+            else:
+                qTest = q.copy()
+                qTest[0] = self.RIn_Ang[0, 0] * q[0] + self.RIn_Ang[0, 1] * q[1]
+                qTest[1] = self.RIn_Ang[1, 0] * q[0] + self.RIn_Ang[1, 1] * q[1]
+                # if in the westard side cap
+                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
+                    qo[0] = self.Lcap - qTest[1]
+                    qo[1] = qTest[0] - self.ro
+                else:  # if in neither then it must be outside
+                    qo[:] = np.nan
+        return qo
 
 class HalbachLensSim(LensIdeal):
     def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth):
@@ -889,11 +919,14 @@ class HalbachLensSim(LensIdeal):
         self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap)
 
     def force(self, q):
-        F=self.fieldFact*np.asarray(self.fastFieldHelper.force(*q))
+        F=np.asarray(self.fastFieldHelper.force(*q))
         return F
 
     def magnetic_Potential(self, q):
         return self.fastFieldHelper.magnetic_Potential(*q)
+    def update_Field_Fact(self,val):
+        self.fastFieldHelper.fieldFact=val
+        self.fieldFact=val
 
 class CombinerHexapoleSim(Element):
     def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,fillParams=True):
@@ -974,7 +1007,7 @@ class CombinerHexapoleSim(Element):
 
         fieldData=self.shape_Field_Data_3D(data3D)
         self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
-                                                                self.space,self.ap,np.nan)
+                                                                self.space,self.ap,np.nan,self.fieldFact)
         # print(self.fastFieldHelper.force_NoSearchInside(1e-3,1e-3,1e-3))
         # exit()
         self.outputOffset=self.find_Ideal_Offset()
@@ -1002,8 +1035,7 @@ class CombinerHexapoleSim(Element):
             "field region must extend past particle region"
 
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
-                                                                                             self.Lm,
-                                                                                             self.space, self.ap,self.ang)
+                                                                    self.Lm,self.space, self.ap,self.ang,self.fieldFact)
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
         assert F_edge / F_center < .01

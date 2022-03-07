@@ -1,3 +1,4 @@
+import multiprocess as mp
 import numpy as np
 from SwarmTracerClass import SwarmTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -35,12 +36,12 @@ def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):
         testData.append(np.append(np.append(np.append(qf,pf),revolutions),EFinal))
     np.savetxt(os.path.join(testDataFolderPath,TESTDataFilePath),np.asarray(testData))
     
-def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated,parallel):
+def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated):
     np.set_printoptions(precision=100)
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     swarmTracer=SwarmTracer(PTL)
-    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=fastMode,parallel=parallel
-                                                        ,accelerated=accelerated)
+    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=fastMode,accelerated=accelerated,
+                                                        parallel=False)
     assert tracedSwarm.num_Particles()==testSwarm.num_Particles()
     testData=np.loadtxt(TESTDataFilePath)
     eps=1e-9 # a small number to represent changes in values that come from different kinds of operations. Because of
@@ -111,8 +112,8 @@ def generate_Lattice(configuration):
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)
         PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.end_Lattice(enforceClosedLattice=True,constrain=True)
-        PTL.elList[0].fieldFact=.3
-        PTL.elList[2].fieldFact=.3
+        PTL.elList[0].update_Field_Fact(.3)
+        PTL.elList[2].update_Field_Fact(.3)
     else:
         raise Exception('no proper configuration name provided')
     return PTL
@@ -124,14 +125,13 @@ def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
         _save_TEST_Data(PTL,testSwarm,TESTName)
     elif fullTest==True:
         for fastMode in [True,False]:
-            for parallel in [True,False]:
                 for accelerated in [True,False]:
-                    TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated, parallel)
+                    TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated)
     elif fullTest==False:
-        fastMode1,accelerated1,parallel1=True,True,True
-        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1, parallel1)
-        fastMode2,accelerated2,parallel2=False,False,False
-        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2, parallel2)
+        fastMode1,accelerated1=True,True
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1)
+        fastMode2,accelerated2=False,False
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2)
 def _save_New_Data():
     tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
@@ -144,7 +144,3 @@ def _full_Test():
         print('Test number ' + testNum)
         TEST_Lattice_Configuration(testNum, fullTest=True)
         print('Success')
-def test():
-    tests = ['1', '2', '3', '4', '5', '6']
-    for testNum in tests:
-        TEST_Lattice_Configuration(testNum, fullTest=False)

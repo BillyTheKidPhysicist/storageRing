@@ -146,7 +146,6 @@ from numba.typed import List
 
 #xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn
 spec = [
-    ('V_ArrFringe',numba.float64[::1]),
     ('xArrEnd',numba.float64[::1]),
     ('yArrEnd',numba.float64[::1]),
     ('zArrEnd',numba.float64[::1]),
@@ -156,15 +155,16 @@ spec = [
     ('VArrEnd',numba.float64[::1]),
     ('xArrIn',numba.float64[::1]),
     ('yArrIn',numba.float64[::1]),
-    ('FxArrEnd',numba.float64[::1]),
-    ('FyArrEnd',numba.float64[::1]),
-    ('VArrEnd',numba.float64[::1]),
+    ('FxArrIn',numba.float64[::1]),
+    ('FyArrIn',numba.float64[::1]),
+    ('VArrIn',numba.float64[::1]),
     ('L', numba.float64),
     ('Lcap', numba.float64),
     ('ap', numba.float64),
+    ('fieldFact', numba.float64),
 ]
 
-# @jitclass(spec)
+@jitclass(spec)
 class LensHalbachFieldHelper_Numba:
     def __init__(self,fieldData,L,Lcap,ap):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
@@ -172,6 +172,7 @@ class LensHalbachFieldHelper_Numba:
         self.L=L
         self.Lcap=Lcap
         self.ap=ap
+        self.fieldFact=1.0
     def _magnetic_Potential_Func_Fringe(self,x,y,z):
         V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
         return V
@@ -211,8 +212,9 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
         else:
             return np.nan, np.nan, np.nan
-        Fy = Fy * FySymmetryFact
-        Fz = Fz * FzSymmetryFact
+        Fx=Fx*self.fieldFact
+        Fy = Fy * FySymmetryFact*self.fieldFact
+        Fz = Fz * FzSymmetryFact*self.fieldFact
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
         y = abs(y)  # confine to upper right quadrant
@@ -227,6 +229,7 @@ class LensHalbachFieldHelper_Numba:
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         else:
             V0=0
+        V0=V0*self.fieldFact
         return V0
 
 
@@ -326,6 +329,7 @@ spec = [
     ('apR', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
+    ('fieldFact', numba.float64),
 ]
 @jitclass(spec)
 class CombinerIdealFieldHelper_Numba:
@@ -338,6 +342,7 @@ class CombinerIdealFieldHelper_Numba:
         self.apR=apR
         self.apz=apz
         self.ang=ang
+        self.fieldFact=1.0
     def force(self,x,y,z):
         return self._force(x,y,z,True)
     def force_NoSearchInside(self,x,y,z):
@@ -352,15 +357,15 @@ class CombinerIdealFieldHelper_Numba:
         Fx,Fy,Fz=0.0,0.0,0.0
         if 0<x < self.Lb:
             B0 = np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
-            Fy = SIMULATION_MAGNETON * self.c2 * (self.c1 + self.c2 * y) / B0
-            Fz = SIMULATION_MAGNETON * self.c2 ** 2 * z / B0
+            Fy = self.fieldFact*SIMULATION_MAGNETON * self.c2 * (self.c1 + self.c2 * y) / B0
+            Fz = self.fieldFact*SIMULATION_MAGNETON * self.c2 ** 2 * z / B0
         else:
             pass
         return Fx,Fy,Fz
     def magnetic_Potential(self, x,y,z):
         V0=0
         if 0<x < self.Lb:
-            V0 = SIMULATION_MAGNETON*np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
+            V0 = self.fieldFact*SIMULATION_MAGNETON*np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
         return V0
     def is_Coord_Inside(self, x,y,z):
         # q: coordinate to test in element's frame
@@ -400,10 +405,11 @@ spec = [
     ('apR', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
+    ('fieldFact', numba.float64),
 ]
 @jitclass(spec)
 class CombinerSimFieldHelper_Numba:
-    def __init__(self,fieldData,La,Lb,Lm,space,apL,apR,apz,ang):
+    def __init__(self,fieldData,La,Lb,Lm,space,apL,apR,apz,ang,fieldFact):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -413,6 +419,7 @@ class CombinerSimFieldHelper_Numba:
         self.apR=apR
         self.apz=apz
         self.ang=ang
+        self.fieldFact=fieldFact
     def _force_Func(self,x,y,z):
         return vec_interp3D(x,y,z,self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr)
     def _magnetic_Potential_Func(self,x,y,z):
@@ -461,8 +468,9 @@ class CombinerSimFieldHelper_Numba:
                 z = -z
                 zFact = -1  # z force is opposite in lower half
         Fx, Fy, Fz = self._force_Func(x, y, z)
-        Fx = xFact * Fx
-        Fz = zFact * Fz
+        Fx = self.fieldFact*xFact * Fx
+        Fy = self.fieldFact*Fy
+        Fz = self.fieldFact*zFact * Fz
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
@@ -474,7 +482,7 @@ class CombinerSimFieldHelper_Numba:
                         x - (self.Lm / 2 + self.space))  # use the reflection of the particle
             if z < 0:  # if in the lower plane, need to use symmetry
                 z = -z
-        return self._magnetic_Potential_Func(x,y,z)
+        return self.fieldFact*self._magnetic_Potential_Func(x,y,z)
 
     def is_Coord_Inside(self, x,y,z):
         # q: coordinate to test in element's frame
@@ -514,9 +522,9 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
 ]
-# @jitclass(spec)
+@jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
-    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang):
+    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -524,7 +532,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         self.space=space
         self.ap=ap
         self.ang=ang
-        self.fieldFact=1.0
+        self.fieldFact=fieldFact
     def _force_Func(self,x,y,z):
         Fx0, Fy0, Fz0= vec_interp3D(-z,y,x,self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr)
         Fx = Fz0
@@ -583,10 +591,10 @@ class CombinerHexapoleSimFieldHelper_Numba:
         Fx, Fy, Fz=self.fieldFact*Fx, self.fieldFact*Fy, self.fieldFact*Fz
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
-        y = abs(y)  # confine to upper right quadrant
-        z = abs(z)
         if self.is_Coord_Inside(x,y,z) == False:
             raise Exception(ValueError)
+        y = abs(y)  # confine to upper right quadrant
+        z = abs(z)
         symmetryLength = self.Lm + 2 * self.space
         if 0 <= x <= symmetryLength / 2:
             x = symmetryLength / 2 - x
@@ -605,7 +613,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner.
             if np.sqrt(y ** 2 + z ** 2) < self.ap:
-                pass
+                return True
             else:
                 return False
         elif x < 0:
@@ -766,16 +774,16 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fz = Fz * FzSymmetryFact
         return Fx, Fy, Fz
 
-    def transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(self,x, y, z, ang, ucAng):
+    def transform_Element_Coords_Into_Unit_Cell_Frame(self,x, y, z):
         angle = np.arctan2(y, x)
         if angle < 0:  # restrict range to between 0 and 2pi
             angle += 2 * np.pi
-        phi = ang - angle
-        revs = int(phi // ucAng)  # number of revolutions through unit cell
+        phi = self.ang - angle
+        revs = int(phi // self.ucAng)  # number of revolutions through unit cell
         if revs % 2 == 0:  # if even
-            theta = phi - ucAng * revs
+            theta = phi - self.ucAng * revs
         else:  # if odd
-            theta = ucAng - (phi - ucAng * revs)
+            theta = self.ucAng - (phi - self.ucAng * revs)
         r = np.sqrt(x ** 2 + y ** 2)
         x = r * np.cos(theta)  # cartesian coords in unit cell frame
         y = r * np.sin(theta)  # cartesian coords in unit cell frame

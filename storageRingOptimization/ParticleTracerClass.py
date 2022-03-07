@@ -183,14 +183,14 @@ class ParticleTracer:
                 self.T+=self.h
                 self.particle.T=self.T
     def multi_Step_Verlet(self):
-        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fieldFact,
+        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,
                                         self.currentEl.fastFieldHelper)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
         if particleOutside is True:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEln, pEln, T, T0, h, forceFact, helper):
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper):
         # copy the input arrays to prevent modifying them outside the function
         force=helper.force
         x, y, z = qEln
@@ -199,7 +199,6 @@ class ParticleTracer:
         if math.isnan(Fx) == True or T >= T0:
             particleOutside = True
             return qEln, qEln, pEln, T, particleOutside
-        Fx, Fy, Fz = Fx * forceFact, Fy * forceFact, Fz * forceFact
         particleOutside = False
         while (True):
             if T >= T0:
@@ -211,7 +210,6 @@ class ParticleTracer:
             z =z+pz * h + .5 * Fz * h ** 2
 
             Fx_n, Fy_n, Fz_n = force(x,y,z)
-            Fx_n, Fy_n, Fz_n = Fx_n * forceFact, Fy_n * forceFact, Fz_n * forceFact
 
             if math.isnan(Fx_n) == True:
                 qEl = np.asarray([x, y, z])
