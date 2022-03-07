@@ -247,11 +247,11 @@ class IdealLensFieldHelper_Numba:
     def magnetic_Potential(self, x,y,z):
         # potential energy at provided coordinates
         # q coords in element frame
-        r = np.sqrt(y ** 2 + +z** 2)
-        if r < self.ap:
+        r = np.sqrt(y ** 2 + z ** 2)
+        if 0 <= x <= self.L and r < self.ap:
             return .5*self.K * r ** 2
         else:
-            return 0.0
+            return np.nan
     def force(self, x,y,z):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap**2:
@@ -300,19 +300,21 @@ class BenderFieldHelper_Numba:
     def magnetic_Potential(self, x,y,z):
         # potential energy at provided coordinates
         # q coords in element frame
-        r = np.sqrt(x ** 2 + +y ** 2)
-        if self.rb + self.rp > r > self.rb - self.rp and np.abs(z) < self.ap:
-            rNew = np.sqrt((r - self.rb) ** 2 + z ** 2)
-            return .5*self.K * SIMULATION_MAGNETON * rNew ** 2
+        phi = full_Arctan2(y,x)
+        rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
+        rToroidal=np.sqrt((rPolar-self.rb)**2+z**2)
+        if phi < self.ang and rToroidal<self.ap:
+            return .5*self.K * SIMULATION_MAGNETON * rToroidal ** 2
         else:
-            return 0.0
+            return np.nan
     def force(self, x,y,z):
         # force at point q in element frame
         # q: particle's position in element frame
         phi = full_Arctan2(y,x)
-        if phi < self.ang:
-            r = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
-            F0 = -self.K * (r - self.rb)  # force in x y plane
+        rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
+        rToroidal=np.sqrt((rPolar-self.rb)**2+z**2)
+        if phi < self.ang and rToroidal<self.ap:
+            F0 = -self.K * (rPolar - self.rb)  # force in x y plane
             Fx = np.cos(phi) * F0
             Fy = np.sin(phi) * F0
             Fz = -self.K * z
@@ -331,7 +333,7 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
 ]
-@jitclass(spec)
+# @jitclass(spec)
 class CombinerIdealFieldHelper_Numba:
     def __init__(self,c1,c2,La,Lb,apL,apR,apz,ang):
         self.c1=c1
@@ -363,18 +365,23 @@ class CombinerIdealFieldHelper_Numba:
             pass
         return Fx,Fy,Fz
     def magnetic_Potential(self, x,y,z):
-        V0=0
+        if self.is_Coord_Inside(x, y, z) == False:
+            return np.nan
         if 0<x < self.Lb:
             V0 = self.fieldFact*SIMULATION_MAGNETON*np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
+        else:
+            V0=0.0
         return V0
     def is_Coord_Inside(self, x,y,z):
         # q: coordinate to test in element's frame
-        if not -self.apz <= z <= self.apz:  # if outside the z apeture (vertical)
+        if not -self.apz < z < self.apz:  # if outside the z apeture (vertical)
             return False
         elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
-            if -self.apL < y < self.apR:  # if inside the y (width) apeture
+            if -self.apL < y < self.apR and -self.apz < z < self.apz:  # if inside the y (width) apeture
                 return True
+            else:
+                return False
         elif x < 0:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines

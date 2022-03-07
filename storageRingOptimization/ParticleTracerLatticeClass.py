@@ -203,7 +203,7 @@ class ParticleTracerLattice:
         #Bp: field strength at pole face of lens, T
         #rp: bore radius of element, m
         #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius, unitless
-
+        assert rb>rp*10
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp

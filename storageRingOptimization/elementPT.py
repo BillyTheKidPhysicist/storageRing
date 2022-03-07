@@ -89,10 +89,6 @@ class Element:
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
-    def compile_fast_Force_Function(self):
-        #function that generates the fast_Force_Function based on existing parameters. It compiles it as well
-        #by passing dummy arguments
-        pass
     def magnetic_Potential(self, q):
         # Function that returns the magnetic potential in the element's frame
         return 0.0
@@ -260,6 +256,8 @@ class Drift(LensIdeal):
         F= np.asarray(self.fastFieldHelper.force(*q))
         return F
     def magnetic_Potential(self, q):
+        if self.is_Coord_Inside(q)==False:
+            return np.nan
         return self.fastFieldHelper.magnetic_Potential(*q)
 
 
