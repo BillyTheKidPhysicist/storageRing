@@ -552,7 +552,7 @@ class CombinerSim(CombinerIdeal):
         self.fieldFact=val
 
 
-class HalbachBenderSimSegmentedWithCap(BenderIdeal):
+class HalbachBenderSimSegmented(BenderIdeal):
     #todo: a feature to prevent the interpolation introducing ridiculous fields into the bore by ending inside the
     #magnet
     #this element is a model of a bending magnet constructed of segments. There are three models from which data is
@@ -561,14 +561,14 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
     #1:  A model of the repeating segments of magnets that compose the bulk of the bender. A magnet, centered at the
     #bending radius, sandwiched by other magnets (at the appropriate angle) to generate the symmetry. The central magnet
     #is position with z=0, and field values are extracted from z=0-TINY_STEP to some value that extends slightly past
-    #the tilted edge. See docs/images/HalbachBenderSimSegmentedWithCapImage1.png
+    #the tilted edge. See docs/images/HalbachBenderSimSegmentedImage1.png
     #2: A model of the magnet between the last magnet, and the inner repeating section. This is required becasuse I found
     #that the assumption that I could jump straight from the outwards magnet to the unit cell portion was incorrect,
     #the force was very discontinuous. To model this I the last few segments of a bender, then extrac the field from
     #z=0 up to a little past halfway the second magnet. Make sure to have the x bounds extend a bit to capture
-    # #everything. See docs/images/HalbachBenderSimSegmentedWithCapImage2.png
+    # #everything. See docs/images/HalbachBenderSimSegmentedImage2.png
     #3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
-    #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedWithCapImage3.png
+    #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedImage3.png
     def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
         # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
         #                  fillParams=False)
@@ -646,9 +646,6 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         #500um works very well, but 1mm may be acceptable
         numModelLenes=3 #3 turns out to be a good number
         assert numModelLenes%2==1
-        fieldDataSeg=self.generate_Segment_Field_Data()
-        fieldDataInternal=self.generate_Internal_Fringe_Field_Data()
-        fieldDataCap=self.generate_Cap_Field_Data()
 
 
         self.ang = 2 * self.numMagnets * self.ucAng
@@ -658,9 +655,18 @@ class HalbachBenderSimSegmentedWithCap(BenderIdeal):
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.K=self.K_Func(self.rb)
-        self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
-            fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,self.M_ang,self.RIn_Ang)
+        self.build_Fast_Field_Helper()
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
+    def build_Fast_Field_Helper(self):
+        fieldDataSeg = self.generate_Segment_Field_Data()
+        fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
+        fieldDataCap = self.generate_Cap_Field_Data()
+        self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
+            fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,
+                                                                                          self.M_ang,self.RIn_Ang)
+        self.fastFieldHelper.force(self.rb+1e-3,1e-3,1e-3) #force numba to compile
+        self.fastFieldHelper.magnetic_Potential(self.rb+1e-3,1e-3,1e-3) #force numba to compile
+
     def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
         assert Max>Min and Max-Min>TINY_STEP
         assert (not (stepSize is not None and numSteps is not None)) and (stepSize is not None or numSteps is not None)
@@ -895,7 +901,8 @@ class HalbachLensSim(LensIdeal):
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
         fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
         self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap)
-
+        self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
+        self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
     def force(self, q):
         F=np.asarray(self.fastFieldHelper.force(*q))
         return F
@@ -1014,6 +1021,8 @@ class CombinerHexapoleSim(Element):
 
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
                                                                     self.Lm,self.space, self.ap,self.ang,self.fieldFact)
+        self.fastFieldHelper.force(1e-3,1e-3,1e-3)#force compile
+        self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3)#force compile
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
         assert F_edge / F_center < .01

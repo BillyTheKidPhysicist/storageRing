@@ -77,7 +77,7 @@ def generate_Lattice(configuration):
     if configuration=='1':
         PTL=ParticleTracerLattice(200.0,latticeType='storageRing')
         PTL.add_Drift(.25)
-        PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254,.01,150,1.0,0.0,rOffsetFact=1.015)
+        PTL.add_Halbach_Bender_Sim_Segmented(.0254,.01,150,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Lens_Ideal(1.0,1.0,.01)
         PTL.add_Halbach_Lens_Sim(.01,1.0)
         PTL.add_Drift(.1)
@@ -108,9 +108,9 @@ def generate_Lattice(configuration):
         else:
             PTL.add_Combiner_Sim_Lens(.1, .02)
         PTL.add_Halbach_Lens_Sim(.01,.5)
-        PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
+        PTL.add_Halbach_Bender_Sim_Segmented(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)
-        PTL.add_Halbach_Bender_Sim_Segmented_With_End_Cap(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
+        PTL.add_Halbach_Bender_Sim_Segmented(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.end_Lattice(enforceClosedLattice=True,constrain=True)
         PTL.elList[0].update_Field_Fact(.3)
         PTL.elList[2].update_Field_Fact(.3)

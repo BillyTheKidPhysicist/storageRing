@@ -1,0 +1,238 @@
+import time
+import numpy as np
+import math
+from elementPT import BenderIdeal,Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from ParticleTracerClass import ParticleTracer
+from ParticleClass import Particle
+from hypothesis import given,settings,strategies as st
+import matplotlib.pyplot as plt
+from constants import SIMULATION_MAGNETON
+def absDif(x1,x2):
+    return abs(abs(x1)-abs(x2))
+
+
+
+class genericElementTestHelper:
+    #elements have generic functions and features common to all kinds. This tests those
+    def __init__(self,el,coordsTestRules,coordFrame):
+        assert len(coordsTestRules)==3
+        assert coordFrame in ('cylinderical','cartesian')
+        if coordFrame=='cylinderical': assert isinstance(el,(BenderIdeal,))
+        else: assert isinstance(el,(Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim))
+        self.el=el
+        self.coordsTestRules=coordsTestRules
+        self.coordFrame=coordFrame
+    def convert_Coord(self,x1,x2,x3):
+        if self.coordFrame=='cartesian':
+            x,y,z=x1,x2,x3
+        else:
+            r,theta,z=x1,x2,x3
+            x,y=r*np.cos(theta),r*np.sin(theta)
+        return np.asarray([x, y, z])
+    def run_Tests(self):
+        self.test1()
+        self.test2()
+    def test1(self):
+        #test that aperture works as expected by sampling many points and getting the correct results
+        isInsideList=[]
+        xyList=[]
+        @given(*self.coordsTestRules)
+        @settings(max_examples=1000)
+        def coord_Check_Consistency(x1,x2,x3):
+            coord=self.convert_Coord(x1,x2,x3)
+            xyList.append(coord[0:2])
+            F=self.el.force(coord)
+            V=self.el.magnetic_Potential(coord)
+            isInside=self.el.is_Coord_Inside(coord)
+            isInsideList.append(isInside)
+            if isInside==False: assert math.isnan(F[0])==True and math.isnan(V)==True
+            else: assert math.isnan(F[0])==False and math.isnan(V)==False
+        coord_Check_Consistency()
+        for inside,xy in zip(isInsideList,xyList):
+            c='green' if inside==True else 'red'
+            plt.scatter(*xy,c=c)
+        plt.show()
+        numTrue=sum(isInsideList)
+        print(numTrue)
+        assert numTrue>100 #at least 100 true seems reasonable
+    def test2(self):
+        #check that coordinate conversions work
+        tol=1e-12
+        @given(*self.coordsTestRules)
+        @settings(max_examples=500)
+        def convert_Invert_Consistency(x1,x2,x3):
+            coordEl0=self.convert_Coord(x1,x2,x3)
+            coordLab=self.el.transform_Element_Coords_Into_Lab_Frame(coordEl0)
+            coordsEl=self.el.transform_Lab_Coords_Into_Element_Frame(coordLab)
+            assert np.all(np.abs(coordEl0-coordsEl)<tol)
+            vecEl0=coordEl0
+            vecLab=self.el.transform_Lab_Frame_Vector_Into_Element_Frame(vecEl0)
+            vecEl=self.el.transform_Element_Frame_Vector_Into_Lab_Frame(vecLab)
+            assert np.all(np.abs(vecEl0 - vecEl) < tol)
+        convert_Invert_Consistency()
+class driftTestHelper:
+    def __init__(self):
+        self.L,self.ap=.15432,.0392
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Drift(self.L,self.ap)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.particleTracer=ParticleTracer(self.PTL)
+        self.el=self.PTL.elList[0]
+    def run_Tests(self):
+        self.test1()
+        self.test2()
+    def test1(self):
+        #test generic conditions of the element
+        floatyz = st.floats(min_value=-1.5 * self.ap, max_value=1.5 * self.ap)
+        floatx = st.floats(min_value=-self.L*.25, max_value=self.L * 1.25)
+        coordTestRules=(floatx,floatyz,floatyz)
+        genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+    def test2(self):
+        # test that particle travels through drift region and ends where expected
+        tol,h=1e-12,1e-7
+        deltaX=-self.L #negative because particles start by moving along -x
+        slopez=.5*self.ap/deltaX
+        zi=-self.ap/4.0
+        zf=deltaX*slopez+zi
+        slopey = .25 * self.ap /deltaX
+        yi = self.ap / 4.0
+        yf = deltaX* slopey + yi
+        vx=-200.0
+        particle=Particle(qi=np.asarray([0.0,yi,zi]),pi=np.asarray([vx,slopey*vx,slopez*vx]))
+        particleTraced=self.particleTracer.trace(particle,1e-7,1.0,fastMode=True)
+        qfTrace,pfTrace=particleTraced.qf,particle.pf
+        slopeyTrace,slopezTrace=pfTrace[1]/pfTrace[0],pfTrace[2]/pfTrace[0]
+        yfTrace,zfTrace=qfTrace[1],qfTrace[2]
+        assert absDif(slopey,slopeyTrace)<tol and absDif(slopez,slopezTrace)<tol
+        assert abs(yf-yfTrace)<tol and abs(zf-zfTrace)<tol
+
+class lensIdealTestHelper:
+    def __init__(self):
+        self.L, self.rp,self.Bp = .51824792317429, .024382758923,1.832484234
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Lens_Ideal(self.L,self.Bp,self.rp)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[0],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        # self.test1()
+        self.test2()
+    def test1(self):
+        #test generic conditions of the element
+        floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.25 * self.rp)
+        floatx = st.floats(min_value=-self.L*.25, max_value=self.L * 1.25)
+        coordTestRules=(floatx,floatyz,floatyz)
+        genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+    def test2(self):
+        tol=1e-2 #test to 1% accuracy
+        #does the particle behave as theory predicts? It should be very close because it's ideal
+        particle=Particle(qi=np.asarray([0.0,self.rp/2.0,0.]))
+        particle=self.particleTracer.trace(particle,1e-6,1.0)
+        yi,yf,pyf=particle.qi[1],particle.qf[1],particle.pf[1]
+        yRMS,pyRMS=np.std(particle.qArr[:,1]),np.std(particle.pArr[:,1])
+        K = 2 * SIMULATION_MAGNETON * self.Bp / (particle.pi[0] ** 2 * self.rp ** 2)
+        phi = np.sqrt(K) * self.L
+        yfTheory,pyfTheory=yi*np.cos(phi),-abs(particle.pi[0])*yi*np.sin(phi)*np.sqrt(K)
+        assert abs(yf-yfTheory)<tol*yi and abs(pyf-pyfTheory)<tol*pyRMS
+
+
+class benderIdealTestHelper:
+    def __init__(self):
+        self.ang=np.pi/2.0
+        self.Bp=.8934752374
+        self.rb=.94830284532
+        self.rp=.01853423
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Drift(1e-3)
+        self.PTL.add_Bender_Ideal(self.ang,self.Bp,self.rb,self.rp)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        self.test1()
+    def test1(self):
+        #test generic conditions of the element
+        floatr = st.floats(min_value=self.rb-self.rp*2, max_value=self.rb+self.rp*2)
+        floatphi=st.floats(min_value=-self.ang*.1, max_value=1.1*self.ang)
+        floatz=st.floats(min_value=-self.rp/2,max_value=self.rp/2)
+        coordTestRules=(floatr,floatphi,floatz)
+        genericElementTestHelper(self.el,coordTestRules,'cylinderical').run_Tests()
+class combinerIdealTestHelper:
+    def __init__(self):
+        self.Lm=.218734921
+        self.ap=.014832794
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Drift(1e-3)
+        self.PTL.add_Combiner_Ideal(Lm=self.Lm,ap=self.ap)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        self.test1()
+    def test1(self):
+        #test generic conditions of the element
+        floatx = st.floats(min_value=-self.Lm*0.1, max_value=1.25*self.Lm)
+        floaty = st.floats(min_value=-2*self.ap, max_value=2*self.ap)
+        floatz = st.floats(min_value=-2*self.ap/2, max_value=2*self.ap/2) #z ap is half of y
+        coordTestRules=(floatx,floaty,floatz)
+        genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+class hexapoleSegmentedBenderSimTestHelper:
+    def __init__(self):
+        self.Lm=.0254
+        self.rp=.014832
+        self.numMagnets=150
+        self.rb=1.02324
+        self.ang=self.numMagnets*self.Lm/self.rb
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Drift(1e-3)
+        self.PTL.add_Halbach_Bender_Sim_Segmented(self.Lm,self.rp,self.numMagnets,self.rb)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        self.test1()
+    def test1(self):
+        #test generic conditions of the element
+        floatr = st.floats(min_value=self.rb-self.rp*2, max_value=self.rb+self.rp*2)
+        floatphi=st.floats(min_value=-self.ang*.1, max_value=1.1*self.ang)
+        floatz=st.floats(min_value=-self.rp/2,max_value=self.rp/2)
+        coordTestRules=(floatr,floatphi,floatz)
+        genericElementTestHelper(self.el,coordTestRules,'cylinderical').run_Tests()
+class hexapoleLensSimHelper:
+    def __init__(self):
+        self.L=.1321432
+        self.rp=.01874832
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Halbach_Lens_Sim(self.rp,self.L)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[0],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        self.test1()
+    def test1(self):
+        #test generic conditions of the element
+        floatyz = st.floats(min_value=-2 * self.rp, max_value=2 * self.rp)
+        floatx = st.floats(min_value=-self.L / 10.0, max_value=self.L * 1.25)
+        coordTestRules=(floatx,floatyz,floatyz)
+        genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+class combinerHexapoleSimTestHelper:
+    def __init__(self):
+        self.Lm=.1453423
+        self.rp=.0123749
+        self.PTL=ParticleTracerLattice(200.0)
+        self.PTL.add_Drift(1e-3)
+        self.PTL.add_Combiner_Sim_Lens(self.Lm,self.rp)
+        self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+    def run_Tests(self):
+        self.test1()
+    def test1(self):
+        #test generic conditions of the element
+        floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.5 * self.rp)
+        floatx = st.floats(min_value=-self.el.L/10.0, max_value=self.el.L*1.1)
+        coordTestRules=(floatx,floatyz,floatyz)
+        genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+def run_Tests():
+    driftTestHelper().run_Tests()
+    lensIdealTestHelper().run_Tests()
+    benderIdealTestHelper().run_Tests()
+    combinerIdealTestHelper().run_Tests()
+    hexapoleSegmentedBenderSimTestHelper().run_Tests()
+    hexapoleLensSimHelper().run_Tests()
+    combinerHexapoleSimTestHelper().run_Tests()

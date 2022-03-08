@@ -217,18 +217,20 @@ class LensHalbachFieldHelper_Numba:
         Fz = Fz * FzSymmetryFact*self.fieldFact
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
+        if np.sqrt(y ** 2 + z ** 2) > self.ap:
+            return np.nan
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if x <= self.Lcap:
+        if 0<=x <= self.Lcap:
             x = self.Lcap - x
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
-        elif self.Lcap < x <= self.L - self.Lcap:
+        elif self.Lcap < x and x <= self.L - self.Lcap:
             V0 = self._magnetic_Potential_Func_Inner(x,y,z)
-        elif x <= self.L: #this one is tricky with the scaling
+        elif 0 <= x and x <= self.L:
             x=self.Lcap-(self.L-x)
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         else:
-            V0=0
+            V0=np.nan
         V0=V0*self.fieldFact
         return V0
 
@@ -529,7 +531,7 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
 ]
-@jitclass(spec)
+# @jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
     def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
@@ -599,7 +601,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
         if self.is_Coord_Inside(x,y,z) == False:
-            raise Exception(ValueError)
+            return np.nan
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryLength = self.Lm + 2 * self.space
@@ -816,9 +818,10 @@ class SegmentedBenderSimFieldHelper_Numba:
     def magnetic_Potential(self, x,y,z):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
+        if self.is_Coord_Inside(x,y,z)==False:
+            return np.nan
         z=abs(z)
         phi = full_Arctan2(y,x)  # calling a fast numba version that is global
-        V0 = 0.0
         if phi < self.ang:  # if particle is inside bending angle region
             revs = int((self.ang - phi) // self.ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:

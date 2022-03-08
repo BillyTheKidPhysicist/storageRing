@@ -50,11 +50,11 @@ def generate_Ring_Lattice(rpBend,rpLens,rpLensFirst,Lm,LLens,parallel=False)->Pa
     PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,LLens)
     PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
+    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     # PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
     # PTL_Ring.add_Drift(probeSpace)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
-    PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
+    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  # 17.8 % of time here
     return PTL_Ring
 

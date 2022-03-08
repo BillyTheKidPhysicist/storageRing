@@ -80,7 +80,7 @@ class ParticleTracerLattice:
         #todo: this should be self I think
         PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector',parallel=parallel)
         PTL_Ring.add_Drift(.05)
-        PTL_Ring.add_Halbach_Bender_Sim_Segmented_With_End_Cap(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
+        PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
         def errorFunc(outputOffsetFact):
             h=5e-6
@@ -186,12 +186,12 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Bender_Sim_Segmented_With_End_Cap(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=None):
+    def add_Halbach_Bender_Sim_Segmented(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=None):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmentedWithCap(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
+        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
