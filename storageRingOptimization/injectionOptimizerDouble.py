@@ -3,7 +3,7 @@ os.environ['OPENBLAS_NUM_THREADS']='1'
 import time
 from asyncDE import solve_Async
 import numpy as np
-from latticeKnobOptimizer import LatticeOptimizer
+from latticeOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt

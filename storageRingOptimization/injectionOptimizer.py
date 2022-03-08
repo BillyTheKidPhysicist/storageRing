@@ -5,7 +5,7 @@ import random
 import time
 from asyncDE import solve_Async
 import numpy as np
-from latticeKnobOptimizer import LatticeOptimizer
+from latticeOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 import matplotlib.pyplot as plt
 

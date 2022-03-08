@@ -2,7 +2,7 @@
 This file holds constants that I use throughout the simulation. 
 
 I use a different form of units where the mass of a lithium 7 atom is taken as 1 kg. This changes the value of the bohr
-magneton. Every other constant is the same
+magneton. Every other constant I use is the same
 """
 MASS_LITHIUM_7=1.165034676538e-26 #mass of lithium 7, kg
 MASS_HELIUM=6.64216e-27 #mass of lithium 7, kg

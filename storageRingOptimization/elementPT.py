@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from math import sqrt
 import warnings
-import fastElementNUMBAFunctions
 import fastNumbaMethodsAndClass
 import pandas as pd
 import numba
@@ -15,9 +14,9 @@ from HalbachLensClass import SegmentedBenderHalbach\
 from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION_MAGNETON
 from numba.typed import List
 
-#Todo: there has to be a more logical way to do all this numba stuff
 
-#todo: this is just awful. I need to refactor this more in line with what I know about clean code now
+
+#todo: this is just awful. I need to clean this up more in line with what I know about clean code now
 
 # from profilehooks import profile
 
@@ -36,6 +35,15 @@ def is_Even(x):
     return True if x%2==0 else False
 
 class Element:
+    """
+    Base class for other elements. Contains universal attributes and methods.
+
+    An element is the fundamental component of a neutral atom storage ring/injector. An arrangment of elements is called
+    a lattice, as is done in accelerator physics. Elements are intended to be combined together such that particles can
+    smoothly move from one to another, and many class variables serves this purpose. An element also contains methods
+    for force vectors and magnetic potential at a point in space. It will also contain methods to generate fields values
+    and construct itself, which is not always trivial.
+    """
     def __init__(self, PTL):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
@@ -89,58 +97,115 @@ class Element:
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
-    def magnetic_Potential(self, q):
-        # Function that returns the magnetic potential in the element's frame
-        return 0.0
+    def magnetic_Potential(self, qEl:np.ndarray)->float:
+        """
+        Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is 
+        1kg, at cartesian 3D coordinate qEl in the local element frame
+         
+        :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
+        :return: magnetic potential energy of a lithium atom in simulation units, float
+        """
+        raise NotImplementedError
+    def force(self, qEl:np.ndarray)->np.ndarray:
+        """
+        Return 3D cartesian force of a lithium at cartesian 3D coordinate qEl in the local element frame. Force vector
+        has simulation units where lithium-7 mass is 1kg. 
+        
+         
+        :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
+        :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
+        """
+        raise NotImplementedError
 
-    def transform_Lab_Coords_Into_Global_Orbit_Frame(self, q, cumulativeLength):
-        # Change the lab coordinates into the particle's orbit frame in the lab. This frame cumulatively grows with
-        #revolutions.
-        q = self.transform_Lab_Coords_Into_Element_Frame(q)  # first change lab coords into element frame
-        qo = self.transform_Element_Coords_Into_Local_Orbit_Frame(q)  # then element frame into orbit frame
-        qo[0] = qo[0] + cumulativeLength  # orbit frame is in the element's frame, so the preceding length needs to be
-        # accounted for
-        return qo
+    def transform_Lab_Coords_Into_Global_Orbit_Frame(self, qLab:np.ndarray, cumulativeLength:float)->np.ndarray:
+        """
+        Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
+        observer/lab cartesian coordinates. 
+        
+        :param qLab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
+        :param cumulativeLength: total length in orbit frame traveled so far. For a series of linear elements this
+        would simply be the sum of their length, float
+        :return: New 3D global orbit frame position, numpy.ndarray([x,y,z])
+        """
+        qEl = self.transform_Lab_Coords_Into_Element_Frame(qLab)
+        qOrbit = self.transform_Element_Coords_Into_Local_Orbit_Frame(qEl)
+        qOrbit[0] = qOrbit[0] + cumulativeLength  # longitudinal component grows
+        return qOrbit
 
-    def transform_Lab_Coords_Into_Element_Frame(self, q):
-        # this is overwridden by all other elements
-        pass
-    def transform_Orbit_Frame_Into_Lab_Frame(self,q):
-        qNew=q.copy()
-        qNew[:2]=self.ROut@qNew[:2]
-        qNew+=self.r1
-        return qNew
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
-        # for straight elements (lens and drift), element and orbit frame are identical. This is the local orbit frame.
-        #does not grow with growing revolution
-        # q: 3D coordinates in element frame
-        return q.copy()
-    def transform_Lab_Frame_Vector_Into_Element_Frame(self, vec):
-        # vec: 3D vector in lab frame to rotate into element frame
-        vecNew = vec.copy()  # copying prevents modifying the original value
+    def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
+        """
+        Generate local cartesian element frame coordinates from cartesian observer/lab frame coordinates
+
+        :param qLab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
+        :return: New 3D cartesian element frame position, numpy.ndarray([x,y,z])
+        """
+        raise NotImplementedError
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
+        """
+        Generate cartesian observer/lab frame coordinates from local cartesian element frame coordinates
+
+        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
+        """
+        raise NotImplementedError
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit)->np.ndarray:
+        """
+        Generate global cartesian observer/lab frame coords from non-cartesian local orbit frame coords 
+
+        :param qOrbit: 3D non-cartesian position vector in element's orbit frame,numpy.array([x,y,z])
+        :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
+        """
+        raise NotImplementedError
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
+        """
+        Generate non-cartesian local orbit frame coords from local cartesian element frame coords
+
+        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
+        """
+        raise NotImplementedError
+    def transform_Lab_Frame_Vector_Into_Element_Frame(self, vecLab:np.ndarray)->np.ndarray:
+        """
+        Generate element frame vector from observer/lab frame vector. 
+        
+        :param vecLab: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz]) 
+        :return: 3D cartesian vector in element frame,numpy.array([vx,vy,vz])
+        """""
+        vecNew = vecLab.copy()  # prevent editing
         vecNew[:2]=self.RIn@vecNew[:2]
         return vecNew
-    def transform_Element_Frame_Vector_Into_Lab_Frame(self, vec):
-        # rotate vector out of element frame into lab frame
-        # vec: vector in
-        vecNew = vec.copy()  # copy input vector to not modify the original
+    def transform_Element_Frame_Vector_Into_Lab_Frame(self, vecEl:np.ndarray)->np.ndarray:
+        """
+        Generate observer/lab frame vector from element frame vector. 
+
+        :param vecEl: 3D cartesian vector in element frame,numpy.array([vx,vy,vz]) 
+        :return: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz])
+        """""
+        vecNew = vecEl.copy()  #prevent editing
         vecNew[:2]=self.ROut@vecNew[:2]
         return vecNew
 
-    def set_Length(self, L):
-        # this is used typically for setting the length after satisfying constraints
-        assert L>0.0
-        self.L = L
-        self.Lo = L
+    def is_Coord_Inside(self, qEl:np.ndarray)->bool:
+        """
+        Check if a 3D cartesian element frame coordinate is contained within an element's vacuum tube
 
-    def is_Coord_Inside(self, q):
-        return None
-    def shape_Field_Data_3D(self, data):
-        # This method takes an array data with the shape (n,6) where n is the number of points in space. Each row
-        # must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
-        # partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
-        # and the order of points doesn't matter
-        #force function into someting that returns 3 scalars at once, and making the magnetic field component optional
+        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :return: True if the coordinate is inside, False if outside
+        """
+        raise NotImplementedError
+    def shape_Field_Data_3D(self, data:np.ndarray)->tuple:
+        """
+        Shape 3D field data for fast linear interpolation method
+
+        Take an array with the shape (n,7) where n is the number of points in space. Each row
+        must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
+        partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
+        and the order of points doesn't matter. Return arrays are raveled for use by fast interpolater
+
+        :param data: (n,7) numpy array of points originating from a 3d grid
+        :return: tuple of 7 arrays, first 3 are grid edge coords (x,y,z) and last 4 are flattened field values
+        (Fx,Fy,Fz,V)
+        """
         assert data.shape[1]==7 and len(data)>2**3
         xArr=np.unique(data[:,0])
         yArr=np.unique(data[:,1])
@@ -164,8 +229,7 @@ class Element:
         return xArr,yArr,zArr,FxFlat,FyFlat,FzFlat,VFlat
 
     def shape_Field_Data_2D(self, data):
-
-        # Data is provided for lens that points in the positive z, so the force functions need to be rotated
+        """2D version of shape_Field_Data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
         assert data.shape[1]==5 and len(data)>2**3
         xArr = np.unique(data[:, 0])
         yArr = np.unique(data[:, 1])
@@ -189,7 +253,8 @@ class Element:
 
 class LensIdeal(Element):
     # ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
-    # F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton.
+    # F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton. This will prevent energy conservation because
+    #of the absence of fringe fields between elements to reduce forward velocity
     def __init__(self, PTL, L, Bp, rp, ap,bumpOffset, fillParams=True):
         # fillParams is used to avoid filling the parameters in inherited classes
         super().__init__(PTL)
@@ -213,21 +278,33 @@ class LensIdeal(Element):
             self.Lo = self.L
         self.fastFieldHelper=fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L,self.K,self.ap)
 
-    def transform_Lab_Coords_Into_Element_Frame(self, q):
-        qNew = q.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
+    def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
+        """return a new vector in the local element frame"""
+        qNew = qLab.copy()
         qNew[0] = qNew[0] - self.r1[0]
         qNew[1] = qNew[1] - self.r1[1]
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
-    def transform_Element_Coords_Into_Lab_Frame(self,qEl):
-        qNew = qEl.copy()  # CAREFUL ABOUT EDITING THINGS YOU DON'T WANT TO EDIT!!!! Need to copy
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
+        """return a new vector in the global/observor lab frame"""
+        qNew = qEl.copy()
         qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew[0] = qNew[0] +self.r1[0]
         qNew[1] = qNew[1] +self.r1[1]
         return qNew
+    def transform_Orbit_Frame_Into_Lab_Frame(self,q):
+        qNew=q.copy()
+        qNew[:2]=self.ROut@qNew[:2]
+        qNew+=self.r1
+        return qNew
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
+        # for straight elements (lens and drift), element and orbit frame are identical. This is the local orbit frame.
+        #does not grow with growing revolution
+        # q: 3D coordinates in element frame
+        return q.copy()
 
     def set_Length(self, L):
-        # this is used typically for setting the length after satisfying constraints
+        """this is used typically for setting the length after satisfying constraints"""
         assert L>0.0
         self.L = L
         self.Lo = self.L
@@ -236,10 +313,6 @@ class LensIdeal(Element):
     def magnetic_Potential(self, q):
         return self.fastFieldHelper.magnetic_Potential(*q)
     def is_Coord_Inside(self, q):
-        # check with fast geometric arguments if the particle is inside the element. This won't necesarily work for all
-        # elements. If True is retured, the particle is inside. If False is returned, it is defintely outside. If none is
-        # returned, it is unknown
-        # q: coordinates to test
         if not 0 <= q[0] <= self.L:
             return False
         else:
@@ -747,11 +820,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def transform_Element_Coords_Into_Unit_Cell_Frame(self, q):
         # As particle leaves unit cell, it does not start back over at the beginning, instead is turns around so to speak
         # and goes the other, then turns around again and so on. This is how the symmetry of the unit cell is exploited.
-        # q: particle coords in element frame
-        # returnUCFirstOrLast: return 'FIRST' or 'LAST' if the coords are in the first or last unit cell. This is typically
-        # used for including unit cell fringe fields
-        # return cythonFunc.transform_Element_Coords_Into_Unit_Cell_Frame_CYTH(qNew, self.ang, self.ucAng)
-        return fastElementNUMBAFunctions.transform_Element_Coords_Into_Unit_Cell_Frame_NUMBA(*q,self.ang,self.ucAng)
+        return np.asarray(self.fastFieldHelper.transform_Element_Coords_Into_Unit_Cell_Frame())
     def is_Coord_Inside(self, q):
         # q: particle's position in element frame
         return self.fastFieldHelper.is_Coord_Inside(*q)
@@ -1142,20 +1211,6 @@ class CombinerHexapoleSim(Element):
         dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
         Lo = np.sum(dLArr)
         return Lo
-    def compile_fast_Force_Function(self):
-        forceNumba = fastElementNUMBAFunctions.combiner_Sim_Hexapole_Force_NUMBA
-        La=self.La
-        Lb=self.Lb
-        Lm=self.Lm
-        space=self.space
-        ang=self.ang
-        ap=self.ap
-        searchIsCoordInside=True
-        force_Func=self.force_Func
-        @numba.njit(numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64))
-        def force_NUMBA_Wrapper(x,y,z):
-            return forceNumba(x,y,z,La,Lb,Lm,space,ang,ap,searchIsCoordInside,force_Func)
-        self.fast_Force_Function=force_NUMBA_Wrapper
     def transform_Lab_Coords_Into_Element_Frame(self, q):
          qNew = q.copy()
          qNew = qNew - self.r2
@@ -1213,6 +1268,7 @@ class geneticLens(LensIdeal):
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
         # super().__init__(PTL, geneticLens.length, geneticLens.maximum_Radius(), np.nan,np.nan,'injector',fillParams=False)
+        raise Exception("under construction")
         super().__init__(PTL, geneticLens.length, None, geneticLens.maximum_Radius(), ap, 0.0, fillParams=False)
         self.fringeFracOuter = 4.0
         self.L = geneticLens.length + 2 * self.fringeFracOuter * self.rp
@@ -1273,38 +1329,18 @@ class geneticLens(LensIdeal):
         self.fill_Field_Func(data3D)
         # self.compile_fast_Force_Function()
 
-        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
-        F_center = np.linalg.norm(self.force(np.asarray([self.L / 2, self.ap / 2, .0])))
-        assert F_edge / F_center < .01
-        # num=50
-        # xArr=np.linspace(-self.ap,self.ap,num)*.25
-        # coords=np.asarray(np.meshgrid(self.L/2,xArr,xArr)).T.reshape(-1,3)
-        # vals=np.asarray([self.force(coord) for coord in coords])
-        # vals=np.linalg.norm(vals,axis=1)
-        # print(np.std(vals))
-        # image=vals.reshape(num,num)
-        # plt.imshow(image)
-        # plt.show()
-
-    def compile_fast_Force_Function(self):
-        forceNumba = fastElementNUMBAFunctions.genetic_Lens_Force_NUMBA
-        L = self.L
-        ap = self.ap
-        force_Func = self.force_Func
-
-        @numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64))
-        def force_NUMBA_Wrapper(x, y, z):
-            return forceNumba(x, y, z, L, ap, force_Func)
-
-        self.fast_Force_Function = force_NUMBA_Wrapper
+        # F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        # F_center = np.linalg.norm(self.force(np.asarray([self.L / 2, self.ap / 2, .0])))
+        # assert F_edge / F_center < .01
 
     def force(self, q, searchIsCoordInside=True):
-        F = fastElementNUMBAFunctions.genetic_Lens_Force_NUMBA(q[0], q[1], q[2], self.L, self.ap, self.force_Func)
+        raise Exception("under construction")
+
         # if np.isnan(F[0])==False:
         #     if q[0]<2*self.rp*self.fringeFracOuter or q[0]>self.L-2*self.rp*self.fringeFracOuter:
         #         return np.zeros(3)
-        F = self.fieldFact * np.asarray(F)
-        return F
+        # F = self.fieldFact * np.asarray(F)
+        # return F
 
     def fill_Field_Func(self, data):
         interpF, interpV = self.make_Interp_Functions(data)

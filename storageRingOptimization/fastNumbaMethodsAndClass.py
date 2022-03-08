@@ -3,7 +3,6 @@ import numpy as np
 import numba
 from math import floor
 from constants import SIMULATION_MAGNETON
-import fastElementNUMBAFunctions
 @numba.njit()
 def scalar_interp3D(x,y,z,xCoords,yCoords,zCoords,vec):
     X,Y,Z=len(xCoords),len(yCoords),len(zCoords)
@@ -335,7 +334,7 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
 ]
-# @jitclass(spec)
+@jitclass(spec)
 class CombinerIdealFieldHelper_Numba:
     def __init__(self,c1,c2,La,Lb,apL,apR,apz,ang):
         self.c1=c1
@@ -531,7 +530,7 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
 ]
-# @jitclass(spec)
+@jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
     def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
@@ -862,3 +861,25 @@ class SegmentedBenderSimFieldHelper_Numba:
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return V0
+
+#for genetic lens
+# @numba.njit()
+# def genetic_Lens_Force_NUMBA(x,y,z, L,ap,  force_Func):
+#     FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
+#     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
+#     y = abs(y)  # confine to upper right quadrant
+#     z = abs(z)
+#     if np.sqrt(y**2+z**2)>ap:
+#         return np.nan,np.nan,np.nan
+#     if 0<=x <=L/2:
+#         x = L/2 - x
+#         Fx,Fy,Fz= force_Func(x, y, z)
+#         Fx=-Fx
+#     elif L/2<x<L:
+#         x=x-L/2
+#         Fx,Fy,Fz = force_Func(x, y, z)
+#     else:
+#         return np.nan,np.nan,np.nan
+#     Fy = Fy * FySymmetryFact
+#     Fz = Fz * FzSymmetryFact
+#     return Fx,Fy,Fz
