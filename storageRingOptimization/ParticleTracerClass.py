@@ -8,7 +8,6 @@ import time
 import numpy as np
 import math
 from math import isnan
-from functionsForBilly import vLi_final
 from numba.experimental import jitclass
 import matplotlib.pyplot as plt
 import sys
@@ -299,12 +298,12 @@ class ParticleTracer:
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
-        if self.tau_Collision is not None:
-            probabilityCutoff=self.h/self.tau_Collision
-            if np.random.rand()<probabilityCutoff:
-                vHe=self.sample_Helium_Momentum()
-                pEl_n=np.asarray(vLi_final(pEl_n,vHe))
-                self.T_CollisionLast = self.T
+        # if self.tau_Collision is not None:
+        #     probabilityCutoff=self.h/self.tau_Collision
+        #     if np.random.rand()<probabilityCutoff:
+        #         vHe=self.sample_Helium_Momentum()
+        #         pEl_n=np.asarray(vLi_final(pEl_n,vHe))
+        #         self.T_CollisionLast = self.T
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
