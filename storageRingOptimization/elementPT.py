@@ -877,7 +877,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return qo
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,extraFieldLength):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,Number):
@@ -904,6 +904,7 @@ class HalbachLensSim(LensIdeal):
         self.lengthEffective=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=None
+        self.extraFieldLength=extraFieldLength #extra field added to end of lens to account misalignment
 
 
         self.force_Func_Outer=None #function that returns 3D vector of force values towards the end of the magnet, if
@@ -966,8 +967,8 @@ class HalbachLensSim(LensIdeal):
             self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
             data2D=None
 
-        zMin=-TINY_STEP
-        zMax=self.Lcap+TINY_STEP
+        zMin=-TINY_STEP #inside the lens
+        zMax=self.Lcap+TINY_STEP+self.extraFieldLength #outside the lens
         zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
         assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
         assert len(xArr_Quadrant)%2==1 and len(yArr_Quadrant)%2==1
@@ -989,7 +990,8 @@ class HalbachLensSim(LensIdeal):
         else:
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
         fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
-        self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap)
+        self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap,
+                                                                                   self.extraFieldLength)
         self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
     def force(self, q):
@@ -1195,14 +1197,6 @@ class CombinerHexapoleSim(Element):
                 coordList.append(q)
                 break
             F_n = force(q_n)
-            # print(F_n)
-            # if np.all(np.isnan(F_n)==False)==False:
-            #     temp=np.asarray(temp)
-            #     plt.plot(temp[:,0],temp[:,1])
-            #     plt.axhline(y=self.ap,c='r')
-            #     plt.axhline(y=-self.ap,c='r')
-            #     plt.axvline(x=self.Lm+self.space,c='r')
-                # plt.show()
             assert np.all(np.isnan(F_n)==False)
 
             F_n[2]=0.0

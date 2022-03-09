@@ -61,7 +61,6 @@ def vec_interp3D(x,y,z,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
     delta_x=(max_x-min_x)/(xCoords.shape[0]-1)
     delta_y=(max_y-min_y)/(yCoords.shape[0]-1)
     delta_z=(max_z-min_z)/(zCoords.shape[0]-1)
-
     x=(x-min_x)/delta_x
     y=(y-min_y)/delta_y
     z=(z-min_z)/delta_z
@@ -282,21 +281,22 @@ class IdealLensFieldHelper_Numba:
         self.K=K
         self.ap=ap
         self.baseClass=BaseClassFieldHelper_Numba()
-    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+    def update_Element_Perturb_Params(self,shiftY:float, shiftZ:float, rotY:float, rotZ:float):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
     def is_Coord_Inside_Vacuum(self,x:float,y:float,z:float)->bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
         else: return False
-    def magnetic_Potential(self, x:float,y:float,z:float):
+    def magnetic_Potential(self, x:float,y:float,z:float)->float:
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
-        r = np.sqrt(y ** 2 + z ** 2)
-        if 0 <= x <= self.L and r < self.ap:
+        if self.is_Coord_Inside_Vacuum(x,y,z):
+            x,y,z=self.baseClass.misalign_Coords(x,y,z)
+            r = np.sqrt(y ** 2 + z ** 2)
             return .5*self.K * r ** 2
         else:
             return np.nan
-    def force(self, x,y,z):
+    def force(self, x:float,y:float,z:float)->tuple:
         """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if self.is_Coord_Inside_Vacuum(x,y,z)==True:
             x,y,z=self.baseClass.misalign_Coords(x,y,z)
@@ -325,72 +325,112 @@ spec = [
     ('Lcap', numba.float64),
     ('ap', numba.float64),
     ('fieldFact', numba.float64),
+    ('extraFieldLength', numba.float64),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
 ]
 
 @jitclass(spec)
 class LensHalbachFieldHelper_Numba:
-    """Helper for elementPT.HalbachLensSim"""
-    def __init__(self,fieldData,L,Lcap,ap):
+    """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
+    def __init__(self,fieldData,L,Lcap,ap,extraFieldLength):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
         self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn=fieldData
         self.L=L
         self.Lcap=Lcap
         self.ap=ap
         self.fieldFact=1.0
+        self.extraFieldLength=extraFieldLength
         self.baseClass=BaseClassFieldHelper_Numba()
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
+        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
     def is_Coord_Inside_Vacuum(self,x,y,z):
+        """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
         else: return False
     def _magnetic_Potential_Func_Fringe(self,x,y,z):
+        """Wrapper for interpolation of magnetic fields at ends of lens. self.magnetic_Potential"""
         V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
         return V
 
     def _magnetic_Potential_Func_Inner(self,x,y,z):
+        """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_Potential"""
         V=interp2D(-z, y,self.xArrIn,self.yArrIn,self.VArrIn)
         return V
     def _force_Func_Outer(self,x,y,z):
+        """Wrapper for interpolation of force fields at ends of lens. see self.force"""
         Fx0,Fy0,Fz0=vec_interp3D(-z, y,x,self.xArrEnd,self.yArrEnd,self.zArrEnd,
                                  self.FxArrEnd, self.FyArrEnd,self.FzArrEnd)
         Fx = Fz0
         Fy = Fy0
         Fz = -Fx0
         return Fx,Fy,Fz
-    def _force_Func_Inner(self,x,y,z):
+    def _force_Func_Inner(self,x:float,y:float,z:float)->tuple:
+        """Wrapper for interpolation of force fields of plane at center lens. see self.force"""
         Fx = 0.0
         Fy = interp2D(-z,y, self.xArrIn,self.yArrIn,self.FyArrIn)
         Fz = -interp2D(-z,y,self.xArrIn,self.yArrIn,self.FxArrIn)
         return Fx, Fy, Fz
-    def force(self,x, y, z):
-        if np.sqrt(y ** 2 + z ** 2) > self.ap:
-            return np.nan, np.nan, np.nan
+    def force(self,x:float, y:float, z:float)->tuple:
+        """
+        Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
+
+        Symmetry if used to simplify the computation of force. Either end of the lens is identical, so coordinates
+        falling within some range are mapped to an interpolation of the force field at the lenses end. If the lens is
+        long enough, the inner region is modeled as a single plane as well. (nan,nan,nan) is returned if coordinate
+        is outside vacuum tube
+
+        :param x: x cartesian coordinate, m
+        :param y: y cartesian coordinate, m
+        :param z: z cartesian coordinate, m
+        :return: tuple of length 3 of the force vector, simulation units. contents are nan if coordinate is outside
+        vacuum
+        """
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
+            return np.nan,np.nan,np.nan
+        x,y,z=self.baseClass.misalign_Coords(x,y,z)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if 0 <= x and x<= self.Lcap:
+        if -self.extraFieldLength <= x<= self.Lcap: #at beginning of lends
             x = self.Lcap - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
             Fx = -Fx
-        elif self.Lcap < x and x <= self.L - self.Lcap:
+        elif self.Lcap < x and x <= self.L - self.Lcap: #if long enough, model interior as uniform in x
             Fx=0.0
             Fy = interp2D(-z, y,  self.xArrIn, self.yArrIn, self.FyArrIn)
             Fz = -interp2D(-z, y, self.xArrIn, self.yArrIn, self.FxArrIn)
-        elif 0 <= x and x <= self.L:
+        elif self.L - self.Lcap<= x and x <= self.L: #at end of lens
             x = self.Lcap - (self.L - x)
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
         else:
-            return np.nan, np.nan, np.nan
+            raise Exception("Particle outside field region") #this may be triggered when itentionally misligned
         Fx=Fx*self.fieldFact
         Fy = Fy * FySymmetryFact*self.fieldFact
         Fz = Fz * FzSymmetryFact*self.fieldFact
+        Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
-    def magnetic_Potential(self, x,y,z):
-        if np.sqrt(y ** 2 + z ** 2) > self.ap:
+    def magnetic_Potential(self, x:float,y:float,z:float):
+        """
+        Magnetic potential energy of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
+
+        Symmetry if used to simplify the computation of potential. Either end of the lens is identical, so coordinates
+        falling within some range are mapped to an interpolation of the potential at the lenses end. If the lens is
+        long enough, the inner region is modeled as a single plane as well. nan is returned if coordinate
+        is outside vacuum tube
+
+        :param x: x cartesian coordinate, m
+        :param y: y cartesian coordinate, m
+        :param z: z cartesian coordinate, m
+        :return: potential energy, simulation units. returns nan if the coordinate is outside the vacuum tube
+        """
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
             return np.nan
-        y = abs(y)  # confine to upper right quadrant
+        x,y,z=self.baseClass.misalign_Coords(x,y,z)
+        y = abs(y)
         z = abs(z)
-        if 0<=x <= self.Lcap:
+        if -self.extraFieldLength <= x<= self.Lcap:
             x = self.Lcap - x
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         elif self.Lcap < x and x <= self.L - self.Lcap:
@@ -399,7 +439,7 @@ class LensHalbachFieldHelper_Numba:
             x=self.Lcap-(self.L-x)
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         else:
-            V0=np.nan
+            raise Exception("Particle outside field region")
         V0=V0*self.fieldFact
         return V0
 

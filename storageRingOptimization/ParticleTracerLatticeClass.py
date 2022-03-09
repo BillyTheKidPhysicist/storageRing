@@ -1,3 +1,5 @@
+from geneticLensElement_Wrapper import GeneticLens
+from typing import Union
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 import numpy as np
@@ -133,40 +135,84 @@ class ParticleTracerLattice:
     def set_Constrained_Linear_Element(self,el):
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)
-    def add_Combiner_Sim(self,file,sizeScale=1.0):
-        #file: name of the file that contains the simulation data from comsol. must be in a very specific format
+    def add_Combiner_Sim(self,sizeScale: float=1.0):
+        """
+        Add model of our combiner from COMSOL. rarely used
+
+        :param sizeScale: How much to scale up or down dimensions of combiner
+        :return: None
+        """
+
+        file='combinerV3.txt'
         el = CombinerSim(self,file,self.latticeType,sizeScale=sizeScale)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None #there can be only one!
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Sim_Lens(self,Lm,rp,loadBeamDiam=10e-3,layers=2):
-        #PTL,Lm,rp,layers,mode
-        #file: name of the file that contains the simulation data from comsol. must be in a very specific format
-        #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2):
+        """
+        Add halbach hexapole lens combiner element.
+
+        The edge of a hexapole lens is used to deflect high and weak field seeking states. Transvers dimension of
+        magnets are the maximum that can be used to for a halbach sextupole of given radius.
+
+        :param Lm: Hard edge length of magnet, m. Total length of element depends on degree of deflection of nominal
+        trajectory
+        :param rp: Bore radius of hexapole lens, m
+        :param loadBeamDiam: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
+        :param layers: Number of concentric layers of magnets
+        :return: None
+        """
         el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp,Lm,apFrac=.8,constrain=False,bumpOffset=0.0,
-                             magnetWidth=None):
-        el=HalbachLensSim(self, rp,Lm,apFrac,bumpOffset,magnetWidth)
+    def add_Halbach_Lens_Sim(self,rp: float,L: Union[float,None],apFrac: float=.8,constrain: bool=False,
+                            bumpOffset: float=0.0,magnetWidth: float=None,extraFieldLength:float=0.0):
+        """
+        Add simulated halbach sextupole element to lattice.
+
+        :param rp: Bore radius, m
+        :param L: Length of element, m. This includes fringe fields, actual magnet length will be smaller
+        :param apFrac: Size of aperture as fraction of bore radius
+        :param constrain: Wether element is being used as part of a constraint. If so, fields construction will be
+        deferred
+        :param bumpOffset: How much to shift the vacuum and element in xy plane
+        :param magnetWidth: Width of both side cuboid magnets in polar plane of lens, m. Magnets length is L minus
+        fringe fields
+        :param extraFieldLength: Amount of length to add to field interpolation grid to allow element misalignment
+        :return: None
+        """
+        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,extraFieldLength)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
-    def add_Genetic_lens(self,lens,ap):
+    def add_Genetic_lens(self,lens: geneticLens,ap: float):
+        """
+        Add genetic lens used for minimizing focus size. This is part of an idea to make a low aberration lens
+
+        :param lens: geneticLens object that returns field values. This sextupole lens can be shimmed, and have bizarre
+        :param ap: Aperture of genetic lens, m
+        :return: None
+        """
         el=geneticLens(self,lens,ap)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
     def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #L: Length of lens, m
-        #Bp: field strength at pole face of lens, T
-        #rp: bore radius of element, m
-        #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius. unitless
+        """
+        Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
+
+        :param L: Length of element, m. Lens hard edge length is this as well
+        :param Bp: Field at bore/pole radius of lens
+        :param rp: Bore/pole radius of lens
+        :param ap:
+        :param constrain:
+        :param bumpOffset:
+        :return:
+        """
         apFrac=.9 #apeture fraction
         if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
             ap=apFrac*rp
@@ -180,9 +226,13 @@ class ParticleTracerLattice:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
     def add_Drift(self,L,ap=.03):
-        #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        #L: length of drift element, m
-        #ap:apeture. Default value of 3 cm radius, unitless
+        """
+        Add drift region. This is simply a vacuum tube.
+
+        :param L: Length of drift region, m
+        :param ap: Aperture of drift region, m
+        :return:
+        """
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order

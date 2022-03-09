@@ -88,7 +88,7 @@ def generate_Lattice(configuration):
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Drift(.1)
         if configuration=='2':
-            PTL.add_Combiner_Sim('combinerV3.txt')
+            PTL.add_Combiner_Sim()
         else:
             PTL.add_Combiner_Sim_Lens(.1, .02)
         PTL.add_Halbach_Lens_Sim(.01, .5)
@@ -104,7 +104,7 @@ def generate_Lattice(configuration):
         PTL=ParticleTracerLattice(200.0,latticeType='storageRing')
         PTL.add_Halbach_Lens_Sim(.01,.5)
         if configuration == '4':
-            PTL.add_Combiner_Sim('combinerV3.txt')
+            PTL.add_Combiner_Sim()
         else:
             PTL.add_Combiner_Sim_Lens(.1, .02)
         PTL.add_Halbach_Lens_Sim(.01,.5)
