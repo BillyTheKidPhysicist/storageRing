@@ -25,7 +25,8 @@ from numba.typed import List
 TINY_STEP=1e-9
 
 
-def full_Arctan2(q):
+def full_Arctan(q):
+    """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
     phi = np.arctan2(q[1], q[0])
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
@@ -85,7 +86,7 @@ class Element:
         self.apz = None  # apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
         self.apL = None  # apeture on the 'left' as seen going clockwise. This is for the combiner
         self.apR = None  # apeture on the'right'.
-        self.type = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
+        self.shape = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
         # constructed in particleTracerLattice
         self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
@@ -97,10 +98,27 @@ class Element:
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
+
+    def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
+        """
+        perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
+        the element will be shifted, and therefore the force it applies will be as well. This is modeled as shifting
+        and rotating the supplied coordinates to force and magnetic field function, then rotating the force
+
+        :param shiftY: Shift in the y direction in element frame
+        :param shiftZ: Shift in the z direction in the element frame
+        :param rotY: Rotation about y axis of the element
+        :param rotZ: Rotation about z axis of the element
+        :return:
+        """
+        raise NotImplementedError
     def magnetic_Potential(self, qEl:np.ndarray)->float:
         """
+        Return magnetic potential energy at position qEl.
+
         Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is 
-        1kg, at cartesian 3D coordinate qEl in the local element frame
+        1kg, at cartesian 3D coordinate qEl in the local element frame. This is done by calling up fastFieldHelper, a
+        jitclass, which does the actual math/interpolation.
          
         :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
@@ -108,8 +126,11 @@ class Element:
         raise NotImplementedError
     def force(self, qEl:np.ndarray)->np.ndarray:
         """
+        Return force at position qEl.
+
         Return 3D cartesian force of a lithium at cartesian 3D coordinate qEl in the local element frame. Force vector
-        has simulation units where lithium-7 mass is 1kg. 
+        has simulation units where lithium-7 mass is 1kg. This is done by calling up fastFieldHelper, a
+        jitclass, which does the actual math/interpolation.
         
          
         :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
@@ -252,86 +273,97 @@ class Element:
 
 
 class LensIdeal(Element):
-    # ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
-    # F=2*ub*r/rp**2 where rp is bore radius, and ub is bore magneton. This will prevent energy conservation because
-    #of the absence of fringe fields between elements to reduce forward velocity
-    def __init__(self, PTL, L, Bp, rp, ap,bumpOffset, fillParams=True):
+    """
+    Ideal model of lens with hard edge. Force inside is calculated from field at pole face and bore radius as
+    F=2*ub*r/rp**2 where rp is bore radius, and ub the simulation bohr magneton where the mass of lithium7=1kg.
+    This will prevent energy conservation because of the absence of fringe fields between elements to reduce
+    forward velocity. Interior vacuum tube is a cylinder
+    """
+    def __init__(self, PTL, L:float, Bp:float, rp:float, ap:float,bumpOffset:float, fillParams=True):
+        """
+        :param PTL: Instance of ParticleTracerLatticeClass
+        :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
+        :param Bp: Magnetic field at the pole face, T.
+        :param rp: Bore radius, m. Distance from center of magnet to the magnetic material
+        :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
+        :param bumpOffset: dubious
+        :param fillParams: Wether to carry out filling the element parameters. dubious
+        """
         # fillParams is used to avoid filling the parameters in inherited classes
         super().__init__(PTL)
-        self.Bp = Bp  # field strength at pole face
-        self.rp = rp  # bore radius
-        self.L = L  # lenght of magnet
-        self.ap = ap  # size of apeture radially
-        self.type = 'STRAIGHT'  # The element's geometry
+        self.Bp = Bp
+        self.rp = rp
+        self.L = L
+        self.ap = ap
+        self.shape = 'STRAIGHT'  # The element's geometry
         self.bumpOffset=bumpOffset
+        self.shift=1e-3
 
         if fillParams == True:
             self.fill_Params()
-    def set_BpFact(self,BpFact):
-        #update the magnetic field multiplication factor. This is used to simulate changing field values, or making
-        #the bore larger
+    def set_BpFact(self,BpFact:float):
+        """update the magnetic field multiplication factor. This is used to simulate changing field values"""
         self.fieldFact=BpFact
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
     def fill_Params(self):
+        """Update class parameters"""
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
         self.fastFieldHelper=fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L,self.K,self.ap)
+    def perturb_Element(self,shiftY:float,shiftZ:float,rotY:float,rotZ:float):
+        """Inherited abstract method from Element. Perturb element for misalignment"""
+        self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
-        """return a new vector in the local element frame"""
-        qNew = qLab.copy()
-        qNew[0] = qNew[0] - self.r1[0]
-        qNew[1] = qNew[1] - self.r1[1]
+        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
+        qNew=qLab.copy()
+        qNew-=self.r1
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
     def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
-        """return a new vector in the global/observor lab frame"""
+        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew = qEl.copy()
         qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
-        qNew[0] = qNew[0] +self.r1[0]
-        qNew[1] = qNew[1] +self.r1[1]
+        qNew+=self.r1
         return qNew
-    def transform_Orbit_Frame_Into_Lab_Frame(self,q):
+    def transform_Orbit_Frame_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
+        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]
         qNew+=self.r1
         return qNew
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
-        # for straight elements (lens and drift), element and orbit frame are identical. This is the local orbit frame.
-        #does not grow with growing revolution
-        # q: 3D coordinates in element frame
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q:np.ndarray)->np.ndarray:
+        """Inherited abstract method from Element. Element and orbit frame is identical"""
         return q.copy()
 
-    def set_Length(self, L):
+    def set_Length(self, L:float):
         """this is used typically for setting the length after satisfying constraints"""
         assert L>0.0
         self.L = L
         self.Lo = self.L
     def force(self,q):
+        """Inherited abstract method from Element"""
         return np.asarray(self.fastFieldHelper.force(*q))
     def magnetic_Potential(self, q):
+        """Inherited abstract method from Element"""
         return self.fastFieldHelper.magnetic_Potential(*q)
     def is_Coord_Inside(self, q):
-        if not 0 <= q[0] <= self.L:
-            return False
-        else:
-            if q[1] ** 2 + q[2] ** 2 < self.ap**2:
-                return True
-            else:
-                return False
+        """Inherited abstract method from Element. Only simple geometry of a cylinder is needed"""
+        return self.fastFieldHelper.is_Coord_Inside_Vacuum(*q)
 
 class Drift(LensIdeal):
-    def __init__(self, PTL, L, ap):
-        super().__init__(PTL, L, 0, np.inf, ap,0.0)
+    """
+    Simple model of free space. Basically a cylinderical vacuum tube
+    """
+    def __init__(self, PTL, L:float, ap:float):
+        """
+        :param PTL: Instance of ParticleTracerLatticeClass
+        :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
+        :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
+        """
+        super().__init__(PTL, L, 0, np.inf, ap,0.0) #set Bp to zero and bore radius to infinite
         self.fastFieldHelper=fastNumbaMethodsAndClass.DriftFieldHelper_Numba(L,ap)
-    def force(self, q):
-        F= np.asarray(self.fastFieldHelper.force(*q))
-        return F
-    def magnetic_Potential(self, q):
-        if self.is_Coord_Inside(q)==False:
-            return np.nan
-        return self.fastFieldHelper.magnetic_Potential(*q)
 
 
 class BenderIdeal(Element):
@@ -347,7 +379,7 @@ class BenderIdeal(Element):
         self.ap = ap  # radial apeture size
         self.rb = rb  # bending radius of magnet. This is tricky because this is the bending radius down the center, but the
         # actual trajectory of the particles is offset a little out from this
-        self.type = 'BEND'
+        self.shape = 'BEND'
         self.ro = None  # bending radius of orbit, ie rb + rOffset.
         self.outputOffsetFunc = None  # a function that returns the value of the offset of the trajectory for a given bending radius
         self.segmented = False  # wether the element is made up of discrete segments, or is continuous
@@ -382,7 +414,7 @@ class BenderIdeal(Element):
         # returns a 3d vector in the orbit frame. First component is distance along trajectory, second is radial displacemnt
         # from the nominal orbit computed with centrifugal force, and the third is the z axis displacemnt.
         qo = q.copy()
-        phi = self.ang - full_Arctan2(qo)  # angle swept out by particle in trajectory. This is zero
+        phi = self.ang - full_Arctan(qo)  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
@@ -405,7 +437,7 @@ class BenderIdeal(Element):
         qLab+=self.r0
         return qLab
     def is_Coord_Inside(self, q):
-        phi = full_Arctan2(q)
+        phi = full_Arctan(q)
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
         if phi <=self.ang:  # if particle is in bending segment
@@ -443,7 +475,7 @@ class CombinerIdeal(Element):
         self.c2 = c2 / self.sizeScale
         self.space = 0  # space at the end of the combiner to account for fringe fields
 
-        self.type = 'COMBINER_SQUARE'
+        self.shape = 'COMBINER_SQUARE'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         if fillsParams == True:
@@ -829,7 +861,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
 
         qo = q.copy()
-        angle = full_Arctan2(qo)#np.arctan2(qo[1], qo[0])
+        angle = full_Arctan(qo)#np.arctan2(qo[1], qo[0])
         if angle < 0:  # restrict range to between 0 and 2pi
             angle += 2 * np.pi
 
@@ -1009,7 +1041,7 @@ class CombinerHexapoleSim(Element):
         # the center of the inlet to the center of the kink
         self.Lb = None  # length of straight section after the kink after the inlet actuall inside the magnet
 
-        self.type = 'COMBINER_CIRCULAR'
+        self.shape = 'COMBINER_CIRCULAR'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         self.force_Func=None
@@ -1273,7 +1305,7 @@ class geneticLens(LensIdeal):
         self.fringeFracOuter = 4.0
         self.L = geneticLens.length + 2 * self.fringeFracOuter * self.rp
         self.Lo = None
-        self.type = 'STRAIGHT'
+        self.shape = 'STRAIGHT'
         self.lens = geneticLens
         assert self.lens.minimum_Radius() >= ap
         self.fringeFracInnerMin = np.inf  # if the total hard edge magnet length is longer than this value * rp, then it can

@@ -84,15 +84,15 @@ class ParticleTracer:
     def transform_To_Next_Element(self,q,p,nextEll):
         el1=self.currentEl
         el2=nextEll
-        if el1.type=='BEND':
+        if el1.shape=='BEND':
             r01 = el1.r0
-        elif el1.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
+        elif el1.shape in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
             r01 = el1.r2
         else:
             r01 = el1.r1
-        if el2.type=='BEND':
+        if el2.shape=='BEND':
             r02 = el2.r0
-        elif el2.type in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
+        elif el2.shape in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
             r02 = el2.r2
         else:
             r02 = el2.r1

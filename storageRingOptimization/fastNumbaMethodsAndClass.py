@@ -3,6 +3,9 @@ import numpy as np
 import numba
 from math import floor
 from constants import SIMULATION_MAGNETON
+
+#this needs to be refactored
+
 @numba.njit()
 def scalar_interp3D(x,y,z,xCoords,yCoords,zCoords,vec):
     X,Y,Z=len(xCoords),len(yCoords),len(zCoords)
@@ -172,6 +175,9 @@ class LensHalbachFieldHelper_Numba:
         self.Lcap=Lcap
         self.ap=ap
         self.fieldFact=1.0
+    def is_Coord_Inside_Vacuum(self,x,y,z):
+        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
+        else: return False
     def _magnetic_Potential_Func_Fringe(self,x,y,z):
         V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
         return V
@@ -232,33 +238,60 @@ class LensHalbachFieldHelper_Numba:
             V0=np.nan
         V0=V0*self.fieldFact
         return V0
-
-
 spec = [
     ('L', numba.float64),
     ('K', numba.float64),
     ('ap', numba.float64),
+    ('shiftY', numba.float64),
+    ('shiftZ', numba.float64),
+    ('rotY', numba.float64),
+    ('rotZ', numba.float64),
 ]
 @jitclass(spec)
 class IdealLensFieldHelper_Numba:
+    """
+    Fast numba jitclass to assist with classes in ElementPT. This introduces many performacne advantages, but as of
+    now has a major drawback on not being able to be pickled. This prevents parallel processing of particle tracing.
+    There is also no inheritance.
+    """
     def __init__(self,L,K,ap):
         self.L=L
         self.K=K
         self.ap=ap
-    def magnetic_Potential(self, x,y,z):
-        # potential energy at provided coordinates
-        # q coords in element frame
+        self.shiftY,self.shiftZ,self.rotY,self.rotZ=0.0,0.0,0.0,0.0
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """Update with perturbation parameters to model element misalingment relative to the vacuum tube"""
+        self.shiftY, self.shiftZ, self.rotY, self.rotZ=shiftY, shiftZ, rotY, rotZ
+    def is_Coord_Inside_Vacuum(self,x:float,y:float,z:float)->bool:
+        """Check if coordinates are inside vacuum tube"""
+        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
+        else: return False
+    def magnetic_Potential(self, x:float,y:float,z:float):
+        """Magnetic potential in simulation units in element frame"""
         r = np.sqrt(y ** 2 + z ** 2)
         if 0 <= x <= self.L and r < self.ap:
             return .5*self.K * r ** 2
         else:
             return np.nan
+    def misalign_Coords(self,x:float,y:float,z:float):
+        """Model element misalignment by misaligning coords. First do rotations about (0,0,0), then displace. Element
+        misalignment has the opposite applied effect. Force will be needed to be rotated"""
+        x,y=np.cos(-self.rotZ)*x-np.sin(-self.rotZ)*y,np.sin(-self.rotZ)*x+np.cos(-self.rotZ)*y
+        y+=self.shiftY
+        z+=self.shiftZ
+        return x,y,z
+    def rotate_Force_For_Misalignment(self,Fx,Fy,Fz):
+        """After rotating and translating coords to model element misalignment, the force must now be rotated as well"""
+        Fx,Fy=np.cos(self.rotZ)*Fx-np.sin(self.rotZ)*Fy,np.sin(self.rotZ)*Fx+np.cos(self.rotZ)*Fy
+        return Fx,Fy,Fz
     def force(self, x,y,z):
-        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap**2:
+        """Calculate force in element frame"""
+        if self.is_Coord_Inside_Vacuum(x,y,z)==True:
+            x,y,z=self.misalign_Coords(x,y,z)
             Fx=0.0
             Fy = -self.K * y
             Fz = -self.K * z
+            Fx,Fy,Fz=self.rotate_Force_For_Misalignment(Fx,Fy,Fz)
             return Fx,Fy,Fz
         else:
             return np.nan,np.nan,np.nan
@@ -274,6 +307,8 @@ class DriftFieldHelper_Numba:
     def magnetic_Potential(self, x,y,z):
         # potential energy at provided coordinates
         # q coords in element frame
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
+            return np.nan
         return 0.0
     def force(self, x,y,z):
         # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
@@ -281,6 +316,9 @@ class DriftFieldHelper_Numba:
             return 0.0,0.0,0.0
         else:
             return np.nan, np.nan, np.nan
+    def is_Coord_Inside_Vacuum(self,x,y,z):
+        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
+        else: return False
 
 spec = [
     ('ang', numba.float64),
@@ -593,7 +631,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
             x = x - symmetryLength / 2
             Fx, Fy, Fz = self._force_Func(x, y, z)
         else:
-            raise Exception(ValueError)
+            raise ValueError
         Fy = Fy * FySymmetryFact
         Fz = Fz * FzSymmetryFact
         Fx, Fy, Fz=self.fieldFact*Fx, self.fieldFact*Fy, self.fieldFact*Fz
