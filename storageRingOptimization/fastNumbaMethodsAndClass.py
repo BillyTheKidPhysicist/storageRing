@@ -144,9 +144,170 @@ def full_Arctan2(y,x):
     return phi
 
 from numba.experimental import jitclass
-from numba.typed import List
 
-#xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn
+
+spec = [
+    ('shiftY', numba.float64),
+    ('shiftZ', numba.float64),
+    ('rotY', numba.float64),
+    ('rotZ', numba.float64)
+]
+@jitclass(spec)
+class BaseClassFieldHelper_Numba:
+    """
+    Base jitclass helper class for elementPT objects to accelerate particel tracing
+
+    A fully numba approach is used to accelerate particle. This class, in conjunction if a numba function in
+    ParticleTracerClass, enables ~100 time faster particle tracing. This requires returning scalar values ( or tuples of
+    scalar values) instead of arrays/vectors. Functions used here for that are recycled for general use by casting
+    there output to an array in elementPT classes. There are two major downsides however:
+
+    1: jitclass does no allow for inheritance, so instead I use this class as a variable in other classes.
+    NotImplementedError could still be raised in elementPT.py with inheritance there
+
+    2: jitclass is not pickleable, and so multiprocessing does not work. This is fine in most cases because particle
+    tracing is so fast that multiprocessing is a poor use case.
+    """
+    def __init__(self):
+        self.shiftY, self.shiftZ, self.rotY, self.rotZ = 0.0, 0.0, 0.0, 0.0
+    def magnetic_Potential(self, x:float,y:float,z:float)->float:
+        """
+        Return magnetic potential energy at position qEl.
+
+        Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is
+        1kg, at cartesian 3D coordinate qEl in the local element frame. This is done by calling up fastFieldHelper, a
+        jitclass, which does the actual math/interpolation.
+
+        :param x: x cartesian coords
+        :param y: y cartesian coords
+        :param z: z cartesian coords
+        :return: magnetic potential energy of a lithium atom in simulation units, float
+        """
+        raise NotImplementedError
+    def force(self, x:float,y:float,z:float)->tuple:
+        """
+        Return force at position qEl.
+
+        Return 3D cartesian force of a lithium at cartesian 3D coordinate qEl in the local element frame. Force vector
+        has simulation units where lithium-7 mass is 1kg. This is done by calling up fastFieldHelper, a
+        jitclass, which does the actual math/interpolation.
+
+
+
+        :param x: x cartesian coords
+        :param y: y cartesian coords
+        :param z: z cartesian coords
+        :return: Tuple of floats as (Fx,Fy,Fz)
+        """
+        raise NotImplementedError
+    def is_Coord_Inside_Vacuum(self,x:float,y:float,z:float)->bool:
+        """
+        Check if a 3D cartesian element frame coordinate is contained within an element's vacuum tube
+
+        :param x: x cartesian coords
+        :param y: y cartesian coords
+        :param z: z cartesian coords
+        :return: True if the coordinate is inside, False if outside
+        """
+        raise NotImplementedError
+    def update_Element_Perturb_Params(self,shiftY:float, shiftZ:float, rotY:float, rotZ:float):
+        """
+        perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
+        the element will be shifted, and therefore the force it applies will be as well. This is modeled as shifting
+        and rotating the supplied coordinates to force and magnetic field function, then rotating the force
+
+        :param shiftY: Shift in the y direction in element frame
+        :param shiftZ: Shift in the z direction in the element frame
+        :param rotY: Rotation about y axis of the element
+        :param rotZ: Rotation about z axis of the element
+        :return:
+        """
+        self.shiftY, self.shiftZ, self.rotY, self.rotZ=shiftY, shiftZ, rotY, rotZ
+    def misalign_Coords(self,x:float,y:float,z:float):
+        """Model element misalignment by misaligning coords. First do rotations about (0,0,0), then displace. Element
+        misalignment has the opposite applied effect. Force will be needed to be rotated"""
+        x,y=np.cos(-self.rotZ)*x-np.sin(-self.rotZ)*y,np.sin(-self.rotZ)*x+np.cos(-self.rotZ)*y #rotate about z
+        x,z=np.cos(-self.rotY)*x-np.sin(-self.rotY)*z,np.sin(-self.rotY)*x+np.cos(-self.rotY)*z #rotate about y
+        y-=self.shiftY
+        z-=self.shiftZ
+        return x,y,z
+    def rotate_Force_For_Misalignment(self,Fx:float,Fy:float,Fz:float):
+        """After rotating and translating coords to model element misalignment, the force must now be rotated as well"""
+        Fx,Fy=np.cos(self.rotZ)*Fx-np.sin(self.rotZ)*Fy,np.sin(self.rotZ)*Fx+np.cos(self.rotZ)*Fy #rotate about z
+        Fx,Fz=np.cos(self.rotY)*Fx-np.sin(self.rotY)*Fz,np.sin(self.rotY)*Fx+np.cos(self.rotY)*Fz #rotate about y
+        return Fx,Fy,Fz
+
+spec = [
+    ('L', numba.float64),
+    ('ap', numba.float64),
+    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
+]
+@jitclass(spec)
+class DriftFieldHelper_Numba:
+    """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
+    def __init__(self,L,ap):
+        self.L=L
+        self.ap=ap
+        self.baseClass=BaseClassFieldHelper_Numba()
+    def magnetic_Potential(self, x,y,z):
+        """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
+            return np.nan
+        return 0.0
+    def force(self, x,y,z):
+        """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:return np.nan,np.nan,np.nan
+        else:return 0.0,0.0,0.0
+    def is_Coord_Inside_Vacuum(self,x,y,z):
+        """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
+        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
+        else: return False
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
+        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+
+
+
+spec = [
+    ('L', numba.float64),
+    ('K', numba.float64),
+    ('ap', numba.float64),
+    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
+]
+@jitclass(spec)
+class IdealLensFieldHelper_Numba:
+    """Helper for elementPT.LensIdeal. Psuedo-inherits from BaseClassFieldHelper"""
+    def __init__(self,L,K,ap):
+        self.L=L
+        self.K=K
+        self.ap=ap
+        self.baseClass=BaseClassFieldHelper_Numba()
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
+        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+    def is_Coord_Inside_Vacuum(self,x:float,y:float,z:float)->bool:
+        """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
+        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
+        else: return False
+    def magnetic_Potential(self, x:float,y:float,z:float):
+        """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
+        r = np.sqrt(y ** 2 + z ** 2)
+        if 0 <= x <= self.L and r < self.ap:
+            return .5*self.K * r ** 2
+        else:
+            return np.nan
+    def force(self, x,y,z):
+        """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
+        if self.is_Coord_Inside_Vacuum(x,y,z)==True:
+            x,y,z=self.baseClass.misalign_Coords(x,y,z)
+            Fx=0.0
+            Fy = -self.K * y
+            Fz = -self.K * z
+            Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
+            return Fx,Fy,Fz
+        else:
+            return np.nan,np.nan,np.nan
+
 spec = [
     ('xArrEnd',numba.float64[::1]),
     ('yArrEnd',numba.float64[::1]),
@@ -164,10 +325,12 @@ spec = [
     ('Lcap', numba.float64),
     ('ap', numba.float64),
     ('fieldFact', numba.float64),
+    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
 ]
 
 @jitclass(spec)
 class LensHalbachFieldHelper_Numba:
+    """Helper for elementPT.HalbachLensSim"""
     def __init__(self,fieldData,L,Lcap,ap):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
         self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn=fieldData
@@ -175,6 +338,7 @@ class LensHalbachFieldHelper_Numba:
         self.Lcap=Lcap
         self.ap=ap
         self.fieldFact=1.0
+        self.baseClass=BaseClassFieldHelper_Numba()
     def is_Coord_Inside_Vacuum(self,x,y,z):
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
         else: return False
@@ -238,87 +402,8 @@ class LensHalbachFieldHelper_Numba:
             V0=np.nan
         V0=V0*self.fieldFact
         return V0
-spec = [
-    ('L', numba.float64),
-    ('K', numba.float64),
-    ('ap', numba.float64),
-    ('shiftY', numba.float64),
-    ('shiftZ', numba.float64),
-    ('rotY', numba.float64),
-    ('rotZ', numba.float64),
-]
-@jitclass(spec)
-class IdealLensFieldHelper_Numba:
-    """
-    Fast numba jitclass to assist with classes in ElementPT. This introduces many performacne advantages, but as of
-    now has a major drawback on not being able to be pickled. This prevents parallel processing of particle tracing.
-    There is also no inheritance.
-    """
-    def __init__(self,L,K,ap):
-        self.L=L
-        self.K=K
-        self.ap=ap
-        self.shiftY,self.shiftZ,self.rotY,self.rotZ=0.0,0.0,0.0,0.0
-    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
-        """Update with perturbation parameters to model element misalingment relative to the vacuum tube"""
-        self.shiftY, self.shiftZ, self.rotY, self.rotZ=shiftY, shiftZ, rotY, rotZ
-    def is_Coord_Inside_Vacuum(self,x:float,y:float,z:float)->bool:
-        """Check if coordinates are inside vacuum tube"""
-        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
-        else: return False
-    def magnetic_Potential(self, x:float,y:float,z:float):
-        """Magnetic potential in simulation units in element frame"""
-        r = np.sqrt(y ** 2 + z ** 2)
-        if 0 <= x <= self.L and r < self.ap:
-            return .5*self.K * r ** 2
-        else:
-            return np.nan
-    def misalign_Coords(self,x:float,y:float,z:float):
-        """Model element misalignment by misaligning coords. First do rotations about (0,0,0), then displace. Element
-        misalignment has the opposite applied effect. Force will be needed to be rotated"""
-        x,y=np.cos(-self.rotZ)*x-np.sin(-self.rotZ)*y,np.sin(-self.rotZ)*x+np.cos(-self.rotZ)*y
-        y+=self.shiftY
-        z+=self.shiftZ
-        return x,y,z
-    def rotate_Force_For_Misalignment(self,Fx,Fy,Fz):
-        """After rotating and translating coords to model element misalignment, the force must now be rotated as well"""
-        Fx,Fy=np.cos(self.rotZ)*Fx-np.sin(self.rotZ)*Fy,np.sin(self.rotZ)*Fx+np.cos(self.rotZ)*Fy
-        return Fx,Fy,Fz
-    def force(self, x,y,z):
-        """Calculate force in element frame"""
-        if self.is_Coord_Inside_Vacuum(x,y,z)==True:
-            x,y,z=self.misalign_Coords(x,y,z)
-            Fx=0.0
-            Fy = -self.K * y
-            Fz = -self.K * z
-            Fx,Fy,Fz=self.rotate_Force_For_Misalignment(Fx,Fy,Fz)
-            return Fx,Fy,Fz
-        else:
-            return np.nan,np.nan,np.nan
-spec = [
-    ('L', numba.float64),
-    ('ap', numba.float64),
-]
-@jitclass(spec)
-class DriftFieldHelper_Numba:
-    def __init__(self,L,ap):
-        self.L=L
-        self.ap=ap
-    def magnetic_Potential(self, x,y,z):
-        # potential energy at provided coordinates
-        # q coords in element frame
-        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
-            return np.nan
-        return 0.0
-    def force(self, x,y,z):
-        # note: for the perfect lens, in it's frame, there is never force in the x direction. Force in x is always zero
-        if 0 <= x <= self.L and np.sqrt(y ** 2 + z ** 2) < self.ap:
-            return 0.0,0.0,0.0
-        else:
-            return np.nan, np.nan, np.nan
-    def is_Coord_Inside_Vacuum(self,x,y,z):
-        if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
-        else: return False
+
+
 
 spec = [
     ('ang', numba.float64),

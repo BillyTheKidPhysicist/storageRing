@@ -186,6 +186,7 @@ class ParticleTracer:
         results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,
                                         self.currentEl.fastFieldHelper)
         qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
+        self.particle.T=self.T
         if particleOutside is True:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
     @staticmethod

@@ -94,7 +94,7 @@ class Element:
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fastFieldHelper=None
+        self.fastFieldHelper=fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba()
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
@@ -111,7 +111,7 @@ class Element:
         :param rotZ: Rotation about z axis of the element
         :return:
         """
-        raise NotImplementedError
+        self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
     def magnetic_Potential(self, qEl:np.ndarray)->float:
         """
         Return magnetic potential energy at position qEl.
@@ -123,7 +123,7 @@ class Element:
         :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
         """
-        raise NotImplementedError
+        return self.fastFieldHelper.magnetic_Potential(*qEl) #will raise NotImplementedError if called
     def force(self, qEl:np.ndarray)->np.ndarray:
         """
         Return force at position qEl.
@@ -136,7 +136,7 @@ class Element:
         :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
         :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
         """
-        raise NotImplementedError
+        return np.asarray(self.fastFieldHelper.force(*qEl)) #will raise NotImplementedError if called
 
     def transform_Lab_Coords_Into_Global_Orbit_Frame(self, qLab:np.ndarray, cumulativeLength:float)->np.ndarray:
         """
@@ -213,7 +213,7 @@ class Element:
         :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        raise NotImplementedError
+        return self.fastFieldHelper.is_Coord_Inside_Vacuum(*qEl) #will raise NotImplementedError if called
     def shape_Field_Data_3D(self, data:np.ndarray)->tuple:
         """
         Shape 3D field data for fast linear interpolation method
@@ -294,7 +294,7 @@ class LensIdeal(Element):
         self.Bp = Bp
         self.rp = rp
         self.L = L
-        self.ap = ap
+        self.ap = ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
         self.bumpOffset=bumpOffset
         self.shift=1e-3
@@ -311,9 +311,6 @@ class LensIdeal(Element):
         if self.L is not None:
             self.Lo = self.L
         self.fastFieldHelper=fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L,self.K,self.ap)
-    def perturb_Element(self,shiftY:float,shiftZ:float,rotY:float,rotZ:float):
-        """Inherited abstract method from Element. Perturb element for misalignment"""
-        self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
         """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
@@ -342,15 +339,6 @@ class LensIdeal(Element):
         assert L>0.0
         self.L = L
         self.Lo = self.L
-    def force(self,q):
-        """Inherited abstract method from Element"""
-        return np.asarray(self.fastFieldHelper.force(*q))
-    def magnetic_Potential(self, q):
-        """Inherited abstract method from Element"""
-        return self.fastFieldHelper.magnetic_Potential(*q)
-    def is_Coord_Inside(self, q):
-        """Inherited abstract method from Element. Only simple geometry of a cylinder is needed"""
-        return self.fastFieldHelper.is_Coord_Inside_Vacuum(*q)
 
 class Drift(LensIdeal):
     """
