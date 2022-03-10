@@ -76,6 +76,8 @@ class ParticleTracerLattice:
         # satisfy geometry. Must be inside bending region
 
         self.elList=[] #to hold all the lattice elements
+    def __iter__(self):
+        return (element for element in self.elList)
     def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.

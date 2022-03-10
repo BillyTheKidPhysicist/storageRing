@@ -161,7 +161,7 @@ class PhaseSpaceAnalyzer:
         xArr=np.arange(revolutionsMax+1)*self.lattice.totalLength+xVideoPoint
         return xArr
     def plot_Lattice_On_Axis(self,ax,plotPointCoords=None):
-        for el in self.lattice.elList:
+        for el in self.lattice:
             ax.plot(*el.SO.exterior.xy,c='black')
         if plotPointCoords is not None:
             ax.scatter(plotPointCoords[0],plotPointCoords[1],c='red',marker='x',s=100,edgecolors=None)

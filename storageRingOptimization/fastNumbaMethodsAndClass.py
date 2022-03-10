@@ -1,3 +1,4 @@
+#type: ignore
 import numpy.linalg as npl
 import numpy as np
 import numba
@@ -489,7 +490,7 @@ class BenderFieldHelper_Numba:
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         raise NotImplementedError
 
-    
+
 spec = [
     ('c1', numba.float64),
     ('c2', numba.float64),

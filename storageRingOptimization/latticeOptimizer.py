@@ -106,7 +106,7 @@ class LatticeOptimizer:
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
         r2Injector = self.latticeInjector.combiner.r2
         r2Ring = self.latticeRing.combiner.r2
-        for el in self.latticeInjector.elList:
+        for el in self.latticeInjector:
             SO = copy.copy(el.SO_Outer)
             SO = translate(SO, xoff=-r2Injector[0], yoff=-r2Injector[1])
             SO = rotate(SO, rotationAngle, use_radians=True, origin=(0, 0))
@@ -116,7 +116,7 @@ class LatticeOptimizer:
 
     def generate_Shapely_Floor_Plan(self):
         shapelyObjectList = []
-        shapelyObjectList.extend([el.SO_Outer for el in self.latticeRing.elList])
+        shapelyObjectList.extend([el.SO_Outer for el in self.latticeRing])
         shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame())
         return shapelyObjectList
 
@@ -126,7 +126,7 @@ class LatticeOptimizer:
         overlapElIndex = 3
         injectorLensShapely = injectorShapelyObjects[overlapElIndex]
         assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
-        ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
+        ringShapelyObjects = [el.SO_Outer for el in self.latticeRing]
         area = 0
         converTo_mm = (1e3) ** 2
         for element in ringShapelyObjects:

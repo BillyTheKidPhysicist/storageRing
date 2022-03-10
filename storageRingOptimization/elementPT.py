@@ -4,8 +4,9 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from math import sqrt
+from typing import Optional
 import warnings
-import fastNumbaMethodsAndClass
+import fastNumbaMethodsAndClass # type: ignore
 import pandas as pd
 import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
@@ -45,7 +46,7 @@ class Element:
     for force vectors and magnetic potential at a point in space. It will also contain methods to generate fields values
     and construct itself, which is not always trivial.
     """
-    def __init__(self, PTL,build=True):
+    def __init__(self, PTL,ang=0.0,build=True,L=None):
         # self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -70,21 +71,16 @@ class Element:
         self.SO_Outer=None #shapely object that represents the outer edge of the element
         self.outerHalfWidth=None #outer diameter/width of the element, where applicable. For example, outer diam of lens is the
         # #bore radius plus magnets and mount material radial thickness
-        # self.fringeFrac=None #the ratio of the extra length added to hard end to account for fringe fields to the radius
-        # #of the element
-        # self.numMagnets=None #number of magnets, typically segments in segmented bending magnet
-        self.ang = 0.0  # bending angle of the element. 0 for lenses and drifts
+        self.ang = ang  # bending angle of the element. 0 for lenses and drifts
+        self.L=L
         self.Lo = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
         # # value because for segmented benders the path length is not simple to compute
-        # self.index = None  # elements position in lattice
-        # self.cap = False  # wether there is a cap or not present on the element. Cap simulates fringe fields
         self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper=fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba()
-
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         # #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
         if build==True:
@@ -159,20 +155,26 @@ class Element:
         :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
         """
         raise NotImplementedError
-    def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit)->np.ndarray:
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit:np.ndarray)->np.ndarray:
         """
-        Generate global cartesian observer/lab frame coords from non-cartesian local orbit frame coords 
+        Generate global cartesian observer/lab frame coords from non-cartesian local orbit frame coords. Orbit coords
+        are similiar to the Frenet-Serret Frame.
 
-        :param qOrbit: 3D non-cartesian position vector in element's orbit frame,numpy.array([x,y,z])
+        :param qOrbit: 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
+            the orbit trajectory. xo is in the xy lab plane, yo is perpdindicular Not necessarily the same as the
+            distance along the center of the element.
         :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
         """
         raise NotImplementedError
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
         """
-        Generate non-cartesian local orbit frame coords from local cartesian element frame coords
+        Generate non-cartesian local orbit frame coords from local cartesian element frame coords. Orbit coords are
+        similiar to the Frenet-Serret Frame.
 
         :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
-        :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
+        :return: New 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
+            the orbit trajectory. xo is in the xy lab plane, yo is perpdindicular Not necessarily the same as the
+            distance along the center of the element.
         """
         raise NotImplementedError
     def transform_Lab_Frame_Vector_Into_Element_Frame(self, vecLab:np.ndarray)->np.ndarray:
@@ -284,13 +286,12 @@ class LensIdeal(Element):
         :param fillParams: Wether to carry out filling the element parameters. dubious
         """
         # fillParams is used to avoid filling the parameters in inherited classes
+        super().__init__(PTL,build=False,L=L)
         self.Bp = Bp
         self.rp = rp
-        self.L = L
         self.ap = ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
         self.bumpOffset=bumpOffset
-        super().__init__(PTL,build=False)
         if build==True:
             self.build()
     def set_BpFact(self,BpFact:float):
@@ -305,25 +306,25 @@ class LensIdeal(Element):
         self.fastFieldHelper=fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L,self.K,self.ap)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
-        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
+        """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew=qLab.copy()
         qNew-=self.r1
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
     def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
-        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
+        """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew = qEl.copy()
         qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew+=self.r1
         return qNew
     def transform_Orbit_Frame_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
-        """Inherited abstract method from Element. A simple translation and rotation completes the transformation"""
+        """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]
         qNew+=self.r1
         return qNew
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q:np.ndarray)->np.ndarray:
-        """Inherited abstract method from Element. Element and orbit frame is identical"""
+        """Overrides abstract method from Element. Element and orbit frame is identical"""
         return q.copy()
 
     def set_Length(self, L:float):
@@ -350,62 +351,82 @@ class Drift(LensIdeal):
         self.Lo = self.L
 
 class BenderIdeal(Element):
-    def __init__(self, PTL, ang, Bp, rp, rb, ap, build=True):
-        # this is the base model for the bending elements, of which there are several kinds. To maintain generality, there
-        # are numerous methods and variables that are not necesary here, but are used in other child classes. For example,
-        # this element has no caps, but a cap length of zero is still used.
-        assert rp<rb/2.0 #geometry constraints
-        super().__init__(PTL, build=False)
-        self.ang=ang
-        self.Bp = Bp  # field strength at pole
-        self.rp = rp  # bore radius of magnet
-        self.ap = ap  # radial apeture size
-        self.rb = rb  # bending radius of magnet. This is tricky because this is the bending radius down the center, but the
-        # actual trajectory of the particles is offset a little out from this
-        self.shape = 'BEND'
-        self.ro = None  # bending radius of orbit, ie rb + rOffset.
-        self.outputOffsetFunc = None  # a function that returns the value of the offset of the trajectory for a given bending radius
-        self.segmented = False  # wether the element is made up of discrete segments, or is continuous
-        self.capped = False  # wether the element has 'caps' on the inlet and outlet. This is used to model fringe fields
+    """
+        Element representing a bender/waveguide. Base class for other benders
+
+        Simple ideal model of bending/waveguide element modeled as a toroid. The force is linearly proportional to the
+        particle's minor radius in the toroid. In this way, it works as a bent lens. Particles will travel through the
+        bender displaced from the center of the  potential (minor radius=0.0) because of the centrifugal effect. Thus,
+        to minimize oscillations, the nominal particle trajectory is not straight through the bender, but offset a small
+        distance. For the ideal bender, this offset can be calculated analytically. Because there are no fringe fields,
+        energy conservation is not expected
+
+        Attributes
+        ----------
+        Bp: Magnetic field at poleface of bender bore, Teslas.
+
+        rp: Radius (minor) to poleface of bender bore, meters.
+
+        ap: Radius (minor) of aperture bender bore, meters. Effectively the vacuum tube inner radius
+
+        rb: Nominal ending radius of bender/waveguide, meters. This is major radius of the toroid. Note that atoms will
+            revolve at a slightly larger radius because of centrifugal effect
+
+        shape: Gemeotric shape of element used for placement. ParticleTracerLatticeClass uses this to assemble lattice
+
+        ro: Orbit bending radius, meter. Larger than self.rb because of centrifugal effect
+
+        segmented: Wether the element is made up of discrete segments, or is continuous. Used in
+            ParticleTracerLatticeClass
+        """
+    def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
+        if all(arg is not None for arg in [ap,rb,ang])==True:
+            assert ap<rp<rb/2.0 and 0.0<ang<2*np.pi
+        self.Bp:float  = Bp
+        self.rp:float = rp
+        self.ap:float = ap
+        self.rb:float = rb
+        self.K:Optional[float] = None
+        self.shape:str = 'BEND'
+        self.ro: Optional[float] =None  # bending radius of orbit, ie rb + rOffset.
+        self.segmented:bool = False  # wether the element is made up of discrete segments, or is continuous
+        super().__init__(PTL, ang=ang,build=False)
         if build==True:
             self.build()
     def build(self):
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
-        self.outputOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
-        self.outputOffset = self.outputOffsetFunc(self.rb)
+        self.outputOffset = sqrt(self.rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - self.rb / 2#self.output_Offset(self.rb)
         self.ro = self.rb + self.outputOffset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
         self.fastFieldHelper=fastNumbaMethodsAndClass.BenderFieldHelper_Numba(self.ang,self.K,self.rp,self.rb,self.ap)
-    def transform_Lab_Coords_Into_Element_Frame(self, q):
-        qNew = q - self.r0
+    def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
+        """Overrides abstract method from Element."""
+        qNew = qLab - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
-    def transform_Element_Coords_Into_Lab_Frame(self,qEl):
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
+        """Overrides abstract method from Element."""
         qNew=qEl.copy()
         qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew=qNew+self.r0
         return qNew
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
-        # q: element coords
-        # returns a 3d vector in the orbit frame. First component is distance along trajectory, second is radial displacemnt
-        # from the nominal orbit computed with centrifugal force, and the third is the z axis displacemnt.
-        qo = q.copy()
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
+        """Overrides abstract method from Element."""
+        qo = qEl.copy()
         phi = self.ang - full_Arctan(qo)  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
-        qox = sqrt(q[0] ** 2 + q[1] ** 2) - self.ro
+        qox = sqrt(qEl[0] ** 2 + qEl[1] ** 2) - self.ro
         qo[0] = qos
         qo[1] = qox
         return qo
 
-
     def transform_Orbit_Frame_Into_Lab_Frame(self,qo):
-        #qo: orbit frame coords, [xo,yo,zo]. xo is distance along orbit, yo is displacement perpindicular to orbit and
-        #horizontal. zo is vertical
+        """Overrides abstract method from Element."""
         xo,yo,zo=qo
         phi=self.ang-xo/self.ro
         xLab=self.ro*np.cos(phi)
@@ -415,7 +436,9 @@ class BenderIdeal(Element):
         qLab[:2]=self.ROut@qLab[:2]
         qLab+=self.r0
         return qLab
+
     def is_Coord_Inside(self, q):
+        """Overrides abstract method from Element."""
         phi = full_Arctan(q)
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
@@ -437,32 +460,35 @@ class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
-    def __init__(self, PTL, Lm:float, c1:float, c2, apL,apR,apZ, mode,sizeScale,build=True):
-        super().__init__(PTL,build=False)
+    def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float,apR: float,apZ: float, mode: str,
+                 sizeScale: float,build: bool=True):
+        super().__init__(PTL, build=False)
         assert mode in ('injector', 'storageRing')
         self.fieldFact=-1.0 if mode=='injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
         # use sizeScale=2.0
-        self.apR = apR * self.sizeScale
-        self.apL = apL * self.sizeScale
-        self.apz=apZ*self.sizeScale
+        self.apR = apR
+        self.apL = apL
+        self.apz=apZ
         self.ap=None
-        self.Lm = Lm * self.sizeScale
+        self.Lm = Lm
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
         self.Lb = None  # length of straight section after the kink after the inlet actuall inside the magnet
-        self.c1 = c1 / self.sizeScale
-        self.c2 = c2 / self.sizeScale
+        self.c1 = c1
+        self.c2 = c2
         self.space = 0  # space at the end of the combiner to account for fringe fields
 
         self.shape = 'COMBINER_SQUARE'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
+
         if build==True:
             self.build()
 
     def build(self):
-
+        self.apR,self.apL,self.apz,self.Lm=[val*self.sizeScale for val in (self.apR,self.apL,self.apz,self.Lm)]
+        self.c1,self.c2=self.c1/self.sizeScale,self.c2/self.sizeScale
         self.Lb = self.Lm  # length of segment after kink after the inlet
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2,np.nan, self.Lb,
                                                                             self.apL,self.apR, np.nan, np.nan)
@@ -887,9 +913,8 @@ class HalbachLensSim(LensIdeal):
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
         assert apFrac<=.95
-        self.rp=min(rpLayers)
-        self.ap = self.rp * apFrac
-        super().__init__(PTL, L, None, self.rp, self.ap, bumpOffset,build=False)
+        rp,ap=min(rpLayers),min(rpLayers)*apFrac
+        super().__init__(PTL, L, None, rp, ap, bumpOffset,build=False)
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
@@ -1015,7 +1040,7 @@ class CombinerHexapoleSim(CombinerIdeal):
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         vacuumTubeThickness=2e-3
         assert  mode in ('storageRing','injector')
-        super().__init__(PTL,Lm,np.nan,np.nan,np.nan,np.nan,np.nan,mode,1.0,build=False)
+        super().__init__(PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
