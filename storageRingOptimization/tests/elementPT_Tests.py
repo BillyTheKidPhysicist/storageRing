@@ -22,6 +22,8 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
     tol=1e-16
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
+        # np.set_printoptions(precision=100)
+        # print(repr(qf),repr(pf))
         assert np.all(np.abs((qf-qf0))<tol)
         assert np.all(np.abs((pf-pf0))<tol)
 
@@ -49,7 +51,7 @@ class genericElementTestHelper:
         #test that aperture works as expected by sampling many points and getting the correct results
         isInsideList=[]
         @given(*self.coordsTestRules)
-        @settings(max_examples=1000,deadline=None)
+        @settings(max_examples=10000,deadline=None)
         def coord_Check_Consistency(x1,x2,x3):
             coord=self.convert_Coord(x1,x2,x3)
             F=self.el.force(coord)
@@ -57,7 +59,8 @@ class genericElementTestHelper:
             isInside=self.el.is_Coord_Inside(coord)
             isInsideList.append(isInside)
             if isInside==False: assert math.isnan(F[0])==True and math.isnan(V)==True
-            else: assert math.isnan(F[0])==False and math.isnan(V)==False
+            else: assert np.any(np.isnan(F))==False and math.isnan(V)==False
+            #this can occur because a nan is being returned from the interpolation reaching into the magnetic material
         coord_Check_Consistency()
         numTrue=sum(isInsideList)
         assert numTrue>50 #at least 50 true seems reasonable
@@ -290,8 +293,8 @@ class combinerHexapoleSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20686029513369442 , -0.005812562642719757,0.003942269805554034])
-        pf0=np.array([-200.40254979666037 ,  -13.176385446022332,   10.09175559122126 ])
+        qf0=np.array([-0.20686635609322787 , -0.005812506947748845,0.003942038743201203])
+        pf0=np.array([-200.40519762427516 ,  -13.175831107630524,   10.093774609103724])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
@@ -302,4 +305,3 @@ def run_Tests():
     combinerIdealTestHelper().run_Tests()
     hexapoleSegmentedBenderSimTestHelper().run_Tests()
     hexapoleLensSimTestHelper().run_Tests()
-    combinerHexapoleSimTestHelper().run_Tests()

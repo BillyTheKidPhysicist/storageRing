@@ -397,11 +397,11 @@ class LensHalbachFieldHelper_Numba:
             x = self.Lcap - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
             Fx = -Fx
-        elif self.Lcap < x and x <= self.L - self.Lcap: #if long enough, model interior as uniform in x
+        elif self.Lcap < x <= self.L - self.Lcap: #if long enough, model interior as uniform in x
             Fx=0.0
             Fy = interp2D(-z, y,  self.xArrIn, self.yArrIn, self.FyArrIn)
             Fz = -interp2D(-z, y, self.xArrIn, self.yArrIn, self.FxArrIn)
-        elif self.L - self.Lcap<= x and x <= self.L: #at end of lens
+        elif self.L - self.Lcap<= x <= self.L+self.extraFieldLength: #at end of lens
             x = self.Lcap - (self.L - x)
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
         else:
@@ -736,13 +736,13 @@ class CombinerHexapoleSimFieldHelper_Numba:
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        symmetryLength = self.Lm + 2 * self.space
-        if -self.extraFieldLength <= x <= symmetryLength / 2:
-            x = symmetryLength / 2 - x
+        symmetryPlaneX = self.Lm/2 + self.space #field symmetry plane location
+        if -self.extraFieldLength <= x <= symmetryPlaneX:
+            x = symmetryPlaneX - x
             Fx, Fy, Fz = self._force_Func(x, y, z)
             Fx = -Fx
-        elif symmetryLength / 2 < x<= symmetryLength:
-            x = x - symmetryLength / 2
+        elif symmetryPlaneX < x:
+            x = x - symmetryPlaneX
             Fx, Fy, Fz = self._force_Func(x, y, z)
         else:
             raise ValueError
@@ -757,12 +757,12 @@ class CombinerHexapoleSimFieldHelper_Numba:
         x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        symmetryLength = self.Lm + 2 * self.space
-        if -self.extraFieldLength <= x <= symmetryLength / 2:
-            x = symmetryLength / 2 - x
+        symmetryPlaneX = self.Lm/2 + self.space #field symmetry plane location
+        if -self.extraFieldLength <= x <= symmetryPlaneX:
+            x = symmetryPlaneX - x
             V = self._magnetic_Potential_Func(x, y, z)
-        elif symmetryLength / 2 < x<= symmetryLength:
-            x = x - symmetryLength / 2
+        elif symmetryPlaneX  < x: #particle can extend past 2*symmetryPlaneX
+            x = x - symmetryPlaneX
             V = self._magnetic_Potential_Func(x, y, z)
         else:
             raise Exception(ValueError)

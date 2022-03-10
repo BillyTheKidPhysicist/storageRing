@@ -765,6 +765,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         numSteps=numSteps if is_Even(numSteps) else numSteps+1
         return np.linspace(Min,Max,numSteps)
     def make_Field_Coord_Arr(self,xMin,xMax,yMin,yMax,zMin,zMax):
+        assert abs(xMax-xMin)/self.numPointsTransverse<self.rp-self.ap and abs(yMax-yMin)/self.numPointsTransverse\
+               <self.rp-self.ap #ensure there is no interpolation that reaches into the magnetic material by
+        # making grid spacing sufficient small
         xArr=self.make_Grid_Edge_Coord_Arr(xMin,xMax,numSteps=self.numPointsTransverse)
         yArr=self.make_Grid_Edge_Coord_Arr(yMin,yMax,numSteps=self.numPointsTransverse)
         zArr=self.make_Grid_Edge_Coord_Arr(zMin,zMax,stepSize=self.longitudinalSpatialStepSize)
@@ -967,10 +970,12 @@ class HalbachLensSim(LensIdeal):
         zMin=-TINY_STEP #inside the lens
         zMax=self.Lcap+TINY_STEP+self.extraFieldLength #outside the lens
         zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
+        assert abs(abs(xArr_Quadrant[1]-xArr_Quadrant[0])-abs(yArr_Quadrant[1]-yArr_Quadrant[0]))<1e-12 #same spacing
         assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
         assert len(xArr_Quadrant)%2==1 and len(yArr_Quadrant)%2==1
         assert all((arr[-1]-arr[-2])/self.rp<.1 for arr in [xArr_Quadrant,yArr_Quadrant]),"" \
                                                                     "spatial step size must be small compared to radius"
+        assert np.sqrt(2)*(xArr_Quadrant[1]-xArr_Quadrant[0])<self.rp-self.ap
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
@@ -1014,7 +1019,7 @@ class CombinerHexapoleSim(CombinerIdeal):
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
-        self.ap=min([self.rp-vacuumTubeThickness,.95*self.rp]) #restrict to good field region
+        self.ap=min([self.rp-vacuumTubeThickness,.9*self.rp]) #restrict to good field region
         # assert loadBeamDiam<1.5*self.ap and self.ap>0.0
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
@@ -1040,7 +1045,7 @@ class CombinerHexapoleSim(CombinerIdeal):
         #todo: this is filthy
         outerFringeFrac = 1.5
         numPointsLongitudinal=25
-        numPointsTransverse=30
+        numPointsTransverse=40
 
         rpList=[]
         magnetWidthList=[]
@@ -1072,8 +1077,12 @@ class CombinerHexapoleSim(CombinerIdeal):
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
-        BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
+        BNormGrad,BNorm=np.zeros((len(volumeCoords),3))*np.nan,np.zeros(len(volumeCoords))*np.nan
+        validIndices=np.arange(len(volumeCoords))
+        #validIndices = np.logical_and(np.linalg.norm(volumeCoords[:,:2],axis=1)<self.rp,volumeCoords[:,0]<=self.Lm/2)#tricky
+        BNormGrad[validIndices],BNorm[validIndices] = lens.BNorm_Gradient(volumeCoords[validIndices],returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        # data3D[:,3:][np.logical_and(np.linalg.norm(data3D[:,:2],axis=1)>self.rp,data3D[:,2]<self.Lm/2)]=np.nan
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
         fieldData=self.shape_Field_Data_3D(data3D)
@@ -1099,11 +1108,12 @@ class CombinerHexapoleSim(CombinerIdeal):
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         xMax=self.Lb+(self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
         # print(xMaxHalf,(self.space*2+self.Lm)/2)
-        yzMax=self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
-        # print(zMaxHalf)
+        xyMax=self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
         assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
-        assert np.abs(xArr_Quadrant).max()>yzMax and np.abs(yArr_Quadrant).max()>yzMax, \
+        assert np.abs(xArr_Quadrant).max()>xyMax and np.abs(yArr_Quadrant).max()>xyMax, \
             "field region must extend past particle region"
+        assert np.sqrt(2) * (xArr_Quadrant[1] - xArr_Quadrant[0]) < self.rp - self.ap #no interpolation reaching into
+        #magnetic material
 
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
                                             self.Lm,self.space, self.ap,self.ang,self.fieldFact,self.extraFieldLength)
@@ -1197,28 +1207,7 @@ class CombinerHexapoleSim(CombinerIdeal):
 
 
     def is_Coord_Inside(self, q):
-        # q: coordinate to test in element's frame
-        if not -self.ap <= q[2] <= self.ap:  # if outside the z apeture (vertical)
-            return False
-        elif 0 <= q[0] <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
-            # through the combiner. Simple square apeture
-            if np.sqrt(q[1]**2+q[2]**2) < self.ap:  # if inside the y (width) apeture
-                return True
-            else:
-                return False
-        elif q[0] < 0:
-            return False
-        else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-            m = np.tan(self.ang)
-            Y1 = m * q[0] + (self.ap - m * self.Lb)  # upper limit
-            Y2 = (-1 / m) * q[0] + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * q[0] + (-self.ap - m * self.Lb)
-            if np.sign(m)<0.0 and (q[1] < Y1 and q[1] > Y2 and q[1] > Y3): #if the inlet is tilted 'down'
-                return True
-            elif np.sign(m)>0.0 and (q[1] < Y1 and q[1] < Y2 and q[1] > Y3): #if the inlet is tilted 'up'
-                return True
-            else:
-                return False
+        return self.fastFieldHelper.is_Coord_Inside(*q)
     def magnetic_Potential(self, q):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
         return self.fastFieldHelper.magnetic_Potential(*q)

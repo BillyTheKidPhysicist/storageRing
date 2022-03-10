@@ -70,8 +70,7 @@ def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated):
                 print('Energy: ',EFinalTraced)
                 print('EnergyTest: ',EFinalTest)
                 print('difference: ',EFinalTest-EFinalTraced)
-            raise Exception('Failed test')
-        assert condition,'Failed on particle: '+str(i)
+            assert False,'Failed on test: '+TESTDataFileName
 def generate_Lattice(configuration):
     #a variety of lattice configurations are tested
     if configuration=='1':
@@ -137,14 +136,14 @@ def _save_New_Data():
     for testNum in tests:
         print('Test number ' + testNum)
         TEST_Lattice_Configuration(testNum, saveData=True)
-        print('Success')
+        print('Saved successfully')
 def _full_Test():
     tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
         print('Test number ' + testNum)
         TEST_Lattice_Configuration(testNum, fullTest=True)
         print('Success')
-def test(parallelTesting=False,fullTest=False):
+def run_Tests(parallelTesting=False,fullTest=False):
     def wrap(x):
         return TEST_Lattice_Configuration(x,fullTest=fullTest)
     testNameList = ['1', '2', '3', '4', '5', '6']

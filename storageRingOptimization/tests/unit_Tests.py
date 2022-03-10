@@ -18,6 +18,6 @@ def test_Parallel_Gradient_Descent():
 def test_FastNumbaMethodsAndClasses():
     fastNumbaMethodsAndClass_Tests.run_Tests()
 def test_Lattice_Tracing_Full_Integration():
-    lattice_Tracing_Tests.test(parallelTesting=True)
+    lattice_Tracing_Tests.run_Tests(parallelTesting=True)
 def test_Elements():
     elementPT_Tests.run_Tests()

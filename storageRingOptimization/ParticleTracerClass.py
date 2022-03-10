@@ -354,8 +354,9 @@ class ParticleTracer:
                     self.pEl=self.pEl+self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
                 return
             else:
-                raise Exception('Something is wrong, element should have changed. Particle is possibly frozen because '
-                                'of broken logic, or being returned the same location')
+                raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
+                                'interpolation extends into the magnetic material. Particle is also possibly frozen '
+                                'because of broken logic that returns it to the same location.')
     def momentum_Correction_At_Bounday(self,qEl,pEl,el,direction):
         #a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
         assert direction in ('entering','leaving')
