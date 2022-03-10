@@ -485,6 +485,10 @@ class BenderFieldHelper_Numba:
         else:
             Fx,Fy,Fz=np.nan,np.nan,np.nan
         return Fx,Fy,Fz
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
+        raise NotImplementedError
+
     
 spec = [
     ('c1', numba.float64),
@@ -692,10 +696,12 @@ spec = [
     ('ap', numba.float64),
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
+    ('extraFieldLength', numba.float64),
+    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
 ]
 @jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
-    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact):
+    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -704,6 +710,8 @@ class CombinerHexapoleSimFieldHelper_Numba:
         self.ap=ap
         self.ang=ang
         self.fieldFact=fieldFact
+        self.extraFieldLength=extraFieldLength
+        self.baseClass=self.baseClass=BaseClassFieldHelper_Numba()
     def _force_Func(self,x,y,z):
         Fx0, Fy0, Fz0= vec_interp3D(-z,y,x,self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr)
         Fx = Fz0
@@ -721,38 +729,19 @@ class CombinerHexapoleSimFieldHelper_Numba:
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
         if searchIsCoordInside == True:
-            if not -self.ap <= z <= self.ap:  # if outside the z apeture (vertical)
-                return np.nan, np.nan, np.nan
-            elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
-                # through the combiner.
-                if np.sqrt(y ** 2 + z ** 2) < self.ap:
-                    pass
-                else:
-                    return np.nan, np.nan, np.nan
-            elif x < 0:
-                return np.nan, np.nan, np.nan
-            else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-                # todo: For now a square aperture, update to circular. Use a simple rotation
-                m = np.tan(self.ang)
-                Y1 = m * x + (self.ap - m * self.Lb)  # upper limit
-                Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-                Y3 = m * x + (-self.ap - m * self.Lb)
-                if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
-                    pass
-                elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
-                    pass
-                else:
-                    return np.nan, np.nan, np.nan
+            if self.is_Coord_Inside(x,y,z)==False:
+                return np.nan,np.nan,np.nan
+        x,y,z=self.baseClass.misalign_Coords(x,y,z)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryLength = self.Lm + 2 * self.space
-        if 0 <= x <= symmetryLength / 2:
+        if -self.extraFieldLength <= x <= symmetryLength / 2:
             x = symmetryLength / 2 - x
             Fx, Fy, Fz = self._force_Func(x, y, z)
             Fx = -Fx
-        elif symmetryLength / 2 < x:
+        elif symmetryLength / 2 < x<= symmetryLength:
             x = x - symmetryLength / 2
             Fx, Fy, Fz = self._force_Func(x, y, z)
         else:
@@ -760,21 +749,24 @@ class CombinerHexapoleSimFieldHelper_Numba:
         Fy = Fy * FySymmetryFact
         Fz = Fz * FzSymmetryFact
         Fx, Fy, Fz=self.fieldFact*Fx, self.fieldFact*Fy, self.fieldFact*Fz
+        Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
         if self.is_Coord_Inside(x,y,z) == False:
             return np.nan
+        x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryLength = self.Lm + 2 * self.space
-        if 0 <= x <= symmetryLength / 2:
+        if -self.extraFieldLength <= x <= symmetryLength / 2:
             x = symmetryLength / 2 - x
             V = self._magnetic_Potential_Func(x, y, z)
-        elif symmetryLength / 2 < x:
+        elif symmetryLength / 2 < x<= symmetryLength:
             x = x - symmetryLength / 2
             V = self._magnetic_Potential_Func(x, y, z)
         else:
             raise Exception(ValueError)
+        V=V*self.fieldFact
         return V
 
     def is_Coord_Inside(self, x,y,z):
@@ -801,6 +793,9 @@ class CombinerHexapoleSimFieldHelper_Numba:
                 return True
             else:
                 return False
+    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
+        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
 spec = [
     ('fieldDataSeg', numba.types.UniTuple(numba.float64[::1],7)),

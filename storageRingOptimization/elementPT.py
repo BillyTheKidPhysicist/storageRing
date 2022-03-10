@@ -45,8 +45,8 @@ class Element:
     for force vectors and magnetic potential at a point in space. It will also contain methods to generate fields values
     and construct itself, which is not always trivial.
     """
-    def __init__(self, PTL):
-        self.theta = None  # angle that describes an element's rotation in the xy plane.
+    def __init__(self, PTL,build=True):
+        # self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
         # east. for theta=90 the output is pointing up.
@@ -66,39 +66,29 @@ class Element:
         self.r1 = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
         self.r2 = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
         self.SO = None  # the shapely object for the element. These are used for plotting, and for finding if the coordinates
-        # are inside an element that can't be found with simple geometry
+        # # are inside an element that can't be found with simple geometry
         self.SO_Outer=None #shapely object that represents the outer edge of the element
         self.outerHalfWidth=None #outer diameter/width of the element, where applicable. For example, outer diam of lens is the
-        #bore radius plus magnets and mount material radial thickness
-        self.fringeFrac=None #the ratio of the extra length added to hard end to account for fringe fields to the radius
-        #of the element
-        self.numMagnets=None #number of magnets, typically segments in segmented bending magnet
-        self.ang = 0  # bending angle of the element. 0 for lenses and drifts
-        self.Lm = None  # hard edge length of magnet along line through the bore
-        self.L = None  # length of magnet along line through the bore
-        self.K = None  # 'spring constant' of element. For some this comes from comsol fields.
+        # #bore radius plus magnets and mount material radial thickness
+        # self.fringeFrac=None #the ratio of the extra length added to hard end to account for fringe fields to the radius
+        # #of the element
+        # self.numMagnets=None #number of magnets, typically segments in segmented bending magnet
+        self.ang = 0.0  # bending angle of the element. 0 for lenses and drifts
         self.Lo = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
-        # value because for segmented benders the path length is not simple to compute
-        self.index = None  # elements position in lattice
-        self.cap = False  # wether there is a cap or not present on the element. Cap simulates fringe fields
-        self.comsolExtraSpace = None  # extra space in comsol files to exported grids. this can be used to find dimensions
-        self.ap = None  # apeture of element. most elements apetures are assumed to be square
-        self.apz = None  # apeture in the z direction. all but the combiner is symmetric, so there apz is the same as ap
-        self.apL = None  # apeture on the 'left' as seen going clockwise. This is for the combiner
-        self.apR = None  # apeture on the'right'.
-        self.shape = None  # gemetric tupe of magnet, STRAIGHT,BEND or COMBINER. This is used to generalize how the geometry
-        # constructed in particleTracerLattice
+        # # value because for segmented benders the path length is not simple to compute
+        # self.index = None  # elements position in lattice
+        # self.cap = False  # wether there is a cap or not present on the element. Cap simulates fringe fields
         self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
-        self.sim = None  # wether the field values are from simulations
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
-        #lens combiner
+        # #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper=fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba()
 
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
-        #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
-
+        # #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
+        if build==True:
+            self.build()
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
         """
         perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
@@ -214,6 +204,10 @@ class Element:
         :return: True if the coordinate is inside, False if outside
         """
         return self.fastFieldHelper.is_Coord_Inside_Vacuum(*qEl) #will raise NotImplementedError if called
+
+    def build(self):
+        """build the element either by simulating fields, loading fields, or using analytic results. Called in __init__"""
+        raise NotImplementedError
     def shape_Field_Data_3D(self, data:np.ndarray)->tuple:
         """
         Shape 3D field data for fast linear interpolation method
@@ -279,7 +273,7 @@ class LensIdeal(Element):
     This will prevent energy conservation because of the absence of fringe fields between elements to reduce
     forward velocity. Interior vacuum tube is a cylinder
     """
-    def __init__(self, PTL, L:float, Bp:float, rp:float, ap:float,bumpOffset:float, fillParams=True):
+    def __init__(self, PTL, L:float, Bp:float, rp:float, ap:float,bumpOffset:float,build=True):
         """
         :param PTL: Instance of ParticleTracerLatticeClass
         :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
@@ -290,22 +284,20 @@ class LensIdeal(Element):
         :param fillParams: Wether to carry out filling the element parameters. dubious
         """
         # fillParams is used to avoid filling the parameters in inherited classes
-        super().__init__(PTL)
         self.Bp = Bp
         self.rp = rp
         self.L = L
         self.ap = ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
         self.bumpOffset=bumpOffset
-        self.shift=1e-3
-
-        if fillParams == True:
-            self.fill_Params()
+        super().__init__(PTL,build=False)
+        if build==True:
+            self.build()
     def set_BpFact(self,BpFact:float):
         """update the magnetic field multiplication factor. This is used to simulate changing field values"""
         self.fieldFact=BpFact
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
-    def fill_Params(self):
+    def build(self):
         """Update class parameters"""
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
@@ -342,26 +334,29 @@ class LensIdeal(Element):
 
 class Drift(LensIdeal):
     """
-    Simple model of free space. Basically a cylinderical vacuum tube
+    Simple model of free space. Effectively a cylinderical vacuum tube
     """
-    def __init__(self, PTL, L:float, ap:float):
+    def __init__(self, PTL, L:float, ap:float,build=True):
         """
         :param PTL: Instance of ParticleTracerLatticeClass
         :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
-        super().__init__(PTL, L, 0, np.inf, ap,0.0) #set Bp to zero and bore radius to infinite
+        super().__init__(PTL, L, 0, np.inf, ap,0.0,build=False) #set Bp to zero and bore radius to infinite
         self.fastFieldHelper=fastNumbaMethodsAndClass.DriftFieldHelper_Numba(L,ap)
-
+        if build==True:
+            self.build()
+    def build(self):
+        self.Lo = self.L
 
 class BenderIdeal(Element):
-    def __init__(self, PTL, ang, Bp, rp, rb, ap, fillParams=True):
+    def __init__(self, PTL, ang, Bp, rp, rb, ap, build=True):
         # this is the base model for the bending elements, of which there are several kinds. To maintain generality, there
         # are numerous methods and variables that are not necesary here, but are used in other child classes. For example,
         # this element has no caps, but a cap length of zero is still used.
-        super().__init__(PTL)
-        self.sim = False
-        self.ang = ang  # total bending angle of bender
+        assert rp<rb/2.0 #geometry constraints
+        super().__init__(PTL, build=False)
+        self.ang=ang
         self.Bp = Bp  # field strength at pole
         self.rp = rp  # bore radius of magnet
         self.ap = ap  # radial apeture size
@@ -372,12 +367,9 @@ class BenderIdeal(Element):
         self.outputOffsetFunc = None  # a function that returns the value of the offset of the trajectory for a given bending radius
         self.segmented = False  # wether the element is made up of discrete segments, or is continuous
         self.capped = False  # wether the element has 'caps' on the inlet and outlet. This is used to model fringe fields
-        self.Lcap = 0  # length of caps
-
-        if fillParams == True:
-            self.fill_Params()
-
-    def fill_Params(self):
+        if build==True:
+            self.build()
+    def build(self):
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.outputOffsetFunc = lambda rb: sqrt(rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - rb / 2
         self.outputOffset = self.outputOffsetFunc(self.rb)
@@ -386,7 +378,6 @@ class BenderIdeal(Element):
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
         self.fastFieldHelper=fastNumbaMethodsAndClass.BenderFieldHelper_Numba(self.ang,self.K,self.rp,self.rb,self.ap)
-
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
@@ -446,15 +437,16 @@ class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
-    def __init__(self, PTL, Lm, c1, c2, ap, mode,sizeScale, fillsParams=True):
-        super().__init__(PTL)
-        self.sim = False
-        self.mode = mode
+    def __init__(self, PTL, Lm:float, c1:float, c2, apL,apR,apZ, mode,sizeScale,build=True):
+        super().__init__(PTL,build=False)
+        assert mode in ('injector', 'storageRing')
+        self.fieldFact=-1.0 if mode=='injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
         # use sizeScale=2.0
-        self.ap = ap * self.sizeScale
-        self.apR = self.ap * self.sizeScale
-        self.apL = self.ap * self.sizeScale
+        self.apR = apR * self.sizeScale
+        self.apL = apL * self.sizeScale
+        self.apz=apZ*self.sizeScale
+        self.ap=None
         self.Lm = Lm * self.sizeScale
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -466,30 +458,24 @@ class CombinerIdeal(Element):
         self.shape = 'COMBINER_SQUARE'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
-        if fillsParams == True:
-            self.fill_Params()
+        if build==True:
+            self.build()
 
-    def fill_Params(self):
+    def build(self):
 
         self.Lb = self.Lm  # length of segment after kink after the inlet
-        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
-            lowField=False
-            self.fieldFact=-1.0 #reverse field to model high field seeker
-        else:
-            lowField=True
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2,np.nan, self.Lb,
                                                                             self.apL,self.apR, np.nan, np.nan)
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
-        self.apz = self.ap / 2
-        self.La = self.ap * np.sin(self.ang)
+        self.La = .5*(self.apR+self.apL) * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2, self.La,self.Lb,
                                                                                        self.apL,self.apR, self.apz, self.ang)
 
-    def compute_Input_Angle_And_Offset(self, h=1e-7):
+    def compute_Input_Angle_And_Offset(self, inputOffset=0.0, h=1e-6):
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -498,15 +484,20 @@ class CombinerIdeal(Element):
         # length, but for the simulated magnets, it's that plus twice the length at the ends.
         # h: timestep
         # lowField: wether to model low or high field seekers
-        q = np.asarray([0.0, 0.0, 0.0])
+        if isinstance(self,CombinerHexapoleSim):
+            assert 0.0 <= inputOffset < self.ap
+        q = np.asarray([0.0, -inputOffset, 0.0])
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
+
         # #of orbit.
+        def force(x):
+            if isinstance(self,CombinerHexapoleSim):
+                if x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > self.ap:
+                    return np.empty(3) * np.nan
+            return np.asarray(self.fastFieldHelper.force_NoSearchInside(x[0], x[1], x[2]))
 
-
-        force = lambda X: np.asarray(self.fastFieldHelper.force_NoSearchInside(*X))
         limit = self.Lm + 2 * self.space
-
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
         while True:
             F = forcePrev
@@ -519,18 +510,25 @@ class CombinerIdeal(Element):
                 q = q + p * dt
                 coordList.append(q)
                 break
-            F_n=force(q_n)
-            F_n[2]=0.0
-            a_n=F_n  # accselferation new or accselferation sub n+1
-            p_n=p+.5*(a+a_n)*h
+            F_n = force(q_n)
+            assert np.all(np.isnan(F_n) == False)
 
+            F_n[2] = 0.0
+            a_n = F_n  # accselferation new or accselferation sub n+1
+            p_n = p + .5 * (a + a_n) * h
             q = q_n
             p = p_n
             forcePrev = F_n
             coordList.append(q)
+        qArr = np.asarray(coordList)
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
-        return outputAngle, outputOffset, np.asarray(coordList)
+        if isinstance(self,CombinerHexapoleSim):
+            lensCorner = np.asarray([self.space + self.Lm, -self.ap, 0.0])
+            minSep = np.min(np.linalg.norm(qArr - lensCorner, axis=1))
+            return outputAngle, outputOffset, qArr, minSep
+        else:
+            return outputAngle, outputOffset, qArr
 
     def transform_Lab_Coords_Into_Element_Frame(self, q):
         qNew = q.copy()
@@ -567,7 +565,7 @@ class CombinerIdeal(Element):
 
 
 class CombinerSim(CombinerIdeal):
-    def __init__(self, PTL, combinerFile, mode,sizeScale=1.0):
+    def __init__(self, PTL, combinerFile, mode,sizeScale=1.0,build=True):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
         # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
@@ -575,28 +573,22 @@ class CombinerSim(CombinerIdeal):
         #mode: wether the combiner is functioning as a loader, or a circulator.
         # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         # doubling dimensions halves the gradient
-        assert mode == 'injector' or mode == 'storageRing'
+        assert mode in ('injector','storageRing')
         Lm = .187
         apL = .015
         apR = .025
-        fringeSpace = 5 * 1.1e-2
-        apz = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, np.nan,mode, sizeScale,
-                         fillsParams=False)
-        self.sim = True
-
-        self.space = fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
-        self.apL = apL * self.sizeScale
-        self.apR = apR * self.sizeScale
-        self.apz = apz * self.sizeScale
+        apZ = 6e-3
+        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale, build=False)
+        self.fringeSpace = 5 * 1.1e-2
         self.combinerFile = combinerFile
-        self.force_Func=None
-        self.magnetic_Potential_Func = None
-        self.fill_Params()
+        if build==True:
+            self.build()
 
-    def fill_Params(self):
-        if self.mode=='injector': #if part of the injection system, atoms will be in high field seeking state
-            self.fieldFact=-1.0
+    def build(self):
+        self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
+        self.apL = self.apL * self.sizeScale
+        self.apR = self.apR * self.sizeScale
+        self.apz = self.apz * self.sizeScale
         data = np.asarray(pd.read_csv(self.combinerFile, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
@@ -621,6 +613,9 @@ class CombinerSim(CombinerIdeal):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
 
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
+        # print(self.fieldFact)
+        # print(self.La, self.Lb,self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
+        # assert False
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData, self.La, self.Lb,
                                                             self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
         self.update_Field_Fact(self.fieldFact)
@@ -663,10 +658,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     #3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
     #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedImage3.png
     def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
-        # super().__init__(PTL, numMagnets, Lm, Lcap, None, rp, rb, yokeWidth, extraSpace, rOffsetFact, ap,
-        #                  fillParams=False)
-        super().__init__(None,None,None,None,None,None,fillParams=False)
-        self.sim = True
+        super().__init__(PTL, None, None, rp, rb, None, build=False)
         self.PTL=PTL
         self.rb=rb
         self.space=extraSpace
@@ -690,11 +682,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.K = None #spring constant of field strength to set the offset of the lattice
         self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
         #constraint solver
-        if numMagnets is not None:
-            self.fill_Params_Pre_Constraint()
-            self.fill_Params_Post_Constrained()
+        self.build()
+    def build(self):
+        if self.numMagnets is not None:
+            self.build_Pre_Constraint()
+            self.build_Post_Constrained()
         else:
-            self.fill_Params_Pre_Constraint()
+            self.build_Pre_Constraint()
     def compute_Aperture(self):
         #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
@@ -710,7 +704,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
 
-    def fill_Params_Pre_Constraint(self):
+    def build_Pre_Constraint(self):
         def find_K(rb):
             ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
             #approximation
@@ -732,7 +726,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.K_Func=lambda r: a * r ** 2 + b * r + c
         self.outputOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
-    def fill_Params_Post_Constrained(self):
+    def build_Post_Constrained(self):
         self.ap=self.compute_Aperture()
         assert self.rb-self.rp-self.yokeWidth>0.0
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
@@ -877,7 +871,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return qo
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,extraFieldLength):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,extraFieldLength,build=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,Number):
@@ -890,15 +884,16 @@ class HalbachLensSim(LensIdeal):
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
         assert apFrac<=.95
-        super().__init__(PTL, None, None, min(rpLayers), None,bumpOffset, fillParams=False)
+        self.rp=min(rpLayers)
+        self.ap = self.rp * apFrac
+        super().__init__(PTL, L, None, self.rp, self.ap, bumpOffset,build=False)
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
         self.Lo=None
-        self.rp=min(rpLayers)
         self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
-        self.ap=self.rp*apFrac
+
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
@@ -913,14 +908,16 @@ class HalbachLensSim(LensIdeal):
         self.magnetic_Potential_Func_Fringe = None
         self.magnetic_Potential_Func_Inner = None
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
-        if self.L is not None:
-            self.fill_Params()
+        if build==True:
+            self.build()
 
     def set_Length(self,L):
         assert L>0.0
         self.L=L
-        self.fill_Params()
-    def fill_Params(self,externalDataProvided=False):
+        self.build()
+    def build(self):
+        if self.L is None:
+            return
         #todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
         #of the bore radius
 
@@ -1004,16 +1001,16 @@ class HalbachLensSim(LensIdeal):
         self.fastFieldHelper.fieldFact=val
         self.fieldFact=val
 
-class CombinerHexapoleSim(Element):
-    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,fillParams=True):
+class CombinerHexapoleSim(CombinerIdeal):
+    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,extraFieldLength,build=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
         #layers: Number of concentric layers
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         vacuumTubeThickness=2e-3
-        super().__init__(PTL)
         assert  mode in ('storageRing','injector')
+        super().__init__(PTL,Lm,np.nan,np.nan,np.nan,np.nan,np.nan,mode,1.0,build=False)
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
@@ -1021,11 +1018,11 @@ class CombinerHexapoleSim(Element):
         # assert loadBeamDiam<1.5*self.ap and self.ap>0.0
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
-        self.mode = mode #wether storage ring or injector. This dictate high or low field seeking
-        self.sim = True
+        self.fieldFact=-1.0 if mode=='injector' else 1.0
         self.force_Func = None
         self.magnetic_Potential_Func = None
         self.space=None
+        self.extraFieldLength=extraFieldLength #extra length to add to interpolation to allow for misalignment
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -1036,15 +1033,14 @@ class CombinerHexapoleSim(Element):
         # the y, with angle self.ang, will exit at x,y=0,0
         self.force_Func=None
         self.magnetic_Potential_Func=None
-        if fillParams==True:
-            self.fill_Params()
+        if build==True:
+            self.build()
 
-    def fill_Params(self):
+    def build(self):
         #todo: this is filthy
         outerFringeFrac = 1.5
         numPointsLongitudinal=25
         numPointsTransverse=30
-        self.fieldFact=-1.0 if self.mode=='injector' else 1.0
 
         rpList=[]
         magnetWidthList=[]
@@ -1071,7 +1067,7 @@ class CombinerHexapoleSim(Element):
 
         zMin=-TINY_STEP
         zMaxHalf=self.Lm/2+self.space+1.5*(zTotalMax-2*(self.Lm/2+self.space))
-        zArr=np.linspace(zMin,zMaxHalf,num=numPointsLongitudinal) #add a little extra so interp works as expected
+        zArr=np.linspace(zMin,zMaxHalf+self.extraFieldLength,num=numPointsLongitudinal)
 
         volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
@@ -1080,10 +1076,9 @@ class CombinerHexapoleSim(Element):
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-
         fieldData=self.shape_Field_Data_3D(data3D)
         self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
-                                                                self.space,self.ap,np.nan,self.fieldFact)
+                                                        self.space,self.ap,np.nan,self.fieldFact,self.extraFieldLength)
         # print(self.fastFieldHelper.force_NoSearchInside(1e-3,1e-3,1e-3))
         # exit()
         self.outputOffset=self.find_Ideal_Offset()
@@ -1111,7 +1106,7 @@ class CombinerHexapoleSim(Element):
             "field region must extend past particle region"
 
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
-                                                                    self.Lm,self.space, self.ap,self.ang,self.fieldFact)
+                                            self.Lm,self.space, self.ap,self.ang,self.fieldFact,self.extraFieldLength)
         self.fastFieldHelper.force(1e-3,1e-3,1e-3)#force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3)#force compile
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
@@ -1125,6 +1120,7 @@ class CombinerHexapoleSim(Element):
         #beam diameter for INJECTED beam. This requires modeling high field seekers. A larger output offset produces
         # a smaller input seperation, and a larger loading/circulating beam angular speration. Particle is traced
         # backwards from the end of the combiner to the input. Uses forward difference.
+        fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
 
         #try and find an initial gradient that works
@@ -1158,61 +1154,11 @@ class CombinerHexapoleSim(Element):
             i+=1
             assert i<iterMax
         assert x>0
-        fieldFact = -1.0 if self.mode == 'injector' else 1.0
-        self.update_Field_Fact(fieldFact)
+        self.update_Field_Fact(fieldFact0)
         return x
 
     def force(self, q):
         return np.asarray(self.fastFieldHelper.force(*q))
-
-    def compute_Input_Angle_And_Offset(self, inputOffset,h=1e-6):
-        # this computes the output angle and offset for a combiner magnet.
-        # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
-        # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
-        # to go to zero (finite field space) so the the particle will violate conservation of energy
-        # limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
-        # length, but for the simulated magnets, it's that plus twice the length at the ends.
-        # h: timestep
-        # lowField: wether to model low or high field seekers
-        assert 0.0<inputOffset<self.ap
-        q = np.asarray([0.0, -inputOffset, 0.0])
-        p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
-        coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
-        # #of orbit.
-        def force(x):
-            if x[0]<self.Lm+self.space and sqrt(x[1]**2+x[2]**2)>self.ap:
-                    return np.empty(3)*np.nan
-            return np.asarray(self.fastFieldHelper.force_NoSearchInside(x[0],x[1],x[2]))
-        limit = self.Lm + 2 * self.space
-        forcePrev = force(q)  # recycling the previous force value cut simulation time in half
-        while True:
-            F = forcePrev
-            F[2] = 0.0  # exclude z component, ideally zero
-            a = F
-            q_n = q + p * h + .5 * a * h ** 2
-            if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
-                dr = limit - q[0]
-                dt = dr / p[0]
-                q = q + p * dt
-                coordList.append(q)
-                break
-            F_n = force(q_n)
-            assert np.all(np.isnan(F_n)==False)
-
-            F_n[2]=0.0
-            a_n=F_n  # accselferation new or accselferation sub n+1
-            p_n=p+.5*(a+a_n)*h
-            q = q_n
-            p = p_n
-            forcePrev = F_n
-            coordList.append(q)
-        qArr=np.asarray(coordList)
-        outputAngle = np.arctan2(p[1], p[0])
-        outputOffset = q[1]
-        lensCorner=np.asarray([self.space+self.Lm,-self.ap,0.0])
-        minSep=np.min(np.linalg.norm(qArr-lensCorner,axis=1))
-        return outputAngle, outputOffset,qArr, minSep
-
     def compute_Trajectory_Length(self, qTracedArr):
         # TODO: CHANGE THAT X DOESN'T START AT ZERO
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
@@ -1282,7 +1228,7 @@ class geneticLens(LensIdeal):
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
         # super().__init__(PTL, geneticLens.length, geneticLens.maximum_Radius(), np.nan,np.nan,'injector',fillParams=False)
-        raise Exception("under construction")
+        raise NotImplementedError #under construction still
         super().__init__(PTL, geneticLens.length, None, geneticLens.maximum_Radius(), ap, 0.0, fillParams=False)
         self.fringeFracOuter = 4.0
         self.L = geneticLens.length + 2 * self.fringeFracOuter * self.rp
@@ -1299,14 +1245,14 @@ class geneticLens(LensIdeal):
         self.magnetic_Potential_Func_Inner = None
         self.fieldFact = 1.0  # factor to multiply field values by for tunability
         if self.L is not None:
-            self.fill_Params()
+            self.build()
 
     def set_Length(self, L):
         assert L > 0.0
         self.L = L
-        self.fill_Params()
+        self.build()
 
-    def fill_Params(self, externalDataProvided=False):
+    def build(self):
         # todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
         # of the bore radius
 

@@ -1,3 +1,4 @@
+import elementPT
 from geneticLensElement_Wrapper import GeneticLens
 from typing import Union
 from ParticleClass import Particle
@@ -150,7 +151,8 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2):
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,
+                              extraFieldLength: float =0.0):
         """
         Add halbach hexapole lens combiner element.
 
@@ -164,7 +166,7 @@ class ParticleTracerLattice:
         :param layers: Number of concentric layers of magnets
         :return: None
         """
-        el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
+        el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType,extraFieldLength)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner=el
@@ -278,7 +280,7 @@ class ParticleTracerLattice:
         #if La<minLa:
         #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el=CombinerIdeal(self, Lm, c1, c2, ap,self.latticeType,sizeScale) #create a combiner element object
+        el=CombinerIdeal(self, Lm, c1, c2, ap,ap,ap/2,self.latticeType,sizeScale) #create a combiner element object
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -345,8 +347,8 @@ class ParticleTracerLattice:
             self.bender2.rb=rb2
             self.bender2.numMagnets=numMagnets2
             self.set_Linear_Constrained_Element_Lengths(L3)
-            self.bender1.fill_Params_Post_Constrained()
-            self.bender2.fill_Params_Post_Constrained()
+            self.bender1.build_Post_Constrained()
+            self.bender2.build_Post_Constrained()
         else:
             phi1,phi2,L3=params
             self.bender1.ang = phi1
@@ -354,8 +356,8 @@ class ParticleTracerLattice:
             #update benders
             # Lfringe=4*self.elList[lens1Index].edgeFact*self.elList[lens1Index].rp
             self.set_Linear_Constrained_Element_Lengths(L3)
-            self.bender1.fill_Params()
-            self.bender2.fill_Params()
+            self.bender1.build()
+            self.bender2.build()
     def solve_Combiner_Constraints(self):
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
@@ -519,7 +521,7 @@ class ParticleTracerLattice:
                 yInner=(el.rb-halfWidth)*np.sin(phiArr)+r0[1] #y values for inner bend
                 xOuter=np.flip((el.rb+halfWidth)*np.cos(phiArr)+r0[0]) #x values for outer bend
                 yOuter=np.flip((el.rb+halfWidth)*np.sin(phiArr)+r0[1]) #y values for outer bend
-                if el.cap==True:
+                if isinstance(el,elementPT.HalbachBenderSimSegmented):
                     xInner=np.append(xInner[0]+el.nb[0]*el.Lcap,xInner)
                     yInner = np.append(yInner[0] + el.nb[1] * el.Lcap, yInner)
                     xInner=np.append(xInner,xInner[-1]+el.ne[0]*el.Lcap)
@@ -676,7 +678,7 @@ class ParticleTracerLattice:
                     el.ne=np.asarray([np.cos(el.theta-np.pi+(np.pi-el.ang)), np.sin(el.theta-np.pi+(np.pi-el.ang))])  # normal vector to output
                     el.r0=np.asarray([xb+el.rb*np.sin(el.theta),yb-el.rb*np.cos(el.theta),0]) #coordinates of center of bending
                     #section, even with caps
-                    if el.cap==True:
+                    if isinstance(el,elementPT.HalbachBenderSimSegmented):
                         xe+=-el.nb[0]*el.Lcap+el.ne[0]*el.Lcap
                         ye+=-el.nb[1] * el.Lcap+el.ne[1]*el.Lcap
                         el.r0[0]+=-el.nb[0]*el.Lcap

@@ -34,6 +34,10 @@ cost: 0.7099381604306393
 numSamples=50
 #rplens rplensfirst rplenslast rpBend LLens
 Xi=np.array([0.02398725, 0.02110859, 0.02104631, 0.22405252])
+
+
+wrapper(Xi,1)
+exit()
 deltaXTest=np.ones(len(Xi))*varJitterAmp/2
 boundsUpper=Xi+deltaXTest
 boundsLower=Xi-deltaXTest

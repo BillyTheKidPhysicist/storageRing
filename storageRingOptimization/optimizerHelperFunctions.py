@@ -6,7 +6,7 @@ from asyncDE import solve_Async
 import numpy as np
 from ParticleTracerClass import ParticleTracer
 from SwarmTracerClass import SwarmTracer
-from latticeKnobOptimizer import LatticeOptimizer,Solution
+from latticeOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 SMALL_NUMBER=1E-9
 # XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
