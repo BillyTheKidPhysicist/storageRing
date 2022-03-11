@@ -399,9 +399,7 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
             Fx = -Fx
         elif self.Lcap < x <= self.L - self.Lcap: #if long enough, model interior as uniform in x
-            Fx=0.0
-            Fy = interp2D(-z, y,  self.xArrIn, self.yArrIn, self.FyArrIn)
-            Fz = -interp2D(-z, y, self.xArrIn, self.yArrIn, self.FxArrIn)
+            Fx,Fy,Fz=self._force_Func_Inner(x,y,z)
         elif self.L - self.Lcap<= x <= self.L+self.extraFieldLength: #at end of lens
             x = self.Lcap - (self.L - x)
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
@@ -434,9 +432,9 @@ class LensHalbachFieldHelper_Numba:
         if -self.extraFieldLength <= x<= self.Lcap:
             x = self.Lcap - x
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
-        elif self.Lcap < x and x <= self.L - self.Lcap:
+        elif self.Lcap <  x <= self.L - self.Lcap:
             V0 = self._magnetic_Potential_Func_Inner(x,y,z)
-        elif 0 <= x and x <= self.L:
+        elif 0 <= x  <= self.L+self.extraFieldLength:
             x=self.Lcap-(self.L-x)
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         else:

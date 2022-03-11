@@ -26,7 +26,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
-                          LmCombiner, rpCombiner,loadBeamDiam,tuning)->ParticleTracerLattice:
+                          LmCombiner, rpCombiner,loadBeamDiam,tuning,jitterAmp=0.0)->ParticleTracerLattice:
     assert tuning in (None, 'field', 'spacing')
     tunableDriftGap=2.54e-2
     jeremyGap=.05
@@ -36,7 +36,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
     if L_Lens-2*rpLens*fringeFrac<0 or L_Lens-2*rpLensFirst*fringeFrac<0 or L_Lens-2*rpLensLast*fringeFrac<0:
         # minimum fringe length must be respected
         return None
-    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
+    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',jitterAmp=jitterAmp)
     if abs(rpBend-1e-2)<SMALL_NUMBER and abs(Lm-.0254/2.0)<SMALL_NUMBER:
         rOffsetFact = 1.0106
     else:
@@ -64,7 +64,8 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
     return PTL_Ring
 
 
-def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam,L1,L2)->ParticleTracerLattice:
+def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam,L1,L2,
+                              jitterAmp=0.0)->ParticleTracerLattice:
     fringeFrac=1.5
     apFrac=.95
     L_InjectorMagnet=L_Injector-2*fringeFrac*rpInjector
@@ -72,7 +73,7 @@ def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loa
         return None
     if loadBeamDiam>rpCombiner: #don't waste time exploring silly configurations
         return None
-    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector')
+    PTL_Injector=ParticleTracerLattice(V0,latticeType='injector',jitterAmp=jitterAmp)
     PTL_Injector.add_Drift(L1,ap=rpInjector)
 
     PTL_Injector.add_Halbach_Lens_Sim(rpInjector,L_Injector,apFrac=apFrac)
@@ -82,9 +83,9 @@ def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loa
     return PTL_Injector
 
 def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2,
-    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3,bumpOffsetAmp=0.0)->ParticleTracerLattice:
+    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)->ParticleTracerLattice:
     fringeFrac = 1.5
-    apFrac = .95
+    apFrac = .9
     LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
     LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
     if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
@@ -105,7 +106,7 @@ def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     return PTL_Injector
 
-def generate_Ring_And_Injector_Lattice(X,tuning):
+def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0):
     rpBend=1e-2
     XInjector=np.array([0.05       ,0.01056943 ,0.17291778 ,0.0256151  ,0.18110825 ,0.04915702
         ,0.01790981 ,0.01645214 ,0.27854378 ,0.19162297])
@@ -116,7 +117,7 @@ def generate_Ring_And_Injector_Lattice(X,tuning):
     rpLens,rpLensFirst,rpLensLast,L_Lens=X
     #value2 from seperate optimizer
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
-                                   tuning)
+                                   tuning,jitterAmp=jitterAmp)
     if PTL_Ring is None:
         print('invalid ring')
         sol=invalid_Solution(X,invalidRing=True)

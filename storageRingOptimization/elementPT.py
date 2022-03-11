@@ -639,9 +639,6 @@ class CombinerSim(CombinerIdeal):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
 
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        # print(self.fieldFact)
-        # print(self.La, self.Lb,self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
-        # assert False
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData, self.La, self.Lb,
                                                             self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
         self.update_Field_Fact(self.fieldFact)
@@ -710,6 +707,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         #constraint solver
         self.build()
     def build(self):
+        """Overrides abstract method from Element"""
         if self.numMagnets is not None:
             self.build_Pre_Constraint()
             self.build_Post_Constrained()
@@ -900,7 +898,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return qo
 
 class HalbachLensSim(LensIdeal):
-    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,extraFieldLength,build=True):
+    def __init__(self,PTL, rpLayers,L,apFrac,bumpOffset,magnetWidth,build=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,Number):
@@ -912,8 +910,14 @@ class HalbachLensSim(LensIdeal):
             if magnetWidth is not None:
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
-        assert apFrac<=.95
+        self.numGridPointsZ = 30
+        self.numGridPointsXY = 20
         rp,ap=min(rpLayers),min(rpLayers)*apFrac
+        self.apMax=(rp-TINY_STEP)*(1-np.sqrt(2)/self.numGridPointsXY) #from geometric arguments of grid inside circle.
+        #imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
+        #has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material
+        assert ap<=self.apMax
+
         super().__init__(PTL, L, None, rp, ap, bumpOffset,build=False)
         self.fringeFracOuter=1.5
         self.L=L
@@ -921,15 +925,12 @@ class HalbachLensSim(LensIdeal):
         self.Lo=None
         self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
-
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         self.lengthEffective=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=None
-        self.extraFieldLength=extraFieldLength #extra field added to end of lens to account misalignment
-
-
+        self.extraFieldLength=None #extra field added to end of lens to account misalignment
         self.force_Func_Outer=None #function that returns 3D vector of force values towards the end of the magnet, if
         #the magent is short, then it returns the values for one half, otherwise symmetry is used  to model interior as
         #2D
@@ -943,19 +944,29 @@ class HalbachLensSim(LensIdeal):
         assert L>0.0
         self.L=L
         self.build()
+    def set_extraFieldLength(self):
+        """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
+        is too large for good field region, extra length is clipped"""
+        jitterAmp=self.PTL.jitterAmp*np.sqrt(2) #consider circular aperture
+        assert jitterAmp<self.L/10.0 #small angles
+        maxJitterAmp=self.apMax-self.ap
+        tiltMax=jitterAmp/self.L if jitterAmp<maxJitterAmp else maxJitterAmp/self.L
+        self.extraFieldLength=self.rp*tiltMax*1.1 #safety factor for approximations
     def build(self):
-        if self.L is None:
+        """Overrides abstract method from Element"""
+        if self.L is None: #defer building until constraints are satisified
             return
-        #todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
-        #of the bore radius
-
-        numPointsLongitudinal=25
-        numPointsTransverse=31
-
+        self.set_extraFieldLength()
+        self.fill_Geometric_Params()
+        self.build_Field_Helper()
+        F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
+        F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
+        assert F_edge/F_center<.01
+    def fill_Geometric_Params(self):
+        """Compute dependent geometric values"""
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
         self.Lo=self.L
-        #todo: the behaviour of this with multiple layers is dubious
         self.lengthEffective=min(self.fringeFracInnerMin*max(self.rpLayers),
                                  self.Lm)  #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
@@ -965,52 +976,78 @@ class HalbachLensSim(LensIdeal):
             self.magnetWidth=maximumMagnetWidth
         else:
             assert np.all(np.array(self.magnetWidth)<maximumMagnetWidth)
-
-        lens=_HalbachLensFieldGenerator(self.lengthEffective,self.magnetWidth,self.rpLayers)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=max(self.rpLayers)+self.magnetWidth[np.argmax(self.rpLayers)] +mountThickness
+    def make_Grid_Coord_Arrays(self):
+        """
+        because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
+        tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
+        quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
+        """
+        TINY_OFFSET=1e-12 #tiny offset to avoid out of bounds right at edges of element
+        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.rp-TINY_OFFSET, self.numGridPointsXY) 
+        xArr_Quadrant = -yArr_Quadrant.copy()
+        zMin = -TINY_OFFSET # inside the lens
+        zMax = self.Lcap+TINY_OFFSET + self.extraFieldLength  # outside the lens
+        zArr = np.linspace(zMin, zMax, self.numGridPointsZ)
+        return xArr_Quadrant,yArr_Quadrant,zArr
+    def make_2D_Field_Data(self,lens:_HalbachLensFieldGenerator,xArr:np.ndarray,yArr:np.ndarray):
+        """
+        Make 2d field data for interpolation.
 
-        # numXY=2*(int(2*self.ap/transverseStepSize)//2)+1 #to ensure it is odd
-        # xyArr=np.linspace(-self.ap-TINY_STEP,self.ap+TINY_STEP,num=numXY) #add a little extra so the interp works correctly
+        This comes from the center of the lens, and models a continuous segment homogenous in x (element frame)
+        that allows for constructing very long lenses. If lens is too short, return None
 
-
-        numXY=numPointsTransverse
-        #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
-        #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
-        #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP,numXY)
-        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP),TINY_STEP,numXY)
-
+        :param lens: lens object to compute fields values
+        :param xArr: Grid edge x values of quarter of plane
+        :param yArr: Grid edge y values of quarter of plane
+        :return: Either 2d array of field data, or None
+        """
         if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
             # portion inside then use a 2D plane to represent the inner portion to save resources
-            planeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,0)).T.reshape(-1,3)
-            BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
+            planeCoords=np.asarray(np.meshgrid(xArr,yArr,0)).T.reshape(-1,3)
+            validIndices=np.linalg.norm(planeCoords,axis=1)<=self.rp
+            BNormGrad,BNorm=np.zeros((len(validIndices),3))*np.nan,np.ones(len(validIndices))*np.nan
+            BNormGrad[validIndices],BNorm[validIndices] = lens.BNorm_Gradient(planeCoords[validIndices],returnNorm=True)
+            # BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
             data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
         else:
-            #still need to make the force function
-            self.magnetic_Potential_Func_Inner = lambda x, y, z: 0.0
             data2D=None
+        return data2D
+    def make_3D_Field_Data(self,lens:_HalbachLensFieldGenerator,xArr:np.ndarray,yArr:np.ndarray,zArr:np.ndarray):
+        """
+        Make 3d field data for interpolation from end of lens region
 
-        zMin=-TINY_STEP #inside the lens
-        zMax=self.Lcap+TINY_STEP+self.extraFieldLength #outside the lens
-        zArr=np.linspace(zMin,zMax,num=numPointsLongitudinal) #add a little extra so interp works as expected
-        assert abs(abs(xArr_Quadrant[1]-xArr_Quadrant[0])-abs(yArr_Quadrant[1]-yArr_Quadrant[0]))<1e-12 #same spacing
-        assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
-        assert len(xArr_Quadrant)%2==1 and len(yArr_Quadrant)%2==1
-        assert all((arr[-1]-arr[-2])/self.rp<.1 for arr in [xArr_Quadrant,yArr_Quadrant]),"" \
-                                                                    "spatial step size must be small compared to radius"
-        assert np.sqrt(2)*(xArr_Quadrant[1]-xArr_Quadrant[0])<self.rp-self.ap
-        volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3) #note that these coordinates can have
+        If the lens is sufficiently long compared to bore radius then this is only field data from the end region
+        (fringe frields and interior near end) because the interior region is modeled as a single plane to exploit
+        longitudinal symmetry. Otherwise, it is exactly half of the lens and fringe fields
+
+        :param lens: lens object to compute fields values
+        :param xArr: Grid edge x values of quarter of plane
+        :param yArr: Grid edge y values of quarter of plane
+        :param zArr: Grid edge z values of half of lens, or region near end if long enough
+        :return: 2D array of field data
+        """
+        volumeCoords=np.asarray(np.meshgrid(xArr,yArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
         #the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         #input coordinates will be shifted in a wrapper function
-        BNormGrad,BNorm = lens.BNorm_Gradient(volumeCoords,returnNorm=True)
+        validXY=np.linalg.norm(volumeCoords[:,:2],axis=1)<=self.rp
+        validZ=volumeCoords[:,2]>=self.Lm/2
+        validIndices = np.logical_or(validXY,validZ)
+        BNormGrad,BNorm=np.zeros((len(validIndices),3))*np.nan,np.ones(len(validIndices))*np.nan
+        BNormGrad[validIndices],BNorm[validIndices] = lens.BNorm_Gradient(volumeCoords[validIndices],returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
-        self.build_Field_Helper(data3D,data2D)
-        F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
-        F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
-        assert F_edge/F_center<.01
-    def build_Field_Helper(self,data3D,data2D):
+        return data3D
+    def make_Field_Data(self):
+        lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers)
+        xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
+        data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
+        data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
+        return data2D,data3D
+    def build_Field_Helper(self):
+        """Generate magnetic field gradients and norms for """
+        data2D, data3D = self.make_Field_Data()
         xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd=self.shape_Field_Data_3D(data3D)
         if data2D is not None: #if no inner plane being used
             xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn=self.shape_Field_Data_2D(data2D)
@@ -1021,18 +1058,36 @@ class HalbachLensSim(LensIdeal):
                                                                                    self.extraFieldLength)
         self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
-    def force(self, q):
-        F=np.asarray(self.fastFieldHelper.force(*q))
+    def force(self, qEl):
+        """Overrides abstract method from Element"""
+        F=np.asarray(self.fastFieldHelper.force(*qEl))
         return F
 
-    def magnetic_Potential(self, q):
-        return self.fastFieldHelper.magnetic_Potential(*q)
+    def magnetic_Potential(self, qEl):
+        """Overrides abstract method from Element"""
+        return self.fastFieldHelper.magnetic_Potential(*qEl)
     def update_Field_Fact(self,val):
+        """Update value used to model magnet strength tunability. fieldFact multiplies force and magnetic potential to
+        model increasing or reducing magnet strength """
         self.fastFieldHelper.fieldFact=val
         self.fieldFact=val
+    def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
+        """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
+        interpolation"""
+        assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
+        totalShiftY=shiftY+rotZ*self.L
+        totalShiftZ=shiftZ+rotY*self.L
+        totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
+        maxShift=self.apMax-self.ap #max shift is moving current aperture to maximum good field aperture
+        if totalShift>maxShift:
+            print('Misalignment is moving particles to bad field region, misalingment will be clipped')
+            reductionFact=.9*maxShift/totalShift #safety factor
+            print('proposed', totalShift, 'new', .9*maxShift)
+            shiftY,shiftZ,rotY,rotZ=[val*reductionFact for val in [shiftY,shiftZ,rotY,rotZ]]
+        self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
 class CombinerHexapoleSim(CombinerIdeal):
-    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,extraFieldLength,build=True):
+    def __init__(self, PTL, Lm, rp, loadBeamDiam,layers, mode,build=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -1052,7 +1107,7 @@ class CombinerHexapoleSim(CombinerIdeal):
         self.force_Func = None
         self.magnetic_Potential_Func = None
         self.space=None
-        self.extraFieldLength=extraFieldLength #extra length to add to interpolation to allow for misalignment
+        self.extraFieldLength=0.0
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -1113,8 +1168,6 @@ class CombinerHexapoleSim(CombinerIdeal):
         fieldData=self.shape_Field_Data_3D(data3D)
         self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
                                                         self.space,self.ap,np.nan,self.fieldFact,self.extraFieldLength)
-        # print(self.fastFieldHelper.force_NoSearchInside(1e-3,1e-3,1e-3))
-        # exit()
         self.outputOffset=self.find_Ideal_Offset()
         inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(self.outputOffset)
         # to find the length
@@ -1132,7 +1185,6 @@ class CombinerHexapoleSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         xMax=self.Lb+(self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
-        # print(xMaxHalf,(self.space*2+self.Lm)/2)
         xyMax=self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
         assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
         assert np.abs(xArr_Quadrant).max()>xyMax and np.abs(yArr_Quadrant).max()>xyMax, \

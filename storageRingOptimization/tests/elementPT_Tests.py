@@ -266,8 +266,8 @@ class hexapoleLensSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.13131293170776956 ,  0.005389456019837423,-0.008481431736711358])
-        pf0=np.array([-201.17975992424462  ,   -3.1602597441617277,3.9764304169248734])
+        qf0=np.array([-0.1313114817736132  ,  0.005389347850941882, -0.008480272519592432])
+        pf0=np.array([-201.17803463379627  ,   -3.159747762350075 ,3.9791771846306614])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 

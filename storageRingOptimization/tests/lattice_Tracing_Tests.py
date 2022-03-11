@@ -23,8 +23,6 @@ def generate_Test_Swarm(configuration):
 def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):
     #swarm is traced through the lattice with all fancy features turned off
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
-    if os.path.exists(TESTDataFilePath) == True:
-        raise Exception("A results file already exists for that test case")
     swarmTracer=SwarmTracer(PTL)
     tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=False,parallel=False,accelerated=False)
     testData=[]
