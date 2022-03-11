@@ -222,7 +222,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=LensIdeal(self, L, Bp, rp, ap,bumpOffset) #create a lens element object
+        el=LensIdeal(self, L, Bp, rp, ap,bumpOffset=bumpOffset) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True:

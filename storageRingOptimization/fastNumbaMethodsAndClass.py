@@ -452,7 +452,7 @@ spec = [
     ('ap', numba.float64),
 ]
 @jitclass(spec)
-class BenderFieldHelper_Numba:
+class BenderIdealFieldHelper_Numba:
     def __init__(self,ang, K, rp, rb, ap):
         self.ang=ang
         self.K=K
@@ -484,6 +484,19 @@ class BenderFieldHelper_Numba:
         else:
             Fx,Fy,Fz=np.nan,np.nan,np.nan
         return Fx,Fy,Fz
+    def is_Coord_Inside_Vacuum(self, x,y,z):
+        phi = full_Arctan2(y,x)
+        if phi < 0:  # constraint to between zero and 2pi
+            phi += 2 * np.pi
+        if phi <=self.ang:  # if particle is in bending segment
+            rh = np.sqrt(x ** 2 + y ** 2) - self.rb  # horizontal radius
+            r = np.sqrt(rh ** 2 + z ** 2)  # particle displacement from center of apeture
+            if r > self.ap:
+                return False
+            else:
+                return True
+        else:
+            return False
     def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         raise NotImplementedError
@@ -521,7 +534,7 @@ class CombinerIdealFieldHelper_Numba:
         # force at point q in element frame
         # q: particle's position in element frame
         if searchIsCoordInside==True:
-            if self.is_Coord_Inside(x,y,z) == False:
+            if self.is_Coord_Inside_Vacuum(x,y,z) == False:
                 return np.nan,np.nan,np.nan
         Fx,Fy,Fz=0.0,0.0,0.0
         if 0<x < self.Lb:
@@ -532,14 +545,14 @@ class CombinerIdealFieldHelper_Numba:
             pass
         return Fx,Fy,Fz
     def magnetic_Potential(self, x,y,z):
-        if self.is_Coord_Inside(x, y, z) == False:
+        if self.is_Coord_Inside_Vacuum(x, y, z) == False:
             return np.nan
         if 0<x < self.Lb:
             V0 = self.fieldFact*SIMULATION_MAGNETON*np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
         else:
             V0=0.0
         return V0
-    def is_Coord_Inside(self, x,y,z):
+    def is_Coord_Inside_Vacuum(self, x,y,z):
         # q: coordinate to test in element's frame
         if not -self.apz < z < self.apz:  # if outside the z apeture (vertical)
             return False
@@ -658,7 +671,7 @@ class CombinerSimFieldHelper_Numba:
                 z = -z
         return self.fieldFact*self._magnetic_Potential_Func(x,y,z)
 
-    def is_Coord_Inside(self, x,y,z):
+    def is_Coord_Inside_Vacuum(self, x,y,z):
         # q: coordinate to test in element's frame
         if not -self.apz <= z <= self.apz:  # if outside the z apeture (vertical)
             return False
@@ -728,7 +741,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
         if searchIsCoordInside == True:
-            if self.is_Coord_Inside(x,y,z)==False:
+            if self.is_Coord_Inside_Vacuum(x,y,z)==False:
                 return np.nan,np.nan,np.nan
         x,y,z=self.baseClass.misalign_Coords(x,y,z)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
@@ -751,7 +764,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
     def magnetic_Potential(self, x,y,z):
-        if self.is_Coord_Inside(x,y,z) == False:
+        if self.is_Coord_Inside_Vacuum(x,y,z) == False:
             return np.nan
         x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)  # confine to upper right quadrant
@@ -768,7 +781,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         V=V*self.fieldFact
         return V
 
-    def is_Coord_Inside(self, x,y,z):
+    def is_Coord_Inside_Vacuum(self, x,y,z):
         # q: coordinate to test in element's frame
         if not -self.ap <= z <= self.ap:  # if outside the z apeture (vertical)
             return False
@@ -953,7 +966,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         x = r * np.cos(theta)  # cartesian coords in unit cell frame
         y = r * np.sin(theta)  # cartesian coords in unit cell frame
         return x,y,z
-    def is_Coord_Inside(self,x,y,z):
+    def is_Coord_Inside_Vacuum(self,x,y,z):
         phi = full_Arctan2(y,x)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
             if (np.sqrt(x**2+y ** 2)-self.rb)**2 + z ** 2 < self.ap**2:
@@ -974,7 +987,7 @@ class SegmentedBenderSimFieldHelper_Numba:
     def magnetic_Potential(self, x,y,z):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
-        if self.is_Coord_Inside(x,y,z)==False:
+        if self.is_Coord_Inside_Vacuum(x,y,z)==False:
             return np.nan
         z=abs(z)
         phi = full_Arctan2(y,x)  # calling a fast numba version that is global
