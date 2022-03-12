@@ -53,7 +53,7 @@ def scalar_interp3D(x,y,z,xCoords,yCoords,zCoords,vec):
     return c
 
 @numba.njit()
-def vec_interp3D(x,y,z,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
+def vec_interp3D(xLoc,yLoc,zLoc,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
     X,Y,Z=len(xCoords),len(yCoords),len(zCoords)
     assert 2<X and 2<Y and 2<Z, "need at least 2 points to interpolate"
     min_x,max_x=xCoords[0],xCoords[-1]
@@ -62,9 +62,9 @@ def vec_interp3D(x,y,z,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
     delta_x=(max_x-min_x)/(xCoords.shape[0]-1)
     delta_y=(max_y-min_y)/(yCoords.shape[0]-1)
     delta_z=(max_z-min_z)/(zCoords.shape[0]-1)
-    x=(x-min_x)/delta_x
-    y=(y-min_y)/delta_y
-    z=(z-min_z)/delta_z
+    x=(xLoc-min_x)/delta_x
+    y=(yLoc-min_y)/delta_y
+    z=(zLoc-min_z)/delta_z
     x0=int(x)
     x1=x0+1
     y0=int(y)
@@ -106,8 +106,11 @@ def vec_interp3D(x,y,z,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
         c1_z=c01_z*(1-yd)+c11_z*yd
         c_z=c0_z*(1-zd)+c1_z*zd
     else:
+        print(xLoc,yLoc,zLoc)
+        print(xCoords.min(),xCoords.max())
+        print(yCoords.min(),yCoords.max())
+        print(zCoords.min(),zCoords.max())
         raise Exception('out of bounds')
-
     return c_x,c_y,c_z
 
 
@@ -115,14 +118,14 @@ def vec_interp3D(x,y,z,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
 
 
 @numba.njit()
-def interp2D(x,y,xCoords,yCoords,v_c):
+def interp2D(xLoc,yLoc,xCoords,yCoords,v_c):
     X, Y = len(xCoords),len(yCoords)
     min_x, max_x = xCoords[0], xCoords[-1]
     min_y, max_y = yCoords[0], yCoords[-1]
     delta_x = (max_x - min_x) / (xCoords.shape[0] - 1)
     delta_y = (max_y - min_y) / (yCoords.shape[0] - 1)
-    x=(x-min_x)/delta_x
-    y=(y-min_y)/delta_y
+    x=(xLoc-min_x)/delta_x
+    y=(yLoc-min_y)/delta_y
     x0=int(x)
     x1=x0+1
     y0=int(y)
@@ -134,6 +137,9 @@ def interp2D(x,y,xCoords,yCoords,v_c):
         c10=v_c[Y*x0+y1]*(1-xd)+v_c[Y*x1+y1]*xd
         c=c00*(1-yd)+c10*yd
     else:
+        print(xLoc, yLoc)
+        print(xCoords.min(), xCoords.max())
+        print(yCoords.min(), yCoords.max())
         raise Exception('out of bounds')
     return c
 @numba.njit()
@@ -709,11 +715,12 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
+    ('inputOffset', numba.float64),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
 ]
 @jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
-    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength):
+    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,inputOffset,extraFieldLength):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -723,6 +730,7 @@ class CombinerHexapoleSimFieldHelper_Numba:
         self.ang=ang
         self.fieldFact=fieldFact
         self.extraFieldLength=extraFieldLength
+        self.inputOffset=inputOffset
         self.baseClass=self.baseClass=BaseClassFieldHelper_Numba()
     def _force_Func(self,x,y,z):
         Fx0, Fy0, Fz0= vec_interp3D(-z,y,x,self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr)
@@ -800,11 +808,19 @@ class CombinerHexapoleSimFieldHelper_Numba:
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
             Y3 = m * x + (-self.ap - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
-                return True
+                val= True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
-                return True
+                val= True
             else:
-                return False
+                val= False
+            # x=x-self.Lb
+            # y=y-self.inputOffset
+            # x,y=np.cos(-self.ang)*x-np.sin(-self.ang)*y,np.sin(-self.ang)*x+np.cos(-self.ang)*y
+            # y=y+self.inputOffset
+            # if np.sqrt(y**2+z**2)>self.ap:
+            #     return False
+            # else:
+            #     return True
     def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)

@@ -8,6 +8,7 @@ from ParticleClass import Particle
 from hypothesis import given,settings,strategies as st
 import matplotlib.pyplot as plt
 from constants import SIMULATION_MAGNETON
+from shapely.geometry import Point
 def absDif(x1,x2):
     return abs(abs(x1)-abs(x2))
 
@@ -44,24 +45,33 @@ class genericElementTestHelper:
             r,theta,z=x1,x2,x3
             x,y=r*np.cos(theta),r*np.sin(theta)
         return np.asarray([x, y, z])
+
+    def is_Inside_Shapely(self,qEl):
+        qLab = self.el.transform_Element_Coords_Into_Lab_Frame(qEl)
+        SO_Padded=self.el.SO.buffer(1e-12) #add padding to avoid issues of point right on edge
+        isInside=SO_Padded.contains(Point(qLab[:2]))
+        return isInside
     def run_Tests(self):
         self.test1()
         self.test2()
     def test1(self):
-        #test that aperture works as expected by sampling many points and getting the correct results
         isInsideList=[]
         @given(*self.coordsTestRules)
-        @settings(max_examples=10000,deadline=None)
-        def coord_Check_Consistency(x1,x2,x3):
+        @settings(max_examples=10_000,deadline=None)
+        def is_Inside_Consistency(x1,x2,x3):
             coord=self.convert_Coord(x1,x2,x3)
             F=self.el.force(coord)
             V=self.el.magnetic_Potential(coord)
-            isInside=self.el.is_Coord_Inside(coord)
-            isInsideList.append(isInside)
-            if isInside==False: assert math.isnan(F[0])==True and math.isnan(V)==True
-            else: assert np.any(np.isnan(F))==False and math.isnan(V)==False
-            #this can occur because a nan is being returned from the interpolation reaching into the magnetic material
-        coord_Check_Consistency()
+            coord2D=coord.copy()
+            coord2D[2]=0.0
+            isInside2D=self.el.is_Coord_Inside(coord2D)
+            isInside2DShapely=self.is_Inside_Shapely(coord2D)
+            isInsideFull3D=self.el.is_Coord_Inside(coord)
+            isInsideList.append(isInsideFull3D)
+            assert isInside2DShapely==isInside2D
+            if isInsideFull3D==False: assert math.isnan(F[0])==True and math.isnan(V)==True,str(F)+','+str(V)
+            else: assert np.any(np.isnan(F))==False and np.isnan(V)==False,str(F)+','+str(V)+','+str(isInsideFull3D)
+        is_Inside_Consistency()
         numTrue=sum(isInsideList)
         assert numTrue>50 #at least 50 true seems reasonable
     def test2(self):
@@ -297,7 +307,6 @@ class combinerHexapoleSimTestHelper:
         pf0=np.array([-200.40519762427516 ,  -13.175831107630524,   10.093774609103724])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
-
 def run_Tests():
     driftTestHelper().run_Tests()
     lensIdealTestHelper().run_Tests()
@@ -305,3 +314,4 @@ def run_Tests():
     combinerIdealTestHelper().run_Tests()
     hexapoleSegmentedBenderSimTestHelper().run_Tests()
     hexapoleLensSimTestHelper().run_Tests()
+    combinerHexapoleSimTestHelper().run_Tests()

@@ -1065,62 +1065,24 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.shape = 'COMBINER_CIRCULAR'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
-        self.force_Func=None
-        self.magnetic_Potential_Func=None
+        self.lens=None
         if build==True:
             self.build()
 
     def build(self):
-
-        rpList=[]
-        magnetWidthList=[]
+        rpList = []
+        magnetWidthList = []
         for _ in range(self.layers):
-            rpList.append(self.rp+sum(magnetWidthList))
-            nextMagnetWidth = (self.rp+sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
+            rpList.append(self.rp + sum(magnetWidthList))
+            nextMagnetWidth = (self.rp + sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
             magnetWidthList.append(nextMagnetWidth)
-        self.space=max(rpList)*self.outerFringeFrac
-        lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList)
-
-        #todo: this making points thing is an abomination. Maybe I should solve for angle with one grid, then switch
-        #to another. Also, x and y should be different!
-        numXY=int((self.ap/self.rp)*self.numGridPointsXY)
-        #because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
-        #tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
-        #quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-        La_Approx=(self.ap+self.space/ np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
-                np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng)) #todo:  A better less wasteful hueristic
-        xyMax=self.ap + (La_Approx + self.ap * np.sin(abs(self.maxCombinerAng))) * np.sin(abs(self.maxCombinerAng))
-        yArr_Quadrant=np.linspace(-TINY_STEP,self.ap+TINY_STEP+xyMax,numXY)
-        xArr_Quadrant=np.linspace(-(self.ap+TINY_STEP+xyMax),TINY_STEP,numXY)
-        # el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang)
-        self.apMax=self.rp-np.sqrt(2)*(yArr_Quadrant[1]-yArr_Quadrant[0])
-
-        assert self.ap<self.apMax
-        zTotalMax=self.Lm+self.space + (La_Approx + self.ap * np.sin(self.maxCombinerAng)) * np.cos(self.maxCombinerAng)
-
-        zMin=-TINY_STEP
-        zMaxHalf=self.Lm/2+self.space+1.5*(zTotalMax-2*(self.Lm/2+self.space))
-        zArr=np.linspace(zMin,zMaxHalf+self.extraFieldLength,num=self.numGridPointsZ)
-
-        volumeCoords=np.asarray(np.meshgrid(xArr_Quadrant,yArr_Quadrant,zArr)).T.reshape(-1,3)
-        BNormGrad,BNorm=np.zeros((len(volumeCoords),3))*np.nan,np.zeros(len(volumeCoords))*np.nan
-        validIndices = np.logical_or(np.linalg.norm(volumeCoords[:,:2],axis=1)<=self.rp,volumeCoords[:,2]>=self.Lm/2)#tricky
-        BNormGrad[validIndices],BNorm[validIndices] = lens.BNorm_Gradient(volumeCoords[validIndices],returnNorm=True)
-        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
-        # data3D[:,3:][np.logical_and(np.linalg.norm(data3D[:,:2],axis=1)>self.rp,data3D[:,2]<self.Lm/2)]=np.nan
+        self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        fieldData=self.shape_Field_Data_3D(data3D)
-        self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
-                                                        self.space,self.ap,np.nan,self.fieldFact,self.extraFieldLength)
-        self.outputOffset=self.find_Ideal_Offset()
-        inputAngle, inputOffset, qTracedArr, minSep=self.compute_Input_Angle_And_Offset(self.outputOffset)
-        # to find the length
-        assert np.abs(inputAngle)<self.maxCombinerAng #tilt can't be too large or it exceeds field region.
-        assert inputAngle*self.fieldFact>0 #satisfied if low field is positive angle and high is negative. Sometimes
-        #this can happen because the lens is to long so an oscilattory behaviour is required by injector
-        self.Lo = self.compute_Trajectory_Length(
-            qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.lens = _HalbachLensFieldGenerator(self.Lm, magnetWidthList, rpList)
+        inputAngle, inputOffset, trajectoryLength = self.compute_Orbit_Characteristics()
+
+        self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
         y0 = inputOffset
@@ -1129,21 +1091,72 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        xMax=self.Lb+(self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
-        xyMax=self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
-        assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
-        assert np.abs(xArr_Quadrant).max()>xyMax and np.abs(yArr_Quadrant).max()>xyMax, \
-            "field region must extend past particle region"
-        assert np.sqrt(2) * (xArr_Quadrant[1] - xArr_Quadrant[0]) < self.rp - self.ap #no interpolation reaching into
-        #magnetic material
-        self.set_extraFieldLength()
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La, self.Lb,
-                                            self.Lm,self.space, self.ap,self.ang,self.fieldFact,self.extraFieldLength)
-        self.fastFieldHelper.force(1e-3,1e-3,1e-3)#force compile
-        self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3)#force compile
-        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
-        F_center = np.linalg.norm(self.force(np.asarray([zMaxHalf, self.ap / 2, .0])))
-        assert F_edge / F_center < .01
+        # xMax = self.Lb + (self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
+        # xyMax = self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
+        # assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
+        # assert np.abs(xArr_Quadrant).max()>xyMax and np.abs(yArr_Quadrant).max()>xyMax, \
+        #     "field region must extend past particle region"
+        # assert np.sqrt(2) * (xArr_Quadrant[1] - xArr_Quadrant[0]) < self.rp - self.ap #no interpolation reaching into
+        # magnetic material
+        fieldData = self.make_Field_Data(self.La,self.ang)
+
+        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La,
+                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.inputOffset,self.extraFieldLength)
+        self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
+        self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
+
+
+
+        # F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        # F_center = np.linalg.norm(self.force(np.asarray([self.Lm/2 + self.space, self.ap / 2, .0])))
+        # assert F_edge / F_center < .01
+
+    def make_Grid_Coords_Arrays(self,La,ang):
+        # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
+        # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
+        # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
+        TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
+
+        yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
+        yMax=np.clip(yMax,self.rp,np.inf)
+        numY=self.numGridPointsXY
+        numX=int(self.numGridPointsXY*self.ap/yMax)
+        zMaxHalf=(self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang)))/2
+        zMaxHalf+=self.extraFieldLength
+
+        yArr_Quadrant = np.linspace(-TINY_OFFSET, yMax, numY)  # this remains y in element frame
+        xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes x in element frame
+        zArr = np.linspace(-TINY_OFFSET, zMaxHalf + self.extraFieldLength, num=self.numGridPointsZ)
+        return xArr_Quadrant,yArr_Quadrant,zArr
+
+    def make_Field_Data(self,La,ang):
+        xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang)
+        self.apMax = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
+        assert self.ap < self.apMax
+        volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
+        BNormGrad, BNorm = np.zeros((len(volumeCoords), 3)) * np.nan, np.zeros(len(volumeCoords)) * np.nan
+        validIndices = np.logical_or(np.linalg.norm(volumeCoords[:, :2], axis=1) <= self.rp,
+                                     volumeCoords[:, 2] >= self.Lm / 2)  # tricky
+        BNormGrad[validIndices], BNorm[validIndices] = self.lens.BNorm_Gradient(volumeCoords[validIndices],
+                                                                                returnNorm=True)
+        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        fieldData = self.shape_Field_Data_3D(data3D)
+        return fieldData
+
+    def compute_Orbit_Characteristics(self):
+        LaMax = (self.ap + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
+                                                np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
+        fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng)
+        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, np.nan, self.Lb,
+                                                self.Lm,self.space, self.ap,np.nan,self.fieldFact,np.nan,self.extraFieldLength)
+        self.outputOffset = self.find_Ideal_Offset()
+        inputAngle, inputOffset, qTracedArr, minSep = self.compute_Input_Angle_And_Offset(self.outputOffset)
+        trajectoryLength = self.compute_Trajectory_Length(qTracedArr)
+        assert np.abs(inputAngle) < self.maxCombinerAng  # tilt can't be too large or it exceeds field region.
+        assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
+        # Sometimes this can happen because the lens is to long so an oscilattory behaviour is required by injector
+        return inputAngle, inputOffset, trajectoryLength
+
     def update_Field_Fact(self,val):
         self.fastFieldHelper.fieldFact=val
         self.fieldFact=val
