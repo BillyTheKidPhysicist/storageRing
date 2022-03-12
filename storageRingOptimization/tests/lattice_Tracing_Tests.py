@@ -8,29 +8,22 @@ from ParticleTracerClass import ParticleTracer
 #TODO: test swarmTracer class features
 testDataFolderPath=os.path.join(os.getcwd(),'testData')
 V0=200.0
-def generate_Test_Swarm(configuration):
-    testSwarm = Swarm()
-    if configuration in ('1','2','3','4','5','6'):
-        testSwarm.add_Particle(pi=np.asarray([-V0, 0.0, 0.0]))
-        testSwarm.add_Particle(qi=np.asarray([-1e-10, 1e-3, 0.0]),pi=np.asarray([-V0, 0.0, 0.0]))
-        testSwarm.add_Particle(pi=np.asarray([-200.0, 5.0, 0.0]))
-    elif configuration in (None,):
-        pass
-    else:
-        raise Exception('no valid configuration given')
+def generate_Test_Swarm(PTL):
+    swarmTracer=SwarmTracer(PTL)
+    testSwarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3,10.0,5.0,100,sameSeed=42)
     return testSwarm
 
 def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):
-    #swarm is traced through the lattice with all fancy features turned off
+    """swarm is traced through the lattice with all fancy features turned off"""
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     swarmTracer=SwarmTracer(PTL)
-    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=False,parallel=False,accelerated=False)
+    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,.25,fastMode=False,parallel=False,accelerated=False)
     testData=[]
     for particle in tracedSwarm:
-        pf=particle.pf
-        qf=particle.qf
+        pf=particle.pf if particle.pf is not None else np.nan*np.empty(3)
+        qf=particle.qf if particle.qf is not None else np.nan*np.empty(3)
         revolutions=particle.revolutions
-        EFinal=particle.EArr[-1]
+        EFinal=particle.EArr[-1] if len(particle.EArr)>0 else np.nan
         testData.append(np.append(np.append(np.append(qf,pf),revolutions),EFinal))
     np.savetxt(os.path.join(testDataFolderPath,TESTDataFilePath),np.asarray(testData))
     
@@ -38,37 +31,38 @@ def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated):
     np.set_printoptions(precision=100)
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     swarmTracer=SwarmTracer(PTL)
-    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,1.0,fastMode=fastMode,accelerated=accelerated,
+    tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,.25,fastMode=fastMode,accelerated=accelerated,
                                                         parallel=False)
-    assert tracedSwarm.num_Particles()==testSwarm.num_Particles()
     testData=np.loadtxt(TESTDataFilePath)
+    assert tracedSwarm.num_Particles()==testSwarm.num_Particles() and len(testData)==tracedSwarm.num_Particles()
     eps=1e-9 # a small number to represent changes in values that come from different kinds of operations. Because of
     #the nature of digitla computing, the same algorithm done in a different way can give slightly different answers
     #in the last few digits on different computers
     for i in range(len(tracedSwarm.particles)):
-        qf=tracedSwarm.particles[i].qf
-        qTest=testData[i,:3]
-        pf=tracedSwarm.particles[i].pf
-        pTest=testData[i,3:6]
-        revs=tracedSwarm.particles[i].revolutions
-        revsTest=testData[i,6]
-        EFinalTest=testData[i,7]
-        condition=(np.all(np.abs(qf-qTest)<eps) and np.all(np.abs(pf-pTest)<eps) and np.abs(revs-revsTest)<eps)
-        if fastMode==False: #include energy considerations
-            EFinalTraced=tracedSwarm.particles[i].EArr[-1]
-            condition=condition and np.abs(EFinalTest-EFinalTraced)<eps
-        if condition==False:
-            print('q:',qf)
-            print('qTest:',qTest)
-            print('difference:',qTest-qf)
-            print('p:',pf)
-            print('pTest:',pTest)
-            print('difference:',pTest-pf)
-            if fastMode==False:
-                print('Energy: ',EFinalTraced)
-                print('EnergyTest: ',EFinalTest)
-                print('difference: ',EFinalTest-EFinalTraced)
-            assert False,'Failed on test: '+TESTDataFileName
+        if tracedSwarm.particles[i].T!=0.0:
+            qf=tracedSwarm.particles[i].qf
+            qTest=testData[i,:3]
+            pf=tracedSwarm.particles[i].pf
+            pTest=testData[i,3:6]
+            revs=tracedSwarm.particles[i].revolutions
+            revsTest=testData[i,6]
+            EFinalTest=testData[i,7]
+            condition=(np.all(np.abs(qf-qTest)<eps) and np.all(np.abs(pf-pTest)<eps) and np.abs(revs-revsTest)<eps)
+            if fastMode==False: #include energy considerations
+                EFinalTraced=tracedSwarm.particles[i].EArr[-1]
+                condition=condition and np.abs(EFinalTest-EFinalTraced)<eps
+            if condition==False:
+                print('q:',qf)
+                print('qTest:',qTest)
+                print('difference:',qTest-qf)
+                print('p:',pf)
+                print('pTest:',pTest)
+                print('difference:',pTest-pf)
+                if fastMode==False:
+                    print('Energy: ',EFinalTraced)
+                    print('EnergyTest: ',EFinalTest)
+                    print('difference: ',EFinalTest-EFinalTraced)
+                assert False,'Failed on test: '+TESTDataFileName
 def generate_Lattice(configuration):
     #a variety of lattice configurations are tested
     if configuration=='1':
@@ -116,7 +110,7 @@ def generate_Lattice(configuration):
     return PTL
 def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
     PTL=generate_Lattice(configuration)
-    testSwarm=generate_Test_Swarm(configuration)
+    testSwarm=generate_Test_Swarm(PTL)
     TESTName='test_'+configuration
     if saveData==True:
         _save_TEST_Data(PTL,testSwarm,TESTName)

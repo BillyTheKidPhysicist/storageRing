@@ -715,12 +715,11 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
-    ('inputOffset', numba.float64),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba()))
 ]
 @jitclass(spec)
 class CombinerHexapoleSimFieldHelper_Numba:
-    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,inputOffset,extraFieldLength):
+    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -730,7 +729,6 @@ class CombinerHexapoleSimFieldHelper_Numba:
         self.ang=ang
         self.fieldFact=fieldFact
         self.extraFieldLength=extraFieldLength
-        self.inputOffset=inputOffset
         self.baseClass=self.baseClass=BaseClassFieldHelper_Numba()
     def _force_Func(self,x,y,z):
         Fx0, Fy0, Fz0= vec_interp3D(-z,y,x,self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr)
@@ -791,9 +789,10 @@ class CombinerHexapoleSimFieldHelper_Numba:
 
     def is_Coord_Inside_Vacuum(self, x,y,z):
         # q: coordinate to test in element's frame
+        standOff=10e-6 #first valid (non np.nan) interpolation point on face of lens is 1e-6 off the surface of the lens
         if not -self.ap <= z <= self.ap:  # if outside the z apeture (vertical)
             return False
-        elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
+        elif 0 <= x <= self.Lb+standOff:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner.
             if np.sqrt(y ** 2 + z ** 2) < self.ap:
                 return True
@@ -808,19 +807,11 @@ class CombinerHexapoleSimFieldHelper_Numba:
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
             Y3 = m * x + (-self.ap - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
-                val= True
+                return True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
-                val= True
+                return True
             else:
-                val= False
-            # x=x-self.Lb
-            # y=y-self.inputOffset
-            # x,y=np.cos(-self.ang)*x-np.sin(-self.ang)*y,np.sin(-self.ang)*x+np.cos(-self.ang)*y
-            # y=y+self.inputOffset
-            # if np.sqrt(y**2+z**2)>self.ap:
-            #     return False
-            # else:
-            #     return True
+                return False
     def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
@@ -855,20 +846,19 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.Lcap=Lcap
         self.RIn_Ang=RIn_Ang
     def _force_Func_Seg(self,x,y,z):
-        # Fx0,Fy0,Fz0= vec_interp3D(x,-z,y,self.fieldDataSeg[0],self.fieldDataSeg[1],self.fieldDataSeg[2],self.fieldDataSeg[3],self.fieldDataSeg[4],self.fieldDataSeg[5])
-        Fx0,Fy0,Fz0=vec_interp3D(x,-z,y,*self.fieldDataSeg[:6])#[0],self.fieldDataSeg[1],self.fieldDataSeg[2],self.fieldDataSeg[3],self.fieldDataSeg[4],self.fieldDataSeg[5])
+        Fx0,Fy0,Fz0=vec_interp3D(x,-z,y,*self.fieldDataSeg[:6])
         Fx = Fx0
         Fy = Fz0
         Fz = -Fy0
         return Fx, Fy, Fz
     def _force_Func_Internal_Fringe(self,x,y,z):
-        Fx0, Fy0, Fz0 = vec_interp3D(x,-z,y,*self.fieldDataInternal[:6])#[0],self.fieldDataInternal[1],self.fieldDataInternal[2],self.fieldDataInternal[3],self.fieldDataInternal[4],self.fieldDataInternal[5])
+        Fx0, Fy0, Fz0 = vec_interp3D(x,-z,y,*self.fieldDataInternal[:6])
         Fx = Fx0
         Fy = Fz0
         Fz = -Fy0
         return Fx, Fy, Fz
     def _Force_Func_Cap(self,x,y,z):
-        Fx0, Fy0, Fz0 = vec_interp3D(x,-z,y,*self.fieldDataCap[:6])#[0],self.fieldDataCap[1],self.fieldDataCap[2],self.fieldDataCap[3],self.fieldDataCap[4],self.fieldDataCap[5])
+        Fx0, Fy0, Fz0 = vec_interp3D(x,-z,y,*self.fieldDataCap[:6])
         Fx = Fx0
         Fy = Fz0
         Fz = -Fy0

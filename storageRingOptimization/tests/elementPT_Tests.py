@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import math
-from elementPT import BenderIdeal,Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim
+from elementPT import BenderIdeal,Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim,HalbachBenderSimSegmented,HalbachLensSim
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Particle
@@ -33,11 +33,12 @@ class genericElementTestHelper:
     def __init__(self,el,coordsTestRules,coordFrame):
         assert len(coordsTestRules)==3
         assert coordFrame in ('cylinderical','cartesian')
-        if coordFrame=='cylinderical': assert isinstance(el,(BenderIdeal,))
-        else: assert isinstance(el,(Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim))
+        if coordFrame=='cylinderical': assert any(type(el)==elType for elType in (BenderIdeal,HalbachBenderSimSegmented))
+        else: assert any(type(el)==elType for elType in (Drift,LensIdeal,CombinerIdeal,CombinerHexapoleSim,HalbachLensSim))
         self.el=el
         self.coordsTestRules=coordsTestRules
         self.coordFrame=coordFrame
+        self.testShapely=False if coordFrame=='cylinderical' else True #circles are not well modeled in shapely
     def convert_Coord(self,x1,x2,x3):
         if self.coordFrame=='cartesian':
             x,y,z=x1,x2,x3
@@ -47,28 +48,36 @@ class genericElementTestHelper:
         return np.asarray([x, y, z])
 
     def is_Inside_Shapely(self,qEl):
+        """Check with Shapely library that point resides in 2D footprint of element. It's possible that the point may
+        fall just on the edge of the object, so return result with and without small padding"""
         qLab = self.el.transform_Element_Coords_Into_Lab_Frame(qEl)
-        SO_Padded=self.el.SO.buffer(1e-12) #add padding to avoid issues of point right on edge
-        isInside=SO_Padded.contains(Point(qLab[:2]))
-        return isInside
+        isInsideUnpadded=self.el.SO.contains(Point(qLab[:2]))
+        SO_Padded = self.el.SO.buffer(1e-9)  # add padding to avoid issues of point right on edge
+        isInsidePadded = SO_Padded.contains(Point(qLab[:2]))
+        return isInsidePadded,isInsideUnpadded
+    def test_Against_Shapely(self,coord2D):
+        isInside2DShapely, isInside2DShapelyPadded = self.is_Inside_Shapely(coord2D)
+        if isInside2DShapely == isInside2DShapelyPadded:  # if consistent for both its not a weird situation of being
+            # right on the edge, so go ahead and check
+            isInside2D = self.el.is_Coord_Inside(coord2D)
+            assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
     def run_Tests(self):
         self.test1()
         self.test2()
     def test1(self):
         isInsideList=[]
         @given(*self.coordsTestRules)
-        @settings(max_examples=10_000,deadline=None)
-        def is_Inside_Consistency(x1,x2,x3):
+        @settings(max_examples=5_000,deadline=None)
+        def is_Inside_Consistency(x1:float,x2:float,x3:float):
             coord=self.convert_Coord(x1,x2,x3)
             F=self.el.force(coord)
             V=self.el.magnetic_Potential(coord)
             coord2D=coord.copy()
             coord2D[2]=0.0
-            isInside2D=self.el.is_Coord_Inside(coord2D)
-            isInside2DShapely=self.is_Inside_Shapely(coord2D)
+            if self.testShapely==True:
+                self.test_Against_Shapely(coord2D)
             isInsideFull3D=self.el.is_Coord_Inside(coord)
             isInsideList.append(isInsideFull3D)
-            assert isInside2DShapely==isInside2D
             if isInsideFull3D==False: assert math.isnan(F[0])==True and math.isnan(V)==True,str(F)+','+str(V)
             else: assert np.any(np.isnan(F))==False and np.isnan(V)==False,str(F)+','+str(V)+','+str(isInsideFull3D)
         is_Inside_Consistency()
@@ -78,7 +87,7 @@ class genericElementTestHelper:
         #check that coordinate conversions work
         tol=1e-12
         @given(*self.coordsTestRules)
-        @settings(max_examples=500,deadline=None)
+        @settings(max_examples=5_000,deadline=None)
         def convert_Invert_Consistency(x1,x2,x3):
             coordEl0=self.convert_Coord(x1,x2,x3)
             coordLab=self.el.transform_Element_Coords_Into_Lab_Frame(coordEl0)
@@ -303,8 +312,8 @@ class combinerHexapoleSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20686635609322787 , -0.005812506947748845,0.003942038743201203])
-        pf0=np.array([-200.40519762427516 ,  -13.175831107630524,   10.093774609103724])
+        qf0=np.array([-0.20686191950164892  , -0.005818561299912518 ,0.0039414173200048195])
+        pf0=np.array([-200.4219580330553  ,  -12.9138294411005  ,   10.074756740292973])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 def run_Tests():

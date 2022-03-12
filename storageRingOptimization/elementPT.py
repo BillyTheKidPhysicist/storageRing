@@ -24,7 +24,7 @@ from numba.typed import List
 
 
 TINY_STEP=1e-9
-
+TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
 
 def full_Arctan(q):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
@@ -937,7 +937,6 @@ class HalbachLensSim(LensIdeal):
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
-        TINY_OFFSET=1e-12 #tiny offset to avoid out of bounds right at edges of element
         yArr_Quadrant = np.linspace(-TINY_OFFSET, self.rp-TINY_OFFSET, self.numGridPointsXY) 
         xArr_Quadrant = -yArr_Quadrant.copy()
         zMin = -TINY_OFFSET # inside the lens
@@ -1091,17 +1090,10 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        # xMax = self.Lb + (self.La + self.ap * np.sin(abs(self.ang))) * np.cos(abs(self.ang))
-        # xyMax = self.ap + (self.La + self.ap * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
-        # assert zMaxHalf>xMax-(self.Lm/2+self.space), "field region must extend past particle region"
-        # assert np.abs(xArr_Quadrant).max()>xyMax and np.abs(yArr_Quadrant).max()>xyMax, \
-        #     "field region must extend past particle region"
-        # assert np.sqrt(2) * (xArr_Quadrant[1] - xArr_Quadrant[0]) < self.rp - self.ap #no interpolation reaching into
-        # magnetic material
         fieldData = self.make_Field_Data(self.La,self.ang)
-
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La,
-                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.inputOffset,self.extraFieldLength)
+                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.extraFieldLength)
+
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
 
@@ -1115,19 +1107,33 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-        TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
+
 
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
         numY=self.numGridPointsXY
         numX=int(self.numGridPointsXY*self.ap/yMax)
-        zMaxHalf=(self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang)))/2
-        zMaxHalf+=self.extraFieldLength
+        zMaxHalf=self.compute_Valid_zMaxHalf(La,ang)
 
         yArr_Quadrant = np.linspace(-TINY_OFFSET, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes x in element frame
         zArr = np.linspace(-TINY_OFFSET, zMaxHalf + self.extraFieldLength, num=self.numGridPointsZ)
         return xArr_Quadrant,yArr_Quadrant,zArr
+    def compute_Valid_zMaxHalf(self,La,ang):
+        """Interpolation points inside magnetic material are set to nan. This can cause a problem near externel face of
+        combiner because particles may see np.nan when they are actually in a valid region. To circumvent, zMaxHalf is
+        chosen such that the first z point above the lens is just barely above it, and vacuum tube is configured to
+        respect that. See fastNumbaMethodsAndClasses.CombinerHexapoleSimFieldHelper_Numba.is_Coord_Inside_Vacuum"""
+        firstValidPointSpacing=1e-6
+        zMaxHalf = (self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang))) / 2
+        zMaxHalf+=self.extraFieldLength
+        pointSpacing=zMaxHalf/(self.numGridPointsZ-1)
+        lastPointInLensIndex=int((self.Lm/2)/pointSpacing) #last point in magnetic material
+        distToJustOutsideLens=firstValidPointSpacing+self.Lm/2-lastPointInLensIndex*pointSpacing #just outside material
+        extraSpacePerPoint=distToJustOutsideLens/lastPointInLensIndex
+        zMaxHalf+=extraSpacePerPoint*(self.numGridPointsZ-1)
+        assert abs((lastPointInLensIndex*zMaxHalf/(self.numGridPointsZ-1)-self.Lm/2)-1e-6),1e-12
+        return zMaxHalf
 
     def make_Field_Data(self,La,ang):
         xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang)
@@ -1148,7 +1154,7 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
                                                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
         fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng)
         self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, np.nan, self.Lb,
-                                                self.Lm,self.space, self.ap,np.nan,self.fieldFact,np.nan,self.extraFieldLength)
+                                                self.Lm,self.space, self.ap,np.nan,self.fieldFact,self.extraFieldLength)
         self.outputOffset = self.find_Ideal_Offset()
         inputAngle, inputOffset, qTracedArr, minSep = self.compute_Input_Angle_And_Offset(self.outputOffset)
         trajectoryLength = self.compute_Trajectory_Length(qTracedArr)
