@@ -50,7 +50,7 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
     PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
-    PTL_Ring.add_Drift(rpLensLast) #models the size of the lengs
+    PTL_Ring.add_Drift(.5,ap=rpLensLast) #models the size of the lengs
     PTL_Ring.add_Drift(lastGap)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Ring.add_Drift(jeremyGap)
@@ -78,7 +78,7 @@ class Injection_Model(LatticeOptimizer):
             , self.h, 1.0, parallel=False,
             fastMode=fastMode, copySwarm=False,
             accelerated=True)
-        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False)
+        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False,traceLineAlpha=.25)
         swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
         # print(swarmEnd.num_Particles(weighted=True))
         swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
@@ -121,9 +121,9 @@ class Injection_Model(LatticeOptimizer):
         plt.show()
     def floor_Plan_OverLap_mm(self):
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        overlapElIndex=-3
-        injectorLensShapely = injectorShapelyObjects[overlapElIndex]
-        assert isinstance(self.latticeInjector.elList[overlapElIndex],HalbachLensSim)
+        injectorOverlapElIndex=-3
+        injectorLensShapely = injectorShapelyObjects[injectorOverlapElIndex]
+        assert isinstance(self.latticeInjector.elList[injectorOverlapElIndex],HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
         area = 0
         converTo_mm=(1e3)**2
@@ -165,16 +165,21 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
-    (.01,.5),(.01,.3)]
+    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.01,.5),
+    (.05,.5),(.01,.3)]
     for _ in range(1):
         print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=9))
-    # X=np.array([0.21479153648948063  , 0.027865069857105004 ,
-    #    0.23693159220680748  , 0.0456169915089179   ,
-    #    0.11390040259744001  , 0.02201806302378923  ,
-    #    0.0052155382283800575, 0.016816456429806968 ,
-    #    0.44119972130219315  , 0.21964890411737606  ])
+    # X=np.array([0.24213519, 0.0312023 , 0.14767671, 0.02214415, 0.04317439,
+    #    0.02367314, 0.01572198, 0.0114348 , 0.16277791, 0.12587023])
     # injector_Cost(X)
 
 if __name__=="__main__":
     main()
+
+
+"""
+---population member---- 
+DNA: array([0.13933567, 0.0296052 , 0.20695275, 0.03      , 0.2       ,
+       0.0499115 , 0.02267897, 0.01343472, 0.22479881, 0.19232315])
+cost: 0.06153557153697121
+"""

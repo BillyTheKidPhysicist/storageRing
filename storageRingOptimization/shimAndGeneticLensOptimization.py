@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from geneticLensElement_Wrapper import GeneticLens
 from parallel_Gradient_Descent import gradient_Descent,global_Gradient_Descent
 import numpy as np
-from lensOptimizerHelperFunctions import characterize_Lens_Full_Swarm,characterize_Lens_Concentric_Swarms
+from lensOptimizerHelper import characterize_Lens_Full_Swarm,characterize_Lens_Concentric_Swarms
 import copy
 import skopt
 

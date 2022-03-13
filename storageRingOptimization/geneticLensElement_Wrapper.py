@@ -1,3 +1,7 @@
+raise NotImplementedError
+#under construction
+
+
 from HalbachLensClass import HalbachLens,Layer,Sphere,RectangularPrism
 from shapely.geometry import Polygon,Point
 import matplotlib.pyplot as plt

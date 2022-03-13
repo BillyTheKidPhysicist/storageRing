@@ -1,5 +1,4 @@
 from numbers import Number
-from collections.abc import Iterable
 import time
 from constants import MAGNETIC_PERMEABILITY
 import numpy as np
@@ -8,7 +7,7 @@ import matplotlib.pyplot as plt
 import numba
 from scipy.spatial.transform import Rotation
 from magpylib.magnet import Box
-from typing import Sequence
+from typing import Union
 
 M_Default=1.018E6
 
@@ -27,9 +26,11 @@ def B_NUMBA(r,r0,m):
     return Bvec
 
 class magpy_Prism:
+
     def __init__(self,x0,y0,z0,phi,width,length,M):
         self.magnet=self._build_magpy_Prism(x0,y0,z0,phi,width,length,M)
-    def _build_magpy_Prism(self, x0, y0, z0, phi, width, length,M):
+
+    def _build_magpy_Prism(self, x0: float, y0: float, z0: float, phi: float, width: float, length: float,M)->Box:
         dimensions_mm = 1e3 * np.asarray([width, width, length])
         position_mm = 1e3 * np.asarray([x0, y0, z0])
         R = Rotation.from_rotvec([0, 0, phi])
@@ -37,14 +38,17 @@ class magpy_Prism:
         magnet = Box(magnetization=(M_MagpyUnit, 0, 0.0), dimension=dimensions_mm, position=position_mm,
                      orientation=R)
         return magnet
-    def B(self,evalCoords):
+
+    def B(self,evalCoords: np.ndarray)->np.ndarray:
         evalCoords_mm = 1e3 * evalCoords
         BVec_mT = self.magnet.getB(evalCoords_mm)  # need to convert to mm
         BVec_T = 1e-3 * BVec_mT  # convert to tesla from milliTesla
         return BVec_T
 
+
 class Sphere:
-    def __init__(self, radius,M=M_Default):
+
+    def __init__(self, radius: float,M: float=M_Default):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         #M: magnetization
@@ -62,7 +66,7 @@ class Sphere:
         self.z = None
         self.r = None
 
-    def position_Sphere(self, r=None, phi=None, z=None):
+    def position_Sphere(self, r: float=None, phi: float=None, z: float=None)->None:
         if phi is not None:
             self.phi = phi
         if z is not None:
@@ -74,14 +78,14 @@ class Sphere:
         y = self.r * np.sin(self.phi)
         self.r0 = np.asarray([x, y, self.z])
 
-    def update_Size(self, radius):
+    def update_Size(self, radius: float)-> None:
         self.radius = radius
         self.volume = (4 * np.pi / 3) * self.radius ** 3
         M = 1.15e6  # magnetization density
         self.m0 = M * (4 / 3) * np.pi * self.radius ** 3  # dipole moment
         self.m = self.m0 * self.n  # vector sphere moment
 
-    def orient(self, theta, psi):
+    def orient(self, theta: float, psi: float)->None:
         # tilt the sphere in spherical coordinates. These are in the lab frame, there is no sphere frame
         #theta,psi =(pi/2,0) is along +x
         #theta,psi=(pi/2,pi/2) is along +y
@@ -91,24 +95,11 @@ class Sphere:
         self.n = np.asarray([np.sin(theta) * np.cos(psi), np.sin(theta) * np.sin(psi), np.cos(theta)])#x,y,z
         self.m = self.m0 * self.n
 
-    def vary_Amplitude(self, fact):
-        self.m = fact * self.m0 * self.n  # vector sphere moment
-
-    def BSlow(self, r):
-        # magnetic field vector at a point in space
-        # r: Coordinates of evaluation
-        r = r - self.r0  # convert to difference vector
-        if npl.norm(r) < self.radius:
-            return np.nan
-        rNorm = npl.norm(r)
-        mrDot = np.sum(self.m * r)
-        Bvec = 1e-7 * (3 * r * mrDot / rNorm ** 5 - self.m / rNorm ** 3)
-        return Bvec
-
-    def B(self, r):
+    def B(self, r:np.ndarray)-> np.ndarray:
+        assert len(r.shape)==2 and r.shape[1]==3
         return B_NUMBA(r, self.r0, self.m)
 
-    def B_Shim(self, r, planeSymmetry=True,negativeSymmetry=True,rotationAngle=np.pi/3):
+    def B_Shim(self, r:np.ndarray, planeSymmetry: bool=True,negativeSymmetry: bool=True,rotationAngle: float=np.pi/3)->np.ndarray:
         # a single magnet actually represents 12 magnet
         # r: array of N position vectors to get field at. Shape (N,3)
         # planeSymmetry: Wether to exploit z symmetry or not
@@ -134,7 +125,8 @@ class Sphere:
         # plt.show()
         return arr
 
-    def B_Symmetry(self,r, rotations,negativeSymmetry, rotationAngle,planeReflection):
+    def B_Symmetry(self,r:np.ndarray, rotations: float,negativeSymmetry: float, rotationAngle: float,
+                   planeReflection: float)->np.ndarray:
         rotAngle = rotationAngle * rotations
         M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
         r0Sym=self.r0.copy()
@@ -149,10 +141,13 @@ class Sphere:
         # plt.quiver(r0Sym[0], r0Sym[1], mSym[0], mSym[1])
         BVecArr = B_NUMBA(r, r0Sym, mSym)
         return BVecArr
+
+
 class RectangularPrism:
     #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
     #are equal, but the length, in the z plane, can be anything.
-    def __init__(self, width,length,M=M_Default):
+
+    def __init__(self, width: float,length: float,M: float=M_Default):
         #width: The width in the x,y plane without rotation, meters
         #lengthI: The length in the z plane without rotation, meters
         #M: magnetization, SI
@@ -171,7 +166,8 @@ class RectangularPrism:
         self.r0 = None
         self.theta = None # rotation about body z axis
         self.magnet=None #holds the magpylib element
-    def place(self, r, theta, z,phi):
+
+    def place(self, r:np.ndarray, theta: float, z: float,phi: float)->None:
         #currentyl no feature for tilting body, only rotating about z axis
         # r: the distance from x,y=0 from the center of the RectangularPrism
         #phi: position in polar/cylinderical coordinates
@@ -182,7 +178,8 @@ class RectangularPrism:
         self.y = self.r * np.sin(self.theta)
         self.r0 = np.asarray([self.x, self.y, self.z])
         self.magnet=magpy_Prism(self.x,self.y,self.z,self.phi,self.width,self.length,self.M)
-    def _build_RectangularPrism(self):
+
+    def _build_RectangularPrism(self)->None:
         # build a rectangular prism made of multiple spheres
         # make rotation matrices
         # theta rotation is clockwise about y in my notation. psi is coutner clokwise around z
@@ -192,14 +189,17 @@ class RectangularPrism:
         R = Rotation.from_rotvec([0, 0, self.phi])
         M_MagpyUnit=1e3*self.M*MAGNETIC_PERMEABILITY #uses units of mT for magnetization.
         self.magnet=Box(magnetization=(M_MagpyUnit,0,0.0),dimension=dimensions_mm,position=position_mm,orientation=R)
-    def B(self, evalCoords):
+
+    def B(self, evalCoords: np.ndarray)->None:
         # (n,3) array to evaluate coords at. SI
         assert len(evalCoords.shape)==2 and evalCoords.shape[1]==3
         BVec=self.magnet.B(evalCoords)
         if len(BVec.shape)==1:
             BVec=np.asarray([BVec])
         return BVec
-    def B_Shim(self, r, planeSymmetry=True,negativeSymmetry=True,rotationAngle=np.pi/3):
+
+    def B_Shim(self, r:np.ndarray, planeSymmetry: bool=True,negativeSymmetry: bool=True,
+               rotationAngle: float=np.pi/3)->np.ndarray:
         # a single magnet actually represents 12 magnet
         # r: array of N position vectors to get field at. Shape (N,3)
         # planeSymmetry: Wether to exploit z symmetry or not
@@ -220,7 +220,9 @@ class RectangularPrism:
             arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle,True)
             arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle,True)
         return arr
-    def B_Symmetry(self,r, rotations,negativeSymmetry, rotationAngle,planeSymmetry):
+
+    def B_Symmetry(self,r:np.ndarray, rotations: float,negativeSymmetry: bool, rotationAngle: float,
+                   planeSymmetry: bool):
         rotAngle = rotationAngle * rotations
         phiSymm=rotAngle
         M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
@@ -237,7 +239,8 @@ class RectangularPrism:
 
 class Layer:
     # class object for a layer of the magnet. Uses the RectangularPrism object
-    def __init__(self, z, width, length,rp, M=M_Default,phase=0.0):
+
+    def __init__(self, z: float, width: float, length: float,rp: Union[float,tuple], M: float=M_Default,phase:float=0.0):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
         # width: width of the rectangular prism in the xy plane
         # length: length of the rectangular prism in the z axis
@@ -245,7 +248,7 @@ class Layer:
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
         maxLayerMagnets=12
-        if isinstance(rp,Iterable):
+        if isinstance(rp,tuple):
             assert len(rp)<=maxLayerMagnets
         else:
             assert rp>0.0
@@ -259,7 +262,8 @@ class Layer:
         self.phase=phase #this will rotate the layer about z this amount
         self.RectangularPrismsList = []  # list of RectangularPrisms
         self.build()
-    def build(self):
+
+    def build(self)->None:
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
         thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)+self.phase  # location of 12 magnets.
@@ -276,13 +280,13 @@ class Layer:
                 self.RectangularPrismsList.append(magnet)
         # plt.gca().set_aspect('equal')
         # plt.show()
-    def B(self, r):
+
+    def B(self, r: np.ndarray)->np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
         assert len(self.RectangularPrismsList)>0
         BArr=np.zeros(r.shape)
         for prism in self.RectangularPrismsList:
             BArr += prism.B(r)
-
         return BArr
 
 
@@ -290,7 +294,7 @@ class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
 
-    def __init__(self,length:float,width:Sequence,rp:Sequence,M:float=M_Default):
+    def __init__(self,length:float,width:tuple,rp:tuple,M:float=M_Default):
         #note that M is tuned to  for spherePerDim=4
         # numLayers: Number of layers
         # width: Width of each Rectangular Prism in the layer, meter
@@ -298,7 +302,7 @@ class HalbachLens:
         # rp: bore radius of concentric layers
         #Br: remnant flux density
         #M: magnetization.
-        assert all(isinstance(variable,Iterable) for variable in (rp,width))
+        assert all(isinstance(variable,tuple) for variable in (rp,width))
         assert all(val>0.0 for val in [*rp,*width])
         assert len(width)==len(rp)
         assert length>0.0 and M>0.0
@@ -318,25 +322,29 @@ class HalbachLens:
         self.ROutTheta=None #rotation matrix to rotate the vector out of the tilted frame to the original frame
 
         self._build()
-    def position(self,r0):
+
+    def position(self,r0: np.ndarray)->None:
         #position the magnet in space
         #r0: 3d position vector of the center of the magnet
         self.r0=r0
-    def rotate(self,theta):
+
+    def rotate(self,theta: float)->None:
         #rotate the magnet about its center
         self.theta=theta
         self.RInTheta=np.asarray([[np.cos(-theta),-np.sin(-theta)],[np.sin(-theta),np.cos(-theta)]]) #to rotate about the
         #y axis. Since the magnet is rotated by theta, the evaluation points need to be rotated by -theta
         self.ROutTheta = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]) #to rotate the
         #vector out after evaluating with the rotated coordinates
-    def _build(self):
+
+    def _build(self)->None:
         #build the lens.
         self.layerList=[]
         z=0.0
         for radiusLayer,widthLayer in zip(self.rp,self.width):
             layer=Layer(z,widthLayer,self.length,radiusLayer,M=self.M)
             self.layerList.append(layer)
-    def _transform_r(self,r):
+
+    def _transform_r(self,r:np.ndarray)->np.ndarray:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
         #r: rows of coordinates, shape (N,3). Where N is the number of evaluation points
@@ -344,6 +352,7 @@ class HalbachLens:
             return self._transform_r_NUMBA(r,self.r0,self.ROutTheta)
         else:
             return r
+
     @staticmethod
     @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:,:]))
     def _transform_r_NUMBA(r,r0,ROutTheta):
@@ -356,7 +365,8 @@ class HalbachLens:
             rNew[i][0]=ROutTheta[0,0]*rx+ROutTheta[0,1]*rz
             rNew[i][2]=ROutTheta[1,0]*rx+ROutTheta[1,1]*rz
         return rNew
-    def _transform_Vector(self,v):
+
+    def _transform_Vector(self,v: np.ndarray)->np.ndarray:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
@@ -364,9 +374,10 @@ class HalbachLens:
             return self._transform_Vector_NUMBA(v,self.RInTheta)
         else:
             return v
+
     @staticmethod
     @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:,:]))
-    def _transform_Vector_NUMBA(v,RInTheta):
+    def _transform_Vector_NUMBA(v: np.ndarray,RInTheta: np.ndarray)-> np.ndarray:
         vNew=v.copy()
         for i in range(vNew.shape[0]):
             vx=vNew[i][0]
@@ -374,7 +385,8 @@ class HalbachLens:
             vNew[i][0]=RInTheta[0,0]*vx+RInTheta[0,1]*vz
             vNew[i][2]=RInTheta[1,0]*vx+RInTheta[1,1]*vz
         return vNew
-    def B_Vec(self,r):
+
+    def B_Vec(self,r: np.ndarray)->np.ndarray:
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
         if len(r.shape)==1:
@@ -390,7 +402,8 @@ class HalbachLens:
             return BArr[0]
         else:
             return BArr
-    def BNorm(self,r):
+
+    def BNorm(self,r:np.ndarray)->np.ndarray:
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
         if len(r.shape)==1:
@@ -402,7 +415,8 @@ class HalbachLens:
             return npl.norm(BVec)
         else:
             return npl.norm(BVec,axis=1)
-    def BNorm_Gradient(self,r,returnNorm=False,dr=1e-7):
+
+    def BNorm_Gradient(self,r: np.ndarray,returnNorm: bool=False,dr: float=1e-7)->Union[np.ndarray,tuple]:
         #Return the gradient of the norm of the B field. use forward difference theorom
         #r: (N,3) vector of coordinates or (3) vector of coordinates.
         #returnNorm: Wether to return the norm as well as the gradient.
@@ -439,11 +453,11 @@ class HalbachLens:
                 return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
 
 
-
 class SegmentedBenderHalbach(HalbachLens):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
-    def __init__(self,rp:float,rb,UCAngle,Lm,numLenses=3,M=1.03e6,positiveAngleMagnetsOnly=False):
+    def __init__(self,rp:float,rb: float,UCAngle: np.ndarray,Lm: float,numLenses: int=3,
+                 M: np.ndarray=1.03e6,positiveAngleMagnetsOnly: bool=False):
         assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
         self.rp=rp #radius of bore of magnet, ie to the pole
         self.rb=rb #bending radius
@@ -459,7 +473,8 @@ class SegmentedBenderHalbach(HalbachLens):
         self.numLenses=numLenses #number of lenses in the model
         self.lensList=None #list to hold lenses
         self._build()
-    def _build(self):
+
+    def _build(self)->None:
         self.lensList=[]
         if self.numLenses==1:
             if self.positiveAngleMagnetsOnly==True:
@@ -479,7 +494,8 @@ class SegmentedBenderHalbach(HalbachLens):
             #is clockwise about y axis in the xz plane looking from the negative side of y
             lens.position(r0)
             self.lensList.append(lens)
-    def B_Vec(self,r):
+
+    def B_Vec(self,r: np.ndarray)->np.ndarray:
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
         if len(r.shape)==1:

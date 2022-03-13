@@ -1,5 +1,5 @@
 import elementPT
-from geneticLensElement_Wrapper import GeneticLens
+# from geneticLensElement_Wrapper import GeneticLens
 from typing import Union
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer

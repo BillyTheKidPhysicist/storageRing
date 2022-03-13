@@ -5,12 +5,13 @@ from line_profiler_pycharm import profile
 import numpy.linalg as npl
 import numpy as np
 import copy
+from typing import Union,Optional
 class Swarm:
     #An object that holds a cloud of particles in phase space
     def __init__(self):
         self.particles = [] #list of particles in swarm
         ##There should be nothing else here. It should only be a container for particles.
-    def add_Particle(self, qi=None,pi=None):
+    def add_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None):
         #add an additional particle to phase space
         #qi: spatial coordinates
         #pi: momentum coordinates

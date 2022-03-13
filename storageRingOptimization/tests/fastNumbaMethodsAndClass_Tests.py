@@ -20,7 +20,7 @@ class BaseFieldHelper_TestHelper:
         """Test that coords and forces are not changed by misalignment procedure when there is no misalignment"""""
         testRules=[st.floats(min_value=-1.0,max_value=1.0)]*6
         @given(*testRules)
-        @settings(max_examples=100)
+        @settings(max_examples=100,deadline=None)
         def coord_And_Force_Alignment_Check(x0,y0,z0,Fx0,Fy0,Fz0):
             self.baseFieldHelper.update_Element_Perturb_Params(*(0.0,)*4)
             x,y,z=self.baseFieldHelper.misalign_Coords(x0,y0,z0)
@@ -33,7 +33,7 @@ class BaseFieldHelper_TestHelper:
         testRules=[st.floats(min_value=.2,max_value=1.0)]*8
         testRules.extend([st.floats(min_value=.01,max_value=.1)]*2)
         @given(*testRules)
-        @settings(max_examples=100)
+        @settings(max_examples=100,deadline=None)
         def coord_And_Force_Aligntment_Check(x0,y0,z0,Fx0,Fy0,Fz0,shiftY,shiftZ,rotY,rotZ):
             arr=np.asarray([x0,y0,z0,Fx0,Fy0,Fz0,shiftY,shiftZ,rotY,rotZ])
             if np.any(np.abs(arr)<1e-2):
