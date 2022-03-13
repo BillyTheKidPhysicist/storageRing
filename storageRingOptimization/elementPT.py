@@ -646,7 +646,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     # #everything. See docs/images/HalbachBenderSimSegmentedImage2.png
     #3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
     #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedImage3.png
-    def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac):
+    def __init__(self, PTL,Lm,rp,numMagnets,rb,extraSpace,rOffsetFact):
         super().__init__(PTL, None, None, rp, rb, None, build=False)
         self.PTL=PTL
         self.rb=rb
@@ -662,9 +662,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.segmented=True
-        self.apFrac=apFrac
-        self.longitudinalSpatialStepSize=1e-3  #target step size for spatial field interpolate.
-        self.numPointsTransverse=30
+        self.numPointsBoreRadius=20 #This many points should span the bore radius for good field sampling
+        self.longitudinalCoordSpacing = self.rp/self.numPointsBoreRadius #Spacing through unit cell. invariant scale
         self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
         self.cap = True
@@ -684,13 +683,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
         vacuumTubeThickness=1e-3
         radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lseg/2)**2)
-        apMax=self.rb-radiusCorner-vacuumTubeThickness
-        if self.apFrac is None:
-            return apMax
-        else:
-            if self.apFrac*self.rp>apMax:
-                raise Exception('Requested aperture is too large')
-            return self.apFrac*self.rp
+        apMaxGeom=self.rb-radiusCorner-vacuumTubeThickness #max aperture without clipping magnet
+        apMaxGoodField=self.rp-np.sqrt(2)*self.rp/self.numPointsBoreRadius  #max aperture without particles seeing
+        #field interpolation reaching into magnetic materal
+        apMax=min([apMaxGeom,apMaxGoodField])
+        return apMax
     def set_BpFact(self,BpFact):
         self.fieldFact=BpFact
 
@@ -735,33 +732,27 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.build_Fast_Field_Helper()
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def build_Fast_Field_Helper(self):
+        """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
+        assert np.all(fieldDataCap[0]==fieldDataInternal[0]) and np.all(fieldDataCap[1]==fieldDataInternal[1])
         self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
             fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,
                                                                                           self.M_ang,self.RIn_Ang)
         self.fastFieldHelper.force(self.rb+1e-3,1e-3,1e-3) #force numba to compile
         self.fastFieldHelper.magnetic_Potential(self.rb+1e-3,1e-3,1e-3) #force numba to compile
 
-    def make_Grid_Edge_Coord_Arr(self,Min,Max,stepSize=None, numSteps=None):
-        assert Max>Min and Max-Min>TINY_STEP
-        assert (not (stepSize is not None and numSteps is not None)) and (stepSize is not None or numSteps is not None)
-        if stepSize is not None:
-            assert stepSize>=TINY_STEP
-            numSteps=int(1+(Max-Min)/stepSize)  #to ensure it is odd
-        minReasonablePoints=5
-        if numSteps<minReasonablePoints: numSteps=minReasonablePoints
-        numSteps=numSteps if is_Even(numSteps) else numSteps+1
-        return np.linspace(Min,Max,numSteps)
-    def make_Field_Coord_Arr(self,xMin,xMax,yMin,yMax,zMin,zMax):
-        assert abs(xMax-xMin)/self.numPointsTransverse<self.rp-self.ap and abs(yMax-yMin)/self.numPointsTransverse\
-               <self.rp-self.ap #ensure there is no interpolation that reaches into the magnetic material by
-        # making grid spacing sufficient small
-        xArr=self.make_Grid_Edge_Coord_Arr(xMin,xMax,numSteps=self.numPointsTransverse)
-        yArr=self.make_Grid_Edge_Coord_Arr(yMin,yMax,numSteps=self.numPointsTransverse)
-        zArr=self.make_Grid_Edge_Coord_Arr(zMin,zMax,stepSize=self.longitudinalSpatialStepSize)
-        gridCoords=np.asarray(np.meshgrid(xArr,yArr,zArr)).T.reshape(-1,3)
+    def make_Grid_Coords(self,xMin,xMax,zMin,zMax):
+        """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
+        """
+        numPointsX=int(self.numPointsBoreRadius*(xMax-xMin)/self.rp)
+        yMin,yMax = -(self.ap + TINY_STEP),TINY_STEP #same for every part of bender
+        numPointsY = int(self.numPointsBoreRadius * (yMax - yMin) / self.rp)
+        numPointsZ=int((zMax-zMin)/self.longitudinalCoordSpacing)
+        xArrArgs,yArrArgs,zArrArgs=(xMin,xMax,numPointsX),(yMin,yMax,numPointsY),(zMin,zMax,numPointsZ)
+        coordArrList=[np.linspace(arrArgs[0],arrArgs[1],arrArgs[2]) for arrArgs in (xArrArgs,yArrArgs,zArrArgs)]
+        gridCoords=np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1,3)
         return gridCoords
 
     def fill_rOffset_And_Dependent_Params(self,rOffset):
@@ -775,49 +766,48 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.rOffsetFact=rOffsetFact
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def generate_Cap_Field_Data(self):
-        lensCap=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
-                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
         #x and y bounds should match with internal fringe bounds
         xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP
         xMax=self.rb+self.ap+TINY_STEP
-        yMin=-(self.ap+TINY_STEP)
-        yMax=TINY_STEP
         zMin=-self.Lcap-TINY_STEP
         zMax=TINY_STEP
-        fieldCoordsCap=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
-        BNormGradArr,BNormArr=lensCap.BNorm_Gradient(fieldCoordsCap,returnNorm=True)
-        # BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
-        dataCap=np.column_stack((fieldCoordsCap,BNormGradArr,BNormArr))
-        return self.shape_Field_Data_3D(dataCap)
+        fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
+        # validIndices=np.sqrt(fieldCoords[:,0]**2+fieldCoords[:,1]**2)<self.rp
+        lens=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
+                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+        BNormGradArr,BNormArr=lens.BNorm_Gradient(fieldCoords,returnNorm=True)
+        fieldData=np.column_stack((fieldCoords,BNormGradArr,BNormArr))
+        return self.shape_Field_Data_3D(fieldData)
 
     def generate_Internal_Fringe_Field_Data(self):
-        lensFringe=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
-                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+        """An magnet slices are required to model the region going from the cap to the repeating unit cell,otherwise
+        there is too large of an energy discontinuity"""
         #x and y bounds should match with cap bounds
         xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP  #inward enough to account for the tilt
         xMax=self.rb+self.ap+TINY_STEP
-        yMin=-(self.ap+TINY_STEP)
-        yMax=TINY_STEP
         zMin=-TINY_STEP
         zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+TINY_STEP
-        fieldCoordsInner=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
-        BNormGradArr,BNormArr=lensFringe.BNorm_Gradient(fieldCoordsInner,returnNorm=True)
-        dataCap=np.column_stack((fieldCoordsInner,BNormGradArr,BNormArr))
-        return self.shape_Field_Data_3D(dataCap)
+        fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
+        lens=_SegmentedBenderHalbachLensFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
+                                    numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+        BNormGradArr,BNormArr=lens.BNorm_Gradient(fieldCoords,returnNorm=True)
+        fieldData=np.column_stack((fieldCoords,BNormGradArr,BNormArr))
+        return self.shape_Field_Data_3D(fieldData)
 
     def generate_Segment_Field_Data(self):
+        """Internal repeating unit cell segment. This is modeled as a tilted portion with angle self.ucAng to the
+        z axis, with its bottom face at z=0 alinged with the xy plane"""
         xMin=(self.rb-self.ap)*np.cos(self.ucAng)-TINY_STEP
         xMax=self.rb+self.ap+TINY_STEP
-        yMin=-(self.ap+TINY_STEP)
-        yMax=TINY_STEP
         zMin=-TINY_STEP
         zMax=np.tan(self.ucAng)*(self.rb+self.ap)+TINY_STEP
-        fieldCoordsPeriodic=self.make_Field_Coord_Arr(xMin,xMax,yMin,yMax,zMin,zMax)
-        lensSegmentedSymmetry = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
+        fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
+        # validIndices=np.sqrt(fieldCoords[:,0]**2+fieldCoords[:,1]**2)<self.rp
+        lens = _SegmentedBenderHalbachLensFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                                           numLenses=self.numModelLenses+2)
-        BNormGradArr,BNormArr=lensSegmentedSymmetry.BNorm_Gradient(fieldCoordsPeriodic,returnNorm=True)
-        dataSeg=np.column_stack((fieldCoordsPeriodic,BNormGradArr,BNormArr))
-        return self.shape_Field_Data_3D(dataSeg)
+        BNormGradArr,BNormArr=lens.BNorm_Gradient(fieldCoords,returnNorm=True)
+        fieldData=np.column_stack((fieldCoords,BNormGradArr,BNormArr))
+        return self.shape_Field_Data_3D(fieldData)
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q):
         # q: element coordinates (x,y,z)
         # returns qo: the coordinates in the orbit frame (s,xo,yo)
@@ -1042,8 +1032,8 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
         # LensIdeal.__init__(self,PTL,None,None,None,None,build=False)
         # HalbachLensSim
-        self.numGridPointsZ = 25
-        self.numGridPointsXY = 60
+        self.numGridPointsZ = 30
+        self.numGridPointsXY = 30
         self.outerFringeFrac = 1.5
 
         self.Lm = Lm

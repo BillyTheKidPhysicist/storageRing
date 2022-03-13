@@ -239,12 +239,12 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Bender_Sim_Segmented(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0,apFrac=None):
+    def add_Halbach_Bender_Sim_Segmented(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0):
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,apFrac)
+        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)

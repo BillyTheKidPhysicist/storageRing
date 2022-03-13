@@ -10,7 +10,7 @@ testDataFolderPath=os.path.join(os.getcwd(),'testData')
 V0=200.0
 def generate_Test_Swarm(PTL):
     swarmTracer=SwarmTracer(PTL)
-    testSwarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3,10.0,5.0,100,sameSeed=42)
+    testSwarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3,10.0,5.0,30,sameSeed=42)
     return testSwarm
 
 def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):

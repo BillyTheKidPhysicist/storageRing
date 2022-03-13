@@ -25,8 +25,8 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
         qf,pf=particle.qf,particle.pf
         # np.set_printoptions(precision=100)
         # print(repr(qf),repr(pf))
-        assert np.all(np.abs((qf-qf0))<tol)
-        assert np.all(np.abs((pf-pf0))<tol)
+        assert np.all(np.abs((qf-qf0))<tol), str(repr(qf))+','+str(repr(qf0))
+        assert np.all(np.abs((pf-pf0))<tol), str(repr(pf))+','+str(repr(pf0))
 
 class genericElementTestHelper:
     #elements have generic functions and features common to all kinds. This tests those
@@ -259,9 +259,9 @@ class hexapoleSegmentedBenderSimTestHelper:
         genericElementTestHelper(self.el,coordTestRules,'cylinderical').run_Tests()
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
-        particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,0.0,0.0]))
-        qf0 = np.array([0.6246954625131056   , 1.819225726826561    ,0.0020243988263382584])
-        pf0 = np.array([ 1.5759939861399491e+02, -1.2475805589256939e+02,-9.2130974698492185e-02])
+        particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
+        qf0 = np.array([0.6246525192445831   , 1.8195558411614172   ,0.0021504576633825535])
+        pf0 = np.array([ 158.1518492606983   , -124.05802414265867  ,0.3721221157610345])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
@@ -312,8 +312,8 @@ class combinerHexapoleSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20686191950164892  , -0.005818561299912518 ,0.0039414173200048195])
-        pf0=np.array([-200.4219580330553  ,  -12.9138294411005  ,   10.074756740292973])
+        qf0=np.array([-0.2068625554718757  , -0.005818682644433714,0.003941996526646968])
+        pf0=np.array([-200.42385219028574 ,  -12.914640614487698,   10.076385001387061])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 def run_Tests():
