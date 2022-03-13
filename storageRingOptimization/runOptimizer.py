@@ -61,8 +61,8 @@ def main():
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    stability_And_Survival_Optimize(bounds,None,8)
-    # survival_Optimize(bounds,None,8)
+    # stability_And_Survival_Optimize(bounds,None,8)
+    survival_Optimize(bounds,None,8)
 if __name__=='__main__':
     main()
 '''

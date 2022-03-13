@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numba
 from scipy.spatial.transform import Rotation
 from magpylib.magnet import Box
+from typing import Sequence
 
 M_Default=1.018E6
 
@@ -289,7 +290,7 @@ class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
 
-    def __init__(self,length,width,rp,M=M_Default):
+    def __init__(self,length:float,width:Sequence,rp:Sequence,M:float=M_Default):
         #note that M is tuned to  for spherePerDim=4
         # numLayers: Number of layers
         # width: Width of each Rectangular Prism in the layer, meter
@@ -442,7 +443,7 @@ class HalbachLens:
 class SegmentedBenderHalbach(HalbachLens):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
-    def __init__(self,rp,rb,UCAngle,Lm,numLenses=3,M=1.03e6,positiveAngleMagnetsOnly=False):
+    def __init__(self,rp:float,rb,UCAngle,Lm,numLenses=3,M=1.03e6,positiveAngleMagnetsOnly=False):
         assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
         self.rp=rp #radius of bore of magnet, ie to the pole
         self.rb=rb #bending radius
