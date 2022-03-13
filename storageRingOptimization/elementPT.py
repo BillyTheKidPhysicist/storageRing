@@ -751,6 +751,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def make_Grid_Coords(self,xMin,xMax,zMin,zMax):
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
+        #todo: I am not convinced it makes the most sense to have the range depend on rp instead of ap
         numPointsX=int(self.numPointsBoreRadius*(xMax-xMin)/self.rp)
         yMin,yMax = -(self.rp + TINY_STEP),TINY_STEP #same for every part of bender
         numPointsY = int(self.numPointsBoreRadius * (yMax - yMin) / self.rp)
@@ -881,12 +882,12 @@ class HalbachLensSim(LensIdeal):
         else: raise TypeError
         self.numGridPointsZ = 30
         self.numGridPointsXY = 20
-        rp,ap=min(rpLayers),min(rpLayers)*apFrac
+        rp=min(rpLayers)
         self.apMax=(rp-TINY_STEP)*(1-np.sqrt(2)/self.numGridPointsXY) #from geometric arguments of grid inside circle.
         #imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         #has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material
+        ap=self.apMax if apFrac is None else apFrac*rp
         assert ap<=self.apMax
-
         super().__init__(PTL, L, None, rp, ap, bumpOffset,build=False)
         self.fringeFracOuter=1.5
         self.L=L
@@ -953,7 +954,7 @@ class HalbachLensSim(LensIdeal):
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
-        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.rp-TINY_OFFSET, self.numGridPointsXY) 
+        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.ap-TINY_OFFSET, self.numGridPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zMin = -TINY_OFFSET # inside the lens
         zMax = self.Lcap+TINY_OFFSET + self.extraFieldLength  # outside the lens
@@ -1129,27 +1130,30 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         yMax=np.clip(yMax,self.rp,np.inf)
         numY=self.numGridPointsXY
         numX=int(self.numGridPointsXY*self.ap/yMax)
-        zMaxHalf=self.compute_Valid_zMaxHalf(La,ang)
+        zMax=self.compute_Valid_zMax(La,ang)
 
         yArr_Quadrant = np.linspace(-TINY_OFFSET, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes x in element frame
-        zArr = np.linspace(-TINY_OFFSET, zMaxHalf + self.extraFieldLength, num=self.numGridPointsZ)
+        zArr = np.linspace(-TINY_OFFSET, zMax + self.extraFieldLength, num=self.numGridPointsZ)
         return xArr_Quadrant,yArr_Quadrant,zArr
-    def compute_Valid_zMaxHalf(self,La,ang):
+    def compute_Valid_zMax(self,La,ang):
         """Interpolation points inside magnetic material are set to nan. This can cause a problem near externel face of
-        combiner because particles may see np.nan when they are actually in a valid region. To circumvent, zMaxHalf is
+        combiner because particles may see np.nan when they are actually in a valid region. To circumvent, zMax is
         chosen such that the first z point above the lens is just barely above it, and vacuum tube is configured to
         respect that. See fastNumbaMethodsAndClasses.CombinerHexapoleSimFieldHelper_Numba.is_Coord_Inside_Vacuum"""
         firstValidPointSpacing=1e-6
-        zMaxHalf = (self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang))) / 2
-        zMaxHalf+=self.extraFieldLength
-        pointSpacing=zMaxHalf/(self.numGridPointsZ-1)
+        maxLength = (self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang)))
+        symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location. See how force is computed
+        zMax=maxLength-symmetryPlaneX #subtle. The interpolation must extend to long enough to account for the
+        #combiner not being symmetric, but the interpolation field being symmetric. See how force symmetry is handled
+        zMax+=self.extraFieldLength
+        pointSpacing=zMax/(self.numGridPointsZ-1)
         lastPointInLensIndex=int((self.Lm/2)/pointSpacing) #last point in magnetic material
         distToJustOutsideLens=firstValidPointSpacing+self.Lm/2-lastPointInLensIndex*pointSpacing #just outside material
         extraSpacePerPoint=distToJustOutsideLens/lastPointInLensIndex
-        zMaxHalf+=extraSpacePerPoint*(self.numGridPointsZ-1)
-        assert abs((lastPointInLensIndex*zMaxHalf/(self.numGridPointsZ-1)-self.Lm/2)-1e-6),1e-12
-        return zMaxHalf
+        zMax+=extraSpacePerPoint*(self.numGridPointsZ-1)
+        assert abs((lastPointInLensIndex*zMax/(self.numGridPointsZ-1)-self.Lm/2)-1e-6),1e-12
+        return zMax
 
     def make_Field_Data(self,La,ang):
         xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang)
@@ -1296,8 +1300,8 @@ class geneticLens(LensIdeal):
         xArr_Quadrant = np.linspace(-(self.ap + TINY_STEP), TINY_STEP, numXY)
 
         zMin = -TINY_STEP
-        zMaxHalf = self.L / 2 + TINY_STEP
-        zArr = np.linspace(zMin, zMaxHalf, num=numPointsLongitudinal)  # add a little extra so interp works as expected
+        zMax = self.L / 2 + TINY_STEP
+        zArr = np.linspace(zMin, zMax, num=numPointsLongitudinal)  # add a little extra so interp works as expected
 
         # assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
         assert len(xArr_Quadrant) % 2 == 1 and len(yArr_Quadrant) % 2 == 1

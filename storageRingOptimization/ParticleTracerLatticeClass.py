@@ -174,7 +174,7 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Lens_Sim(self,rp: float,L: Union[float,None],apFrac: float=.9,constrain: bool=False,
+    def add_Halbach_Lens_Sim(self,rp: float,L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
                             bumpOffset: float=0.0,magnetWidth: float=None):
         """
         Add simulated halbach sextupole element to lattice.

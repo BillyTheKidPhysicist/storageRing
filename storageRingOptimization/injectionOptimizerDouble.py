@@ -22,7 +22,6 @@ def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
-    apFrac=.98
     LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
     LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
     aspect1,aspect2=LMagnet1/rpInjectorMagnet1,LMagnet2/rpInjectorMagnet2
@@ -30,14 +29,14 @@ def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
         return None
     if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
         return None
-    if loadBeamDiam>apFrac*rpCombiner: #silly if load beam doens't fit in half of magnet
+    if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
     PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=False)
-    PTL_Injector.add_Drift(L1, ap=apFrac*rpInjectorMagnet1)
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1, apFrac=apFrac)
-    PTL_Injector.add_Drift(L2, ap=apFrac*max([rpInjectorMagnet1,rpInjectorMagnet2]))
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2, apFrac=apFrac)
-    PTL_Injector.add_Drift(L3, ap=apFrac*rpInjectorMagnet2)
+    PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
+    PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
+    PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     return PTL_Injector
@@ -87,6 +86,10 @@ class Injection_Model(LatticeOptimizer):
         swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=fastMode)
         # self.latticeRing.show_Lattice(swarm=swarmRingTraced,finalCoords=False, showTraceLines=True,
         #                               trueAspectRatio=False)
+
+        #only count particle survived if they make it to the end of the last element of the ring surrogate. I do some
+        #lazy trick here with the width of the end of the last element and the range that a particle could be in that
+        #width and have made it to the end
         ne=self.latticeRing.elList[-1].ne
         endAngle=abs(ne[1]/ne[0])
         xMax=self.latticeRing.elList[-1].r2[0]
@@ -157,7 +160,7 @@ def main():
             return injector_Cost(X)
         except:
             np.set_printoptions(precision=100)
-            print('failed with params',repr(X))
+            print('failed with params',repr(np.asarray(X)))
             raise Exception()
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
@@ -165,10 +168,13 @@ def main():
     bounds = [(.05, .3), (.01, .05),(.05, .3), (.01, .05), (.02, .2), (.005, .05),(5e-3,30e-3),(.01,.5),
     (.01,.5),(.01,.3)]
     for _ in range(1):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=False,workers=9))
-    # X=np.array([0.18343486, 0.02195529, 0.28051502, 0.03176977, 0.1993704 ,
-    #    0.05      , 0.03      , 0.22756322, 0.40135286, 0.07435526])
-    # gradient_Descent(wrapper,X,100e-6,30,disp=True,Plot=True)
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=9))
+    # X=np.array([0.21479153648948063  , 0.027865069857105004 ,
+    #    0.23693159220680748  , 0.0456169915089179   ,
+    #    0.11390040259744001  , 0.02201806302378923  ,
+    #    0.0052155382283800575, 0.016816456429806968 ,
+    #    0.44119972130219315  , 0.21964890411737606  ])
+    # injector_Cost(X)
 
 if __name__=="__main__":
     main()

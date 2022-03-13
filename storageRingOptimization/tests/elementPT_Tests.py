@@ -285,8 +285,8 @@ class hexapoleLensSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.1313114817736132  ,  0.005389347850941882, -0.008480272519592432])
-        pf0=np.array([-201.17803463379627  ,   -3.159747762350075 ,3.9791771846306614])
+        qf0=np.array([-0.13131255560602847 ,  0.005389042193361335,-0.008480447325995597])
+        pf0=np.array([-201.18045750427612  ,   -3.1617793105855436,3.9793250478945374])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
@@ -312,8 +312,8 @@ class combinerHexapoleSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.2068625554718757  , -0.005818682644433714,0.003941996526646968])
-        pf0=np.array([-200.42385219028574 ,  -12.914640614487698,   10.076385001387061])
+        qf0=np.array([-0.20686255547198076  , -0.005818682643949487 ,0.0039419965265814014])
+        pf0=np.array([-200.42385219087774 ,  -12.914640613791557,   10.07638500140596 ])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 def run_Tests():
