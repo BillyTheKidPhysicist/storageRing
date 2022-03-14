@@ -11,7 +11,7 @@ def full_Arctan(x2,x1):
     return phi
 class BaseFieldHelper_TestHelper:
     def __init__(self):
-        self.baseFieldHelper=BaseClassFieldHelper_Numba()
+        self.baseFieldHelper=BaseClassFieldHelper_Numba(None)
         self.tol=1e-10
     def run_Tests(self):
         self.test1()

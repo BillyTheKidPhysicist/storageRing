@@ -80,11 +80,49 @@ class Element:
         self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
         self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fastFieldHelper=fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba()
+        self.fastFieldHelper=None
         self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
         # #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
+        self._fastFieldHelperInitParams=None #variable to assist in workaround for jitclass pickling issue
+        self._fastFieldHelperInternalParam=None
         if build==True:
             self.build()
+
+    def init_fastFieldHelper(self,initParams):
+        """Because jitclass cannot be pickled, I need to do some gymnastics. An Element object must be able to fully
+        release references in __dict__ to the fastFieldHelper. Thus, each Element cannot carry around an uninitiliazed
+        class of fastFieldHelper. Instead, it must be initialized from the global namespace."""
+        if type(self)==Element:
+            return fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba(*initParams)
+        elif type(self)==LensIdeal:
+            return fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(*initParams)
+        elif type(self)==Drift:
+            return fastNumbaMethodsAndClass.DriftFieldHelper_Numba(*initParams)
+        elif type(self)==CombinerIdeal:
+            return fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(*initParams)
+        elif type(self)==CombinerSim:
+            return fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(*initParams)
+        elif type(self)==CombinerHexapoleSim:
+            return fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(*initParams)
+        elif type(self)==HalbachBenderSimSegmented:
+            return fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(*initParams)
+        elif type(self)==BenderIdeal:
+            return fastNumbaMethodsAndClass.BenderIdealFieldHelper_Numba(*initParams)
+        elif type(self)==HalbachLensSim:
+            return fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(*initParams)
+
+    def __getstate__(self):
+        self._fastFieldHelperInitParams=self.fastFieldHelper.get_Init_Params()
+        self._fastFieldHelperInternalParam=self.fastFieldHelper.get_Internal_Params()
+        paramDict= {}
+        for key,val in self.__dict__.items():
+            if key!='fastFieldHelper':
+                paramDict[key]=val
+        return paramDict
+    def __setstate__(self,d):
+        self.__dict__=d
+        self.__dict__['fastFieldHelper']=self.init_fastFieldHelper(self._fastFieldHelperInitParams)
+        self.fastFieldHelper.set_Internal_Params(self._fastFieldHelperInternalParam)
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
         """
         perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
@@ -265,8 +303,7 @@ class Element:
         FyMatrix = -SIMULATION_MAGNETON * BGradyMatrix
         VMatrix=SIMULATION_MAGNETON * B0Matrix
         VFlat,FxFlat,FyFlat=np.ravel(VMatrix),np.ravel(FxMatrix), np.ravel(FyMatrix)
-        return xArr, yArr,FxFlat,FyFlat,VFlat 
-
+        return xArr, yArr,FxFlat,FyFlat,VFlat
 
 class LensIdeal(Element):
     """
@@ -294,11 +331,12 @@ class LensIdeal(Element):
         self.bumpOffset=bumpOffset
         if build==True:
             self.build()
+
     def set_BpFact(self,BpFact:float)->None:
         """update the magnetic field multiplication factor. This is used to simulate changing field values"""
         self.fieldFact=BpFact
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
-    def build(self)->float:
+    def build(self)->None:
         """Update class parameters"""
         self.K = self.fieldFact*(2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
@@ -344,7 +382,7 @@ class Drift(LensIdeal):
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
         super().__init__(PTL, L, 0, np.inf, ap,build=False) #set Bp to zero and bore radius to infinite
-        self.fastFieldHelper=fastNumbaMethodsAndClass.DriftFieldHelper_Numba(L,ap)
+        self.fastFieldHelper=self.init_fastFieldHelper([L,ap])
         if build==True:
             self.build()
     def build(self)->None:
@@ -393,6 +431,7 @@ class BenderIdeal(Element):
         super().__init__(PTL, ang=ang,build=False)
         if build==True:
             self.build()
+
     def build(self)->None:
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.outputOffset = sqrt(self.rb ** 2 / 4 + self.PTL.v0Nominal ** 2 / self.K) - self.rb / 2#self.output_Offset(self.rb)
@@ -400,7 +439,7 @@ class BenderIdeal(Element):
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
-        self.fastFieldHelper=fastNumbaMethodsAndClass.BenderIdealFieldHelper_Numba(self.ang,self.K,self.rp,self.rb,self.ap)
+        self.fastFieldHelper=self.init_fastFieldHelper([self.ang,self.K,self.rp,self.rb,self.ap])
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element."""
         qNew = qLab - self.r0
@@ -466,21 +505,20 @@ class CombinerIdeal(Element):
 
         if build==True:
             self.build()
-
     def build(self)->None:
         self.apR,self.apL,self.apz,self.Lm=[val*self.sizeScale for val in (self.apR,self.apL,self.apz,self.Lm)]
         self.c1,self.c2=self.c1/self.sizeScale,self.c2/self.sizeScale
         self.Lb = self.Lm  # length of segment after kink after the inlet
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2,np.nan, self.Lb,
-                                                                            self.apL,self.apR, np.nan, np.nan)
+        self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2,np.nan, self.Lb,
+                                                                            self.apL,self.apR, np.nan, np.nan])
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
         self.La = .5*(self.apR+self.apL) * np.sin(self.ang)
         self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(self.c1, self.c2, self.La,self.Lb,
-                                                                                       self.apL,self.apR, self.apz, self.ang)
+        self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La,self.Lb,
+                                                                                self.apL,self.apR, self.apz, self.ang])
 
     def compute_Input_Angle_And_Offset(self, inputOffset:float=0.0, h:float=1e-6)->tuple:
         # this computes the output angle and offset for a combiner magnet.
@@ -545,7 +583,7 @@ class CombinerIdeal(Element):
         # it starts at zero
         yDelta = np.append(y[0], y[1:] - y[:-1])
         dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
-        Lo = np.sum(dLArr)
+        Lo = float(np.sum(dLArr))
         return Lo
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
         qEl = self.transform_Lab_Frame_Vector_Into_Element_Frame(qLab-self.r2) #a simple vector trick
@@ -590,6 +628,7 @@ class CombinerSim(CombinerIdeal):
         if build==True:
             self.build()
 
+
     def build(self)->None:
         self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
         self.apL = self.apL * self.sizeScale
@@ -603,8 +642,8 @@ class CombinerSim(CombinerIdeal):
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
         fieldData=List(self.shape_Field_Data_3D(data))
-        self.fastFieldHelper=fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData,np.nan,self.Lb,self.Lm,
-                                                                        self.space,self.apL,self.apR,self.apz,np.nan,self.fieldFact)
+        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,np.nan,self.Lb,self.Lm,
+                                                        self.space,self.apL,self.apR,self.apz,np.nan,self.fieldFact])
         inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
          # 0.07891892567413786
@@ -619,8 +658,8 @@ class CombinerSim(CombinerIdeal):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
 
         self.inputOffset = inputOffset-np.tan(inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(fieldData, self.La, self.Lb,
-                                                            self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact)
+        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La, self.Lb,
+                                            self.Lm,self.space, self.apL, self.apR,self.apz, self.ang,self.fieldFact])
         self.update_Field_Fact(self.fieldFact)
     def update_Field_Fact(self,fieldStrengthFact)->None:
         self.fastFieldHelper.fieldFact=fieldStrengthFact
@@ -743,9 +782,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
         assert np.all(fieldDataCap[0]==fieldDataInternal[0]) and np.all(fieldDataCap[1]==fieldDataInternal[1])
-        self.fastFieldHelper=fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(fieldDataSeg,
-            fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,
-                                                                                          self.M_ang,self.RIn_Ang)
+        self.fastFieldHelper=self.init_fastFieldHelper([fieldDataSeg,fieldDataInternal,fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,
+                                                                                          self.M_ang,self.RIn_Ang])
         self.fastFieldHelper.force(self.rb+1e-3,1e-3,1e-3) #force numba to compile
         self.fastFieldHelper.magnetic_Potential(self.rb+1e-3,1e-3,1e-3) #force numba to compile
 
@@ -1028,8 +1066,8 @@ class HalbachLensSim(LensIdeal):
         else:
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
         fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
-        self.fastFieldHelper=fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(fieldData,self.L,self.Lcap,self.ap,
-                                                                                   self.extraFieldLength)
+        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,self.L,self.Lcap,self.ap,
+                                                                                   self.extraFieldLength])
         self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
     def update_Field_Fact(self,fieldStrengthFact:float)->None:
@@ -1040,7 +1078,6 @@ class HalbachLensSim(LensIdeal):
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
-        print(self)
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
         totalShiftY=shiftY+rotZ*self.L
         totalShiftZ=shiftZ+rotY*self.L
@@ -1113,8 +1150,8 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         fieldData = self.make_Field_Data(self.La,self.ang)
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, self.La,
-                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.extraFieldLength)
+        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
+                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.extraFieldLength])
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
@@ -1178,8 +1215,8 @@ class CombinerHexapoleSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         LaMax = (self.ap + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                                                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
         fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng)
-        self.fastFieldHelper = fastNumbaMethodsAndClass.CombinerHexapoleSimFieldHelper_Numba(fieldData, np.nan, self.Lb,
-                                                self.Lm,self.space, self.ap,np.nan,self.fieldFact,self.extraFieldLength)
+        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb,
+                                        self.Lm,self.space, self.ap,np.nan,self.fieldFact,self.extraFieldLength])
         self.outputOffset = self.find_Ideal_Offset()
         inputAngle, inputOffset, qTracedArr, minSep = self.compute_Input_Angle_And_Offset(self.outputOffset)
         trajectoryLength = self.compute_Trajectory_Length(qTracedArr)

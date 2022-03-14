@@ -169,7 +169,6 @@ class SwarmTracer:
             np.random.seed(42)
         elif type(sameSeed) == int:
             np.random.seed(sameSeed)
-        else: raise ValueError
 
         swarm = Swarm()
         sampler=skopt.sampler.Sobol()

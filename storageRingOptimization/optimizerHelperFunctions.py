@@ -8,6 +8,8 @@ from ParticleTracerClass import ParticleTracer
 from SwarmTracerClass import SwarmTracer
 from latticeOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
+from typing import Union,Optional
+
 SMALL_NUMBER=1E-9
 # XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
 V0=210
@@ -26,7 +28,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
-                          LmCombiner, rpCombiner,loadBeamDiam,tuning,jitterAmp=0.0)->ParticleTracerLattice:
+                          LmCombiner, rpCombiner,loadBeamDiam,tuning,jitterAmp=0.0)->Optional[ParticleTracerLattice]:
     assert tuning in (None, 'field', 'spacing')
     tunableDriftGap=2.54e-2
     jeremyGap=.05
@@ -65,7 +67,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens,
 
 
 def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam,L1,L2,
-                              jitterAmp=0.0)->ParticleTracerLattice:
+                              jitterAmp=0.0)->Optional[ParticleTracerLattice]:
     fringeFrac=1.5
     apFrac=.95
     L_InjectorMagnet=L_Injector-2*fringeFrac*rpInjector
@@ -83,7 +85,7 @@ def generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loa
     return PTL_Injector
 
 def generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2,
-    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)->ParticleTracerLattice:
+    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)->Optional[ParticleTracerLattice]:
     fringeFrac = 1.5
     apFrac = .9
     LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
@@ -125,10 +127,6 @@ def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0):
     # PTL_Injector=generate_Injector_Lattice(L_Injector, rpInjector, LmCombiner, rpCombiner,loadBeamDiam, L1, L2)
     PTL_Injector=generate_Injector_Lattice_Double_Magnet(L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2,
                                 rpInjectorMagnet2, LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3)
-    if PTL_Injector is None:
-        print('invalid injector')
-        sol=invalid_Solution(X,invalidInjector=True)
-        return sol
     assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset
     return PTL_Ring,PTL_Injector
 def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):

@@ -27,12 +27,12 @@ def _save_TEST_Data(PTL,testSwarm,TESTDataFileName):
         testData.append(np.append(np.append(np.append(qf,pf),revolutions),EFinal))
     np.savetxt(os.path.join(testDataFolderPath,TESTDataFilePath),np.asarray(testData))
     
-def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated):
+def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated,parallel):
     np.set_printoptions(precision=100)
     TESTDataFilePath=os.path.join(testDataFolderPath,TESTDataFileName)
     swarmTracer=SwarmTracer(PTL)
     tracedSwarm=swarmTracer.trace_Swarm_Through_Lattice(testSwarm,1e-5,.25,fastMode=fastMode,accelerated=accelerated,
-                                                        parallel=False)
+                                                        parallel=parallel)
     testData=np.loadtxt(TESTDataFilePath)
     assert tracedSwarm.num_Particles()==testSwarm.num_Particles() and len(testData)==tracedSwarm.num_Particles()
     eps=1e-9 # a small number to represent changes in values that come from different kinds of operations. Because of
@@ -108,7 +108,7 @@ def generate_Lattice(configuration):
     else:
         raise Exception('no proper configuration name provided')
     return PTL
-def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
+def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False,parallel=False):
     PTL=generate_Lattice(configuration)
     testSwarm=generate_Test_Swarm(PTL)
     TESTName='test_'+configuration
@@ -117,12 +117,13 @@ def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False):
     elif fullTest==True:
         for fastMode in [True,False]:
                 for accelerated in [True,False]:
-                    TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated)
+                    for parallel in [True,False]:
+                        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated,parallel)
     elif fullTest==False:
         fastMode1,accelerated1=True,True
-        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1)
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1,parallel)
         fastMode2,accelerated2=False,False
-        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2)
+        TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2,parallel)
 def _save_New_Data():
     tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
@@ -141,6 +142,7 @@ def run_Tests(parallelTesting=False,fullTest=False):
     testNameList = ['1', '2', '3', '4', '5', '6']
     if parallelTesting==False:
         [wrap(test) for test in testNameList]
+        TEST_Lattice_Configuration('1',parallel=True) #check that paralle method works
     else:
         with mp.Pool(10) as pool:
             pool.map(wrap,testNameList)

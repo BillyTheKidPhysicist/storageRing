@@ -257,8 +257,8 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Halbach_Bender_Sim_Segmented(self,Lm: float,rp: float,numMagnets: int,rb: float,extraSpace: float=0.0,
-                                         rOffsetFact: float=1.0)->None:
+    def add_Halbach_Bender_Sim_Segmented(self,Lm: float,rp: float,numMagnets: Optional[int],rb: float,
+                                         extraSpace: float=0.0,rOffsetFact: float=1.0)->None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
