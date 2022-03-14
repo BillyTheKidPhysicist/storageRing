@@ -13,7 +13,7 @@ from elementPT import HalbachLensSim, LensIdeal, Drift
 import multiprocess as mp
 from collections.abc import Iterable
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from typing import Union
+from typing import Union,Optional
 from shapely.geometry import Polygon
 list_array_tuple=Union[np.ndarray,tuple,list]
 
@@ -144,8 +144,8 @@ class LatticeOptimizer:
         plt.grid()
         plt.show()
 
-    def mode_Match_Cost(self, X: list_array_tuple,useSurrogate: bool,energyCorrection: bool,rejectUnstable: bool=True,
-                        rejectIllegalFloorPlan: bool=True,
+    def mode_Match_Cost(self, X: Optional[list_array_tuple],useSurrogate: bool,energyCorrection: bool,
+                        rejectUnstable: bool=True,rejectIllegalFloorPlan: bool=True,
                         returnCostsSeperate: bool=False)-> Union[float,tuple[float,float]]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
@@ -318,7 +318,7 @@ class LatticeOptimizer:
         return fluxMulPerc
 
     def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIndices: list_array_tuple,
-                               tuningChoice: bool,whichKnobs: str)-> None:
+                               tuningChoice: str,whichKnobs: str)-> None:
         if max(tuningElementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(tuningElementIndices): raise Exception("Bounds do not match number of tuned elements")
         combinerRing,combinerLat=self.latticeRing.combiner,self.latticeInjector.combiner
@@ -351,7 +351,7 @@ class LatticeOptimizer:
             elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
             self.tunableTotalLengthList.append(elBefore.L + elAfter.L)
 
-    def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningChoice: bool,whichKnobs: str,
+    def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningChoice: str,whichKnobs: str,
                                 ringTuningBounds: list_array_tuple, injectorTuningBounds: list_array_tuple)-> None:
         assert tuningChoice in ('spacing','field') and whichKnobs in ('all','ring')
         assert all(isinstance(arg,Iterable) for arg in (tuningElementIndices,ringTuningBounds,injectorTuningBounds))

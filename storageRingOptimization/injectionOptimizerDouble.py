@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 import time
 from asyncDE import solve_Async
-from typing import Union
+from typing import Union,Optional
 import numpy as np
 from latticeOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -19,16 +19,16 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return False
     else:
         return True
-def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
+def generate_Injector_Lattice_Double_Lens(X) -> Optional[ParticleTracerLattice]:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
     LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
     LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
     aspect1,aspect2=LMagnet1/rpInjectorMagnet1,LMagnet2/rpInjectorMagnet2
-    if aspect1<1.0 or aspect2<1.0:
+    if aspect1<1.0 or aspect2<1.0: #horrible fringe field performance
         return None
-    if LMagnet1 < 1e-9 or LMagnet2 < 1e-9:  # minimum fringe length must be respected.
+    if LMagnet1 < 1e-3 or LMagnet2 < 1e-3:  # minimum fringe length must be respected.
         return None
     if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
@@ -40,6 +40,7 @@ def generate_Injector_Lattice_Double_Lens(X) -> ParticleTracerLattice:
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
+    assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
     return PTL_Injector
 
 
@@ -195,13 +196,26 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.05,.5),
-    (.05,.5),(.05,.3)]
-    for _ in range(1):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=8))
+    # bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.05,.5),
+    # (.05,.5),(.05,.3)]
+    # for _ in range(3):
+    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=False,workers=8))
     # X0=np.array([0.15831797, 0.01681428, 0.19546755, 0.02932734, 0.15318842,
     #    0.03942919, 0.01484423, 0.01      , 0.42291596, 0.22561926])
     # injector_Cost(X0)
 
 if __name__=="__main__":
     main()
+
+
+'''
+---population member---- 
+DNA: array([0.12524277, 0.02191994, 0.16189484, 0.02631402, 0.16314783,
+       0.03999999, 0.01706859, 0.0605528 , 0.27198268, 0.2054394 ])
+cost: 0.10423455810539292
+finished with total evals:  11732
+---population member---- 
+DNA: array([0.06567916, 0.01414217, 0.16048129, 0.0251745 , 0.15970735,
+       0.03985693, 0.01875451, 0.05      , 0.26854486, 0.2264674 ])
+cost: 0.09930996157904261
+'''
