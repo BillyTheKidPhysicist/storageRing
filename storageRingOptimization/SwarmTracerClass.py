@@ -7,6 +7,7 @@ import skopt
 import multiprocess as mp
 from constants import BOLTZMANN_CONSTANT,MASS_LITHIUM_7
 from ParticleTracerLatticeClass import ParticleTracerLattice
+from typing import Union,Optional
 
 
 def lorentz_Function(x,gamma):
@@ -19,11 +20,12 @@ def normal(v,sigma,v0=0.0):
 
 
 class SwarmTracer:
+
     def __init__(self,lattice:ParticleTracerLattice):
         self.lattice=lattice
         self.particleTracer = ParticleTracer(self.lattice)
 
-    def Rd_Sample(self,n,d=1,seed=.5):
+    def Rd_Sample(self,n: int,d: int=1,seed: float=.5)-> np.ndarray:
         # copied and modified from: https://github.com/arvoelke/nengolib
         #who themselves got it from:  http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
         def gamma(d,n_iter=20):
@@ -44,7 +46,7 @@ class SwarmTracer:
             z[i]=(z[i-1]+alpha)%1
 
         return z
-    def initialize_Stablity_Testing_Swarm(self,qMax):
+    def initialize_Stablity_Testing_Swarm(self,qMax: np.ndarray)-> Swarm:
         smallOffset=-1e-10 #this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
         swarmTest.add_Particle(qi=np.asarray([smallOffset,0.0,0.0]))
@@ -53,7 +55,8 @@ class SwarmTracer:
         swarmTest.add_Particle(qi=np.asarray([smallOffset, qMax/2, -qMax/2]))
         swarmTest.add_Particle(qi=np.asarray([smallOffset, -qMax/2, -qMax/2]))
         return swarmTest
-    def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax, pMax, numGridEdge, upperSymmetry=False):
+    def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax: np.ndarray, pMax: np.ndarray, numGridEdge: int,
+                                                  upperSymmetry: bool=False)-> Swarm:
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
         # to the west. The transverse plane is the yz plane.
         # qMax: absolute value maximum position in the transverse direction
@@ -75,8 +78,9 @@ class SwarmTracer:
             else:
                 swarm.add_Particle(qi, pi)
         return swarm
-    def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam,collectorOutputAngle,numParticles,
-                    gammaSpace=3.5e-3,temperature=.003,sameSeed=False,upperSymmetry=False,probabilityMin=0.0):
+    def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam: float,collectorOutputAngle: float,
+                                    numParticles: float,gammaSpace: float=3.5e-3,temperature: float=.003,
+                                    sameSeed: bool=False,upperSymmetry: bool=False,probabilityMin: float=0.01)-> Swarm:
         #this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
         #swarm that is well spread out in space, then weighitng each particle by it's probability according to the
         #observed data. The probability is finally rescaled
@@ -87,7 +91,7 @@ class SwarmTracer:
         #temperature: The temperature of the atoms, kelvin. Decides thermal velocity spread
 
         assert 0.0<captureDiam<=.1 and 0.0<collectorOutputAngle<=.2 and 0.0<gammaSpace<=.01\
-               and 0.0<temperature<=.1 #reasonable values
+               and 0.0<temperature<=.1 and probabilityMin>=0.0#reasonable values
 
         pTransMax=self.lattice.v0Nominal*np.tan(collectorOutputAngle) #transverse velocity dominates thermal velocity,
         #ie, geometric heating
@@ -117,6 +121,7 @@ class SwarmTracer:
             if particle.probability>probabilityMin:
                 swarmObserved.particles.append(particle)
         return swarmObserved
+
     def _make_PseudoRandom_Swarm_Bounds_List(self,qTBounds,pTBounds,pxBounds,upperSymmetry=False):
         if isinstance(qTBounds,float):
             assert qTBounds>0.0
@@ -192,7 +197,9 @@ class SwarmTracer:
         if sameSeed==True or type(sameSeed)==int:
             np.random.seed(reSeedVal)  # re randomize
         return swarm
-    def initialize_Point_Source_Swarm(self,sourceAngle,numParticles,smallXOffset=True,sameSeed=False):
+
+    def initialize_Point_Source_Swarm(self,sourceAngle: float,numParticles: int,smallXOffset: bool=True,
+                                      sameSeed:bool =False)-> Swarm:
         p0=self.lattice.v0Nominal #the momentum of each particle
         qTBounds,pxBounds=1e-12,1e-12 #force to a point spatialy, and no speed spread
         pTBounds=np.tan(sourceAngle)*p0
@@ -211,61 +218,23 @@ class SwarmTracer:
         for theta in thetaArr:
             swarm.add_Particle(pi=np.asarray([-self.lattice.v0Nominal,pr*np.cos(theta),pr*np.sin(theta)]))
         return swarm
-    def generate_Probe_Sample(self,v0,seed=None,rpPoints=3,rqPoints=3):
-        # value of 3 for points is a good value from testing to give qualitative results
-        if type(seed)==int:
-            np.random.seed(seed)
-        pMax=10.0
-        numParticlesArr=np.arange(4,4*(rpPoints+1),4)
-        coords=np.asarray([[0,0]])
-        for numParticles in numParticlesArr:
-            r=pMax*numParticles/numParticlesArr.max()
-            phiArr=np.linspace(0,2*np.pi,numParticles,endpoint=False)
-            tempCoords=np.column_stack((r*np.cos(phiArr),r*np.sin(phiArr)))
-            coords=np.row_stack((coords,tempCoords))
-        pSamples=np.column_stack((-np.ones(coords.shape[0])*v0,coords))
-        # plt.scatter(pSamples[:,1],pSamples[:,2])
-        # plt.show()
 
-        # create position samples
-
-        qMax=2.5e-3
-        numParticlesArr=np.arange(4,4*(rqPoints+1),4)
-        coords=np.asarray([[0,0]])
-        for numParticles in numParticlesArr:
-            r=qMax*numParticles/numParticlesArr.max()
-            phiArr=np.linspace(0,np.pi,numParticles,endpoint=True)
-            tempCoords=np.column_stack((r*np.cos(phiArr),r*np.sin(phiArr)))
-            coords=np.row_stack((coords,tempCoords))
-        qSamples=np.column_stack((-np.zeros(coords.shape[0]),coords))
-        # plt.scatter(qSamples[:,1],qSamples[:,2])
-        # plt.show()
-
-        swarm=Swarm()
-        for qCoord in qSamples:
-            for pCoord in pSamples:
-                if qCoord[2]==0 and pCoord[2]<0:  # exploit symmetry along z=0 for momentum by exluding downard
-                    # directed points
-                    pass
-                else:
-                    swarm.add_Particle(qi=qCoord.copy(),pi=pCoord.copy())
-        if type(seed)==int:
-            np.random.seed(int(time.time()))
-        return swarm
     def initalize_PseudoRandom_Swarm_At_Combiner_Output(self,qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=False,
                                                         sameSeed=False,circular=True,smallXOffset=True):
         swarmAtOrigin=self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=upperSymmetry,
                                                                sameSeed=sameSeed,circular=circular,smallXOffset=smallXOffset)
         swarmAtCombiner=self.move_Swarm_To_Combiner_Output(swarmAtOrigin,copySwarm=False,scoot=True)
         return swarmAtCombiner
-    def combiner_Output_Offset_Shift(self):
+
+    def combiner_Output_Offset_Shift(self)-> np.ndarray:
         #combiner may have an output offset (ie hexapole combiner). This return the 3d vector (x,y,0) that connects the
         #geoemtric center of the output plane with the offset point, which also lies in the plane. stern gerlacht
         #style doesn't have and offset
         n2=self.lattice.combiner.ne.copy() #unit normal to outlet
         np2=-np.asarray([n2[1],-n2[0],0.0]) # unit parallel to outlet
         return np2*self.lattice.combiner.outputOffset
-    def move_Swarm_To_Combiner_Output(self,swarm,scoot=False,copySwarm=True):
+
+    def move_Swarm_To_Combiner_Output(self,swarm: Swarm,scoot: bool=False,copySwarm: bool=True)-> Swarm:
         #take a swarm where at move it to the combiner's output. Swarm should be created such that it is centered at
         #(0,0,0) and have average negative velocity.
         #swarm: the swarm to move to output
@@ -287,13 +256,13 @@ class SwarmTracer:
                 particle.qi+=particle.pi*tinyTimeStep
         return swarm
 
-    def _super_Fast_Trace(self,swarm,trace_Particle):
+    def _super_Fast_Trace(self,swarm: Swarm,trace_Particle_Function)-> Swarm:
         # use trick of accessing only the important class variabels and passing those through to reduce pickle time
         def fastFunc(compactDict):
             particle = Particle()
             for key, val in compactDict.items():
                 setattr(particle, key, val)
-            particle = trace_Particle(particle)
+            particle = trace_Particle_Function(particle)
             compactDictTraced = {}
             for key, val in vars(particle).items():
                 if val is not None:
@@ -313,8 +282,10 @@ class SwarmTracer:
             for key, val in compactDict.items():
                 setattr(particle, key, val)
         return swarm
-    def trace_Swarm_Through_Lattice(self, swarm, h, T, parallel=False, fastMode=True, copySwarm=True, accelerated=False,
-                                    stepsBetweenLogging=1,energyCorrection=False,tau_Collision=None,jetCollision=False)-> Swarm:
+
+    def trace_Swarm_Through_Lattice(self, swarm: Swarm, h: float, T: float, parallel: bool=False, fastMode: bool=True,
+                                    copySwarm: bool=True, accelerated: bool=False,stepsBetweenLogging: int=1,
+                                    energyCorrection: bool=False,tau_Collision: Optional[float]=None)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
         else:

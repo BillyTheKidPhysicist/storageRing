@@ -1,6 +1,6 @@
 import elementPT
 # from geneticLensElement_Wrapper import GeneticLens
-from typing import Union
+from typing import Union,Generator,Iterable
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 import numpy as np
@@ -20,16 +20,18 @@ class SimpleLocalMinimizer:
     #find the minimum in a system that has no global minimum, but is rather more like a lumpy mattress. I would prefer
     #to have used a vanilla newton methods or gradient descent, but from scipy I was not able to select the appropriate
     #step size. Assumes the cost function goes to zero.
+
     def __init__(self,function):
         self.function=function
-    def gradient(self,q0, dq):
+
+    def gradient(self,q0: np.ndarray, dq: float)-> np.ndarray:
         #find gradeint of the function
         x, y = q0
         dfx = (self.function(np.asarray([x + dq, y]))- self.function(np.asarray([x - dq, y]))) / (2*dq)
         dfy = (self.function(np.asarray([x, y + dq]))- self.function(np.asarray([x, y - dq]))) / (2*dq)
         return np.asarray([dfx, dfy])
 
-    def estimate_Step_Size_Gradient(self,q0, fracReduction, eps=1e-10):
+    def estimate_Step_Size_Gradient(self,q0: np.ndarray, fracReduction: float, eps: float=1e-10)-> np.ndarray:
         #simple method that uses the gradient to make a tiny step in the direction of reduction of the cost function,
         #then uses that information to figure out how big the step should be to get to zero. Basically newton's method
         #without matrix inversion, and assuming that the cost function goes to zero.
@@ -41,7 +43,8 @@ class SimpleLocalMinimizer:
         dFracFuncVal = -(funcValNew - funcVal0) / funcVal0
         dq = dqEps * fracReduction / np.abs(dFracFuncVal)
         return dq
-    def solve(self,X0,tol=1e-10,maxIter=100):
+
+    def solve(self,X0: np.ndarray,tol: float=1e-10,maxIter: int=100)-> tuple:
         X = X0.copy()
         error = self.function(X0)
         i = 0
@@ -54,8 +57,11 @@ class SimpleLocalMinimizer:
                 break
         return X,error
 
+
 class ParticleTracerLattice:
-    def __init__(self,v0Nominal,latticeType='storageRing',parallel=False,jitterAmp=0.0):
+
+    def __init__(self,v0Nominal: Union[float,int],latticeType: str='storageRing',parallel: bool=False,
+                 jitterAmp: float=0.0):
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
         self.latticeType=latticeType#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
@@ -77,11 +83,14 @@ class ParticleTracerLattice:
         # satisfy geometry. Must be inside bending region
 
         self.elList=[] #to hold all the lattice elements
-    def __iter__(self):
+
+    def __iter__(self)-> Iterable[Element]:
         return (element for element in self.elList)
-    def find_Optimal_Offset_Factor(self,rp,rb,Lm,parallel=False):
+
+    def find_Optimal_Offset_Factor(self,rp: float,rb: float,Lm: float,parallel: bool=False)-> float:
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.
+        assert rp<rb/2.0 #geometry argument, and common mistake
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
         PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector',parallel=parallel)
@@ -108,7 +117,8 @@ class ParticleTracerLattice:
         errorArr=np.asarray(Parallel(n_jobs=njobs)(delayed(errorFunc)(outputOffset) for outputOffset in outputOffsetFactArr))
         rOffsetOptimal=self._find_rOptimal(outputOffsetFactArr,errorArr)
         return rOffsetOptimal
-    def _find_rOptimal(self,outputOffsetFactArr,errorArr):
+
+    def _find_rOptimal(self,outputOffsetFactArr: np.ndarray,errorArr: np.ndarray)-> Optional[float]:
         test=errorArr.copy()[1:]
         test=np.append(test,errorArr[0])
         numValidSolutions=np.sum(~np.isnan(errorArr))
@@ -136,10 +146,12 @@ class ParticleTracerLattice:
             # print('Invalid solution, rMin very near edge. ')
             return None
         return rOptimal
-    def set_Constrained_Linear_Element(self,el):
+
+    def set_Constrained_Linear_Element(self,el: Element)-> None:
         if len(self.linearElementsToConstraint)>1: raise Exception("there can only be 2 constrained linear elements")
         self.linearElementsToConstraint.append(el)
-    def add_Combiner_Sim(self,sizeScale: float=1.0):
+
+    def add_Combiner_Sim(self,sizeScale: float=1.0)-> None:
         """
         Add model of our combiner from COMSOL. rarely used
 
@@ -154,7 +166,8 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2):
+
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2)-> None:
         """
         Add halbach hexapole lens combiner element.
 
@@ -174,8 +187,9 @@ class ParticleTracerLattice:
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
+
     def add_Halbach_Lens_Sim(self,rp: float,L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
-                            bumpOffset: float=0.0,magnetWidth: float=None):
+                            bumpOffset: float=0.0,magnetWidth: float=None)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -193,7 +207,8 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
-    def add_Genetic_lens(self,lens: geneticLens,ap: float):
+
+    def add_Genetic_lens(self,lens: geneticLens,ap: float)-> None:
         """
         Add genetic lens used for minimizing focus size. This is part of an idea to make a low aberration lens
 
@@ -204,7 +219,8 @@ class ParticleTracerLattice:
         el=geneticLens(self,lens,ap)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0):
+
+    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0)-> None:
         """
         Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
 
@@ -228,7 +244,8 @@ class ParticleTracerLattice:
         if constrain==True:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
-    def add_Drift(self,L,ap=.03):
+
+    def add_Drift(self,L: float,ap: float=.03)-> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -239,7 +256,9 @@ class ParticleTracerLattice:
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Halbach_Bender_Sim_Segmented(self,Lm,rp,numMagnets,rb,extraSpace=0.0,rOffsetFact=1.0):
+
+    def add_Halbach_Bender_Sim_Segmented(self,Lm: float,rp: float,numMagnets: int,rb: float,extraSpace: float=0.0,
+                                         rOffsetFact: float=1.0)->None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
@@ -248,7 +267,8 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
-    def add_Bender_Ideal(self,ang,Bp,rb,rp,ap=None):
+
+    def add_Bender_Ideal(self,ang: float,Bp: float,rb: float,rp: float,ap: float=None)-> None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
         #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -267,7 +287,8 @@ class ParticleTracerLattice:
         el.index = len(self.elList) #where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el) #add element to the list holding lattice elements in order
-    def add_Combiner_Ideal(self,Lm=.2,c1=1,c2=20,ap=.015,sizeScale=1.0):
+
+    def add_Combiner_Ideal(self,Lm: float=.2,c1: float=1,c2: float=20,ap: float=.015,sizeScale: float=1.0)-> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #add combiner (stern gerlacht) element to lattice
         #La: input length of combiner. The bent portion outside of combiner
@@ -288,9 +309,8 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-
-    def end_Lattice(self,constrain=False,enforceClosedLattice=True,buildLattice=True,
-                    surpressWarning=False):
+    def end_Lattice(self,constrain: bool=False,enforceClosedLattice: bool=True,buildLattice: bool=True,
+                    surpressWarning: bool=False)-> None:
         #TODO: THIS WHOLE THING IS WACK, especially the contraint part
         #REALLY NEED TO CLEAN UP ERROR CATCHING
         #document which parameters mean what when using constrain!
@@ -314,10 +334,12 @@ class ParticleTracerLattice:
             self.totalLength=0
             for el in self.elList: #total length of particle's orbit in an element
                 self.totalLength+=el.Lo
-    def build_Lattice(self,enforceClosedLattice=True,surpressWarning=False):
+
+    def build_Lattice(self,enforceClosedLattice: bool=True,surpressWarning: bool=False)-> None:
         self.set_Element_Coordinates(enforceClosedLattice,surpressWarning)
         self.make_Geometry()
-    def set_Linear_Constrained_Element_Lengths(self,L):
+
+    def set_Linear_Constrained_Element_Lengths(self,L: bool)-> None:
         #right now only supports up to two elements with benders on one side of them and one element between them
         assert len(self.linearElementsToConstraint)<=2
         if len(self.linearElementsToConstraint)==1:
@@ -331,7 +353,8 @@ class ParticleTracerLattice:
                 else:
                     sharedLength-=el.L
             for el in self.linearElementsToConstraint: el.set_Length(sharedLength/2)
-    def constrain_Lattice(self):
+
+    def constrain_Lattice(self)-> None:
         #enforce constraints on the lattice. this comes from the presence of the combiner for now because the total
         #angle must be 2pi around the lattice, and the combiner has some bending angle already. Additionally, the lengths
         #between bending segments must be set in this manner as well
@@ -359,7 +382,8 @@ class ParticleTracerLattice:
             self.set_Linear_Constrained_Element_Lengths(L3)
             self.bender1.build()
             self.bender2.build()
-    def solve_Combiner_Constraints(self):
+
+    def solve_Combiner_Constraints(self)-> tuple:
         #this solves for the constraint coming from two benders and a combiner. The bending angle of each bender is computed
         #as well as the distance between the two on the segment without the combiner. For a segmented bender, this solves
         #an implicit equation because the number of segments must be an integer. For continuously extruded benders
@@ -451,7 +475,8 @@ class ParticleTracerLattice:
 
     @staticmethod
     # @numba.njit(numba.float64[:](numba.float64,numba.float64,numba.float64,numba.float64,numba.float64,numba.float64))
-    def solve_Triangle_Problem(inputAng,inputOffset,outputOffset,L1,L2,r1,r2):
+    def solve_Triangle_Problem(inputAng: float,inputOffset: float,outputOffset: float,L1: float,L2: float,
+                               r1: float,r2: float):
         #the triangle problem refers to two circles and a kinked section connected by their tangets. This is the situation
         #with the combiner and the two benders. The geometry of the combiner requires an additional step because the orbit
         #does not go straight through the combiner input, but is shifted a small amount by an offset. This, combined with
@@ -482,7 +507,8 @@ class ParticleTracerLattice:
         theta2 = 2 * np.pi - inputAng - theta1
         params=np.asarray([theta1,theta2,L3])
         return params
-    def make_Geometry(self):
+
+    def make_Geometry(self)-> None:
         #todo: refactor this whole thing
         #construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
         #Ideally I would never need to use this to find which particle the elment is in because it's slower.
@@ -559,7 +585,8 @@ class ParticleTracerLattice:
                 raise Exception('No correct element provided')
             el.SO=Polygon(pointsInner)
             el.SO_Outer=Polygon(pointsOuter)
-    def catch_Errors(self,constrain,builLattice):
+
+    def catch_Errors(self,constrain: bool,builLattice: bool)-> None:
         #catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         #kinds. This class is not meant to have tons of error handling, so user must be cautious
         if self.elList[0].shape=='BEND': #first element can't be a bending element
@@ -586,7 +613,8 @@ class ParticleTracerLattice:
                     raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
             if self.bender1.segmented != self.bender2.segmented:
                 raise Exception('BENDER MUST BOTH BE SEGMENTED OR BOTH NOT')
-    def set_Element_Coordinates(self,enforceClosedLattice,surpressWarning):
+
+    def set_Element_Coordinates(self,enforceClosedLattice: bool,surpressWarning: bool)-> None:
         #each element has a coordinate for beginning and for end, as well as a value describing it's rotation where
         #0 degrees is to the east and 180 degrees to the west. Each element also has a normal vector for the input
         #and output planes. The first element's beginning is at 0,0 with a -180 degree angle and each following element
@@ -749,7 +777,8 @@ class ParticleTracerLattice:
             import warnings
             print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
-    def get_Element_Before_And_After(self,elCenter):
+
+    def get_Element_Before_And_After(self,elCenter: np.ndarray)-> tuple[Element,Element]:
         if (elCenter.index==len(self.elList)-1 or elCenter.index==0) and self.latticeType=='injector':
             raise Exception('Element cannot be first or last if lattice is injector type')
         elBeforeIndex=elCenter.index-1 if elCenter.index!=0 else len(self.elList)-1
@@ -757,7 +786,8 @@ class ParticleTracerLattice:
         elBefore=self.elList[elBeforeIndex]
         elAfter=self.elList[elAfterIndex]
         return elBefore,elAfter
-    def get_Lab_Coords_From_Orbit_Distance(self,xPos):
+
+    def get_Lab_Coords_From_Orbit_Distance(self,xPos: np.ndarray)-> tuple[float,float]:
         #xPos: distance along ideal orbit
         assert xPos>=0.0
         xPos=xPos%self.totalLength #xpos without multiple revolutions

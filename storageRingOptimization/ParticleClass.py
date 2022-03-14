@@ -1,3 +1,4 @@
+from elementPT import Element
 import matplotlib.pyplot as plt
 import warnings
 import time
@@ -5,125 +6,7 @@ from line_profiler_pycharm import profile
 import numpy.linalg as npl
 import numpy as np
 import copy
-from typing import Union,Optional
-class Swarm:
-    #An object that holds a cloud of particles in phase space
-    def __init__(self):
-        self.particles = [] #list of particles in swarm
-        ##There should be nothing else here. It should only be a container for particles.
-    def add_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None):
-        #add an additional particle to phase space
-        #qi: spatial coordinates
-        #pi: momentum coordinates
-        if pi is None:
-            pi=np.asarray([-210.0,0.0,0.0])
-        if qi is None:
-            qi = np.asarray([-1e-10, 0.0, 0.0])
-
-        self.particles.append(Particle(qi, pi))
-    def vectorize(self,onlyUnclipped=False):
-        #return position and momentum vectors for the particle swarm
-        qVec=[]
-        pVec=[]
-        for particle in self.particles:
-            if onlyUnclipped==True:
-                if particle.clipped==False:
-                    qVec.append(particle.qf)
-                    pVec.append(particle.pf)
-            else:
-                qVec.append(particle.qf)
-                pVec.append(particle.pf)
-        qVec=np.asarray(qVec)
-        pVec=np.asarray(pVec)
-        return qVec,pVec
-    def survival_Rev(self):
-        #return average number of revolutions of particles
-        revs=0
-        for particle in self.particles:
-            if particle.clipped is None:
-                raise Exception('PARTICLE HAS NOT BEEN TRACED')
-            if np.isnan(particle.revolutions)==True:
-                raise Exception('Particle revolutions have an issue')
-            if particle.revolutions is not None:
-                revs+=particle.revolutions
-
-        meanRevs=revs/self.num_Particles()
-        return meanRevs
-    def longest_Particle_Life_Revolutions(self):
-        #return number of revolutions of longest lived particle
-        maxList=[]
-        for particle in self.particles:
-            if particle.revolutions is not None:
-                maxList.append(particle.revolutions)
-        if len(maxList)==0:
-            return 0.0
-        else:
-            return max(maxList)
-    def survival_Bool(self, frac=True):
-        #returns fraction of particles that have survived, ie not clipped.
-        #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
-        numSurvived = 0.0
-        for particle in self.particles:
-            if particle.clipped is None:
-                raise Exception('PARTICLE HAS NO DATA ON SURVIVAL')
-            numSurvived += float(not particle.clipped) #if it has NOT clipped then turn that into a 1.0
-        if frac == True:
-            return numSurvived / len(self.particles)
-        else:
-            return numSurvived
-    def __iter__(self):
-        return (particle for particle in self.particles)
-    def copy(self):
-        return copy.deepcopy(self)
-    def quick_Copy(self): #only copy the initial conditions. For swarms that havn't been traced or been monkeyed
-        #with at all
-        swarmNew=Swarm()
-        for particle in self.particles:
-            assert particle.traced==False
-            particleNew=Particle(qi=particle.qi.copy(),pi=particle.pi.copy())
-            particleNew.probability=particle.probability
-            particleNew.color=particle.color
-            swarmNew.particles.append(particleNew)
-        return swarmNew
-    def num_Particles(self,weighted=False):
-        if weighted==False: return len(self.particles)
-        else: return sum([particle.probability for particle in self.particles])
-    def num_Revs(self,weighted=False):
-        if weighted==False:
-            return sum([particle.revolutions for particle in self.particles])
-        else:
-            return sum([particle.revolutions*particle.probability for particle in self.particles])
-    def weighted_Flux_Multiplication(self):
-        #only for circular lattice
-        if self.num_Particles() == 0: return 0.0
-        assert all([particle.traced == True for particle in self.particles])
-        numWeighedtRevs = self.num_Revs(weighted=True)
-        numWeightedParticles = self.num_Particles(weighted=True)
-        return numWeighedtRevs/numWeightedParticles
-    def lattice_Flux(self,weighted=False):
-        #only for circular lattice. This gives the average flux in a cross section of the lattice. Only makes sense
-        #for many more than one revolutions
-        totalFlux=0
-        for particle in self.particles:
-            flux=particle.revolutions/np.linalg.norm(particle.pi)
-            flux=flux*particle.probability if weighted==True else flux
-            totalFlux+=flux
-        return totalFlux
-    def reset(self):
-        #reset the swarm.
-        for particle in self.particles:
-            particle.reset()
-    def plot(self,yAxis=True,zAxis=False):
-        for particle in self.particles:
-            if yAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,1],c='red')
-            if zAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,2],c='blue')
-        plt.grid()
-        plt.title('ideal orbit displacement. red is y position, blue is z positon. \n total particles: '+
-                  str(len(self.particles)))
-        plt.ylabel('displacement from ideal orbit')
-        plt.xlabel("distance along orbit,m")
-        plt.show()
-
+from typing import Union,Optional,Generator,Iterable
 
 
 class Particle:
@@ -131,6 +14,7 @@ class Particle:
     #energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
+
     def __init__(self,qi=None,pi=None,probability=1.0):
         if qi is None:
             qi=np.zeros(3)
@@ -176,9 +60,11 @@ class Particle:
         #element index and list of energy changes for each pass
         self.probability=probability #used for swarm behaviour based on probability
         self.totalLatticeLength=None
+
     def reset(self):
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi,probability=self.probability)
+
     def __str__(self):
         string='------particle-------\n'
         string+='qi: '+str(self.qi)+'\n'
@@ -188,7 +74,8 @@ class Particle:
         string+='current element: '+str(self.currentEl)+' \n '
         string+='revolution: '+str(self.revolutions)+' \n'
         return string
-    def log_Params(self,currentEl,qel,pel):
+
+    def log_Params(self,currentEl: Element,qel: np.ndarray,pel: np.ndarray)-> None:
         #this records value like position and momentum
         #qel: element position coordinate
         #pel: momentum position coordinate
@@ -203,12 +90,14 @@ class Particle:
             elIndex=currentEl.index
             self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(q, self.cumulativeLength))
             self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
-    def get_Energy(self,currentEl,qEl,pEl):
+
+    def get_Energy(self,currentEl: Element,qEl: np.ndarray,pEl: np.ndarray)-> float:
         V=currentEl.magnetic_Potential(qEl)
         T=np.sum(pEl**2)/2.0
         return T+V
 
-    def log_Params_In_Drift_Region(self,qEli,pEli,qElf,h,driftEl):
+    def log_Params_In_Drift_Region(self,qEli: np.ndarray,pEli: np.ndarray,qElf: np.ndarray,h: float,
+                                   driftEl: Element)-> None:
         #log the parameters when the particle has traveled in a straight line inside a drift region
         #qi: initial position
         #pi: initial momentum
@@ -245,7 +134,8 @@ class Particle:
         for pEl in pElArr:
             self._TList.append((driftEl.index,np.sum(pEl**2/2.0)))
             self._VList.append((driftEl.index,0.0)) #python list creation trick
-    def fill_Energy_Array_And_Dicts(self):
+
+    def fill_Energy_Array_And_Dicts(self)-> None:
         self.TArr=np.asarray([entry[1] for entry in self._TList])
         self.VArr=np.asarray([entry[1] for entry in self._VList])
         self.EArr=self.TArr.copy()+self.VArr.copy()
@@ -263,10 +153,10 @@ class Particle:
                         self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
                     E_AfterEnteringEl=self.EArr[i]
                     elementIndexPrev=self._TList[i][0]
-        self._TList=[]
-        self._VList=[]
+        self._TList,self._VList=[],[]
 
-    def finished(self,currentEl,qEl,pEl,totalLatticeLength=None):
+    def finished(self,currentEl: Element,qEl: np.ndarray,pEl: np.ndarray,
+                 totalLatticeLength: Optional[float]=None)-> None:
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice
         self.traced=True
@@ -291,7 +181,8 @@ class Particle:
                 self.qoFinal=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.qf, self.cumulativeLength)
                 self.revolutions=self.qoFinal[0]/totalLatticeLength
             self.currentEl=None # to save memory
-    def plot_Energies(self,showOnlyTotalEnergy=False):
+
+    def plot_Energies(self,showOnlyTotalEnergy: bool=False)-> None:
         if self.EArr.shape[0]==0:
             raise Exception('PARTICLE HAS NO LOGGED POSITION')
         EArr = self.EArr
@@ -313,7 +204,8 @@ class Particle:
         plt.legend()
         plt.grid()
         plt.show()
-    def plot_Orbit_Reference_Frame_Position(self, plotYAxis='y'):
+
+    def plot_Orbit_Reference_Frame_Position(self, plotYAxis: bool='y')->None:
         if plotYAxis!='y' and plotYAxis!='z':
             raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
         if self.qoArr.shape[0]==0:
@@ -333,3 +225,136 @@ class Particle:
 
     def copy(self):
         return copy.deepcopy(self)
+
+
+class Swarm:
+
+    def __init__(self):
+        self.particles = [] #list of particles in swarm
+
+    def add_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None)->None:
+        #add an additional particle to phase space
+        #qi: spatial coordinates
+        #pi: momentum coordinates
+        if pi is None:
+            pi=np.asarray([-210.0,0.0,0.0])
+        if qi is None:
+            qi = np.asarray([-1e-10, 0.0, 0.0])
+        self.particles.append(Particle(qi, pi))
+
+    def vectorize(self,onlyUnclipped: bool=False)->tuple[np.ndarray,np.ndarray]:
+        #return position and momentum vectors for the particle swarm
+        qVec=[]
+        pVec=[]
+        for particle in self.particles:
+            if onlyUnclipped==True:
+                if particle.clipped==False:
+                    qVec.append(particle.qf)
+                    pVec.append(particle.pf)
+            else:
+                qVec.append(particle.qf)
+                pVec.append(particle.pf)
+        qVec=np.asarray(qVec)
+        pVec=np.asarray(pVec)
+        return qVec,pVec
+
+    def survival_Rev(self)-> None:
+        #return average number of revolutions of particles
+        revs=0
+        for particle in self.particles:
+            if particle.clipped is None:
+                raise Exception('PARTICLE HAS NOT BEEN TRACED')
+            if np.isnan(particle.revolutions)==True:
+                raise Exception('Particle revolutions have an issue')
+            if particle.revolutions is not None:
+                revs+=particle.revolutions
+
+        meanRevs=revs/self.num_Particles()
+        return meanRevs
+
+    def longest_Particle_Life_Revolutions(self)->float:
+        #return number of revolutions of longest lived particle
+        maxList=[]
+        for particle in self.particles:
+            if particle.revolutions is not None:
+                maxList.append(particle.revolutions)
+        if len(maxList)==0:
+            return 0.0
+        else:
+            return max(maxList)
+
+    def survival_Bool(self, frac:bool=True)->float:
+        #returns fraction of particles that have survived, ie not clipped.
+        #frac: if True, return the value as a fraction, the number of surviving particles divided by total particles
+        numSurvived = 0.0
+        for particle in self.particles:
+            if particle.clipped is None:
+                raise Exception('PARTICLE HAS NO DATA ON SURVIVAL')
+            numSurvived += float(not particle.clipped) #if it has NOT clipped then turn that into a 1.0
+        if frac == True:
+            return numSurvived / len(self.particles)
+        else:
+            return numSurvived
+
+    def __iter__(self)-> Iterable[Particle]:
+        return (particle for particle in self.particles)
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    def quick_Copy(self): #only copy the initial conditions. For swarms that havn't been traced or been monkeyed
+        #with at all
+        swarmNew=Swarm()
+        for particle in self.particles:
+            assert particle.traced==False
+            particleNew=Particle(qi=particle.qi.copy(),pi=particle.pi.copy())
+            particleNew.probability=particle.probability
+            particleNew.color=particle.color
+            swarmNew.particles.append(particleNew)
+        return swarmNew
+
+    def num_Particles(self,weighted: bool=False)->float:
+        if weighted==False: return 1.0*len(self.particles)
+        else: return sum([particle.probability for particle in self.particles])
+
+    def num_Revs(self,weighted: bool=False)->int :
+        if weighted==False:
+            return sum([particle.revolutions for particle in self.particles])
+        else:
+            return sum([particle.revolutions*particle.probability for particle in self.particles])
+
+    def weighted_Flux_Multiplication(self)->float:
+        #only for circular lattice
+        if self.num_Particles() == 0: return 0.0
+        assert all([particle.traced == True for particle in self.particles])
+        numWeighedtRevs = self.num_Revs(weighted=True)
+        numWeightedParticles = self.num_Particles(weighted=True)
+        return numWeighedtRevs/numWeightedParticles
+
+    def lattice_Flux(self,weighted: bool=False)->float:
+        #only for circular lattice. This gives the average flux in a cross section of the lattice. Only makes sense
+        #for many more than one revolutions
+        totalFlux=0
+        for particle in self.particles:
+            flux=particle.revolutions/np.linalg.norm(particle.pi)
+            flux=flux*particle.probability if weighted==True else flux
+            totalFlux+=flux
+        return totalFlux
+
+    def reset(self)-> None:
+        #reset the swarm.
+        for particle in self.particles:
+            particle.reset()
+    def plot(self,yAxis:bool =True,zAxis:bool =False)->None:
+        for particle in self.particles:
+            if yAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,1],c='red')
+            if zAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,2],c='blue')
+        plt.grid()
+        plt.title('ideal orbit displacement. red is y position, blue is z positon. \n total particles: '+
+                  str(len(self.particles)))
+        plt.ylabel('displacement from ideal orbit')
+        plt.xlabel("distance along orbit,m")
+        plt.show()
+
+
+

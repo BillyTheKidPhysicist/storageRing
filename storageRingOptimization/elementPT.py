@@ -72,6 +72,7 @@ class Element:
         # #bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
         self.L=L
+        self.index=None
         self.Lo = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
         # # value because for segmented benders the path length is not simple to compute
         self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
