@@ -12,13 +12,10 @@ from SwarmTracerClass import SwarmTracer
 from elementPT import HalbachLensSim, LensIdeal, Drift
 import multiprocess as mp
 from collections.abc import Iterable
-from profilehooks import profile
-'''
-This file contains a class used to optimize the tunable knobs we can expect to have. These are either field values
-or element spacing
-
-'''
-
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from typing import Union
+from shapely.geometry import Polygon
+list_array_tuple=Union[np.ndarray,tuple,list]
 
 class Solution:
     # class to hold onto results of each solution
@@ -53,8 +50,9 @@ class Solution:
 
 
 class LatticeOptimizer:
-    def __init__(self, latticeRing, latticeInjector):
-
+    
+    def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice):
+        assert latticeRing.latticeType=='storageRing' and latticeInjector.latticeType=='injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
         self.particleTracerRing = ParticleTracer(latticeRing)
@@ -91,9 +89,11 @@ class LatticeOptimizer:
         self.tuningBounds = None
         self.numParticlesFullSwarm=500
         self.numParticlesSurrogate=50
+        self.swarmInjectorInitial=None
+        self.swarmInjectorInitial_Surrogate=None
         self.generate_Swarms()
 
-    def generate_Swarms(self):
+    def generate_Swarms(self)-> None:
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
             self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry,gammaSpace=self.gamma_Space,
@@ -101,8 +101,9 @@ class LatticeOptimizer:
         np.random.shuffle(self.swarmInjectorInitial.particles)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
-    def get_Injector_Shapely_Objects_In_Lab_Frame(self):
-        newShapelyObjectList = []
+        
+    def get_Injector_Shapely_Objects_In_Lab_Frame(self)-> list[Polygon]:
+        shapelyObjectLabFrameList = []
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
         r2Injector = self.latticeInjector.combiner.r2
         r2Ring = self.latticeRing.combiner.r2
@@ -111,16 +112,16 @@ class LatticeOptimizer:
             SO = translate(SO, xoff=-r2Injector[0], yoff=-r2Injector[1])
             SO = rotate(SO, rotationAngle, use_radians=True, origin=(0, 0))
             SO = translate(SO, xoff=r2Ring[0], yoff=r2Ring[1])
-            newShapelyObjectList.append(SO)
-        return newShapelyObjectList
+            shapelyObjectLabFrameList.append(SO)
+        return shapelyObjectLabFrameList
 
-    def generate_Shapely_Floor_Plan(self):
+    def generate_Shapely_Object_List_Of_Floor_Plan(self)-> list[Polygon]:
         shapelyObjectList = []
         shapelyObjectList.extend([el.SO_Outer for el in self.latticeRing])
         shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame())
         return shapelyObjectList
 
-    def floor_Plan_OverLap_mm(self):
+    def floor_Plan_OverLap_mm(self)-> float:
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
         assert len(injectorShapelyObjects)==6
         overlapElIndex = 3
@@ -133,10 +134,9 @@ class LatticeOptimizer:
             area += element.intersection(injectorLensShapely).area * converTo_mm
         return area
 
-
-    def show_Floor_Plan(self,X):
+    def show_Floor_Plan(self,X: list_array_tuple)-> None:
         self.update_Ring_And_Injector(X)
-        shapelyObjectList = self.generate_Shapely_Floor_Plan()
+        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan()
         for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
         plt.gca().set_aspect('equal')
         plt.xlabel('meters')
@@ -144,8 +144,9 @@ class LatticeOptimizer:
         plt.grid()
         plt.show()
 
-    def mode_Match_Cost(self, X,useSurrogate,energyCorrection,rejectUnstable=True,rejectIllegalFloorPlan=True,
-                        returnCostsSeperate=False):
+    def mode_Match_Cost(self, X: list_array_tuple,useSurrogate: bool,energyCorrection: bool,rejectUnstable: bool=True,
+                        rejectIllegalFloorPlan: bool=True,
+                        returnCostsSeperate: bool=False)-> Union[float,tuple[float,float]]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         swarmCost,floorPlanCost=None,None
@@ -158,20 +159,23 @@ class LatticeOptimizer:
         elif rejectUnstable==True and self.is_Stable(X) == False:
             cost=2.0
         else:
-            swarmTraced=self.inject_Swarm(X,useSurrogate,energyCorrection)
+            swarmTraced=self.inject_And_Trace_Swarm(X,useSurrogate,energyCorrection)
             swarmCost = self.swarm_Cost(swarmTraced)
             floorPlanCost = self.floor_Plan_Cost(X)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= 2.0
         if returnCostsSeperate==True: return swarmCost,floorPlanCost
         else: return cost
-    def inject_Swarm(self,X,useSurrogate,energyCorrection):
+        
+    def inject_And_Trace_Swarm(self,X: list_array_tuple,useSurrogate: bool,energyCorrection: bool)-> Swarm:
         self.update_Ring_And_Injector(X)
         swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End(useSurrogate)
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
                                     fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
         return swarmTraced
-    def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced, copyParticles=False):
+    
+    def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced: Swarm, 
+                                                            copyParticles: bool=False)-> Swarm:
         #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
         #are now clipping the combiner and any that would clip the next element
         #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
@@ -200,7 +204,7 @@ class LatticeOptimizer:
                         swarmSurvived.particles.append(particleEnd)
         return swarmSurvived
 
-    def trace_And_Project_Injector_Swarm_To_Combiner_End(self,useSurrogate) -> Swarm:
+    def trace_And_Project_Injector_Swarm_To_Combiner_End(self,useSurrogate: bool) -> Swarm:
         if useSurrogate==True:
             swarm=self.swarmInjectorInitial_Surrogate
         else:
@@ -212,7 +216,7 @@ class LatticeOptimizer:
         swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         return swarmEnd
 
-    def is_Stable(self, X,minRevsToTest=5.0):
+    def is_Stable(self, X: list_array_tuple,minRevsToTest=5.0)-> bool:
         self.update_Ring_And_Injector(X)
         maxInitialTransversePos=1e-3
         T_Max=1.1 * minRevsToTest * self.latticeRing.totalLength / self.latticeRing.v0Nominal
@@ -226,7 +230,7 @@ class LatticeOptimizer:
                 stable = True
         return stable
 
-    def update_Ring_And_Injector(self,X):
+    def update_Ring_And_Injector(self,X: list_array_tuple):
         if X is None:
             pass
         elif self.whichKnobs=='all':
@@ -238,7 +242,8 @@ class LatticeOptimizer:
             assert len(X) == 2
             self.update_Ring_Lattice(X)
         else: raise ValueError
-    def update_Injector_Lattice(self, X):
+        
+    def update_Injector_Lattice(self, X: list_array_tuple):
         # modify lengths of drift regions in injector
         assert len(X)==2
         assert X[0]>0.0 and X[1]>0.0
@@ -246,7 +251,7 @@ class LatticeOptimizer:
         self.latticeInjector.elList[self.injectTuneElIndices[1]].set_Length(X[1])
         self.latticeInjector.build_Lattice()
 
-    def update_Ring_Lattice(self, X):
+    def update_Ring_Lattice(self, X: list_array_tuple)-> None:
         assert len(X)==2
         if self.tuningChoice == 'field':
             self.update_Ring_Field_Values(X)
@@ -254,11 +259,11 @@ class LatticeOptimizer:
             self.update_Ring_Spacing(X)
         else: raise ValueError
 
-    def update_Ring_Field_Values(self, X):
+    def update_Ring_Field_Values(self, X: list_array_tuple)-> None:
         for el, arg in zip(self.tunedElementList, X):
             el.fieldFact = arg
 
-    def update_Ring_Spacing(self, X):
+    def update_Ring_Spacing(self, X: list_array_tuple)-> None:
         for elCenter, spaceFracElBefore, totalLength in zip(self.tunedElementList, X, self.tunableTotalLengthList):
             assert 0<=spaceFracElBefore<=1.0
             elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
@@ -270,7 +275,7 @@ class LatticeOptimizer:
             elAfter.set_Length(LAfter)
         self.latticeRing.build_Lattice()
 
-    def compute_Swarm_Flux_Mult_Percent(self, swarmTraced:Swarm):
+    def compute_Swarm_Flux_Mult_Percent(self, swarmTraced:Swarm)-> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         #all particles survived through the lattice.
         assert all([particle.traced == True for particle in swarmTraced.particles])
@@ -283,31 +288,37 @@ class LatticeOptimizer:
         fluxMultPerc=1e2*(weightedFluxMult/weightedFluxMultMax)*injectionSurvivalFrac
         assert 0.0 <= fluxMultPerc <= 100.0
         return fluxMultPerc
-    def maximum_Weighted_Flux_Multiplication(self):
+    
+    def maximum_Weighted_Flux_Multiplication(self)-> float:
         #unrealistic maximum flux of lattice
         rBendNominal=1.0
         LCombinerNominal=.2
         minLatticeLength=2*(np.pi*rBendNominal+LCombinerNominal)
         maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #the aboslute max
         return maxFluxMult
-    def floor_Plan_Cost(self,X):
+    
+    def floor_Plan_Cost(self,X: list_array_tuple)-> float:
         self.update_Ring_And_Injector(X)
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
         factor = 300 #units of mm^2
         cost = 2 / (1 + np.exp(-overlap / factor)) - 1
         assert 0.0<=cost<=1.0
         return cost
-    def swarm_Cost(self, swarm):
+    
+    def swarm_Cost(self, swarm: Swarm)-> float:
         fluxMultPerc=self.compute_Swarm_Flux_Mult_Percent(swarm)
         swarmCost=(100.0-fluxMultPerc)/100.0
         assert 0.0<=swarmCost<=1.0
         return swarmCost
-    def flux_Percent_From_Cost(self, cost,X):
+    
+    def flux_Percent_From_Cost(self, cost,X)-> float:
         fluxCost=cost-self.floor_Plan_Cost(X)
         fluxMulPerc=100.0*(1.0-fluxCost)
         assert 0.0<=fluxMulPerc<=100.0
         return fluxMulPerc
-    def catch_Optimizer_Errors(self, tuningBounds, tuningElementIndices, tuningChoice,whichKnobs):
+
+    def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIndices: list_array_tuple,
+                               tuningChoice: bool,whichKnobs: str)-> None:
         if max(tuningElementIndices) >= len(self.latticeRing.elList) - 1: raise Exception("element indices out of bounds")
         if len(tuningBounds) != len(tuningElementIndices): raise Exception("Bounds do not match number of tuned elements")
         combinerRing,combinerLat=self.latticeRing.combiner,self.latticeInjector.combiner
@@ -335,12 +346,13 @@ class LatticeOptimizer:
         if whichKnobs not in ('all','ring'):
             raise Exception('Knobs must be either \'all\' (full system) or \'ring\' (only storage ring)')
 
-    def fill_Initial_Total_Tuning_Elements_Length_List(self):
+    def fill_Initial_Total_Tuning_Elements_Length_List(self)-> None:
         for elCenter in self.tunedElementList:
             elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
             self.tunableTotalLengthList.append(elBefore.L + elAfter.L)
 
-    def initialize_Optimizer(self, tuningElementIndices, tuningChoice,whichKnobs, ringTuningBounds, injectorTuningBounds):
+    def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningChoice: bool,whichKnobs: str,
+                                ringTuningBounds: list_array_tuple, injectorTuningBounds: list_array_tuple)-> None:
         assert tuningChoice in ('spacing','field') and whichKnobs in ('all','ring')
         assert all(isinstance(arg,Iterable) for arg in (tuningElementIndices,ringTuningBounds,injectorTuningBounds))
         self.whichKnobs=whichKnobs
@@ -354,7 +366,8 @@ class LatticeOptimizer:
         if self.sameSeedForSearch == True:
             np.random.seed(42)
 
-    def test_Lattice_Stability(self, ringTuningBounds,injectorTuningBounds, numEdgePoints=30, parallel=False):
+    def test_Lattice_Stability(self, ringTuningBounds: list_array_tuple,injectorTuningBounds: list_array_tuple,
+                               numEdgePoints: int=30, parallel: bool=False)-> bool:
         assert len(ringTuningBounds) == 2 and len(injectorTuningBounds)==2
         ringKnob1Arr = np.linspace(ringTuningBounds[0][0], ringTuningBounds[0][1], numEdgePoints)
         ringKnob2Arr = np.linspace(ringTuningBounds[1][0], ringTuningBounds[1][1], numEdgePoints)
@@ -373,6 +386,7 @@ class LatticeOptimizer:
             return False
         else:
             return True
+
     def _fast_Minimize(self):
         #less accurate method that minimizes with a smaller surrogate swarm then uses the full swarm for the final
         #value
@@ -382,6 +396,7 @@ class LatticeOptimizer:
                                                    maxiter=self.maxEvals//(self.optimalPopSize*len(self.tuningBounds)),
                                                    popsize=self.optimalPopSize,init='halton')
         return sol_Surrogate
+
     def _accurate_Minimize(self):
         #start first by quickly randomly searching with a surrogate swarm.
         randomSamplePoints=128
@@ -415,6 +430,7 @@ class LatticeOptimizer:
         sol.invalidInjector = False
         sol.invalidRing = False
         return sol
+
     def optimize(self, tuningElementIndices, ringTuningBounds=None, injectorTuningBounds=None, tuningChoice='spacing'
                  ,whichKnobs='all',parallel=False,fastSolver=False)->Solution:
         self.fastSolver=fastSolver

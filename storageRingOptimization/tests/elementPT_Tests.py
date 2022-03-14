@@ -19,8 +19,9 @@ def trace_Different_Conditions(PTL,particleInitial,h):
         for accelerated in (True,False):
             particleList.append(PT.trace(particleInitial.copy(), h, 1.0, fastMode=fastMode,accelerated=accelerated))
     return particleList
+
 def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
-    tol=1e-16
+    tol=1e-14
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
         # np.set_printoptions(precision=100)
@@ -30,6 +31,7 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
 
 class genericElementTestHelper:
     #elements have generic functions and features common to all kinds. This tests those
+
     def __init__(self,el,coordsTestRules,coordFrame):
         assert len(coordsTestRules)==3
         assert coordFrame in ('cylinderical','cartesian')
@@ -39,6 +41,7 @@ class genericElementTestHelper:
         self.coordsTestRules=coordsTestRules
         self.coordFrame=coordFrame
         self.testShapely=False if coordFrame=='cylinderical' else True #circles are not well modeled in shapely
+
     def convert_Coord(self,x1,x2,x3):
         if self.coordFrame=='cartesian':
             x,y,z=x1,x2,x3
@@ -55,15 +58,18 @@ class genericElementTestHelper:
         SO_Padded = self.el.SO.buffer(1e-9)  # add padding to avoid issues of point right on edge
         isInsidePadded = SO_Padded.contains(Point(qLab[:2]))
         return isInsidePadded,isInsideUnpadded
+
     def test_Against_Shapely(self,coord2D):
         isInside2DShapely, isInside2DShapelyPadded = self.is_Inside_Shapely(coord2D)
         if isInside2DShapely == isInside2DShapelyPadded:  # if consistent for both its not a weird situation of being
             # right on the edge, so go ahead and check
             isInside2D = self.el.is_Coord_Inside(coord2D)
             assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         isInsideList=[]
         @given(*self.coordsTestRules)
@@ -83,6 +89,7 @@ class genericElementTestHelper:
         is_Inside_Consistency()
         numTrue=sum(isInsideList)
         assert numTrue>50 #at least 50 true seems reasonable
+
     def test2(self):
         #check that coordinate conversions work
         tol=1e-12
@@ -99,7 +106,9 @@ class genericElementTestHelper:
             assert np.all(np.abs(vecEl0 - vecEl) < tol)
         convert_Invert_Consistency()
 
+
 class driftTestHelper:
+
     def __init__(self):
         self.L,self.ap=.15432,.0392
         self.PTL=ParticleTracerLattice(200.0)
@@ -107,16 +116,19 @@ class driftTestHelper:
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.particleTracer=ParticleTracer(self.PTL)
         self.el=self.PTL.elList[0]
+
     def run_Tests(self):
         self.test1()
         self.test2()
         self.test3()
+
     def test1(self):
         #test generic conditions of the element
         floatyz = st.floats(min_value=-1.5 * self.ap, max_value=1.5 * self.ap)
         floatx = st.floats(min_value=-self.L*.25, max_value=self.L * 1.25)
         coordTestRules=(floatx,floatyz,floatyz)
         genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+
     def test2(self):
         # test that particle travels through drift region and ends where expected
         tol,h=1e-12,1e-7
@@ -135,6 +147,7 @@ class driftTestHelper:
         yfTrace,zfTrace=qfTrace[1],qfTrace[2]
         assert absDif(slopey,slopeyTrace)<tol and absDif(slopez,slopezTrace)<tol
         assert abs(yf-yfTrace)<tol and abs(zf-zfTrace)<tol
+
     def test3(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([0.0,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-3.8]))
@@ -143,23 +156,28 @@ class driftTestHelper:
         particleList=trace_Different_Conditions(self.PTL,particle,1e-5)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class lensIdealTestHelper:
+
     def __init__(self):
         self.L, self.rp,self.Bp = .51824792317429, .024382758923,1.832484234
         self.PTL=ParticleTracerLattice(200.0)
         self.PTL.add_Lens_Ideal(self.L,self.Bp,self.rp)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[0],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
         self.test3()
+
     def test1(self):
         #test generic conditions of the element
         floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.25 * self.rp)
         floatx = st.floats(min_value=-self.L*.25, max_value=self.L * 1.25)
         coordTestRules=(floatx,floatyz,floatyz)
         genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+
     def test2(self):
         tol=1e-2 #test to 1% accuracy
         #does the particle behave as theory predicts? It should be very close because it's ideal
@@ -171,6 +189,7 @@ class lensIdealTestHelper:
         phi = np.sqrt(K) * self.L
         yfTheory,pyfTheory=yi*np.cos(phi),-abs(particle.pi[0])*yi*np.sin(phi)*np.sqrt(K)
         assert abs(yf-yfTheory)<tol*yi and abs(pyf-pyfTheory)<tol*pyRMS
+
     def test3(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,8.2,-6.8]))
@@ -179,7 +198,9 @@ class lensIdealTestHelper:
         particleList=trace_Different_Conditions(self.PTL,particle,1e-5)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class benderIdealTestHelper:
+
     def __init__(self):
         self.ang=np.pi/2.0
         self.Bp=.8934752374
@@ -190,9 +211,11 @@ class benderIdealTestHelper:
         self.PTL.add_Bender_Ideal(self.ang,self.Bp,self.rb,self.rp)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         #test generic conditions of the element
         floatr = st.floats(min_value=self.rb-self.rp*2, max_value=self.rb+self.rp*2)
@@ -200,6 +223,7 @@ class benderIdealTestHelper:
         floatz=st.floats(min_value=-self.rp/2,max_value=self.rp/2)
         coordTestRules=(floatr,floatphi,floatz)
         genericElementTestHelper(self.el,coordTestRules,'cylinderical').run_Tests()
+
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-6.8]))
@@ -208,7 +232,9 @@ class benderIdealTestHelper:
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class combinerIdealTestHelper:
+
     def __init__(self):
         self.Lm=.218734921
         self.ap=.014832794
@@ -217,9 +243,11 @@ class combinerIdealTestHelper:
         self.PTL.add_Combiner_Ideal(Lm=self.Lm,ap=self.ap)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         #test generic conditions of the element
         floatx = st.floats(min_value=-self.Lm*0.1, max_value=1.25*self.Lm)
@@ -227,6 +255,7 @@ class combinerIdealTestHelper:
         floatz = st.floats(min_value=-2*self.ap/2, max_value=2*self.ap/2) #z ap is half of y
         coordTestRules=(floatx,floaty,floatz)
         genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,0.0,0.0]))
@@ -235,7 +264,9 @@ class combinerIdealTestHelper:
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class hexapoleSegmentedBenderSimTestHelper:
+
     def __init__(self):
         self.Lm=.0254
         self.rp=.014832
@@ -247,9 +278,11 @@ class hexapoleSegmentedBenderSimTestHelper:
         self.PTL.add_Halbach_Bender_Sim_Segmented(self.Lm,self.rp,self.numMagnets,self.rb)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         #test generic conditions of the element
         floatr = st.floats(min_value=self.rb-self.rp*2, max_value=self.rb+self.rp*2)
@@ -257,15 +290,18 @@ class hexapoleSegmentedBenderSimTestHelper:
         floatz=st.floats(min_value=-self.rp/2,max_value=self.rp/2)
         coordTestRules=(floatr,floatphi,floatz)
         genericElementTestHelper(self.el,coordTestRules,'cylinderical').run_Tests()
+
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([0.6246807314136619   , 1.8195326119782014   ,0.0021508391432821044])
-        pf0 = np.array([ 158.1533614053062   , -124.06166042771717  ,0.3733029306560347])
+        qf0 = np.array([0.6246876805773034   , 1.8195263869875777   ,0.0021494963567847674])
+        pf0 = np.array([ 158.1515485477083   , -124.06038699242039  ,0.3732855519313561])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class hexapoleLensSimTestHelper:
+
     def __init__(self):
         self.L=.1321432
         self.rp=.01874832
@@ -273,15 +309,18 @@ class hexapoleLensSimTestHelper:
         self.PTL.add_Halbach_Lens_Sim(self.rp,self.L)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[0],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         #test generic conditions of the element
         floatyz = st.floats(min_value=-2 * self.rp, max_value=2 * self.rp)
         floatx = st.floats(min_value=-self.L / 10.0, max_value=self.L * 1.25)
         coordTestRules=(floatx,floatyz,floatyz)
         genericElementTestHelper(self.el,coordTestRules,'cartesian').run_Tests()
+
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
@@ -290,7 +329,9 @@ class hexapoleLensSimTestHelper:
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
+
 class combinerHexapoleSimTestHelper:
+
     def __init__(self):
         self.Lm=.1453423
         self.rp=.0123749
@@ -300,9 +341,11 @@ class combinerHexapoleSimTestHelper:
         self.PTL.add_Combiner_Sim_Lens(self.Lm,self.rp)
         self.PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         self.el,self.particleTracer=self.PTL.elList[1],ParticleTracer(self.PTL)
+
     def run_Tests(self):
         self.test1()
         self.test2()
+
     def test1(self):
         #test generic conditions of the element
         floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.5 * self.rp)
@@ -316,6 +359,7 @@ class combinerHexapoleSimTestHelper:
         pf0=np.array([-200.42385219087774 ,  -12.914640613791557,   10.07638500140596 ])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
+
 def run_Tests():
     driftTestHelper().run_Tests()
     lensIdealTestHelper().run_Tests()

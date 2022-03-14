@@ -1,4 +1,4 @@
-raise NotImplementedError
+
 #under construction
 
 
@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections.abc import Iterable
 class GeneticLens(HalbachLens):
-    def __init__(self,DNA_List):
+    def __init__(self,DNA_List: list):
+        raise NotImplementedError
         #DNA: list of dictionaries to construct lens. each entry in the list corresponds to a single layer. Layers
         #are assumed to be stacked on top of each other in the order they are entered. No support for multiple
         #concentric layers. arguments in first list entry are:
@@ -28,7 +29,7 @@ class GeneticLens(HalbachLens):
         self.shimList=[]
         self.cubeList=[]
         self.build()
-    def unpack_DNA_List(self):
+    def unpack_DNA_List(self)-> None:
         for DNA in self.DNA_List:
             if DNA['component']=='shim':
                 self.shimDNA_List.append(DNA)
@@ -36,6 +37,7 @@ class GeneticLens(HalbachLens):
                 self.layerDNA_List.append(DNA)
             else: raise ValueError
     def build(self):
+        raise Exception("Change the names here")
         for DNA,z in zip(self.layerDNA_List,self.zArrLayers):
             phase=DNA['phase'] if 'phase' in DNA else 0.0
             layer=Layer(z,DNA['width'],DNA['length'],DNA['rp'],phase=phase)
@@ -47,7 +49,7 @@ class GeneticLens(HalbachLens):
                 self.shimList.append(cube)
             elif DNA['shape']=='sphere':
                 sphere=Sphere(DNA['diameter']/2.0)
-                sphere.position_Sphere(r=DNA['r'],phi=DNA['phi'],z=DNA['z'])
+                sphere.position_Sphere(DNA['r'],DNA['phi'],DNA['z'])
                 sphere.orient(DNA['theta'],DNA['psi'])
                 self.shimList.append(sphere)
             else: raise ValueError

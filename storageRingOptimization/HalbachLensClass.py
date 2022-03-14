@@ -27,10 +27,11 @@ def B_NUMBA(r,r0,m):
 
 class magpy_Prism:
 
-    def __init__(self,x0,y0,z0,phi,width,length,M):
+    def __init__(self,x0: float, y0: float, z0: float, phi: float, width: float, length: float,M: float):
         self.magnet=self._build_magpy_Prism(x0,y0,z0,phi,width,length,M)
 
-    def _build_magpy_Prism(self, x0: float, y0: float, z0: float, phi: float, width: float, length: float,M)->Box:
+    def _build_magpy_Prism(self, x0: float, y0: float, z0: float, phi: float, width: float, length: float,
+                           M: float)->Box:
         dimensions_mm = 1e3 * np.asarray([width, width, length])
         position_mm = 1e3 * np.asarray([x0, y0, z0])
         R = Rotation.from_rotvec([0, 0, phi])
@@ -60,22 +61,17 @@ class Sphere:
         self.r0 = None  # location of sphere
         self.n = None  # orientation
         self.m = None  # vector sphere moment
-        self.phi = None  # phi position
-        self.theta = None  # orientation of dipole. From local z axis
-        self.psi = None  # orientation of dipole. in local xy plane
+        self.theta = None  # phi position
+        self.phi = None  # orientation of dipole. From lab z axis
+        self.psi = None  # orientation of dipole. in lab xy plane
         self.z = None
         self.r = None
 
-    def position_Sphere(self, r: float=None, phi: float=None, z: float=None)->None:
-        if phi is not None:
-            self.phi = phi
-        if z is not None:
-            self.z = z
-        if r is not None:
-            self.r = r
-        assert not None in (phi,z,r)
-        x = self.r * np.cos(self.phi)
-        y = self.r * np.sin(self.phi)
+    def position_Sphere(self, r: float, theta: float, z: float)->None:
+        self.r,self.theta,self.z = r, theta, z
+        assert not None in (theta,z,r)
+        x = self.r * np.cos(self.theta)
+        y = self.r * np.sin(self.theta)
         self.r0 = np.asarray([x, y, self.z])
 
     def update_Size(self, radius: float)-> None:
@@ -85,14 +81,14 @@ class Sphere:
         self.m0 = M * (4 / 3) * np.pi * self.radius ** 3  # dipole moment
         self.m = self.m0 * self.n  # vector sphere moment
 
-    def orient(self, theta: float, psi: float)->None:
+    def orient(self, phi: float, psi: float)->None:
         # tilt the sphere in spherical coordinates. These are in the lab frame, there is no sphere frame
-        #theta,psi =(pi/2,0) is along +x
-        #theta,psi=(pi/2,pi/2) is along +y
-        #theta,psi=(0.0,anything) is along +z
-        self.theta = theta
+        #phi,psi =(pi/2,0) is along +x
+        #phi,psi=(pi/2,pi/2) is along +y
+        #phi,psi=(0.0,anything) is along +z
+        self.phi = phi
         self.psi = psi
-        self.n = np.asarray([np.sin(theta) * np.cos(psi), np.sin(theta) * np.sin(psi), np.cos(theta)])#x,y,z
+        self.n = np.asarray([np.sin(phi) * np.cos(psi), np.sin(phi) * np.sin(psi), np.cos(phi)])#x,y,z
         self.m = self.m0 * self.n
 
     def B(self, r:np.ndarray)-> np.ndarray:
@@ -162,9 +158,9 @@ class RectangularPrism:
         self.x=None #cartesian
         self.y=None #cartesian
         self.z = None #cartesian
-        self.phi = None #position angle in polar coordinates
+        self.theta = None #position angle in polar coordinates
         self.r0 = None
-        self.theta = None # rotation about body z axis
+        self.phi = None # rotation about body z axis
         self.magnet=None #holds the magpylib element
 
     def place(self, r:np.ndarray, theta: float, z: float,phi: float)->None:
@@ -224,16 +220,16 @@ class RectangularPrism:
     def B_Symmetry(self,r:np.ndarray, rotations: float,negativeSymmetry: bool, rotationAngle: float,
                    planeSymmetry: bool):
         rotAngle = rotationAngle * rotations
-        phiSymm=rotAngle
+        thetaSymm=rotAngle
         M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
         r0Sym=self.r0.copy()
         r0Sym[:2]=M_Rot@r0Sym[:2]
         if negativeSymmetry==True:
-            phiSymm+=rotations*np.pi
+            thetaSymm+=rotations*np.pi
         if planeSymmetry==True:
             r0Sym[2] = -r0Sym[2]
         # plt.quiver(r0Sym[0], r0Sym[1], np.cos(self.phi+phiSymm),np.sin(self.phi+phiSymm))
-        magnet=magpy_Prism(*r0Sym,self.phi+phiSymm,self.width,self.length,self.M)
+        magnet=magpy_Prism(*r0Sym,self.phi+thetaSymm,self.width,self.length,self.M)
         B=magnet.B(r)
         return B
 
@@ -316,7 +312,7 @@ class HalbachLens:
         self.M=M
         #euler angles. Order of operation is theta and then psi, done in the reference frame of the lens. In reality
         #the rotations are done to the evaluation point, then the resulting vector is rotated back
-        self.theta=None #rotation, through the y axis
+        self.phi=None #rotation, through the y axis
         self.r0=np.zeros(3) #location of center of magnet
         self.RInTheta=None #rotation matrix for the evaluation points to generate the final value
         self.ROutTheta=None #rotation matrix to rotate the vector out of the tilted frame to the original frame
@@ -330,7 +326,7 @@ class HalbachLens:
 
     def rotate(self,theta: float)->None:
         #rotate the magnet about its center
-        self.theta=theta
+        self.phi=theta
         self.RInTheta=np.asarray([[np.cos(-theta),-np.sin(-theta)],[np.sin(-theta),np.cos(-theta)]]) #to rotate about the
         #y axis. Since the magnet is rotated by theta, the evaluation points need to be rotated by -theta
         self.ROutTheta = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]) #to rotate the
@@ -348,7 +344,7 @@ class HalbachLens:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handle the rotation and translation of the evaluation points
         #r: rows of coordinates, shape (N,3). Where N is the number of evaluation points
-        if self.theta is not None:
+        if self.phi is not None:
             return self._transform_r_NUMBA(r,self.r0,self.ROutTheta)
         else:
             return r
@@ -370,7 +366,7 @@ class HalbachLens:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,
         #then the vector is rotated back. This function handles the rotation of the evaluated vector
         #v: rows of vectors, shape (N,3) where N is the number of vectors
-        if self.theta is not None:
+        if self.phi is not None:
             return self._transform_Vector_NUMBA(v,self.RInTheta)
         else:
             return v
@@ -457,7 +453,7 @@ class SegmentedBenderHalbach(HalbachLens):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
     def __init__(self,rp:float,rb: float,UCAngle: np.ndarray,Lm: float,numLenses: int=3,
-                 M: np.ndarray=1.03e6,positiveAngleMagnetsOnly: bool=False):
+                 M: float=1.03e6,positiveAngleMagnetsOnly: bool=False):
         assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
         self.rp=rp #radius of bore of magnet, ie to the pole
         self.rb=rb #bending radius

@@ -660,9 +660,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.segmented=True
-        self.numPointsBoreRadius=20 #This many points should span the bore ap (nearly same as bore radius) for good
-        # field sampling
-        self.longitudinalCoordSpacing = self.rp/self.numPointsBoreRadius #Spacing through unit cell. invariant scale
+        self.RIn_Ang=None
+        self.M_uc=None
+        self.M_ang=None
+        self.numPointsBoreAp=20 #This many points should span the bore ap for good field sampling
+        self.longitudinalCoordSpacing = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
         self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
         self.cap = True
@@ -670,6 +672,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
         #constraint solver
         self.build()
+
     def build(self)->None:
         """Overrides abstract method from Element"""
         if self.numMagnets is not None:
@@ -677,19 +680,21 @@ class HalbachBenderSimSegmented(BenderIdeal):
             self.build_Post_Constrained()
         else:
             self.build_Pre_Constraint()
+
     def compute_Aperture(self)->None:
         #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
         vacuumTubeThickness=1e-3
         radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lseg/2)**2)
         apMaxGeom=self.rb-radiusCorner-vacuumTubeThickness #max aperture without clipping magnet
-        apMaxGoodField=self.rp-np.sqrt(2)*self.rp/self.numPointsBoreRadius  #max aperture without
-        # particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for several
-        #reasons (using int, and non equal grid in xy), so I include a smallsafety factor
-        apMaxGoodField=.95*apMaxGoodField
+        safetyFactor=.95
+        apMaxGoodField=safetyFactor*self.numPointsBoreAp*self.rp/(self.numPointsBoreAp+np.sqrt(2))  #max aperture
+        # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
+        # several reasons (using int, and non equal grid in xy), so I include a smallsafety factor
         apMax=min([apMaxGeom,apMaxGoodField])
-        assert apMax/self.rp>.8 #Because of how interpolation coords are calculated, I assume ap~rp
+        assert apMax/self.rp>.8 #Not confident results work outside ap~rp
         return apMax
+
     def set_BpFact(self,BpFact:float):
         assert 0.0<=BpFact
         self.fieldFact=BpFact
@@ -711,11 +716,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
             kList.append(find_K(rb))
         kArr = np.asarray(kList)
         a, b, c = np.polyfit(rArr, kArr, 2)
-
-
         self.K_Func=lambda r: a * r ** 2 + b * r + c
         self.outputOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
+
     def build_Post_Constrained(self)->None:
         self.ap=self.compute_Aperture()
         assert self.rb-self.rp-self.yokeWidth>0.0
@@ -723,8 +727,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         #500um works very well, but 1mm may be acceptable
         numModelLenes=3 #3 turns out to be a good number
         assert numModelLenes%2==1
-
-
         self.ang = 2 * self.numMagnets * self.ucAng
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
         m = np.tan(self.ucAng)
@@ -734,6 +736,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.K=self.K_Func(self.rb)
         self.build_Fast_Field_Helper()
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
+
     def build_Fast_Field_Helper(self)->None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
@@ -749,11 +752,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def make_Grid_Coords(self,xMin:float,xMax:float,zMin:float,zMax:float)->np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
-        #todo: I am not convinced it makes the most sense to have the range depend on rp instead of ap
-        numPointsX=int(self.numPointsBoreRadius*(xMax-xMin)/self.rp)
+        numPointsX=int(self.numPointsBoreAp*(xMax-xMin)/self.ap)
         yMin,yMax = -(self.rp + TINY_STEP),TINY_STEP #same for every part of bender
-        numPointsY = int(self.numPointsBoreRadius * (yMax - yMin) / self.rp)
+        numPointsY = int(self.numPointsBoreAp * (yMax - yMin) / self.ap)
         numPointsZ=int((zMax-zMin)/self.longitudinalCoordSpacing)
+        assert numPointsX/numPointsY>=(xMax-xMin)/(yMax-yMin) # should be at least this ratio
         xArrArgs,yArrArgs,zArrArgs=(xMin,xMax,numPointsX),(yMin,yMax,numPointsY),(zMin,zMax,numPointsZ)
         coordArrList=[np.linspace(arrArgs[0],arrArgs[1],arrArgs[2]) for arrArgs in (xArrArgs,yArrArgs,zArrArgs)]
         gridCoords=np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1,3)

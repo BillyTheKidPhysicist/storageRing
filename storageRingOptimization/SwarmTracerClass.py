@@ -46,7 +46,7 @@ class SwarmTracer:
             z[i]=(z[i-1]+alpha)%1
 
         return z
-    def initialize_Stablity_Testing_Swarm(self,qMax: np.ndarray)-> Swarm:
+    def initialize_Stablity_Testing_Swarm(self,qMax: float)-> Swarm:
         smallOffset=-1e-10 #this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
         swarmTest.add_Particle(qi=np.asarray([smallOffset,0.0,0.0]))

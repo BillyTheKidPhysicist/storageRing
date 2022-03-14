@@ -2,6 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 import time
 from asyncDE import solve_Async
+from typing import Union
 import numpy as np
 from latticeOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -59,19 +60,22 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     return PTL_Ring
 
 class Injection_Model(LatticeOptimizer):
-    def __init__(self, latticeRing, latticeInjector):
+
+    def __init__(self, latticeRing, latticeInjector,tunabilityLength: float=2e-2):
         super().__init__(latticeRing,latticeInjector)
-    def cost(self):
+        self.tunabilityLength=tunabilityLength
+
+    def cost(self)-> float:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         swarmCost = self.injected_Swarm_Cost()
         assert 0.0<=swarmCost<=1.0
-        overLapCost=self.floor_Plan_Cost()
-        assert 0.0<=overLapCost<=1.0
-        cost=np.sqrt(overLapCost**2+swarmCost**2)
+        floorPlanCost=self.floor_Plan_Cost_With_Tunability()
+        assert 0.0<=floorPlanCost<=1.0
+        cost=np.sqrt(floorPlanCost**2+swarmCost**2)
         return cost
 
-    def injected_Swarm_Cost(self):
+    def injected_Swarm_Cost(self)-> float:
         fastMode=True
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             self.swarmInjectorInitial.quick_Copy()
@@ -105,33 +109,57 @@ class Injection_Model(LatticeOptimizer):
                                 / self.swarmInjectorInitial.num_Particles(weighted=True)
         # self.show_Floor_Plan()
         return swarmCost
-    def floor_Plan_Cost(self):
+
+    def floor_Plan_Cost_With_Tunability(self)-> float:
+        """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
+        Return the largest value of the three"""
+        L0=self.latticeInjector.elList[-2].L #value before tuning
+        cost0=self.floor_Plan_Cost()
+        self.latticeInjector.elList[-2].set_Length(L0+self.tunabilityLength) #move lens away from combiner
+        self.latticeInjector.build_Lattice()
+        costClose = self.floor_Plan_Cost()
+        self.latticeInjector.elList[-2].set_Length(L0-self.tunabilityLength) #move lens towards combiner
+        self.latticeInjector.build_Lattice()
+        costFar = self.floor_Plan_Cost()
+        self.latticeInjector.elList[-2].set_Length(L0) #reset
+        return max([cost0,costClose,costFar])
+
+    def floor_Plan_Cost(self)-> float:
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
         factor = 300 #units of mm^2
         cost = 2 / (1 + np.exp(-overlap / factor)) - 1
         assert 0.0<=cost<=1.0
         return cost
-    def show_Floor_Plan(self):
-        shapelyObjectList = self.generate_Shapely_Floor_Plan()
+
+    def show_Floor_Plan(self)-> None:
+        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan()
         for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
         plt.gca().set_aspect('equal')
         plt.xlabel('meters')
         plt.ylabel('meters')
         plt.grid()
         plt.show()
+
     def floor_Plan_OverLap_mm(self):
+        """Not a great approach. Overlap is measured for the last lens of the injector and each element in the ring.
+        A crude model of the ring blocking the injector is achieved by using a less weight ovelap of injector
+        drift element right before combiner and ring lens"""
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        injectorOverlapElIndex=-3
-        injectorLensShapely = injectorShapelyObjects[injectorOverlapElIndex]
-        assert isinstance(self.latticeInjector.elList[injectorOverlapElIndex],HalbachLensSim)
+        injectorOverlapLensIndex=-3
+        injectorLensShapely = injectorShapelyObjects[injectorOverlapLensIndex]
+        injectorLastDrift=injectorShapelyObjects[4]
+        assert isinstance(self.latticeInjector.elList[injectorOverlapLensIndex],HalbachLensSim)
         ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
         area = 0
         converTo_mm=(1e3)**2
         for element in ringShapelyObjects:
             area += element.intersection(injectorLensShapely).area*converTo_mm
-        area += injectorShapelyObjects[4].intersection(ringShapelyObjects[0]).area * converTo_mm / 10
+        area += injectorLastDrift.intersection(ringShapelyObjects[0]).area * converTo_mm / 10 #crude method of
+        #punishing for ring lens blocking path through injector to combiner
         return area
-def injector_Cost(X):
+
+
+def injector_Cost(X: Union[np.ndarray,list,tuple]):
     maximumCost=2.0
     L_Injector_TotalMax = 2.0
     try:
@@ -154,8 +182,10 @@ def injector_Cost(X):
     cost=model.cost()
     assert 0.0<=cost<=maximumCost
     return cost
+
+
 def main():
-    def wrapper(X):
+    def wrapper(X: Union[np.ndarray,list,tuple]):
         try:
             return injector_Cost(X)
         except:
@@ -165,21 +195,13 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.01,.5),
-    (.05,.5),(.01,.3)]
+    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.05,.5),
+    (.05,.5),(.05,.3)]
     for _ in range(1):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=9))
-    # X=np.array([0.24213519, 0.0312023 , 0.14767671, 0.02214415, 0.04317439,
-    #    0.02367314, 0.01572198, 0.0114348 , 0.16277791, 0.12587023])
-    # injector_Cost(X)
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=8))
+    # X0=np.array([0.15831797, 0.01681428, 0.19546755, 0.02932734, 0.15318842,
+    #    0.03942919, 0.01484423, 0.01      , 0.42291596, 0.22561926])
+    # injector_Cost(X0)
 
 if __name__=="__main__":
     main()
-
-
-"""
----population member---- 
-DNA: array([0.13933567, 0.0296052 , 0.20695275, 0.03      , 0.2       ,
-       0.0499115 , 0.02267897, 0.01343472, 0.22479881, 0.19232315])
-cost: 0.06153557153697121
-"""

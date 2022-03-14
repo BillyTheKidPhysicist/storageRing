@@ -13,7 +13,7 @@ class SpheretestHelper:
     def test1(self):
         #test that the field points in the right direction
         sphere=Sphere(.0254)
-        sphere.position_Sphere(r=.05,phi=0.0,z=0.0)
+        sphere.position_Sphere(r=.05,theta=0.0,z=0.0)
         sphere.orient(np.pi/2,0.0)
         rCenter=np.zeros((1,3))
         BVec_0=np.asarray([0.11180404595756577 ,-0.0 ,-3.4230116753414134e-18]) #point along x only
@@ -22,10 +22,10 @@ class SpheretestHelper:
     def test2(self):
         #test that rotation symmetry works as expected
         sphere1=Sphere(.0254)
-        sphere1.position_Sphere(r=.05,phi=0.0,z=0.0)
+        sphere1.position_Sphere(.05,0.0,0.0)
         sphere1.orient(np.pi/2,0.0)
         sphere2 = Sphere(.0254)
-        sphere2.position_Sphere(r=.05, phi=np.pi/3, z=0.0)
+        sphere2.position_Sphere(.05,np.pi/3,0.0)
         sphere2.orient(np.pi / 2, 4*np.pi/3)
         rtest = np.ones((1,3))*.01
         BVec1=sphere1.B_Shim(rtest,planeSymmetry=False)[0]
@@ -39,10 +39,10 @@ class SpheretestHelper:
     def test3(self):
         # test that reflection symmetry works as expected
         sphere1 = Sphere(.0254)
-        sphere1.position_Sphere(r=.05, phi=0.0, z=.1)
+        sphere1.position_Sphere(.05, 0.0, .1)
         sphere1.orient(np.pi / 4, np.pi/3)
         sphere2 = Sphere(.0254)
-        sphere2.position_Sphere(r=.05, phi=0.0, z=-.1)
+        sphere2.position_Sphere(.05, 0.0, -.1)
         sphere2.orient(3*np.pi / 4,np.pi/3)
         rtest = np.ones((1, 3)) * .01
         BVec_Symm1=sphere1.B_Shim(rtest,planeSymmetry=True)[0]

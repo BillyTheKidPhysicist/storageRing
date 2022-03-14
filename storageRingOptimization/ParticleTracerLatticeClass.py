@@ -1,5 +1,5 @@
 import elementPT
-# from geneticLensElement_Wrapper import GeneticLens
+from geneticLensElement_Wrapper import GeneticLens
 from typing import Union,Generator,Iterable
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
@@ -208,11 +208,11 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
 
-    def add_Genetic_lens(self,lens: geneticLens,ap: float)-> None:
+    def add_Genetic_lens(self,lens: GeneticLens,ap: float)-> None:
         """
         Add genetic lens used for minimizing focus size. This is part of an idea to make a low aberration lens
 
-        :param lens: geneticLens object that returns field values. This sextupole lens can be shimmed, and have bizarre
+        :param lens: GeneticLens object that returns field values. This sextupole lens can be shimmed, and have bizarre
         :param ap: Aperture of genetic lens, m
         :return: None
         """
