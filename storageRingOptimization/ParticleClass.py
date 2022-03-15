@@ -2,7 +2,6 @@ from elementPT import Element
 import matplotlib.pyplot as plt
 import warnings
 import time
-from line_profiler_pycharm import profile
 import numpy.linalg as npl
 import numpy as np
 import copy

@@ -19,8 +19,7 @@ def survival_Optimize(bounds,tuning,workers):
         return sol.cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
     solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
-    # args0 = np.asarray([0.014806207213648389 ,0.03692744992554145  ,0.012943735152596201,
-    # 0.00887297909758099,  0.11347521253442482 ])
+    # args0 = np.asarray([0.01505976, 0.0388815  ,0.0191172,  0.01054996, 0.1       ])
     # wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
@@ -50,6 +49,8 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         # print(repr(args0),nominalCost,variability)
         return nominalCost+variability
     solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
+    # args0 = np.asarray([0.01505976, 0.0388815, 0.0191172, 0.01054996, 0.1])
+    # wrapper(args0)
 def main():
     bounds = [
         (.005, .03),  # rpLens

@@ -17,7 +17,8 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     sol=Solution()
     sol.xRing_TunedParams1=XLattice
     sol.fluxMultiplicationPercent=0.0
-    sol.cost=1.0
+    sol.swarmCost,sol.floorPlanCost=1.0,1.0
+    sol.cost=sol.swarmCost+sol.floorPlanCost
     sol.description='Pseudorandom search'
     sol.invalidRing=invalidRing
     sol.invalidInjector=invalidInjector

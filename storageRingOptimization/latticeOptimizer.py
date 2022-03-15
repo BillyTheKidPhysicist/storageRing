@@ -20,13 +20,13 @@ list_array_tuple=Union[np.ndarray,tuple,list]
 class Solution:
     # class to hold onto results of each solution
     def __init__(self):
-        self.xInjector_TunedParams = np.nan
-        self.xRing_TunedParams1 = np.nan  # paramters tuned by the 'outer' gp minimize
-        self.xRing_TunedParams2 = np.nan  # paramters tuned by the 'inner' gp minimize
-        self.fluxMultiplicationPercent = np.nan
-        self.cost=np.nan
-        self.swarmCost=np.nan
-        self.floorPlanCost=np.nan
+        self.xInjector_TunedParams = None
+        self.xRing_TunedParams1 = None  # paramters tuned by the 'outer' gp minimize
+        self.xRing_TunedParams2 = None  # paramters tuned by the 'inner' gp minimize
+        self.fluxMultiplicationPercent = None
+        self.cost=None
+        self.swarmCost=None
+        self.floorPlanCost=None
         self.scipyMessage=None
         self.stable=None
         self.invalidInjector=None

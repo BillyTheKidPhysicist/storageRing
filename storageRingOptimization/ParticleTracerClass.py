@@ -14,7 +14,6 @@ import sys
 from shapely.geometry import Polygon,Point
 import elementPT
 from constants import BOLTZMANN_CONSTANT,MASS_HELIUM
-from line_profiler_pycharm import profile
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
 
