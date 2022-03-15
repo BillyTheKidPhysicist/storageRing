@@ -17,9 +17,10 @@ def survival_Optimize(bounds,tuning,workers):
             print('assert during evaluation on args: ',repr(args))
             assert False
         return sol.cost
-    #rpLens,rpLensFirst,rpLensLast,LLens, injectorFactor,rpInjectorFactor,LmCombiner,rpCombiner
+    #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
     solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
-    # args0 = np.asarray([0.02271454, 0.01960324, 0.01969699, 0.20520395])
+    # args0 = np.asarray([0.014806207213648389 ,0.03692744992554145  ,0.012943735152596201,
+    # 0.00887297909758099,  0.11347521253442482 ])
     # wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
@@ -46,23 +47,23 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         results=np.asarray([get_Individual_Costs(arg) for arg in testArr])
         swarmCosts,floorPlanCosts=results[:,0],results[:,1]
         variability=np.std(swarmCosts)
-        print(args0,nominalCost,variability)
+        # print(repr(args0),nominalCost,variability)
         return nominalCost+variability
     solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
 def main():
     bounds = [
         (.005, .03),  # rpLens
-        (.01, .03),  # rpLensFirst
+        (.02, .04),  # rpLensFirst
         (.005, .02),  # rplensLast
-        # (.0075, .0125),  # rpBend
+        (.008, .012),  # rpBend
         (.1, .4)  # L_Lens
         # (.125,.2125), #L_Injector
         # (.01,.03), #rpInjector
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    # stability_And_Survival_Optimize(bounds,None,8)
-    survival_Optimize(bounds,None,8)
+    stability_And_Survival_Optimize(bounds,None,8)
+    # survival_Optimize(bounds,None,9)
 if __name__=='__main__':
     main()
 '''

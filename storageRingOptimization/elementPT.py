@@ -791,10 +791,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
         numPointsX=int(self.numPointsBoreAp*(xMax-xMin)/self.ap)
-        yMin,yMax = -(self.rp + TINY_STEP),TINY_STEP #same for every part of bender
+        yMin,yMax = -(self.ap + TINY_STEP),TINY_STEP #same for every part of bender
         numPointsY = int(self.numPointsBoreAp * (yMax - yMin) / self.ap)
         numPointsZ=int((zMax-zMin)/self.longitudinalCoordSpacing)
-        assert numPointsX/numPointsY>=(xMax-xMin)/(yMax-yMin) # should be at least this ratio
+        assert (numPointsX+1)/numPointsY>=(xMax-xMin)/(yMax-yMin) # should be at least this ratio
         xArrArgs,yArrArgs,zArrArgs=(xMin,xMax,numPointsX),(yMin,yMax,numPointsY),(zMin,zMax,numPointsZ)
         coordArrList=[np.linspace(arrArgs[0],arrArgs[1],arrArgs[2]) for arrArgs in (xArrArgs,yArrArgs,zArrArgs)]
         gridCoords=np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1,3)
@@ -812,8 +812,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
     def generate_Cap_Field_Data(self)->tuple:
         #x and y bounds should match with internal fringe bounds
-        xMin=(self.rb-self.rp)*np.cos(2*self.ucAng)-TINY_STEP
-        xMax=self.rb+self.rp+TINY_STEP
+        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP
+        xMax=self.rb+self.ap+TINY_STEP
         zMin=-self.Lcap-TINY_STEP
         zMax=TINY_STEP
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
@@ -835,8 +835,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """An magnet slices are required to model the region going from the cap to the repeating unit cell,otherwise
         there is too large of an energy discontinuity"""
         #x and y bounds should match with cap bounds
-        xMin=(self.rb-self.rp)*np.cos(2*self.ucAng)-TINY_STEP  #inward enough to account for the tilt
-        xMax=self.rb+self.rp+TINY_STEP
+        xMin=(self.rb-self.ap)*np.cos(2*self.ucAng)-TINY_STEP  #inward enough to account for the tilt
+        xMax=self.rb+self.ap+TINY_STEP
         zMin=-TINY_STEP
         zMax=np.tan(2*self.ucAng)*(self.rb+self.ap)+TINY_STEP
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)

@@ -78,7 +78,7 @@ class StabilityAnalyzer:
             print(self.cost(PTL_Ring,PTL_Injector))
 
 
-sa=StabilityAnalyzer(np.array([0.02417499, 0.02112171, 0.02081137, 0.22577471]))
+sa=StabilityAnalyzer(np.array([0.02848478, 0.02997235, 0.01174471, 0.32522116]) )
 sa.measure_Alingment_Sensitivity()
 
 

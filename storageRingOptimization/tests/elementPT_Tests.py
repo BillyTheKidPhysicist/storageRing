@@ -24,8 +24,8 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
     tol=1e-14
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
-        # np.set_printoptions(precision=100)
-        # print(repr(qf),repr(pf))
+        np.set_printoptions(precision=100)
+        print(repr(qf),repr(pf))
         assert np.all(np.abs((qf-qf0))<tol), str(repr(qf))+','+str(repr(qf0))
         assert np.all(np.abs((pf-pf0))<tol), str(repr(pf))+','+str(repr(pf0))
 
@@ -294,8 +294,8 @@ class hexapoleSegmentedBenderSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([0.6246876805773034   , 1.8195263869875777   ,0.0021494963567847674])
-        pf0 = np.array([ 158.1515485477083   , -124.06038699242039  ,0.3732855519313561])
+        qf0 = np.array([0.6247088857626518  , 1.8195094081582     , 0.002149543327947823])
+        pf0 = np.array([ 158.15196558131223   , -124.06028169770222   ,0.37163596065796817])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
