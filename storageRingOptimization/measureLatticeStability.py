@@ -47,7 +47,7 @@ class StabilityAnalyzer:
         self.tuning=tuning
         self.jitterSigma=jitterFWHM/2.355
         self.maxJitter=3*self.jitterSigma
-        self.jitterableElements=(elementPT.CombinerHexapoleSim,elementPT.LensIdeal,elementPT.CombinerHexapoleSim)
+        self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.CombinerHalbachLensSim)
     def generate_Ring_And_Injector_Lattice(self):
         return optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(self.paramsOptimal,None, jitterAmp=self.maxJitter)
     def jitter_Element(self,element:elementPT.Element):

@@ -14,7 +14,7 @@ class Particle:
     # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
     # interest.
 
-    def __init__(self,qi=None,pi=None,probability=1.0):
+    def __init__(self,qi: Optional[np.ndarray]=None,pi: Optional[np.ndarray]=None,probability:float =1.0):
         if qi is None:
             qi=np.zeros(3)
         if pi is None:
@@ -60,11 +60,11 @@ class Particle:
         self.probability=probability #used for swarm behaviour based on probability
         self.totalLatticeLength=None
 
-    def reset(self):
+    def reset(self)-> None:
         #reset the particle
         self.__init__(qi=self.qi,pi=self.pi,probability=self.probability)
 
-    def __str__(self):
+    def __str__(self)-> str:
         string='------particle-------\n'
         string+='qi: '+str(self.qi)+'\n'
         string+='pi: '+str(self.pi)+'\n'
@@ -257,7 +257,7 @@ class Swarm:
         pVec=np.asarray(pVec)
         return qVec,pVec
 
-    def survival_Rev(self)-> None:
+    def survival_Rev(self)-> float:
         #return average number of revolutions of particles
         revs=0
         for particle in self.particles:
@@ -344,6 +344,7 @@ class Swarm:
         #reset the swarm.
         for particle in self.particles:
             particle.reset()
+
     def plot(self,yAxis:bool =True,zAxis:bool =False)->None:
         for particle in self.particles:
             if yAxis==True: plt.plot(particle.qoArr[:,0],particle.qoArr[:,1],c='red')

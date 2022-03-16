@@ -181,7 +181,7 @@ class ParticleTracerLattice:
         :param layers: Number of concentric layers of magnets
         :return: None
         """
-        el = CombinerHexapoleSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
+        el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner=el

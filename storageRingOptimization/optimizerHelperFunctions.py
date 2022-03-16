@@ -137,8 +137,9 @@ def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):
         sol.fluxMultiplicationPercent = optimizer.flux_Percent_From_Cost(sol.cost, knobParams)
     elif tuning == 'field':
         sol = optimizer.optimize((0, 4), whichKnobs='ring', tuningChoice=tuning, ringTuningBounds=[(.25, 1.75)] * 2)
-    else:
+    elif tuning=='spacing':
         sol = optimizer.optimize((1, 9), whichKnobs='ring', tuningChoice=tuning)
+    else: raise ValueError
     sol.xRing_TunedParams1 = X
     # if sol.fluxMultiplicationPercent>10.0:
     #     print(sol)

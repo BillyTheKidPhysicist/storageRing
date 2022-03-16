@@ -859,7 +859,7 @@ spec = [
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
 @jitclass(spec)
-class CombinerHexapoleSimFieldHelper_Numba:
+class CombinerHalbachLensSimFieldHelper_Numba:
 
     def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData

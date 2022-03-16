@@ -19,6 +19,7 @@ list_array_tuple=Union[np.ndarray,tuple,list]
 
 class Solution:
     # class to hold onto results of each solution
+
     def __init__(self):
         self.xInjector_TunedParams = None
         self.xRing_TunedParams1 = None  # paramters tuned by the 'outer' gp minimize
