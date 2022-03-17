@@ -60,8 +60,9 @@ class SimpleLocalMinimizer:
 
 class ParticleTracerLattice:
 
-    def __init__(self,v0Nominal: Union[float,int],latticeType: str='storageRing',parallel: bool=False,
-                 jitterAmp: float=0.0):
+    def __init__(self,v0Nominal: Union[float,int],latticeType: str='storageRing',
+                 jitterAmp: float=0.0, fieldDensityMultiplier:float =1.0):
+        assert fieldDensityMultiplier>0.0
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
         self.latticeType=latticeType#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
@@ -69,12 +70,12 @@ class ParticleTracerLattice:
         #is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
         self.mass_Li7 = 1.1648E-26  # mass of lithium 7, SI
-        self.parallel=parallel
         self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
         #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.combinerIndex=None #the index in the lattice where the combiner is
         self.totalLength=None #total length of lattice, m
         self.jitterAmp=jitterAmp
+        self.fieldDensityMultiplier=fieldDensityMultiplier
 
         self.bender1=None #bender element object
         self.bender2=None #bender element object
@@ -93,7 +94,7 @@ class ParticleTracerLattice:
         assert rp<rb/2.0 #geometry argument, and common mistake
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
-        PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector',parallel=parallel)
+        PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector')
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
@@ -188,8 +189,8 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Halbach_Lens_Sim(self,rp: float,L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
-                            bumpOffset: float=0.0,magnetWidth: float=None)-> None:
+    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
+                            bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 

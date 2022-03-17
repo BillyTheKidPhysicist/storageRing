@@ -32,13 +32,13 @@ def generate_Injector_Lattice_Double_Lens(X) -> Optional[ParticleTracerLattice]:
         return None
     if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
-    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector', parallel=False)
+    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector')
     PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
+    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
     return PTL_Injector
@@ -51,10 +51,10 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     lastGap = 5e-2
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
-    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',parallel=False)
+    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
     PTL_Ring.add_Drift(.5,ap=rpLensLast) #models the size of the lengs
     PTL_Ring.add_Drift(lastGap)
-    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
+    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rplensFirst, .2)
     PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False,surpressWarning=True)  # 17.8 % of time here
@@ -196,10 +196,10 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    # bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .2), (.005, .04),(5e-3,30e-3),(.05,.5),
-    # (.05,.5),(.05,.3)]
-    # for _ in range(3):
-    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=False,workers=8))
+    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
+    (.05,.5),(.05,.3)]
+    for _ in range(3):
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=6))
     # X0=np.array([0.15831797, 0.01681428, 0.19546755, 0.02932734, 0.15318842,
     #    0.03942919, 0.01484423, 0.01      , 0.42291596, 0.22561926])
     # injector_Cost(X0)
@@ -219,3 +219,12 @@ DNA: array([0.06567916, 0.01414217, 0.16048129, 0.0251745 , 0.15970735,
        0.03985693, 0.01875451, 0.05      , 0.26854486, 0.2264674 ])
 cost: 0.09930996157904261
 '''
+
+
+"""
+---population member---- 
+DNA: array([0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
+       0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834])
+cost: 0.14064186273851484
+
+"""

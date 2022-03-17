@@ -19,7 +19,7 @@ from scipy.spatial.transform import Rotation as Rot
 #todo: this is just awful. I need to clean this up more in line with what I know about clean code now
 
 # from profilehooks import profile
-
+realNumber=(int,float)
 
 
 TINY_STEP=1e-9
@@ -727,7 +727,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     def __init__(self, PTL,Lm:float,rp:float,numMagnets:float,rb:float,extraSpace:float,rOffsetFact:float):
         super().__init__(PTL, None, None, rp, rb, None, build=False)
-        self.PTL=PTL
         self.rb=rb
         self.space=extraSpace
         self.Lm=Lm
@@ -745,6 +744,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.M_uc=None
         self.M_ang=None
         self.numPointsBoreAp=20 #This many points should span the bore ap for good field sampling
+        self.numPointsBoreAp=int(self.numPointsBoreAp*self.PTL.fieldDensityMultiplier)
         self.longitudinalCoordSpacing = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
         self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
@@ -961,10 +961,10 @@ class HalbachLensSim(LensIdeal):
                  magnetWidth: Union[float,tuple],build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
-        if isinstance(rpLayers,(float,int)):
+        if isinstance(rpLayers,realNumber):
             rpLayers=(rpLayers,)
             if magnetWidth is not None: #todo: when would it be none?
-                assert isinstance(magnetWidth,(int,float))
+                assert isinstance(magnetWidth,realNumber)
                 magnetWidth=(magnetWidth,)
         elif isinstance(rpLayers,tuple):
             if magnetWidth is not None:
@@ -972,6 +972,8 @@ class HalbachLensSim(LensIdeal):
         else: raise TypeError
         self.numGridPointsZ = 25
         self.numGridPointsXY = 20
+        self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
+        self.numGridPointsXY=int(self.numGridPointsXY*PTL.fieldDensityMultiplier)
         rp=min(rpLayers)
         self.apMax=(rp-TINY_STEP)*(1-np.sqrt(2)/self.numGridPointsXY) #from geometric arguments of grid inside circle.
         #imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
@@ -1012,7 +1014,7 @@ class HalbachLensSim(LensIdeal):
         assert jitterAmp<self.L/10.0 #small angles
         maxJitterAmp=self.apMax-self.ap
         tiltMax=jitterAmp/self.L if jitterAmp<maxJitterAmp else maxJitterAmp/self.L
-        self.extraFieldLength=self.rp*tiltMax*1.1 #safety factor for approximations
+        self.extraFieldLength=self.rp*tiltMax*1.5 #safety factor for approximations
 
     def build(self)->None:
         """Overrides abstract method from Element"""
@@ -1164,6 +1166,9 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # HalbachLensSim
         self.numGridPointsZ = 25
         self.numGridPointsXY = 25
+
+        self.numGridPointsZ = int(self.numGridPointsZ * self.PTL.fieldDensityMultiplier)
+        self.numGridPointsXY = int(self.numGridPointsXY * self.PTL.fieldDensityMultiplier)
         self.outerFringeFrac = 1.5
 
         self.Lm = Lm
@@ -1212,12 +1217,12 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         fieldData = self.make_Field_Data(self.La,self.ang)
+        self.set_extraFieldLength()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
                                 self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.extraFieldLength])
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
-
 
 
         # F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
@@ -1294,25 +1299,30 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
     def set_extraFieldLength(self)->None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
-        is too large for good field region, extra length is clipped"""
-        jitterAmp=self.PTL.jitterAmp*np.sqrt(2) #consider circular aperture
-        assert jitterAmp<self.L/10.0 #small angles
-        maxJitterAmp=self.apMax-self.ap
-        tiltMax=jitterAmp/self.L if jitterAmp<maxJitterAmp else maxJitterAmp/self.L
-        self.extraFieldLength=self.rp*tiltMax*1.1 #safety factor for approximations
+        is too large for good field region, extra length is clipped. Misalignment is a translational and/or rotational,
+        so extra length needs to be accounted for in the case of rotational."""
+        xArr, yArr, zArr = self.make_Grid_Coords_Arrays(self.La, self.ang)
+        assert np.max(np.abs(xArr))>self.ap+self.PTL.jitterAmp #check we won't exit interpolation region
+        assert np.max(np.abs(yArr))>self.ap+self.PTL.jitterAmp #check we won't exit interpolation region
+        shiftMaxRadial=np.sqrt(2)*self.PTL.jitterAmp #two maximal shifts in each dimension
+        assert self.ap+shiftMaxRadial<self.apMax
+        tiltMax1D=np.arctan(self.PTL.jitterAmp/self.L) #Tilt in x,y can be higher but I only need to consider 1D
+        #because interpolation grid is square
+        assert tiltMax1D<.05 #insist small angle approx
+        self.extraFieldLength=self.rp*np.tan(tiltMax1D)*1.5 #safety factor
 
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
-        totalShiftY=shiftY+rotZ*self.L
-        totalShiftZ=shiftZ+rotY*self.L
+        totalShiftY=shiftY+np.sin(rotZ)*self.L
+        totalShiftZ=shiftZ+np.sin(rotY)*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
         maxShift=self.apMax-self.ap #max shift is moving current aperture to maximum good field aperture
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact=.9*maxShift/totalShift #safety factor
-            print('proposed', totalShift, 'new', .9*maxShift)
+            print('proposed', totalShift, 'new', reductionFact*maxShift)
             shiftY,shiftZ,rotY,rotZ=[val*reductionFact for val in [shiftY,shiftZ,rotY,rotZ]]
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 

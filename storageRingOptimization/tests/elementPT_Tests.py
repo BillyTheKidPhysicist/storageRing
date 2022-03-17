@@ -25,7 +25,7 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
         np.set_printoptions(precision=100)
-        print(repr(qf),repr(pf))
+        # print(repr(qf),repr(pf))
         assert np.all(np.abs((qf-qf0))<tol), str(repr(qf))+','+str(repr(qf0))
         assert np.all(np.abs((pf-pf0))<tol), str(repr(pf))+','+str(repr(pf0))
 

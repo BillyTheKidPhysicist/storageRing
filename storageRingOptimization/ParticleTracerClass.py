@@ -60,7 +60,7 @@ class ParticleTracer:
 
         self.T=None #total time elapsed
         self.h=None #step size
-        self.minTimeStepsPerElement =3
+        self.minTimeStepsPerElement=3
         self.energyCorrection =None
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step

@@ -67,14 +67,16 @@ def main():
     # survival_Optimize(bounds,None,9)
 if __name__=='__main__':
     main()
-'''
 
-----------Solution-----------   
-injector element spacing optimum configuration: nan
-storage ring tuned params 1 optimum configuration: [0.01003313 0.01843031 0.01834712 0.00989281 0.18579258]
-storage ring tuned params 2 optimum configuration: [0.37154555 0.50950135]
-cost: 0.5311869592905618
-percent max flux multiplication: 46.88130407094382
-scipy message: Optimization terminated successfully.
+"""
+# rpLens, rpLensFirst,rplensLast, rpBend , L_Lens
+------ITERATIONS:  6600
+POPULATION VARIABILITY: [0.11689785 0.03807884 0.01926286 0.21154906 0.02265415]
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.0066742 , 0.03319674, 0.0132268 , 0.008     , 0.39566699])
+cost: 0.654946920570375
 
-'''
+"""
+
+
