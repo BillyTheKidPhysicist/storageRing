@@ -1,20 +1,37 @@
 
 # storageRing
-Created 9/20/2019 by Billy.
-Code and algorithms for design of storage ring and injector. There are two folders, storageRingOptimization and injectionSystemOptimization. storageRingOptimization deals with the analysis and optimization of the storage ring, including injection components. injectionSystemOptimization deals with the analysis and optimization of the injection system, but would not be used in ringSystem, though the results from the analysis are.
+Code and algorithms for design of storage ring and injector. Anyone who comes looking, I apologize for my previous selfs not strictly adhering to clean coding and decent documentation. This will be removed when these issues are remedied
 
 ## storageRingOptimization
-This is constantly evolving.
-The main files are as follows:
-- element.py: Contains the classes which represent elements in the storage ring such as drift regions, lenses, combiners, and benders. There are two main classes, ideal and sim. Ideal represents the ideal hard edge version of an element. Sim is for using the results of numerical modeling, particularily form COMSOL. Each elements has methods for transforming coordinates between the element frame and lab frame, getting the force and magnetic field, determining if a point lies within the element's vacuum chamber, etc. Cython and numba is used to accelerate computation
+This is constantly evolving. The main files are as follows:
+
+- element.py: Contains the classes which represent elements in the storage ring such as drift regions, lenses, combiners, and benders. Linear combinations of these elements form a lattice through which particles trace.
+
+- fastNumbaMethodsAndClass.py: A file of helper Numba classes attached to Elements in element.py, as well as helper functions. Classes use "@numba.jitclass". Jitclasses have no inheritance, and can't be pickled directly so some challenges must be overcome.
+
 - particleTracerLattice.py: Wrangles the classes from elements.py into a functioning storage ring. There is a decent amount of geometry required to get everything lined up correctly. When using the combining magnet an implicit problem appears that must be solved numerically, and it may have multiple solutions.   
-- particleTracer.py: Does the actual particle tracing using Velocity Verlet. I've tried RK4 and implicit trapezoid, but neither performed as well. Particle tracing is done in the lab frame. A single particle is traced at a time.
-- particleClass.py: Contains two classes, Particle and Swarm. Particle represents a single particle with properties like momentum and position, wether it has clipped an apeture, a history of it's trajectory through phase space if so needed and etc. Swarm represents a cloud of particle in phase space. It is more a covenience class that saves me from typing    the same thing over and over and improves readability.
-- ParaWell.py: My custom class that takes advantage of forking on posix systems to do fast parallelization, and with minimal typing. Needs to be included with a setup so it can be install system wide, and moved out of this rep.
-- generatePhaseSpaceCloud.py: Model out observed atomic focus to generate a text file of particle's initial condition. Uses the very low discrepancy poisson disc method to sample from.
+- particleTracer.py: Does the actual particle tracing using Velocity Verlet. Can use an entirely "Numbafied" loop, with jitclasses attached to element object in element.py, for rapid compiled language speed
+
+- particleClass.py: Contains two classes, Particle and Swarm. Particle represents a single particle with properties like momentum and position, wether it has clipped an apeture, a history of it's trajectory through phase space if so needed and etc. Swarm represents a cloud of particle in phase space. It is more a covenience class primarily
+
 - swarmTracer.py: A class that creates and manipulates Swarm objects. Has methods to create a random swarm, create a swarm from observed data, move a swarm to various positions, inject a swam into the lattice, trace a swarm and etc.
-- OptimizerClass.py: A class to do the actual optimization of the lattice. I use scikit-optimize gaussian proccess. However I use the ask/tell interface so I can have more control because there are many configurations of the storage ring that are unstable, which is easy to evaluate and I don't want to count towards my evaluations. The basic logic is at a stable configuration do a monte carlo integartion with a large cloud of particles with nearest neighbor (kdtree) interpolate the results. Then use differential evolution to find the optimal injection system parameters that best mode match into the lattice by projecting the swarm at the end of the injection system onto the lattice's phase space with the nearest neighbor function. After this is optimized, move on. I have found this to reliabely give the same results
-- Various notebooks to test and use the above classes, mostly OptimizerClass, on different configurations.
+
+- HalbachLensClass.py:. Wrapper for magpylib class to generate fields for halbach hexapole lenses, and bender elements composed of halbach lenses
+
+- injectionOptimizer.py: Optimize survival through injection system. This is achieved by optimizing atom survival through combiner and an atom lens which follows
+
+- storageRingOptimizer.py: Optimizer storage ring. Different options for which knobs can be tuned.
+
+- measureLatticeStability.py: Once an optimal solution is found, verify it is stable to realistic perturbations. Work in progress
+
+- parallel_Gradient_Descent.py: Mostly a learning exercise. Jacobian is found in parallel.
+
+- runOptimizer.py: Launch storage ring optimization
+
+- constants.py: File of constants used globally.
+
+- test: Folder containing unit tests. There is decent coverage
+
 
 ## phaseSpaceGenerationAndExtraction
-Contains a class and files to analyze results of tracing.
+Contains a class and files to primarily generate nice plots of tracing.
