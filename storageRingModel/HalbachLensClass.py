@@ -10,7 +10,7 @@ from typing import Union,Optional
 
 M_Default=1.018E6 #default magnetization value, SI. Magnetization for N48 grade
 
-
+list_tuple_arr=Union[list,tuple,np.ndarray]
 
 @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:]))
 def B_NUMBA(r,r0,m):
@@ -234,45 +234,52 @@ class RectangularPrism:
 
 class Layer:
     # class object for a layer of the magnet. Uses the RectangularPrism object
+    numMagnetsInLayer = 12
 
-    def __init__(self, z: float, width: float, length: float,rp: Union[float,tuple], M: float=M_Default,phase:float=0.0):
+    def __init__(self, z: float, width: float, length: float,rp: float, M: float=M_Default,
+                 phase:float=0.0,rMagnetShift: Optional[tuple]=None, thetaShift: Optional[list_tuple_arr]=None,
+                 phiShift: Optional[list_tuple_arr]=None, M_ShiftRelative: Optional[list_tuple_arr]=None):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
         # width: width of the rectangular prism in the xy plane
         # length: length of the rectangular prism in the z axis
         # M: magnetization, SI
         # spherePerDim: number of spheres per transvers dimension in each cube. Longitudinal number will be this times
         # a factor
-        maxLayerMagnets=12
-        if isinstance(rp,tuple):
-            assert len(rp)<=maxLayerMagnets
-        else:
-            assert rp>0.0
-            rp=(rp,)
         assert width > 0.0 and length > 0.0  and M > 0.0
+        self.rMagnetShift: tuple=self.make_Tuple_If_None(rMagnetShift)
+        self.thetaShift: tuple=self.make_Tuple_If_None(thetaShift)
+        self.phiShift: tuple=self.make_Tuple_If_None(phiShift)
+        self.M_ShiftRelative: tuple=self.make_Tuple_If_None(M_ShiftRelative)
+        self.rp: tuple = (rp,)*self.numMagnetsInLayer
         self.z: float = z
         self.width: float = width
         self.length: float = length
-        self.rp: tuple=rp
+
         self.M: float = M
         self.phase: float=phase #this will rotate the layer about z this amount
         self.RectangularPrismsList: list = []  # list of RectangularPrisms
         self.build()
-
+    def make_Tuple_If_None(self,variable: Optional[tuple])-> tuple:
+        variableTuple= (0.0,)*self.numMagnetsInLayer if variable is None else variable
+        assert len(variableTuple)==self.numMagnetsInLayer
+        return variableTuple
     def build(self)->None:
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
+        #how I do this is confusing
         thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False)+self.phase  # location of 12 magnets.
-        thetaArr=thetaArr.reshape(-1,len(self.rp)).T
+        thetaArr+=np.asarray(self.thetaShift)
         phiArr =self.phase+ np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
-        phiArr=phiArr.reshape(-1,len(self.rp)).T
-        for r,r_phi,r_theta in zip(self.rp,phiArr,thetaArr):
-            for phi,theta in zip(r_phi,r_theta):
-                # x,y=r*np.cos(theta),r*np.sin(theta)
-                # plt.quiver(x,y,np.cos(phi),np.sin(phi))
-                magnet = RectangularPrism(self.width, self.length, self.M)
-                rCenter=r+self.width/2
-                magnet.place(rCenter, theta, self.z, phi)
-                self.RectangularPrismsList.append(magnet)
+        phiArr+=np.asarray(self.phiShift)
+        rArr=self.rp+np.asarray(self.rMagnetShift)
+        mArr=self.M*np.ones(self.numMagnetsInLayer)*(1.0+np.asarray(self.M_ShiftRelative))
+        for r, phi,theta,M in zip(rArr,phiArr,thetaArr,mArr):
+            # x,y=r*np.cos(theta),r*np.sin(theta)
+            # plt.quiver(x,y,np.cos(phi),np.sin(phi))
+            magnet = RectangularPrism(self.width, self.length, M)
+            rMagnetCenter = r + self.width / 2
+            magnet.place(rMagnetCenter, theta, self.z, phi)
+            self.RectangularPrismsList.append(magnet)
         # plt.gca().set_aspect('equal')
         # plt.show()
 
@@ -283,8 +290,6 @@ class Layer:
         for prism in self.RectangularPrismsList:
             BArr += prism.B(r)
         return BArr
-
-
 class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
