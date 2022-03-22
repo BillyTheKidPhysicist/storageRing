@@ -120,9 +120,9 @@ def TEST_Lattice_Configuration(configuration,fullTest=False,saveData=False,paral
                     for parallel in [True,False]:
                         TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode, accelerated,parallel)
     elif fullTest==False:
-        fastMode1,accelerated1=True,True
+        fastMode1,accelerated1,parallel1=True,True,parallel
         TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode1, accelerated1,parallel)
-        fastMode2,accelerated2=False,False
+        fastMode2,accelerated2,parallel2=False,False,False
         TEST_Lattice_Tracing(PTL,testSwarm, TESTName, fastMode2, accelerated2,parallel)
 def _save_New_Data():
     tests = ['1', '2', '3', '4', '5', '6']
@@ -138,11 +138,10 @@ def _full_Test():
         print('Success')
 def run_Tests(parallelTesting=False,fullTest=False):
     def wrap(x):
-        return TEST_Lattice_Configuration(x,fullTest=fullTest)
+        return TEST_Lattice_Configuration(x,fullTest=fullTest,parallel=not parallelTesting)
     testNameList = ['1', '2', '3', '4', '5', '6']
     if parallelTesting==False:
         [wrap(test) for test in testNameList]
-        TEST_Lattice_Configuration('1',parallel=True) #check that paralle method works
     else:
         with mp.Pool(10) as pool:
             pool.map(wrap,testNameList)

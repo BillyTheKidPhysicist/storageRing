@@ -811,6 +811,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         numModelLenes=3 #3 turns out to be a good number
         assert numModelLenes%2==1
         self.ang = 2 * self.numMagnets * self.ucAng
+        assert self.ang<2*np.pi*3/4
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
         m = np.tan(self.ucAng)
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix

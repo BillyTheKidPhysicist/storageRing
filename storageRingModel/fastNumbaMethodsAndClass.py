@@ -285,7 +285,7 @@ class DriftFieldHelper_Numba:
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.L, self.ap,self.fieldFact
+        return self.L, self.ap
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -342,7 +342,7 @@ class IdealLensFieldHelper_Numba:
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldfact,self.baseClass.get_Rotation_Params()
+        return self.fieldFact,self.baseClass.get_Rotation_Params()
 
     def set_Internal_Params(self, params):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""

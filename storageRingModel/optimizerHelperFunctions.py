@@ -50,7 +50,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
         PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
     PTL_Ring.add_Drift(lastGap)
-    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam)
+    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
     if tuning=='spacing':
@@ -85,15 +85,15 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam)
+    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
     return PTL_Injector
 
 def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultiplier=1.0):
     # rpBend=1e-2
-    XInjector=(0.12524277, 0.02191994, 0.16189484, 0.02631402, 0.16314783,
-       0.03999999, 0.01706859, 0.0605528 , 0.27198268, 0.2054394)
+    XInjector=np.array([0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
+       0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834])
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
     loadBeamDiam, L1, L2, L3=XInjector
 

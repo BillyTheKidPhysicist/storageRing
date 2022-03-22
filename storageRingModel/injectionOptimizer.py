@@ -28,7 +28,7 @@ def generate_Injector_Lattice_Double_Lens(X) -> Optional[ParticleTracerLattice]:
     aspect1,aspect2=LMagnet1/rpInjectorMagnet1,LMagnet2/rpInjectorMagnet2
     if aspect1<1.0 or aspect2<1.0: #horrible fringe field performance
         return None
-    if LMagnet1 < 1e-3 or LMagnet2 < 1e-3:  # minimum fringe length must be respected.
+    if LMagnet1 < rpInjectorMagnet1/2 or LMagnet2 < rpInjectorMagnet2/2:  # minimum fringe length must be respected.
         return None
     if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None

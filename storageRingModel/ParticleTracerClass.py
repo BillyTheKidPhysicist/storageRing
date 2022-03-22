@@ -122,7 +122,7 @@ class ParticleTracer:
         if self.fastMode==False and self.particle.clipped == False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
 
-    def trace(self,particle: Particle,h: float,T0: float,fastMode: bool=False,accelerated: bool=False,
+    def trace(self,particle: Optional[Particle],h: float,T0: float,fastMode: bool=False,accelerated: bool=False,
               energyCorrection: bool=False,stepsBetweenLogging: int=1, tau_Collision: bool=None)-> Particle:
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously

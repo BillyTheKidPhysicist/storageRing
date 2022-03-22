@@ -63,19 +63,20 @@ def main():
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    stability_And_Survival_Optimize(bounds,None,8)
-    # survival_Optimize(bounds,None,9)
+    # stability_And_Survival_Optimize(bounds,None,8)
+    survival_Optimize(bounds,None,8)
 if __name__=='__main__':
     main()
 
 """
 # rpLens, rpLensFirst,rplensLast, rpBend , L_Lens
-------ITERATIONS:  6600
-POPULATION VARIABILITY: [0.11689785 0.03807884 0.01926286 0.21154906 0.02265415]
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.0066742 , 0.03319674, 0.0132268 , 0.008     , 0.39566699])
-cost: 0.654946920570375
+----------Solution-----------   
+injector element spacing optimum configuration: None
+storage ring tuned params 1 optimum configuration: array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
+storage ring tuned params 2 optimum configuration: None
+cost: 0.5982274404677516
+percent max flux multiplication: 40.30475837756654
+scipy message: None
 
 """
 

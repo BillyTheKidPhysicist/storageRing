@@ -294,8 +294,8 @@ class hexapoleSegmentedBenderSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([0.6247088857626518  , 1.8195094081582     , 0.002149543327947823])
-        pf0 = np.array([ 158.15196558131223   , -124.06028169770222   ,0.37163596065796817])
+        qf0 = np.array([0.6250668389719087   , 1.8190287085793573,0.0022008046241118358])
+        pf0 = np.array([ 158.65101866215835, -123.41480447654143,    1.65811660590993])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
