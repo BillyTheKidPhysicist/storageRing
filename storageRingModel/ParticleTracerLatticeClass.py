@@ -190,7 +190,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
-                            bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None)-> None:
+                bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,applyMethodOfMoments: bool =False)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -202,9 +202,11 @@ class ParticleTracerLattice:
         :param bumpOffset: How much to shift the vacuum and element in xy plane
         :param magnetWidth: Width of both side cuboid magnets in polar plane of lens, m. Magnets length is L minus
         fringe fields
+        :param applyMethodOfMoments: Use the more accrurate technique of modifying the bulk magnetization of a magnet
+        base on self fields, and fields of neighboring magnets. Takes extra time
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth)
+        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,applyMethodOfMoments)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)

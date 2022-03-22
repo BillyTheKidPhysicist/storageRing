@@ -16,9 +16,12 @@ from scipy.spatial.transform import Rotation as Rot
 
 
 
-#todo: this is just awful. I need to clean this up more in line with what I know about clean code now
+#todo: this needs a good scrubbing. It would be nice to get the opinion of someone who know what they are talking about
+#Where should type hints go exactly when there are many subfunctions?
+#Are type hints more for readers, or more for pycharm/mypy
+#When is there too much logic in init?
 
-# from profilehooks import profile
+
 realNumber=(int,float)
 
 
@@ -961,7 +964,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 class HalbachLensSim(LensIdeal):
 
     def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: float,bumpOffset: float,
-                 magnetWidth: Union[float,tuple],build: bool=True):
+                 magnetWidth: Union[float,tuple],applyMethodOfMoments: bool=False, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
@@ -987,6 +990,7 @@ class HalbachLensSim(LensIdeal):
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
+        self.applyMethodOfMoments=applyMethodOfMoments
         self.Lo=None
         self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
@@ -1113,7 +1117,8 @@ class HalbachLensSim(LensIdeal):
         return data3D
 
     def make_Field_Data(self)->tuple:
-        lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers)
+        lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers,
+                                applyMethodOfMoments=self.applyMethodOfMoments,subdivide=self.applyMethodOfMoments)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)

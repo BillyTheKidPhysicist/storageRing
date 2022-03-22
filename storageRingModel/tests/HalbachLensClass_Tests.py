@@ -60,8 +60,7 @@ class RectangularPrismtestHelper:
         self.test2()
     def test1(self):
         #test that fields point as expected
-        prism=RectangularPrism(.0254,.1)
-        prism.place(.07,0.0,0.0,np.pi)
+        prism=RectangularPrism(.07,0.0,0.0,np.pi,.0254,.1)
         rCenter=np.zeros((1,3))
         BVec=prism.B(rCenter)[0]
         BVec_0=np.asarray([-0.026118798585274296 ,3.1986303085030583e-18 ,0.0])
@@ -69,12 +68,9 @@ class RectangularPrismtestHelper:
         assert np.all(np.abs(BVec-BVec_0)<self.numericTol)
     def test2(self):
         #test that shim symmetry works as expected
-        prismA = RectangularPrism(.0254, .0254)
-        prismB = RectangularPrism(.0254, .0254)
-        prismC = RectangularPrism(.0254, .0254)
-        prismA.place(.05, -np.pi/5, 0.05, np.pi/7)
-        prismB.place(.05, -np.pi/5, -0.05, np.pi/7)
-        prismC.place(.05, -np.pi/5, 0.05, np.pi/7)
+        prismA = RectangularPrism(.05, -np.pi/5, 0.05, np.pi/7,.0254, .0254)
+        prismB = RectangularPrism(.05, -np.pi/5, -0.05, np.pi/7,.0254, .0254)
+        prismC = RectangularPrism(.05, -np.pi/5, 0.05, np.pi/7,.0254, .0254)
         xArr=np.linspace(-.01,.01,10)
         coords=np.asarray(np.meshgrid(xArr,xArr,xArr)).T.reshape(-1,3)
         vals1=prismA.B_Shim(coords,planeSymmetry=False)+prismB.B_Shim(coords,planeSymmetry=False)
@@ -102,10 +98,8 @@ class LayertestHelper:
         rp = .05
         xArr = np.linspace(-rp / 2, rp / 2, 50)
         coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
-        prism = RectangularPrism(width, width)
-        prism.place(rp + width / 2, 0.0, 0.0, np.pi)
-        prism1 = RectangularPrism(width, width)
-        prism1.place(rp + width / 2, np.pi / 6, 0.0, np.pi + 2 * np.pi / 3)
+        prism = RectangularPrism(rp + width / 2, 0.0, 0.0, np.pi,width, width)
+        prism1 = RectangularPrism(rp + width / 2, np.pi / 6, 0.0, np.pi + 2 * np.pi / 3,width, width)
         layer = Layer(0.0, width, width, rp)
         layerBVec = layer.B(coords)
         prismBVec = prism.B_Shim(coords, planeSymmetry=False) + prism1.B_Shim(coords, planeSymmetry=False)
