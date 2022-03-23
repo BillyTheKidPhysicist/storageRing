@@ -34,7 +34,7 @@ class magpy_Prism:
     def __init__(self,x0: float, y0: float, z0: float, phi: float, width: float, length: float,M: float):
         assert M>=0.0
         self.x0,self.y0,self.z0,self.phi,self.width,self.length,self.M=x0,y0,z0,phi,width,length,M
-        self.mur: np.ndarray=1.05*np.ones(3) #recoil permeability
+        self.mur: float=1.05 #recoil permeability
         self.r0: np.ndarray=np.asarray([x0,y0,z0]) #center of magnet
         self._magnet: Box=self._build_magpy_Prism()
         self.M0_Vec=self._get_M0_Vec_Lab_Frame()
@@ -97,84 +97,84 @@ class magpy_Prism:
         HVec_KA_Per_m = self._magnet.getH(evalCoords_mm)  # need to convert to mm
         HVec_KA_Per_m = 1e3 * HVec_KA_Per_m  # convert to tesla from milliTesla
         return HVec_KA_Per_m
-
-
-class _MagnetizationSolver:
-    """
-    Using an approximate magnetostatic method of moments, adjusts the magnetization vectors of list of magpy_Prism
-    objects.
-
-    :param prismList: list of magpy_Prism objects
-    """
-
-    def __init__(self, prismList: list[magpy_Prism]):
-        assert all(isinstance(el, magpy_Prism) == True for el in prismList)
-        self.prismList = prismList
-
-    def solve_System(self, tol: float, maxEvals: int) -> None:
-        """Iteratively solve magnet-magnet and magnet-self interactions. This could be done with a NxN matrix"""
-        error = self.relax_System()
-        i = 0
-        while error > tol:
-            error = self.relax_System()
-            i += 1
-            if i > maxEvals:
-                raise Exception("system not converging")
-        # M0 = norm(self.prismList[0].M0_Vec)
-        # MList = [1.0 - norm(p.get_M_Vector()) / M0 for p in self.prismList]
-        # print(MList)
-
-    def relax_System(self) -> float:
-        """Adjust prism magnetizations based on currecnt fields and magnetizations. An approximate solution"""
-        M_VecNewList, deltaM_VecList = self.new_MagVecs()
-        error = self.compute_Error(deltaM_VecList)
-        self.update_Prism_Magnetization(M_VecNewList)
-        return error
-
-    def new_MagVecs(self) -> tuple[list[np.ndarray], list[np.ndarray]]:
-        """Get the new magnetization vectors given current fields and magnetization vectors"""
-        M_VecNewList = []
-        deltaM_VecList = []
-        for prismN in self.prismList:
-            H_N = prismN.H(prismN.sampleCoords)  # this includes the -M in H=B/u0 - M
-            for prismK in self.prismList:
-                if prismK is not prismN:  # now apply external field
-                    B = prismK.B(prismN.sampleCoords)
-                    H_External = B / MAGNETIC_PERMEABILITY  # the -M term is already accounted for
-                    H_N += H_External
-            H_Mean = np.mean(H_N, axis=0)  # averagd over the body
-            M_VecNewN = (prismN.mur - 1) * H_Mean + prismN.M0_Vec
-            M_VecNewList.append(M_VecNewN)
-            deltaM_VecList.append(M_VecNewN - prismN.get_M_Vector())
-        return M_VecNewList, deltaM_VecList
-
-    def compute_Error(self, deltaM_VecList: list[np.ndarray]) -> float:
-        """Solver error is the largest difference between norm of current magnetization and new magnetization divided
-        by norm of remnant magnetization"""
-        fracDiffList = []
-        for deltaM_Vec, prism in zip(deltaM_VecList, self.prismList):
-            fracDiffList.append(norm(deltaM_Vec) / norm(prism.M0_Vec))
-        return max(fracDiffList)
-
-    def update_Prism_Magnetization(self, M_VecNewList: list[np.ndarray]) -> None:
-        """apply the new magnetizations to the prims"""
-        for M_Vec, prism in zip(M_VecNewList, self.prismList):
-            prism.set_M_Vector(M_Vec)
-
-
-def solve_And_Update_Magnetization_Interactions(prismList: list[magpy_Prism], tol: float = 1e-3,
-                                                maxEvals: int = 10) -> None:
-    """
-    Adjust bulk magnetization vectors of prismlist to satisfy magnet-magnet and magnet-self interactions. Magnetization
-    is adjusted in place
-
-    :param prismList: list of magpy_Prism objects
-    :param tol: target relative tolerance of solver for termination
-    :param maxEvals: maximum number of evaluations of iterative solver. An error is raised if evals>maxEvals
-    :return: None
-    """
-    solver = _MagnetizationSolver(prismList)
-    solver.solve_System(tol, maxEvals)
+#
+#
+# class _MagnetizationSolver:
+#     """
+#     Using an approximate magnetostatic method of moments, adjusts the magnetization vectors of list of magpy_Prism
+#     objects.
+#
+#     :param prismList: list of magpy_Prism objects
+#     """
+#
+#     def __init__(self, prismList: list[magpy_Prism]):
+#         assert all(isinstance(el, magpy_Prism) == True for el in prismList)
+#         self.prismList = prismList
+#
+#     def solve_System(self, tol: float, maxEvals: int) -> None:
+#         """Iteratively solve magnet-magnet and magnet-self interactions. This could be done with a NxN matrix"""
+#         error = self.relax_System()
+#         i = 0
+#         while error > tol:
+#             error = self.relax_System()
+#             i += 1
+#             if i > maxEvals:
+#                 raise Exception("system not converging")
+#         # M0 = norm(self.prismList[0].M0_Vec)
+#         # MList = [1.0 - norm(p.get_M_Vector()) / M0 for p in self.prismList]
+#         # print(MList)
+#
+#     def relax_System(self) -> float:
+#         """Adjust prism magnetizations based on currecnt fields and magnetizations. An approximate solution"""
+#         M_VecNewList, deltaM_VecList = self.new_MagVecs()
+#         error = self.compute_Error(deltaM_VecList)
+#         self.update_Prism_Magnetization(M_VecNewList)
+#         return error
+#
+#     def new_MagVecs(self) -> tuple[list[np.ndarray], list[np.ndarray]]:
+#         """Get the new magnetization vectors given current fields and magnetization vectors"""
+#         M_VecNewList = []
+#         deltaM_VecList = []
+#         for prismN in self.prismList:
+#             H_N = prismN.H(prismN.sampleCoords)  # this includes the -M in H=B/u0 - M
+#             for prismK in self.prismList:
+#                 if prismK is not prismN:  # now apply external field
+#                     B = prismK.B(prismN.sampleCoords)
+#                     H_External = B / MAGNETIC_PERMEABILITY  # the -M term is already accounted for
+#                     H_N += H_External
+#             H_Mean = np.mean(H_N, axis=0)  # averagd over the body
+#             M_VecNewN = (prismN.mur - 1) * H_Mean + prismN.M0_Vec
+#             M_VecNewList.append(M_VecNewN)
+#             deltaM_VecList.append(M_VecNewN - prismN.get_M_Vector())
+#         return M_VecNewList, deltaM_VecList
+#
+#     def compute_Error(self, deltaM_VecList: list[np.ndarray]) -> float:
+#         """Solver error is the largest difference between norm of current magnetization and new magnetization divided
+#         by norm of remnant magnetization"""
+#         fracDiffList = []
+#         for deltaM_Vec, prism in zip(deltaM_VecList, self.prismList):
+#             fracDiffList.append(norm(deltaM_Vec) / norm(prism.M0_Vec))
+#         return max(fracDiffList)
+#
+#     def update_Prism_Magnetization(self, M_VecNewList: list[np.ndarray]) -> None:
+#         """apply the new magnetizations to the prims"""
+#         for M_Vec, prism in zip(M_VecNewList, self.prismList):
+#             prism.set_M_Vector(M_Vec)
+#
+#
+# def solve_And_Update_Magnetization_Interactions(prismList: list[magpy_Prism], tol: float = 1e-3,
+#                                                 maxEvals: int = 10) -> None:
+#     """
+#     Adjust bulk magnetization vectors of prismlist to satisfy magnet-magnet and magnet-self interactions. Magnetization
+#     is adjusted in place
+#
+#     :param prismList: list of magpy_Prism objects
+#     :param tol: target relative tolerance of solver for termination
+#     :param maxEvals: maximum number of evaluations of iterative solver. An error is raised if evals>maxEvals
+#     :return: None
+#     """
+#     solver = _MagnetizationSolver(prismList)
+#     solver.solve_System(tol, maxEvals)
 
 class Sphere:
 
@@ -400,13 +400,6 @@ class HalbachLens:
 
     def __init__(self,length:float,width:Union[float,tuple],rp:Union[float,tuple],M=M_Default,
                  applyMethodOfMoments=False,subdivide=False):
-        #note that M is tuned to  for spherePerDim=4
-        # numLayers: Number of layers
-        # width: Width of each Rectangular Prism in the layer, meter
-        #length: the length of each layer, meter. If None, each layer is built of cubes
-        # rp: bore radius of concentric layers
-        #Br: remnant flux density
-        #M: magnetization.
         assert type(width)==type(rp)
         if isinstance(width,float):
             width,rp=(width,),(rp,)
@@ -459,25 +452,25 @@ class HalbachLens:
                 self.layerList.append(layer)
         if self.applyMethodOfMoments==True:
             self.solve_Method_Of_Moments()
-
     def subdivide_Lens(self):
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers """
-        if self.length<=2*max(self.rp):
-            lengthArr=np.ones(2)*self.length/2
-            zArr=np.array([-1.0,1.0])*self.length/4.0
-        else:
-            lengthArr=np.array([max(self.rp),self.length-2*max(self.rp),max(self.rp)])
-            zBot=self.length/2-max(self.rp)/2.0
-            zArr=np.array([zBot,0.0,-zBot])
-        assert abs(sum(lengthArr)-self.length)<1e-12
-        return zArr,lengthArr
+        numSlices=5
+        LArr=np.ones(numSlices)*self.length/numSlices
+        zArr=np.cumsum(LArr)-self.length/2-.5*self.length/numSlices
+        assert abs(np.sum(LArr)-self.length)<1e-12 and np.abs(np.mean(zArr))<1e-12 #length adds up and centered on 0
+        return zArr,LArr
 
     def solve_Method_Of_Moments(self):
         """Tweak magnetization of magnets based on magnetic fields of neighboring magnets, and self fields"""
-        prismList=[]
+        from demag_functions import apply_demag
+        from magpylib import Collection
+        prismList,chiList=[],[]
         for layer in self.layerList:
-            prismList.extend([p._magnet for p in layer.RectangularPrismsList])
-        solve_And_Update_Magnetization_Interactions(prismList)
+            prismList.extend([p._magnet._magnet for p in layer.RectangularPrismsList])
+            chiList.extend([p._magnet.mur-1.0 for p in layer.RectangularPrismsList])
+        col=Collection(prismList)
+        apply_demag(col,chiList)
+
 
     def _transform_r(self,r:np.ndarray)->np.ndarray:
         #to evaluate the field from tilted or translated magnets, the evaluation point is instead tilted or translated,

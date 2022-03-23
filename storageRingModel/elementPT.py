@@ -964,7 +964,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 class HalbachLensSim(LensIdeal):
 
     def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: float,bumpOffset: float,
-                 magnetWidth: Union[float,tuple],applyMethodOfMoments: bool=False, build: bool=True):
+        magnetWidth: Union[float,tuple],applyMethodOfMoments: bool, methodOfMomentsHighPrecision: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
@@ -976,6 +976,8 @@ class HalbachLensSim(LensIdeal):
             if magnetWidth is not None:
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
+        if applyMethodOfMoments==False:
+            assert methodOfMomentsHighPrecision==False
         self.numGridPointsZ = 25
         self.numGridPointsXY = 20
         self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
@@ -991,6 +993,7 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.bumpOffset=bumpOffset
         self.applyMethodOfMoments=applyMethodOfMoments
+        self.methodOfMomentsHighPrecision=methodOfMomentsHighPrecision
         self.Lo=None
         self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
@@ -1118,7 +1121,7 @@ class HalbachLensSim(LensIdeal):
 
     def make_Field_Data(self)->tuple:
         lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers,
-                                applyMethodOfMoments=self.applyMethodOfMoments,subdivide=self.applyMethodOfMoments)
+                        applyMethodOfMoments=self.applyMethodOfMoments,subdivide=self.methodOfMomentsHighPrecision)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
