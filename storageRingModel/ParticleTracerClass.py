@@ -315,6 +315,7 @@ class ParticleTracer:
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
+        self.elHasChanged=False
 
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n,qEl,pEl)-> None:
         #qEl_n: coordinates that are outside the current element and possibley in the next

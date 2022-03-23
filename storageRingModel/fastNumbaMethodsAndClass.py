@@ -1020,6 +1020,7 @@ spec = [
     ('M_ang', numba.float64[:,::1]),
     ('Lcap', numba.float64),
     ('RIn_Ang', numba.float64[:,::1]),
+    ('misalignmentCoeffArr', numba.float64[:,::1]),
     ('fieldFact',numba.float64),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
@@ -1040,6 +1041,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.Lcap=Lcap
         self.RIn_Ang=RIn_Ang
         self.fieldFact=1.0
+        self.misalignmentCoeffArr=2.0*(np.random.random_sample((numMagnets+1,12))-.5)
         self.baseClass = BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
@@ -1055,6 +1057,60 @@ class SegmentedBenderSimFieldHelper_Numba:
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         self.fieldFact, alignmentParams = params
         self.baseClass.set_Misalignment_Params(alignmentParams)
+
+    def _misalignment_Force_Fact_Longitudinal(self,x, y, z):
+        """Misalignment factor in longitudinal direction through bender. Exists to enforce energy conservation with
+        transverse force fact. Otherwise there would be discontinuities"""
+        theta = full_Arctan2(y, x)
+        # print('------',x,y,z,self.Lcap,theta)
+        # print(-self.Lcap <= y < 0.0 ,np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap)
+        if 0.0 <= theta <= self.ang:
+            fact = abs(np.sin(.5 * np.pi * theta / self.ucAng + np.pi / 2))
+        elif -self.Lcap <= y < 0.0 and np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap:
+            fact = 1.0 - abs(y / self.Lcap)
+            # print('here1')
+        else:
+            rotAngle = -self.ang
+            x, y = np.cos(rotAngle) * x - np.sin(rotAngle) * y, np.sin(rotAngle) * x + np.cos(rotAngle) * y
+            # print('here2')
+            assert 0.0 <= y <= self.Lcap + 1e-9  # allow for error
+            fact = 1.0 - abs(y / self.Lcap)
+        return fact
+
+    def _misalignment_Force_Fact_Trans(self,x, y, z):
+        """Misalignment factor in transverse to origin through geometric center of bender. Attempts to model 12 peak
+         noise functino"""
+        thetaMajor = full_Arctan2(y, x)
+        if 0.0 <= thetaMajor <= self.ang:
+            cLongIndex = int((thetaMajor + self.ucAng) / (2 * self.ucAng))
+            deltaR_Major = np.sqrt(x ** 2 + y ** 2) - self.rb
+            thetaMinor = full_Arctan2(z, deltaR_Major)
+        elif -self.Lcap <= y < 0.0:  # in a straight section
+            cLongIndex = 0
+            thetaMinor = full_Arctan2(z, x - self.rb)
+        else:
+            rotAngle = -self.ang
+            x, y = np.cos(rotAngle) * x - np.sin(rotAngle) * y, np.sin(rotAngle) * x + np.cos(rotAngle) * y
+            cLongIndex = len(self.misalignmentCoeffArr) - 1
+            thetaMinor = full_Arctan2(z, x - self.rb)
+        cTransIndex = int(thetaMinor / (np.pi / 6))
+        c = self.misalignmentCoeffArr[cLongIndex][cTransIndex]
+        thetaMinorRel = thetaMinor - 2 * np.pi * cTransIndex / 12
+        thetaMinorSlice = np.pi * thetaMinorRel / (2 * np.pi / 12)
+        fact = c * np.sin(thetaMinorSlice)
+        return fact
+
+    def misalignment_Force_Fact(self,x, y, z):
+        """Function to model misalignment in bending section. This is a qualitatvely correct model derived by inspecting
+        the nature of actal misalignments, which for technical reasons would be very challenging to implement. Mostly
+        becuase symmetry would be broken"""
+        amp = .05
+        factLong = self._misalignment_Force_Fact_Longitudinal(x,y,z)
+        assert abs(factLong) <= 1.0
+        factTrans = self._misalignment_Force_Fact_Trans(x, y, z)
+        assert abs(factTrans) <= 1.0
+        forceFact = (1.0 + amp * factLong * factTrans)
+        return forceFact
 
     def _force_Func_Seg(self,x,y,z):
         Fx0,Fy0,Fz0=vec_interp3D(x,-z,y,*self.fieldDataSeg[:6])
@@ -1141,11 +1197,7 @@ class SegmentedBenderSimFieldHelper_Numba:
                     Fx, Fy, Fz = self.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x,y)
                 else:
                     if position == 'FIRST':
-                        x0 = x
-                        y0 = y
-                        x = self.M_ang[0, 0] * x0 + self.M_ang[0, 1] * y0
-                        y = self.M_ang[1, 0] * x0 + self.M_ang[1, 1] * y0
-
+                        x,y = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y,self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
                         Fx, Fy, Fz = self._force_Func_Internal_Fringe(x, y, z)
                         Fx0 = Fx
                         Fy0 = Fy
@@ -1160,10 +1212,7 @@ class SegmentedBenderSimFieldHelper_Numba:
                 # eastward side
                 Fx, Fy, Fz = self._Force_Func_Cap(x, y, z)
             else:
-                x0=x
-                y0=y
-                x = self.M_ang[0, 0] * x0 + self.M_ang[0, 1] * y0
-                y = self.M_ang[1, 0] * x0 + self.M_ang[1, 1] * y0
+                x,y = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y,self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
                 if np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap and (-self.Lcap <= y <= 0):  # if on the westwards side
                     Fx, Fy, Fz = self._Force_Func_Cap(x, y, z)
                     Fx0 = Fx
@@ -1176,6 +1225,11 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fx*=self.fieldFact
         Fy*=self.fieldFact
         Fz*=self.fieldFact
+        # if np.isnan(Fx)==False:
+        #     fact=self.misalignment_Force_Fact(x, y, z)
+        #     Fx*=fact
+        #     Fy*=fact
+        #     Fz*=fact
         return Fx, Fy, Fz
 
     def transform_Element_Coords_Into_Unit_Cell_Frame(self,x, y, z):

@@ -343,7 +343,7 @@ class Layer:
 
     numMagnetsInLayer = 12
     def __init__(self, z, width, length,rp, M=M_Default, phase=0.0,rMagnetShift=None, thetaShift=None,phiShift=None,
-                 M_ShiftRelative=None):
+                 M_ShiftRelative=None,applyMethodOfMoments=False):
         # z: z coordinate of the layer, meter. The layer is in the x,y plane. This is the location of the center
         # width: width of the rectangular prism in the xy plane
         # length: length of the rectangular prism in the z axis
@@ -359,6 +359,7 @@ class Layer:
         self.z: float = z
         self.width: float = width
         self.length: float = length
+        self.applyMethodOfMoments=applyMethodOfMoments
 
         self.M: float = M
         self.phase: float=phase #this will rotate the layer about z this amount
@@ -384,6 +385,8 @@ class Layer:
             rMagnetCenter = r + self.width / 2
             magnet = RectangularPrism(rMagnetCenter,theta,self.z,phi,self.width, self.length, M)
             self.RectangularPrismsList.append(magnet)
+        if self.applyMethodOfMoments==True:
+            self.solve_Method_Of_Moments()
         # plt.gca().set_aspect('equal')
         # plt.show()
 
@@ -394,6 +397,18 @@ class Layer:
         for prism in self.RectangularPrismsList:
             BArr += prism.B(r)
         return BArr
+
+    def solve_Method_Of_Moments(self):
+        """Tweak magnetization of magnets based on magnetic fields of neighboring magnets, and self fields"""
+        from demag_functions import apply_demag
+        from magpylib import Collection
+        prismList,chiList=[],[]
+        for prism in self.RectangularPrismsList:
+            prismList.append(prism._magnet._magnet)#extend([p._magnet._magnet for p in layer.RectangularPrismsList])
+            chiList.append(prism._magnet.mur-1.0)
+        col=Collection(prismList)
+        apply_demag(col,chiList)
+
 class HalbachLens:
     # class for a lens object. This is uses the layer object.
     # The lens will be positioned such that the center layer is at z=0. Can be tilted though
@@ -639,6 +654,3 @@ class SegmentedBenderHalbach(HalbachLens):
             return BArr[0]
         else:
             return BArr
-
-
-

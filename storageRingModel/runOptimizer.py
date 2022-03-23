@@ -1,7 +1,6 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-import multiprocess as mp
-import numpy as np
+from helperTools import *
 
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
@@ -79,5 +78,19 @@ percent max flux multiplication: 40.30475837756654
 scipy message: None
 
 """
+
+
+# many particles:
+
+"""----------Solution-----------   
+injector element spacing optimum configuration: None
+storage ring tuned params 1 optimum configuration: array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
+storage ring tuned params 2 optimum configuration: None
+cost: 0.5911770700478259
+percent max flux multiplication: 41.00979780702859
+scipy message: None
+----------------------------"""
+
+
 
 
