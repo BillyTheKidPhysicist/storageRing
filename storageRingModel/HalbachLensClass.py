@@ -24,46 +24,6 @@ def B_NUMBA(r,r0,m):
     Bvec=(MAGNETIC_PERMEABILITY/(4*np.pi))*(3*r*mrDot/rNorm**5-m/rNorm**3)
     return Bvec
 
-class magpy_Prism:
-
-    #magpy uses non SI units, so I need to do some conversion
-    magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
-    SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
-    meterTo_mm=1e3 #magpy takes distance in mm
-
-    def __init__(self,x0: float, y0: float, z0: float, phi: float, width: float, length: float,M: float):
-        assert M>=0.0
-        self.x0,self.y0,self.z0,self.phi,self.width,self.length,self.M=x0,y0,z0,phi,width,length,M
-        self.mur: float=1.05 #recoil permeability
-        self.r0: np.ndarray=np.asarray([x0,y0,z0]) #center of magnet
-        self._magnet: Box=self._build_magpy_Prism()
-
-    def _build_magpy_Prism(self)-> Box:
-        """Build magpy prism object. This requires so units conversions, and forming vectors"""
-        dimensions_mm =np.asarray([self.width, self.width, self.length]) * self.meterTo_mm
-        position_mm =  np.asarray([self.x0, self.y0, self.z0]) * self.meterTo_mm
-        R = Rotation.from_rotvec([0, 0, self.phi])
-        M_MagpyUnit = self.M * self.SI_MagnetizationToMagpy  # uses units of mT for magnetization.
-        magnet = Box(magnetization=(M_MagpyUnit, 0, 0.0), dimension=dimensions_mm, position=position_mm,
-                     orientation=R)
-        return magnet
-
-
-
-    def B(self,evalCoords: np.ndarray)->np.ndarray:
-        """B field vector at evalCoords. Can be shape (3) or (n,3). Return will have same shape except (1,3)->(3)"""
-        evalCoords_mm = 1e3 * evalCoords
-        BVec_mT = self._magnet.getB(evalCoords_mm)  # need to convert to mm
-        BVec_T = 1e-3 * BVec_mT  # convert to tesla from milliTesla
-        return BVec_T
-
-    def H(self,evalCoords: np.ndarray)->np.ndarray:
-        """H field vector at evalCoords. Keep in mind that H fields require knowing magnetization, and this is not
-        aware of magnetization of other magnets"""
-        evalCoords_mm = 1e3 * evalCoords
-        HVec_KA_Per_m = self._magnet.getH(evalCoords_mm)  # need to convert to mm
-        HVec_KA_Per_m = 1e3 * HVec_KA_Per_m  # convert to tesla from milliTesla
-        return HVec_KA_Per_m
 
 class Sphere:
 
@@ -166,7 +126,8 @@ class RectangularPrism:
     SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
     meterTo_mm=1e3 #magpy takes distance in mm
 
-    def __init__(self, rCenter: float ,theta: float,z: float,phi: float,width: float,length: float,M=M_Default):
+    def __init__(self, rCenter: float ,theta: float,z: float,phi: float,width: float,length: float,M: float=M_Default,
+                 ):
         #width: The width in the x,y plane without rotation, meters
         #lengthI: The length in the z plane without rotation, meters
         #M: magnetization, SI
@@ -185,7 +146,7 @@ class RectangularPrism:
         self.theta =theta #position angle in polar coordinates
         self.phi = phi # rotation about body z axis
         self.r0 = np.asarray([self.x0,self.y0,self.z0])
-        self._magnet: Box=self._build_magpy_Prism()#magpy_Prism(self.x,self.y,self.z,self.phi,self.width,self.length,self.M)
+        self._magnet: Box=self._build_magpy_Prism()
 
     def _build_magpy_Prism(self)-> Box:
         """Build magpy prism object. This requires so units conversions, and forming vectors"""

@@ -355,8 +355,8 @@ class CombinerHalbachLensSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20685916281536737 , -0.005818512874340701,0.00394152247017076 ])
-        pf0=np.array([-200.42097137394722 ,  -12.912764266953541,   10.07461221495169 ])
+        qf0=np.array([-0.20688908487229254  , -0.005641795098780709 ,0.0038676014455718975])
+        pf0=np.array([-200.4041436020237  ,  -13.040552901126786,   10.24377912237599 ])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 

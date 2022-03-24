@@ -91,6 +91,8 @@ percent max flux multiplication: 41.00979780702859
 scipy message: None
 ----------------------------"""
 
+# many particles, method of moments
+
 
 
 

@@ -964,7 +964,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 class HalbachLensSim(LensIdeal):
 
     def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: float,bumpOffset: float,
-        magnetWidth: Union[float,tuple],applyMethodOfMoments: bool, methodOfMomentsHighPrecision: bool, build: bool=True):
+        magnetWidth: Union[float,tuple], methodOfMomentsHighPrecision: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
@@ -976,8 +976,6 @@ class HalbachLensSim(LensIdeal):
             if magnetWidth is not None:
                 assert isinstance(magnetWidth,tuple)
         else: raise TypeError
-        if applyMethodOfMoments==False:
-            assert methodOfMomentsHighPrecision==False
         self.numGridPointsZ = 25
         self.numGridPointsXY = 20
         self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
@@ -992,7 +990,6 @@ class HalbachLensSim(LensIdeal):
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
-        self.applyMethodOfMoments=applyMethodOfMoments
         self.methodOfMomentsHighPrecision=methodOfMomentsHighPrecision
         self.Lo=None
         self.magnetWidth=magnetWidth
@@ -1121,7 +1118,7 @@ class HalbachLensSim(LensIdeal):
 
     def make_Field_Data(self)->tuple:
         lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers,
-                        applyMethodOfMoments=self.applyMethodOfMoments,subdivide=self.methodOfMomentsHighPrecision)
+                        applyMethodOfMoments=True,subdivide=self.methodOfMomentsHighPrecision)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
@@ -1200,7 +1197,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.shape = 'COMBINER_CIRCULAR'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
-        self.lens=None
+        self.lens: Optional[_HalbachLensFieldGenerator]=None
         if build==True:
             self.build()
 
@@ -1215,7 +1212,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        self.lens = _HalbachLensFieldGenerator(self.Lm, tuple(magnetWidthList), tuple(rpList))
+        self.lens = _HalbachLensFieldGenerator(self.Lm, tuple(magnetWidthList), tuple(rpList),applyMethodOfMoments=True)
         inputAngle, inputOffset, trajectoryLength = self.compute_Orbit_Characteristics()
 
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
