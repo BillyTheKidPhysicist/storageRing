@@ -79,6 +79,7 @@ class RectangularPrismtestHelper:
         vals2_0=0.0016452085474342394
         assert np.mean(np.abs(vals1-vals2))<self.numericTol
         assert abs(np.std(vals2)-vals2_0)<self.numericTol and abs(np.std(vals1)-vals1_0)<self.numericTol
+
 class LayertestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines

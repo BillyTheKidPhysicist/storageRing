@@ -46,19 +46,19 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
         return None
     if tuning=='spacing':
         PTL_Ring.add_Drift(tunableDriftGap/2)
-        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens,applyMethodOfMoments=True)
+        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
         PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens,applyMethodOfMoments=True)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
     PTL_Ring.add_Drift(lastGap)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Ring.add_Drift(jeremyGap)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens,applyMethodOfMoments=True)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
     if tuning=='spacing':
         PTL_Ring.add_Drift(tunableDriftGap/2)
-        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens,applyMethodOfMoments=True)
+        PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
         PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
-    PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True,applyMethodOfMoments=True)
+    PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
     PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
     PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  # 17.8 % of time here
     return PTL_Ring
@@ -81,9 +81,9 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     PTL_Injector = ParticleTracerLattice(V0, latticeType='injector',jitterAmp=jitterAmp,fieldDensityMultiplier
                             =fieldDensityMultiplier)
     PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1,applyMethodOfMoments=True)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2,applyMethodOfMoments=True)
+    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)

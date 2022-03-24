@@ -25,7 +25,7 @@ def B_NUMBA(r,r0,m):
     return Bvec
 
 class magpy_Prism:
-    
+
     #magpy uses non SI units, so I need to do some conversion
     magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
     SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
@@ -37,8 +37,6 @@ class magpy_Prism:
         self.mur: float=1.05 #recoil permeability
         self.r0: np.ndarray=np.asarray([x0,y0,z0]) #center of magnet
         self._magnet: Box=self._build_magpy_Prism()
-        self.M0_Vec=self._get_M0_Vec_Lab_Frame()
-        self.sampleCoords: np.ndarray=self._make_Sample_Coords()
 
     def _build_magpy_Prism(self)-> Box:
         """Build magpy prism object. This requires so units conversions, and forming vectors"""
@@ -50,38 +48,7 @@ class magpy_Prism:
                      orientation=R)
         return magnet
 
-    def _get_M0_Vec_Lab_Frame(self)-> np.ndarray:
-        """Get magnetization vector, minus the recoil permeabiliy, in the lab frame"""
-        R_Mat=self._magnet.orientation.as_matrix()
-        M0_Magpy=self._magnet.magnetization
-        M0_LabFrame=R_Mat@M0_Magpy*self.magpyMagnetization_ToSI
-        return M0_LabFrame
 
-    def _make_Sample_Coords(self)-> np.ndarray:
-        """Grid of coords residing in prism used to determine nominal H value for magnetostatic method of moments.
-        Coords are in lab frame"""
-        coordsXY = np.linspace(-.9 * self.width / 2, .9 * self.width / 2, 5)
-        coordsZ = np.linspace(-.9 * self.length / 2, .9 * self.length / 2, 5)
-        coords = np.array(np.meshgrid(coordsXY, coordsXY, coordsZ)).T.reshape(-1, 3)
-        R = self._magnet.orientation.as_matrix()
-        rotatedCoords = (R @ coords.T).T
-        labFrameCoords=rotatedCoords+self.r0
-        return labFrameCoords
-    
-    def get_M_Vector(self)-> np.ndarray:
-        """Get magnetization vector of cuboid in lab frame"""
-        M_Vec=self._magnet.orientation.as_matrix()@self._magnet.magnetization
-        # print('get', M_Vec)
-        M_Vec=M_Vec*self.magpyMagnetization_ToSI
-        return M_Vec
-
-    def set_M_Vector(self, M_VecLab: np.ndarray)-> None:
-        """Update magpylib magnet with new magnetization vector. Magpy vector must be in magnet frame!
-        must rotate back"""
-        R_Reverse=self._magnet.orientation.as_matrix().T
-        M_Vec=R_Reverse@M_VecLab
-        M_VecMagpy = M_Vec*self.SI_MagnetizationToMagpy
-        self._magnet.magnetization=M_VecMagpy
 
     def B(self,evalCoords: np.ndarray)->np.ndarray:
         """B field vector at evalCoords. Can be shape (3) or (n,3). Return will have same shape except (1,3)->(3)"""
@@ -97,84 +64,6 @@ class magpy_Prism:
         HVec_KA_Per_m = self._magnet.getH(evalCoords_mm)  # need to convert to mm
         HVec_KA_Per_m = 1e3 * HVec_KA_Per_m  # convert to tesla from milliTesla
         return HVec_KA_Per_m
-#
-#
-# class _MagnetizationSolver:
-#     """
-#     Using an approximate magnetostatic method of moments, adjusts the magnetization vectors of list of magpy_Prism
-#     objects.
-#
-#     :param prismList: list of magpy_Prism objects
-#     """
-#
-#     def __init__(self, prismList: list[magpy_Prism]):
-#         assert all(isinstance(el, magpy_Prism) == True for el in prismList)
-#         self.prismList = prismList
-#
-#     def solve_System(self, tol: float, maxEvals: int) -> None:
-#         """Iteratively solve magnet-magnet and magnet-self interactions. This could be done with a NxN matrix"""
-#         error = self.relax_System()
-#         i = 0
-#         while error > tol:
-#             error = self.relax_System()
-#             i += 1
-#             if i > maxEvals:
-#                 raise Exception("system not converging")
-#         # M0 = norm(self.prismList[0].M0_Vec)
-#         # MList = [1.0 - norm(p.get_M_Vector()) / M0 for p in self.prismList]
-#         # print(MList)
-#
-#     def relax_System(self) -> float:
-#         """Adjust prism magnetizations based on currecnt fields and magnetizations. An approximate solution"""
-#         M_VecNewList, deltaM_VecList = self.new_MagVecs()
-#         error = self.compute_Error(deltaM_VecList)
-#         self.update_Prism_Magnetization(M_VecNewList)
-#         return error
-#
-#     def new_MagVecs(self) -> tuple[list[np.ndarray], list[np.ndarray]]:
-#         """Get the new magnetization vectors given current fields and magnetization vectors"""
-#         M_VecNewList = []
-#         deltaM_VecList = []
-#         for prismN in self.prismList:
-#             H_N = prismN.H(prismN.sampleCoords)  # this includes the -M in H=B/u0 - M
-#             for prismK in self.prismList:
-#                 if prismK is not prismN:  # now apply external field
-#                     B = prismK.B(prismN.sampleCoords)
-#                     H_External = B / MAGNETIC_PERMEABILITY  # the -M term is already accounted for
-#                     H_N += H_External
-#             H_Mean = np.mean(H_N, axis=0)  # averagd over the body
-#             M_VecNewN = (prismN.mur - 1) * H_Mean + prismN.M0_Vec
-#             M_VecNewList.append(M_VecNewN)
-#             deltaM_VecList.append(M_VecNewN - prismN.get_M_Vector())
-#         return M_VecNewList, deltaM_VecList
-#
-#     def compute_Error(self, deltaM_VecList: list[np.ndarray]) -> float:
-#         """Solver error is the largest difference between norm of current magnetization and new magnetization divided
-#         by norm of remnant magnetization"""
-#         fracDiffList = []
-#         for deltaM_Vec, prism in zip(deltaM_VecList, self.prismList):
-#             fracDiffList.append(norm(deltaM_Vec) / norm(prism.M0_Vec))
-#         return max(fracDiffList)
-#
-#     def update_Prism_Magnetization(self, M_VecNewList: list[np.ndarray]) -> None:
-#         """apply the new magnetizations to the prims"""
-#         for M_Vec, prism in zip(M_VecNewList, self.prismList):
-#             prism.set_M_Vector(M_Vec)
-#
-#
-# def solve_And_Update_Magnetization_Interactions(prismList: list[magpy_Prism], tol: float = 1e-3,
-#                                                 maxEvals: int = 10) -> None:
-#     """
-#     Adjust bulk magnetization vectors of prismlist to satisfy magnet-magnet and magnet-self interactions. Magnetization
-#     is adjusted in place
-#
-#     :param prismList: list of magpy_Prism objects
-#     :param tol: target relative tolerance of solver for termination
-#     :param maxEvals: maximum number of evaluations of iterative solver. An error is raised if evals>maxEvals
-#     :return: None
-#     """
-#     solver = _MagnetizationSolver(prismList)
-#     solver.solve_System(tol, maxEvals)
 
 class Sphere:
 
@@ -271,7 +160,13 @@ class Sphere:
 class RectangularPrism:
     #A right rectangular prism. Without any rotation the prism is oriented such that the 2 dimensions in the x,y plane
     #are equal, but the length, in the z plane, can be anything.
-    def __init__(self, rCenter,theta,z,phi,width,length,M=M_Default):
+
+    #magpy uses non SI units, so I need to do some conversion
+    magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
+    SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
+    meterTo_mm=1e3 #magpy takes distance in mm
+
+    def __init__(self, rCenter: float ,theta: float,z: float,phi: float,width: float,length: float,M=M_Default):
         #width: The width in the x,y plane without rotation, meters
         #lengthI: The length in the z plane without rotation, meters
         #M: magnetization, SI
@@ -279,25 +174,38 @@ class RectangularPrism:
         # theta rotation is clockwise about y in my notation, originating at positive z
         # psi is counter clockwise around z
         assert width>0.0 and length >0.0  and M>0
-        self.width: float = width
-        self.length: float=length
-        self.M: float=M
-        self.r: float = rCenter #r in cylinderical coordinates, equals sqrt(x**2+y**2)
-        self.x: float=rCenter * np.cos(theta)
-        self.y: float=rCenter * np.sin(theta)
-        self.z: float = z
-        self.theta: float =theta #position angle in polar coordinates
-        self.phi: float = phi # rotation about body z axis
-        self.r0: np.ndarray = np.asarray([self.x,self.y,self.z])
-        self._magnet: magpy_Prism=magpy_Prism(self.x,self.y,self.z,self.phi,self.width,self.length,self.M)
+        self.width= width
+        self.length=length
+        self.mur: float = 1.05  # recoil permeability
+        self.M=M
+        self.rCenter= rCenter #r in cylinderical coordinates, equals sqrt(x**2+y**2)
+        self.x0=rCenter * np.cos(theta)
+        self.y0=rCenter * np.sin(theta)
+        self.z0 = z
+        self.theta =theta #position angle in polar coordinates
+        self.phi = phi # rotation about body z axis
+        self.r0 = np.asarray([self.x0,self.y0,self.z0])
+        self._magnet: Box=self._build_magpy_Prism()#magpy_Prism(self.x,self.y,self.z,self.phi,self.width,self.length,self.M)
 
-    def B(self, evalCoords: np.ndarray)->np.ndarray:
-        # (n,3) array to evaluate coords at. SI
-        assert len(evalCoords.shape)==2 and evalCoords.shape[1]==3
-        BVec=self._magnet.B(evalCoords)
-        if len(BVec.shape)==1:
-            BVec=np.asarray([BVec])
-        return BVec
+    def _build_magpy_Prism(self)-> Box:
+        """Build magpy prism object. This requires so units conversions, and forming vectors"""
+        dimensions_mm =np.asarray([self.width, self.width, self.length]) * self.meterTo_mm
+        position_mm =  np.asarray([self.x0, self.y0, self.z0]) * self.meterTo_mm
+        R = Rotation.from_rotvec([0, 0, self.phi])
+        M_MagpyUnit = self.M * self.SI_MagnetizationToMagpy  # uses units of mT for magnetization.
+        magnet = Box(magnetization=(M_MagpyUnit, 0, 0.0), dimension=dimensions_mm, position=position_mm,
+                     orientation=R)
+        return magnet
+
+    def B(self,evalCoords: np.ndarray)->np.ndarray:
+        """B field vector at evalCoords. Can be shape (3) or (n,3). Return will have same shape except (1,3)->(3)"""
+        assert len(evalCoords.shape) == 2 and evalCoords.shape[1] == 3
+        evalCoords_mm = 1e3 * evalCoords
+        BVec_mT = self._magnet.getB(evalCoords_mm)  # need to convert to mm
+        BVec_T = 1e-3 * BVec_mT  # convert to tesla from milliTesla
+        if len(BVec_T.shape) == 1:
+            BVec_T = np.asarray([BVec_T])
+        return BVec_T
 
     def B_Shim(self, r:np.ndarray, planeSymmetry: bool=True,negativeSymmetry: bool=True,
                rotationAngle: float=np.pi/3)->np.ndarray:
@@ -305,6 +213,7 @@ class RectangularPrism:
         # r: array of N position vectors to get field at. Shape (N,3)
         # planeSymmetry: Wether to exploit z symmetry or not
         # plt.quiver(self.r0[0],self.r0[1],np.cos(self.phi),np.sin(self.phi),color='r')
+        print("I'm not sure this is working correctly with magnetic method of moments!")
         arr = np.zeros(r.shape)
         arr += self.B(r)
         arr+=self.B_Symmetry(r,1,negativeSymmetry,rotationAngle,False)
@@ -334,7 +243,10 @@ class RectangularPrism:
         if planeSymmetry==True:
             r0Sym[2] = -r0Sym[2]
         # plt.quiver(r0Sym[0], r0Sym[1], np.cos(self.phi+phiSymm),np.sin(self.phi+phiSymm))
-        magnet=magpy_Prism(r0Sym[0],r0Sym[1],r0Sym[2],self.phi+thetaSymm,self.width,self.length,self.M)
+        x,y,z=r0Sym
+        rCenter=np.sqrt(x**2+y**2)
+        theta=np.arctan2(y,x)
+        magnet=RectangularPrism(rCenter,theta,z,self.phi+thetaSymm,self.width,self.length,self.M)
         B=magnet.B(r)
         return B
 
@@ -404,8 +316,8 @@ class Layer:
         from magpylib import Collection
         prismList,chiList=[],[]
         for prism in self.RectangularPrismsList:
-            prismList.append(prism._magnet._magnet)#extend([p._magnet._magnet for p in layer.RectangularPrismsList])
-            chiList.append(prism._magnet.mur-1.0)
+            prismList.append(prism._magnet)#extend([p._magnet._magnet for p in layer.RectangularPrismsList])
+            chiList.append(prism.mur-1.0)
         col=Collection(prismList)
         apply_demag(col,chiList)
 
@@ -481,8 +393,8 @@ class HalbachLens:
         from magpylib import Collection
         prismList,chiList=[],[]
         for layer in self.layerList:
-            prismList.extend([p._magnet._magnet for p in layer.RectangularPrismsList])
-            chiList.extend([p._magnet.mur-1.0 for p in layer.RectangularPrismsList])
+            prismList.extend([p._magnet for p in layer.RectangularPrismsList])
+            chiList.extend([p.mur-1.0 for p in layer.RectangularPrismsList])
         col=Collection(prismList)
         apply_demag(col,chiList)
 

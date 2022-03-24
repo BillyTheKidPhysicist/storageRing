@@ -190,7 +190,7 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
-                bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,applyMethodOfMoments: bool =False,
+                bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,applyMethodOfMoments: bool =True,
                              methodOfMomentsHighPrecision: bool=False)-> None:
         """
         Add simulated halbach sextupole element to lattice.
