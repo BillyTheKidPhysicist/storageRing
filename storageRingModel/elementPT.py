@@ -964,7 +964,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 class HalbachLensSim(LensIdeal):
 
     def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: float,bumpOffset: float,
-        magnetWidth: Union[float,tuple], methodOfMomentsHighPrecision: bool, build: bool=True):
+        magnetWidth: Union[float,tuple], methodOfMomentsHighPrecision: bool,useStandardMagErrorss: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
@@ -991,6 +991,7 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.bumpOffset=bumpOffset
         self.methodOfMomentsHighPrecision=methodOfMomentsHighPrecision
+        self.useStandardMagErrors=useStandardMagErrorss
         self.Lo=None
         self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
@@ -1118,7 +1119,7 @@ class HalbachLensSim(LensIdeal):
 
     def make_Field_Data(self)->tuple:
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,self.lengthEffective,
-                        applyMethodOfMoments=True)
+                        applyMethodOfMoments=True,useStandardMagErrors=self.useStandardMagErrors)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)

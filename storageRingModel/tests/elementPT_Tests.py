@@ -25,8 +25,10 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
         np.set_printoptions(precision=100)
-        assert np.all(np.abs((qf-qf0))<tol), str(repr(qf))+','+str(repr(qf0))
-        assert np.all(np.abs((pf-pf0))<tol), str(repr(pf))+','+str(repr(pf0))
+        if np.all(np.abs((qf-qf0))<tol)==False or np.all(np.abs((pf-pf0))<tol)==False:
+            print(repr(qf),repr(pf))
+            print(repr(qf0),repr(pf0))
+            raise ValueError
 
 class genericElementTestHelper:
     #elements have generic functions and features common to all kinds. This tests those
@@ -367,3 +369,4 @@ def run_Tests():
     hexapoleSegmentedBenderSimTestHelper().run_Tests()
     hexapoleLensSimTestHelper().run_Tests()
     CombinerHalbachLensSimTestHelper().run_Tests()
+hexapoleLensSimTestHelper().run_Tests()

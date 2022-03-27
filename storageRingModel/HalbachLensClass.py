@@ -9,6 +9,7 @@ from magpylib.magnet import Box as _Box
 from magpylib import Collection
 from typing import Union,Optional
 from demag_functions import apply_demag
+import copy
 
 M_Default=1.018E6 #default magnetization value, SI. Magnetization for N48 grade
 
@@ -206,15 +207,17 @@ class Layer(billyHalbachCollectionWrapper):
     numMagnetsInLayer = 12
     def __init__(self, rp: float,length: float,magnetWidth: float,position: list_tuple_arr=(0.0,0.0,0.0),
                  orientation: Optional[Rotation]=None, M: float=M_Default,mur: float=1.05,
-                 rMagnetShift=None, thetaShift=None,phiShift=None, M_ShiftRelative=None,applyMethodOfMoments=False):
-        #all SI units
+                 rMagnetShift=None, thetaShift=None,phiShift=None, M_NormShiftRelative=None,dimShift=None,M_AngleShift=None,
+                 applyMethodOfMoments=False):
         super().__init__()
         assert magnetWidth > 0.0 and length > 0.0  and M > 0.0
         assert isinstance(orientation,(type(None),Rotation))==True
-        self.rMagnetShift: tuple=self.make_Tuple_If_None(rMagnetShift)
-        self.thetaShift: tuple=self.make_Tuple_If_None(thetaShift)
-        self.phiShift: tuple=self.make_Tuple_If_None(phiShift)
-        self.M_ShiftRelative: tuple=self.make_Tuple_If_None(M_ShiftRelative)
+        self.rMagnetShift: np.ndarray=self.make_Arr_If_None_Else_Copy(rMagnetShift)
+        self.thetaShift: np.ndarray=self.make_Arr_If_None_Else_Copy(thetaShift)
+        self.phiShift: np.ndarray=self.make_Arr_If_None_Else_Copy(phiShift)
+        self.M_NormShiftRelative: np.ndarray=self.make_Arr_If_None_Else_Copy(M_NormShiftRelative)
+        self.dimShift: np.ndarray=self.make_Arr_If_None_Else_Copy(dimShift,numParams=3)
+        self.M_AngleShift: np.ndarray=self.make_Arr_If_None_Else_Copy(M_AngleShift)
         self.rp: tuple = (rp,)*self.numMagnetsInLayer
         self.mur=mur #relative permeability
         self.position=position
@@ -225,48 +228,90 @@ class Layer(billyHalbachCollectionWrapper):
         self.M: float = M
         self.build()
 
-    def make_Tuple_If_None(self,variable: Optional[tuple])-> tuple:
-        variableTuple= (0.0,)*self.numMagnetsInLayer if variable is None else variable
-        assert len(variableTuple)==self.numMagnetsInLayer
-        return variableTuple
+    def make_Arr_If_None_Else_Copy(self, variable: Optional[list_tuple_arr], numParams=1)-> np.ndarray:
+        """If no misalignment is supplied, making correct shaped array of zeros, also check shape of provided array
+        is correct"""
+        variableArr= np.zeros((self.numMagnetsInLayer,numParams)) if variable is None else copy.copy(variable)
+        assert len(variableArr)==self.numMagnetsInLayer and len(variableArr.shape)==2
+        return variableArr
 
     def build(self)->None:
         # build the elements that form the layer. The 'home' magnet's center is located at x=r0+width/2,y=0, and its
         #magnetization points along positive x
         #how I do this is confusing
-        thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False) # location of 12 magnets.
-        thetaArr+=np.asarray(self.thetaShift)
-        phiArr =np.pi + np.arange(0, 12) * 2 * np.pi / 3 #direction of magnetization
-        phiArr+=np.asarray(self.phiShift)
-        rArr=self.rp+np.asarray(self.rMagnetShift)
-        M_Arr=self.M*np.ones(self.numMagnetsInLayer)*(1.0+np.asarray(self.M_ShiftRelative))
+        magnetizationArr=self.make_Mag_Vec_Arr_Magpy()
+        dimensionArr=self.make_Cuboid_Dimensions_Magpy()
+        positionArr=self.make_Cuboid_Positions_Magpy()
+        orientationList=self.make_Cuboid_Orientation_Magpy()
 
-        for r, phi,theta,M in zip(rArr,phiArr,thetaArr,M_Arr):
-            rMagnetCenter = r + self.magnetWidth / 2
-            xCenter, yCenter = rMagnetCenter * np.cos(theta), rMagnetCenter * np.sin(theta)
-            R = Rotation.from_rotvec([0.0, 0.0, phi])
-            M_MagpyUnit = self.M * self.SI_MagnetizationToMagpy  # uses units of mT for magnetization.
-            dimension = np.asarray((self.magnetWidth, self.magnetWidth, self.length))*self.meterTo_mm
-            position=(xCenter*self.meterTo_mm, yCenter*self.meterTo_mm, 0.0)
-            box =Box(magnetization=(M_MagpyUnit, 0.0, 0.0), dimension=dimension,
-                     position=position, orientation=R,mur=self.mur)
+        for M,dim,pos,orientation in zip(magnetizationArr,dimensionArr,positionArr,orientationList):
+            box =Box(magnetization=M, dimension=dim,
+                     position=pos, orientation=orientation,mur=self.mur)
             self.add(box)
+
         if self.orientation is not None:
             self.rotate(self.orientation,anchor=0.0)
         self.move(self.position)
         if self.applyMethodOfMoments==True:
             self.method_Of_Moments()
 
+    def make_Cuboid_Orientation_Magpy(self):
+        """Make orientations of each magpylib cuboid. A list of scipy Rotation objects. add error effects
+        (may be zero though)"""
+        phiArr = np.pi + np.arange(0, 12) * 2 * np.pi / 3  # direction of magnetization
+        phiArr += np.ravel(self.phiShift) #add specified rotation, typically errors
+        rotationAll=[Rotation.from_rotvec([0.0, 0.0, phi]) for phi in phiArr]
+        assert len(rotationAll)==self.numMagnetsInLayer
+        return rotationAll
+
+    def make_Cuboid_Positions_Magpy(self):
+        """Array of position of each magpylib cuboid, in units of mm. add error effects (may be zero though)"""
+        thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False) # location of 12 magnets.
+        thetaArr+=np.ravel(self.thetaShift) #add specified rotation, typically errors
+        rArr = self.rp + np.ravel(self.rMagnetShift)
+        rMagnetCenter = rArr + self.magnetWidth / 2 #add specified rotation, typically errors
+        xCenter, yCenter = rMagnetCenter * np.cos(thetaArr), rMagnetCenter * np.sin(thetaArr)
+        positionAll=np.column_stack((xCenter,yCenter,np.zeros(self.numMagnetsInLayer)))
+        positionAll*=self.meterTo_mm
+        assert positionAll.shape==(self.numMagnetsInLayer,3)
+        return positionAll
+
+    def make_Cuboid_Dimensions_Magpy(self):
+        """Make array of dimension of each magpylib cuboid in units of mm. add error effects (may be zero though)"""
+        dimensionSingle = np.asarray([self.magnetWidth, self.magnetWidth, self.length])
+        dimensionAll=dimensionSingle*np.ones((self.numMagnetsInLayer,3))
+        dimensionAll+=self.dimShift #add specified rotation, typically errors
+        assert np.all(10*np.abs(self.dimShift)<dimensionAll) #model probably doesn't work
+        dimensionAll*=self.meterTo_mm
+        assert dimensionAll.shape == (self.numMagnetsInLayer, 3)
+        return dimensionAll
+
+    def make_Mag_Vec_Arr_Magpy(self):
+        """Make array of magnetization vector of each magpylib cuboid in units of mT. add error effects (may be zero
+        though)"""
+        M_MagpyUnit = self.M * self.SI_MagnetizationToMagpy  # uses units of mT for magnetization.
+        magnetizationSingle=np.asarray([M_MagpyUnit, 0.0, 0.0])
+        magnetizationAll=magnetizationSingle*np.ones((self.numMagnetsInLayer,3))
+        magnetizationAll*=(1+self.M_NormShiftRelative) #add specified fraction shifts, typically errors
+        for M,M_Angle in zip(magnetizationAll,self.M_AngleShift):
+            if np.all(M_Angle!=0):
+                assert M[0]!=0.0 and np.all(M[1:]==0.0) and len(M_Angle)==2
+                R = Rotation.from_rotvec([0.0, M_Angle[0], M_Angle[1]])
+            else:
+                R=Rotation.from_rotvec([0.0,0.0,0.0])
+            M[:]=R.as_matrix()@M[:] #edit in place
+        assert magnetizationAll.shape == (self.numMagnetsInLayer, 3)
+        return magnetizationAll
+
 
 class HalbachLens(billyHalbachCollectionWrapper):
 
-    # magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
-    # SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
-    # meterTo_mm=1e3 #magpy takes distance in mm
+    numMagnetsInLayer = 12
 
     def __init__(self,rp: Union[float,tuple],magnetWidth: Union[float,tuple],length: float,
                  position: list_tuple_arr=(0.0,0.0,0.0), orientation: Optional[Rotation]=None,
-                 M: float=M_Default,numSlices: int =1, applyMethodOfMoments=False):
+                 M: float=M_Default,numSlices: int =1, applyMethodOfMoments=False, useStandardMagErrors=False,
+                 sameSeed=True):
         super().__init__()
         assert length > 0.0 and M > 0.0
         assert isinstance(orientation, (type(None), Rotation)) == True
@@ -277,8 +322,11 @@ class HalbachLens(billyHalbachCollectionWrapper):
         self.magnetWidth: tuple = magnetWidth if isinstance(magnetWidth,tuple) else (magnetWidth,)
         self.length: float = length
         self.applyMethodOfMoments: bool = applyMethodOfMoments
+        self.useStandardMagErrors: bool=useStandardMagErrors
+        self.sameSeed: bool=sameSeed
         self.M: float = M
         self.numSlices=numSlices
+        self.numLayers=len(self.rp)
         self.mur=1.05
 
         self.layerList: list[Layer]=[]
@@ -288,7 +336,13 @@ class HalbachLens(billyHalbachCollectionWrapper):
         zArr, lengthArr = self.subdivide_Lens()
         for zLayer,length in zip(zArr,lengthArr):
             for radiusLayer,widthLayer in zip(self.rp,self.magnetWidth):
-                layer=Layer(radiusLayer,length,widthLayer,M=self.M,position=(0,0,zLayer))
+                if self.useStandardMagErrors==True:
+                    dimVariation, magVecAngleVariation, magNormVariation=self.standard_Magnet_Errors()
+                else:
+                    dimVariation, magVecAngleVariation, magNormVariation=[np.zeros((12,1))]*3
+                layer=Layer(radiusLayer,length,widthLayer,M=self.M,position=(0,0,zLayer),
+                            M_AngleShift=magVecAngleVariation,dimShift=dimVariation,
+                            M_NormShiftRelative=magNormVariation)
                 self.add(layer)
                 self.layerList.append(layer)
 
@@ -298,9 +352,26 @@ class HalbachLens(billyHalbachCollectionWrapper):
 
         if self.applyMethodOfMoments == True:
             self.method_Of_Moments()
-
+    def standard_Magnet_Errors(self):
+        """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
+        if self.sameSeed==True:
+            np.random.seed(42)
+        dimTol=.004*.0254 #dimension variation,inch to meter, +/- meters
+        MagVecAngleTol=2*np.pi/180 #magnetization vector angle tolerane,degree to radian,, +/- radians
+        MagNormTol=.0125 #magnetization value tolerance, +/- fraction
+        dimVariation=self.make_Base_Error_Arr(numParams=3)*dimTol
+        MagVecAngleVariation=self.make_Base_Error_Arr(numParams=2)*MagVecAngleTol/np.sqrt(2) #two dimensional variation
+        magNormVariation=self.make_Base_Error_Arr()*MagNormTol
+        if self.sameSeed==True:
+            #todo: Does this random seed thing work, or is it a pitfall?
+            np.random.seed(int(time.time()))
+        return dimVariation,MagVecAngleVariation,magNormVariation
+    def make_Base_Error_Arr(self,numParams=1):
+        """values range between -1 and 1 with shape (12,numParams)"""
+        return 2*(np.random.random_sample((self.numMagnetsInLayer,numParams)) - .5)
     def subdivide_Lens(self):
-        """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers """
+        """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
+         if the lens is composed of slices"""
         LArr=np.ones(self.numSlices)*self.length/self.numSlices
         zArr=np.cumsum(LArr)-self.length/2-.5*self.length/self.numSlices
         assert abs(np.sum(LArr)-self.length)<1e-12 and np.abs(np.mean(zArr))<1e-12 #length adds up and centered on 0

@@ -191,7 +191,7 @@ class ParticleTracerLattice:
 
     def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
                 bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,
-                             methodOfMomentsHighPrecision: bool=False)-> None:
+                             methodOfMomentsHighPrecision: bool=False, useStandardMagErrors: bool=False)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -205,9 +205,11 @@ class ParticleTracerLattice:
         fringe fields
         :param methodOfMomentsHighPrecision: Wether to subdivide the magnet into small pieces when applying method of
         moments
+        :param useStandardMagErrors: Include random variations originating from manufactoring errors of neodymium. Will
+        have a repeatable effect if lens is same shape and number of layers and slices
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,methodOfMomentsHighPrecision)
+        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,methodOfMomentsHighPrecision, useStandardMagErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
