@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from HalbachLensClass import Sphere,RectangularPrism,Layer,HalbachLens
+
+from temp3 import Layer,HalbachLens,Sphere
 import scipy.optimize as spo
 import multiprocess as mp
 class SpheretestHelper:
@@ -32,7 +33,6 @@ class SpheretestHelper:
         BVec2=sphere2.B_Shim(rtest,planeSymmetry=False)[0]
         BVec1_0=np.asarray([-0.0011941881467123633 ,-0.16959218399899806 ,0.025757119925902405])
         BVec2_0=np.asarray([-0.001194188146712627 ,-0.16959218399899786 ,0.025757119925902378])
-        print(BVec2)
         assert np.all(np.abs(BVec1 - BVec1_0) < self.numericTol)
         assert np.all(np.abs(BVec2 - BVec2_0) < self.numericTol)
         assert np.all(np.abs(BVec2 - BVec1) < self.numericTol)
@@ -52,64 +52,24 @@ class SpheretestHelper:
         assert np.all(np.abs(BVec_Symm1 - BVec_Symm1_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm2_0) < self.numericTol)
         assert np.all(np.abs(BVec_Symm2 - BVec_Symm1) < self.numericTol)
-class RectangularPrismtestHelper:
-    def __init__(self):
-        self.numericTol = 1e-14  # same approach should be this accurate on different machines
-    def run_tests(self):
-        self.test1()
-        self.test2()
-    def test1(self):
-        #test that fields point as expected
-        prism=RectangularPrism(.07,0.0,0.0,np.pi,.0254,.1)
-        rCenter=np.zeros((1,3))
-        BVec=prism.B(rCenter)[0]
-        BVec_0=np.asarray([-0.026118798585274296 ,3.1986303085030583e-18 ,0.0])
-        assert np.all(np.abs(BVec[1:])<self.numericTol) and BVec[0]<0.0
-        assert np.all(np.abs(BVec-BVec_0)<self.numericTol)
-    def test2(self):
-        #test that shim symmetry works as expected
-        prismA = RectangularPrism(.05, -np.pi/5, 0.05, np.pi/7,.0254, .0254)
-        prismB = RectangularPrism(.05, -np.pi/5, -0.05, np.pi/7,.0254, .0254)
-        prismC = RectangularPrism(.05, -np.pi/5, 0.05, np.pi/7,.0254, .0254)
-        xArr=np.linspace(-.01,.01,10)
-        coords=np.asarray(np.meshgrid(xArr,xArr,xArr)).T.reshape(-1,3)
-        vals1=prismA.B_Shim(coords,planeSymmetry=False)+prismB.B_Shim(coords,planeSymmetry=False)
-        vals2=prismC.B_Shim(coords,planeSymmetry=True)
-        vals1_0=0.0016452085474342394
-        vals2_0=0.0016452085474342394
-        assert np.mean(np.abs(vals1-vals2))<self.numericTol
-        assert abs(np.std(vals2)-vals2_0)<self.numericTol and abs(np.std(vals1)-vals1_0)<self.numericTol
+
 
 class LayertestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
     def run_tests(self):
         self.test1()
-        self.test2()
     def test1(self):
         #test that fields point as expected
-        layer1=Layer(1.0,.02,.5,.05)
+        z,width,length,rp=1.0,.02,.5,.05
+        layer1=Layer(rp,length,width,position=(0.0,0.0,z))
         rtest=np.asarray([[.02,.02,1.0]])
-        BVec=layer1.B(rtest)[0]
+        BVec=layer1.B_Vec(rtest)
         BVec_0=np.asarray([7.04735665657541e-09 ,0.1796475065591648 ,0.0])
         assert abs(BVec[2])<self.numericTol
         assert np.all(np.abs(BVec_0-BVec)<self.numericTol)
-    def test2(self):
-        width = .0254
-        rp = .05
-        xArr = np.linspace(-rp / 2, rp / 2, 50)
-        coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
-        prism = RectangularPrism(rp + width / 2, 0.0, 0.0, np.pi,width, width)
-        prism1 = RectangularPrism(rp + width / 2, np.pi / 6, 0.0, np.pi + 2 * np.pi / 3,width, width)
-        layer = Layer(0.0, width, width, rp)
-        layerBVec = layer.B(coords)
-        prismBVec = prism.B_Shim(coords, planeSymmetry=False) + prism1.B_Shim(coords, planeSymmetry=False)
-        layerBVecRMS0=0.045531041274931655
-        prismBVecRMS0=0.045531041274931655
-        print(np.std(prismBVec),np.std(layerBVec))
-        assert np.abs(np.std(layerBVec)-layerBVecRMS0)<self.numericTol
-        assert np.abs(np.std(prismBVec)-prismBVecRMS0)<self.numericTol
-        assert np.std(prismBVec-layerBVec)<self.numericTol
+
+
 class HalbachLenstestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
@@ -123,9 +83,9 @@ class HalbachLenstestHelper:
         return B0*(r/self.rp)**2
     def test1(self):
         #test that concentric layers work as expected
-        lensAB = HalbachLens(self.length, (self.magnetWidth, self.magnetWidth*1.5), (self.rp,self.rp+self.magnetWidth))
-        lensA = HalbachLens(self.length, (self.magnetWidth,), (self.rp,))
-        lensB = HalbachLens(self.length, (self.magnetWidth*1.5,), (self.rp + self.magnetWidth,))
+        lensAB = HalbachLens((self.rp,self.rp+self.magnetWidth), (self.magnetWidth, self.magnetWidth*1.5),self.length )
+        lensA = HalbachLens( self.rp,self.magnetWidth,self.length)
+        lensB = HalbachLens(self.rp + self.magnetWidth, self.magnetWidth*1.5,self.length )
         xArr = np.linspace(-self.rp * .3, self.rp * .3,10)
         coords = np.asarray(np.meshgrid(xArr, xArr, xArr)).T.reshape(-1, 3)
         coords[:,2]+=self.length/3 #break symmetry of test points
@@ -142,7 +102,7 @@ class HalbachLenstestHelper:
     def test2(self):
         #test that the lens is well fit to a parabolic potential
         magnetWidth1,magnetWidth2=.0254,.0254*1.5
-        lens=HalbachLens(self.length,(magnetWidth1,magnetWidth2),(self.rp,self.rp+.0254))
+        lens=HalbachLens((self.rp,self.rp+.0254),(magnetWidth1,magnetWidth2),self.length)
         xArr=np.linspace(-self.rp*.9,self.rp*.9)
         coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
         rArr=np.linalg.norm(coords[:,:2],axis=1)
@@ -153,13 +113,12 @@ class HalbachLenstestHelper:
         residuals=1e2*np.abs(np.sum(BNormVals-self.hexapole_Fit(rArr,*params)))/np.sum(BNormVals)
         residuals0=0.03770965561603838
         assert abs(residuals-residuals0)<self.numericTol
-        # plt.scatter(rArr,BNormVals)
-        # plt.show()
+
+
 def run_Tests(parallel=False):
     def run(func):
         func()
-    funcList=[SpheretestHelper().run_tests,RectangularPrismtestHelper().run_tests,LayertestHelper().run_tests,
-              HalbachLenstestHelper().run_tests]
+    funcList=[SpheretestHelper().run_tests,LayertestHelper().run_tests,HalbachLenstestHelper().run_tests]
     if parallel==True:
         with mp.Pool() as pool:
             pool.map(run,funcList)

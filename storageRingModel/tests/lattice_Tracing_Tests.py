@@ -145,4 +145,3 @@ def run_Tests(parallelTesting=False,fullTest=False):
     else:
         with mp.Pool(10) as pool:
             pool.map(wrap,testNameList)
-_save_New_Data()

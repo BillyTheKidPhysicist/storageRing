@@ -25,7 +25,6 @@ def assert_Particle_List_Is_Expected(particleList,qf0,pf0):
     for particle in particleList:
         qf,pf=particle.qf,particle.pf
         np.set_printoptions(precision=100)
-        # print(repr(qf),repr(pf))
         assert np.all(np.abs((qf-qf0))<tol), str(repr(qf))+','+str(repr(qf0))
         assert np.all(np.abs((pf-pf0))<tol), str(repr(pf))+','+str(repr(pf0))
 
@@ -294,8 +293,8 @@ class hexapoleSegmentedBenderSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([0.6250668389719087   , 1.8190287085793573,0.0022008046241118358])
-        pf0 = np.array([ 158.65101866215835, -123.41480447654143,    1.65811660590993])
+        qf0 = np.array([6.2387894461198390e-01, 1.8191705401961875e+00,1.7912224786975480e-03])
+        pf0 = np.array([ 159.07566856454326  , -122.81457788771797  ,3.8692411576805315])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
@@ -324,8 +323,8 @@ class hexapoleLensSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.13132135641679127 ,  0.005449608408740467,-0.008571529140845028])
-        pf0=np.array([-201.18840500038587  ,   -2.9789389201994614,3.7022004610878905])
+        qf0=np.array([-0.13132135641679268 ,  0.005449608408735147,-0.008571529140843293])
+        pf0=np.array([-201.18840500038652 ,   -2.978938920216345,    3.702200461091814])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 
@@ -355,8 +354,8 @@ class CombinerHalbachLensSimTestHelper:
     def test2(self):
         """Compare previous to current tracing. ParticleTracerClass can affect this"""
         particle=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20688908487229254  , -0.005641795098780709 ,0.0038676014455718975])
-        pf0=np.array([-200.4041436020237  ,  -13.040552901126786,   10.24377912237599 ])
+        qf0=np.array([-0.20688908487194574 , -0.005641795098740778,0.003867601445506119])
+        pf0=np.array([-200.40414360193998 ,  -13.040552901360817,   10.243779121952757])
         particleList=trace_Different_Conditions(self.PTL,particle,5e-6)
         assert_Particle_List_Is_Expected(particleList,qf0,pf0)
 

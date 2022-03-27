@@ -17,9 +17,9 @@ def survival_Optimize(bounds,tuning,workers):
             assert False
         return sol.cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
-    # args0 = np.asarray([0.01505976, 0.0388815  ,0.0191172,  0.01054996, 0.1       ])
-    # wrapper(args0)
+    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
+    args0 = np.array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
+    wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
@@ -91,7 +91,7 @@ percent max flux multiplication: 41.00979780702859
 scipy message: None
 ----------------------------"""
 
-# many particles, method of moments
+# many particles, full method of moments
 
 
 

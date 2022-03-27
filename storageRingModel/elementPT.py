@@ -10,7 +10,7 @@ import pandas as pd
 import numba
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from constants import MASS_LITHIUM_7,BOLTZMANN_CONSTANT,BHOR_MAGNETON,SIMULATION_MAGNETON
+from constants import SIMULATION_MAGNETON
 from numba.typed import List
 from scipy.spatial.transform import Rotation as Rot
 
@@ -789,7 +789,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         def find_K(rb:float):
             ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
             #approximation
-            lens = _HalbachBenderFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3)
+            lens = _HalbachBenderFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3,applyMethodOfMoments=True)
             xArr = np.linspace(-self.rp/3, self.rp/3) + rb
             coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
             FArr = SIMULATION_MAGNETON*lens.BNorm_Gradient(coords)[:, 0]
@@ -869,7 +869,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=np.sqrt((fieldCoords[:,0]-self.rb)**2+fieldCoords[:,1]**2)<self.rp
         lens=_HalbachBenderFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
-                                                numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True)
+                            numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def is_Valid_Internal_Fringe(self,coord0:np.ndarray)->float:
@@ -893,7 +893,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=[self.is_Valid_Internal_Fringe(coord) for coord in fieldCoords]
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                         numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True)
+                                        numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def generate_Segment_Field_Data(self)->tuple:
@@ -906,7 +906,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=np.sqrt((fieldCoords[:,0]-self.rb)**2+fieldCoords[:,1]**2)<self.rp
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                                          numLenses=self.numModelLenses+2)
+                                                            numLenses=self.numModelLenses+2,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def compute_Valid_Field_Data(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
@@ -1117,8 +1117,8 @@ class HalbachLensSim(LensIdeal):
         return data3D
 
     def make_Field_Data(self)->tuple:
-        lens = _HalbachLensFieldGenerator(self.lengthEffective, self.magnetWidth, self.rpLayers,
-                        applyMethodOfMoments=True,subdivide=self.methodOfMomentsHighPrecision)
+        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,self.lengthEffective,
+                        applyMethodOfMoments=True)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
@@ -1212,7 +1212,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        self.lens = _HalbachLensFieldGenerator(self.Lm, tuple(magnetWidthList), tuple(rpList),applyMethodOfMoments=True)
+        self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True)
         inputAngle, inputOffset, trajectoryLength = self.compute_Orbit_Characteristics()
 
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
