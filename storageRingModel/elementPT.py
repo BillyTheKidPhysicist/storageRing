@@ -325,6 +325,11 @@ class Element:
         VFlat,FxFlat,FyFlat=np.ravel(VMatrix),np.ravel(FxMatrix), np.ravel(FyMatrix)
         return xArr, yArr,FxFlat,FyFlat,VFlat
 
+    def get_Valid_Jitter_Amplitude(self,Print=False):
+        """If jitter (radial misalignment) amplitude is too large, it is clipped."""
+        jitterAmpRadial = self.PTL.jitterAmp * np.sqrt(2)
+        return jitterAmpRadial
+
 
 class LensIdeal(Element):
     """
@@ -1015,16 +1020,6 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.build()
 
-    def get_Valid_Jitter_Amplitude(self,Print=False):
-        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
-        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
-        maxJitterAmp = self.apMax - self.ap
-        jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
-        if Print==True:
-            if jitterAmpProposed==maxJitterAmp:
-                print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
-        return jitterAmp
-
     def set_extraFieldLength(self)->None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
         is too large for good field region, extra length is clipped"""
@@ -1155,6 +1150,16 @@ class HalbachLensSim(LensIdeal):
         self.fastFieldHelper.fieldFact=fieldStrengthFact
         self.fieldFact=fieldStrengthFact
 
+    def get_Valid_Jitter_Amplitude(self,Print=False):
+        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
+        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
+        maxJitterAmp = self.apMax - self.ap
+        jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
+        if Print==True:
+            if jitterAmpProposed==maxJitterAmp:
+                print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
+        return jitterAmp
+
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
@@ -1162,7 +1167,7 @@ class HalbachLensSim(LensIdeal):
         totalShiftY=shiftY+rotZ*self.L
         totalShiftZ=shiftZ+rotY*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
-        maxShift=self.apMax-self.ap #max shift is moving current aperture to maximum good field aperture
+        maxShift=self.get_Valid_Jitter_Amplitude()
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact=.9*maxShift/totalShift #safety factor
@@ -1346,7 +1351,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         totalShiftY=shiftY+np.sin(rotZ)*self.L
         totalShiftZ=shiftZ+np.sin(rotY)*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
-        maxShift=self.apMax-self.ap #max shift is moving current aperture to maximum good field aperture
+        maxShift=self.get_Valid_Jitter_Amplitude()
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact=.9*maxShift/totalShift #safety factor

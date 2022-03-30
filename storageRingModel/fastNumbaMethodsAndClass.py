@@ -106,10 +106,10 @@ def vec_interp3D(xLoc,yLoc,zLoc,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
         c1_z=c01_z*(1-yd)+c11_z*yd
         c_z=c0_z*(1-zd)+c1_z*zd
     else:
-        # print(xLoc,yLoc,zLoc)
-        # print(xCoords.min(),xCoords.max())
-        # print(yCoords.min(),yCoords.max())
-        # print(zCoords.min(),zCoords.max())
+        print(xLoc,yLoc,zLoc)
+        print(xCoords.min(),xCoords.max())
+        print(yCoords.min(),yCoords.max())
+        print(zCoords.min(),zCoords.max())
         raise Exception('out of bounds')
     return c_x,c_y,c_z
 
@@ -930,13 +930,13 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         F= self._force(x,y,z,False)
         return F
 
-    def _force(self,x, y, z,searchIsCoordInside):
+    def _force(self,x0, y0, z0,searchIsCoordInside):
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
         if searchIsCoordInside == True:
-            if self.is_Coord_Inside_Vacuum(x,y,z)==False:
+            if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
                 return np.nan,np.nan,np.nan
-        x,y,z=self.baseClass.misalign_Coords(x,y,z)
+        x,y,z=self.baseClass.misalign_Coords(x0,y0,z0)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
@@ -950,6 +950,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             x = x - symmetryPlaneX
             Fx, Fy, Fz = self._force_Func(x, y, z)
         else:
+            print(x0,y0,z0)
             raise ValueError
         Fy = Fy * FySymmetryFact
         Fz = Fz * FzSymmetryFact

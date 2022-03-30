@@ -20,4 +20,4 @@ def test_FastNumbaMethodsAndClasses():
 def test_Lattice_Tracing_Full_Integration():
     lattice_Tracing_Tests.run_Tests(parallelTesting=True)
 def test_Elements():
-    elementPT_Tests.run_Tests()
+    elementPT_Tests.run_Tests(parallel=True)

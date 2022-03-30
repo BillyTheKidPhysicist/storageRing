@@ -1,17 +1,14 @@
-import time
+from helperTools import *
 import sys
-import os
 import pytest
-import numpy as np
-import math
 from elementPT import Element,BenderIdeal,Drift,LensIdeal,CombinerIdeal,CombinerHalbachLensSim,HalbachBenderSimSegmented,HalbachLensSim
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Particle
 from hypothesis import given,settings,strategies as st
-import matplotlib.pyplot as plt
 from constants import SIMULATION_MAGNETON
 from shapely.geometry import Point
+
 def absDif(x1,x2):
     return abs(abs(x1)-abs(x2))
 
@@ -23,32 +20,8 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-
-
-
-
-# class testHelper:
-#     def __init__(self):
-#         self.PTL
-#     def get_Element(self):
-#         el = self.PTL.elList[0]
-#         assert type(el) == HalbachLensSim
-#         return el
-#
-#     def run_Tests(self):
-#         tester=ElementTestRunner(self)
-#         tester.test_Tracing()
-#
-#     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-#         PTL = ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
-#         PTL.add_Halbach_Lens_Sim(self.rp, self.L)
-#         PTL.end_Lattice(constrain=False, surpressWarning=True, enforceClosedLattice=False)
-#         return PTL
-#     def convert_Test_Coord_To_El_Frame(self,x1,x2,x3):
-#         x,y,z=x1,x2,x3
-#         return np.array([x,y,z])
-
 class ElementTestHelper:
+
     ElementBaseClass=type(Element)
     def __init__(self,elType: ElementBaseClass,particle0: Particle,qf0: np.ndarray,pf0: np.ndarray,useShapelyTest: bool,
                  testMisalignment: bool,testMagnetErrors: bool):
@@ -118,7 +91,6 @@ class DriftTestHelper(ElementTestHelper):
         PTL.add_Drift(self.L,self.ap)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
-
 
     def test_Drift(self):
         # test that particle travels through drift region and ends where expected
@@ -201,6 +173,7 @@ class LensIdealTestHelper(ElementTestHelper):
         yfTheory,pyfTheory=yi*np.cos(phi),-abs(particle.pi[0])*yi*np.sin(phi)*np.sqrt(K)
         assert abs(yf-yfTheory)<tol*yi and abs(pyf-pyfTheory)<tol*pyRMS
 
+
 class BenderIdealTestHelper(ElementTestHelper):
 
     def __init__(self):
@@ -226,6 +199,7 @@ class BenderIdealTestHelper(ElementTestHelper):
         PTL.add_Bender_Ideal(self.ang,self.Bp,self.rb,self.rp)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
+
 
 class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
 
@@ -254,6 +228,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
 
+
 class CombinerIdealTestHelper(ElementTestHelper):
 
     def __init__(self):
@@ -278,6 +253,7 @@ class CombinerIdealTestHelper(ElementTestHelper):
         PTL.end_Lattice(constrain=False, surpressWarning=True, enforceClosedLattice=False)
         return PTL
 
+
 class CombinerHalbachTestHelper(ElementTestHelper):
 
     def __init__(self):
@@ -290,7 +266,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
 
     def make_coordTestRules(self):
         #test generic conditions of the element
-        floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.5 * self.rp)
+        floatyz = st.floats(min_value=-3 * self.rp, max_value=3 * self.rp)
         floatx = st.floats(min_value=-self.el.L/10.0, max_value=self.el.L*1.1)
         return floatx,floatyz,floatyz
 
@@ -302,17 +278,19 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         return PTL
 
 
-
 class ElementTestRunner:
+
     def __init__(self, ElementTestHelper: ElementTestHelper):
         self.elTestHelper = ElementTestHelper
         self.timeStepTracing = 5e-6
+
     def run_Tests(self):
         self.test_Tracing()
         self.test_Coord_Consistency()
         self.test_Coord_Conversions()
         self.test_Imperfections_Tracing()
         self.test_Misalignment()
+
     def test_Tracing(self):
         particleTracedList = self.trace_Different_Conditions(self.elTestHelper.PTL)
         self.assert_Particle_List_Is_Expected(particleTracedList,self.elTestHelper.qf0,self.elTestHelper.pf0)
@@ -341,6 +319,7 @@ class ElementTestRunner:
         is_Inside_Consistency()
         numTrue = sum(isInsideList)
         assert numTrue > 50  # at least 50 true seems reasonable
+
     def test_Coord_Conversions(self):
         #check that coordinate conversions work
         tol=1e-12
@@ -357,6 +336,7 @@ class ElementTestRunner:
             vecEl=el.transform_Element_Frame_Vector_Into_Lab_Frame(vecLab)
             assert np.all(np.abs(vecEl0 - vecEl) < tol)
         convert_Invert_Consistency()
+
     def test_Imperfections_Tracing(self):
         """test that misalignment and errors change results"""
         jitterAmp0=1e-6
@@ -374,17 +354,19 @@ class ElementTestRunner:
             assert str(excInfo.value)=="particle test mismatch"
         if self.elTestHelper.testMisalignment==True: wrapper(False,jitterAmp0)
         if self.elTestHelper.testMagnetErrors: wrapper(True,0.0)
+
     def test_Misalignment(self):
-        def test_Jitter_Val(jitterAmp):
+        def _test_Miaslignment(jitterAmp):
             PTL = self.elTestHelper.make_Latice(jitterAmp=jitterAmp)
             el = self.elTestHelper.get_Element(PTL)
             jitterArr = 2 * (np.random.random_sample(4) - .5) * jitterAmp
             jitterArr[2:] *= 1 / el.L  # rotation component
             blockPrint()
             el.perturb_Element(*jitterArr)
+            assert el.get_Valid_Jitter_Amplitude()<=jitterAmp*np.sqrt(2)+1e-12
             enablePrint()
             @given(*self.elTestHelper.coordTestRules)
-            @settings(max_examples=5000, deadline=None)
+            @settings(max_examples=5_000, deadline=None)
             def test_Geomtry_And_Fields(x1: float, x2: float, x3: float):
                 coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
                 F = el.force(coord)
@@ -395,9 +377,8 @@ class ElementTestRunner:
         if self.elTestHelper.testMisalignment==True:
             jitterAmpArr=np.linspace(0.0,self.elTestHelper.el.rp/10.0,5)
             np.random.seed(42)
-            [test_Jitter_Val(jitter) for jitter in jitterAmpArr]
+            [_test_Miaslignment(jitter) for jitter in jitterAmpArr]
             np.random.seed(int(time.time()))
-
 
     def trace_Different_Conditions(self,PTL):
         PT = ParticleTracer(PTL)
@@ -419,6 +400,7 @@ class ElementTestRunner:
                 # print(repr(qf), repr(pf))
                 # print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
+
     def is_Inside_Shapely(self,qEl):
         """Check with Shapely library that point resides in 2D footprint of element. It's possible that the point may
         fall just on the edge of the object, so return result with and without small padding"""
@@ -436,11 +418,23 @@ class ElementTestRunner:
             isInside2D = self.elTestHelper.el.is_Coord_Inside(coord2D)
             assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
 
-def run_Tests():
-    DriftTestHelper().run_Tests()
-    LensIdealTestHelper().run_Tests()
-    BenderIdealTestHelper().run_Tests()
-    CombinerIdealTestHelper().run_Tests()
-    CombinerHalbachTestHelper().run_Tests()
-    HexapoleLensSimTestHelper().run_Tests()
-    HexapoleSegmentedBenderTestHelper().run_Tests()
+def run_Tests(parallel=False):
+    funcsToRun=[DriftTestHelper().run_Tests,
+    LensIdealTestHelper().run_Tests,
+    BenderIdealTestHelper().run_Tests,
+    CombinerIdealTestHelper().run_Tests,
+    CombinerHalbachTestHelper().run_Tests,
+    HexapoleLensSimTestHelper().run_Tests,
+    HexapoleSegmentedBenderTestHelper().run_Tests]
+    def run_Func(func):
+        func()
+    processes=-1 if parallel==True else 1
+    tool_Parallel_Process(run_Func,funcsToRun,processes=processes)
+# run_Tests(parallel=True)
+# # DriftTestHelper().run_Tests()
+# # LensIdealTestHelper().run_Tests()
+# # BenderIdealTestHelper().run_Tests()
+# # CombinerIdealTestHelper().run_Tests()
+# # CombinerHalbachTestHelper().run_Tests()
+# # HexapoleLensSimTestHelper().run_Tests()
+# # HexapoleSegmentedBenderTestHelper().run_Tests()
