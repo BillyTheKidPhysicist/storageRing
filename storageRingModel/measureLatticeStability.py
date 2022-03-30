@@ -1,15 +1,11 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
+from helperTools import *
 from typing import Union
 import skopt
-import numpy as np
 import elementPT
-import multiprocess as mp
 import optimizerHelperFunctions
-import matplotlib.pyplot as plt
 from SwarmTracerClass import SwarmTracer
-import skopt
-import time
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
 
@@ -37,8 +33,8 @@ class StabilityAnalyzer:
         a gaussian. Heavy lifiting is done in optimizerHelperFunctions.py
 
         :param paramsOptimal: Optimal parameters of a lattice solution.
-        :param precision: Maximum displacement from ideal trajectory perpindicular to vacuum tube. This is out accepted
-        tolerance
+        :param precision: Maximum displacement from ideal trajectory perpindicular to vacuum tube in one direction.
+        This is our accepted tolerance
         :param tuning: Type of tuning for the lattice.
         """
         assert tuning in ('spacing','field',None)
@@ -46,10 +42,10 @@ class StabilityAnalyzer:
         self.tuning=tuning
         self.precision=precision
         self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.CombinerHalbachLensSim)
-    def generate_Ring_And_Injector_Lattice(self):
+    def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool):
         return optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(self.paramsOptimal,None,
-                                                        jitterAmp=self.precision/2.0,fieldDensityMultiplier=1.0)
-    def jitter_Amplitudes(self,element: elementPT.Element):
+                                jitterAmp=0*self.precision/2.0,fieldDensityMultiplier=1.0,standardMagnetErrors=useMagnetErrors)
+    def make_Jitter_Amplitudes(self, element: elementPT.Element):
         L = element.L
         angleMax = np.arctan(self.precision / L)
         randomNum = np.random.random_sample()
@@ -63,7 +59,7 @@ class StabilityAnalyzer:
         return shiftY, shiftZ, rotAngleY,rotAngleZ
 
     def jitter_Element(self,element:elementPT.Element):
-        shiftY,shiftZ,rotY,rotZ=self.jitter_Amplitudes(element)
+        shiftY,shiftZ,rotY,rotZ=self.make_Jitter_Amplitudes(element)
         element.perturb_Element(shiftY,shiftZ,rotY,rotZ)
     def jitter_Lattice(self,PTL):
         for el in PTL:
@@ -74,7 +70,7 @@ class StabilityAnalyzer:
         return cost
     def measure_Alingment_Sensitivity(self):
         # np.random.seed(42)
-        PTL_Ring,PTL_Injector=self.generate_Ring_And_Injector_Lattice()
+
         import dill
         # # file=open('temp1','wb')
         # # dill.dump(PTL_Ring,file)
@@ -85,38 +81,36 @@ class StabilityAnalyzer:
         # import dill
         # file = open('temp1', 'rb')
         # PTL_Ring=dill.load(file)
-        file = open('temp2', 'rb')
-        PTL_Injector = dill.load(file)
-        file.close()
+        # file = open('temp2', 'rb')
+        # PTL_Injector = dill.load(file)
+        # file.close()
         # self.jitter_Lattice(PTL_Injector)
 
         def _cost(i):
-            print(i)
             if i!=0:
+                PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(True)
                 np.random.seed(i)
                 self.jitter_Lattice(PTL_Ring)
                 self.jitter_Lattice(PTL_Injector)
-            try:
-                return self.cost(PTL_Ring, PTL_Injector)
-            except:
-                return np.nan
+                cost=self.cost(PTL_Ring, PTL_Injector)
+            else:
+                try:
+                    PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(False)
+                    cost=self.cost(PTL_Ring, PTL_Injector)
+                except:
+                    print('issue')
+                    cost= np.nan
+            print(cost)
+            return cost
         # _cost(0)
-        # [_cost(i) for i in list(range(30))]
-        with mp.Pool(10) as pool:
-            results=np.asarray(pool.map(_cost,list(range(30))))
-        # np.savetxt('stabilityData',results)
-        print(results)
-
-"""
-[0.70624971 0.7173343  0.69522913 0.7154003  0.70952638 0.71102004
- 0.70953184 0.72955335 0.71696684 0.72404627 0.68602692 0.71580795
- 0.70982592 0.71133951 0.71000365 0.7082258  0.75010548 0.72227082
- 0.71354967 0.72761908 0.70818812 0.73874164 0.70931439 0.71204169
- 0.71617644 0.70881442 0.70971138 0.71839448 0.72854086 0.71631354]
-"""
+        # _cost(2)
+        results=tool_Parallel_Process(_cost,list(range(10)),processes=5)
+        # print(repr(results))
 
 
-sa=StabilityAnalyzer(np.array([0.00976065, 0.03458421, 0.01329697, 0.01013278, 0.39046408]))
+
+
+sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
 sa.measure_Alingment_Sensitivity()
 
 

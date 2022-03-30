@@ -17,9 +17,9 @@ def survival_Optimize(bounds,tuning,workers):
             assert False
         return sol.cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True)
-    args0 = np.array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
-    wrapper(args0)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
+    # args0 = np.array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
+    # wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
@@ -67,31 +67,16 @@ def main():
 if __name__=='__main__':
     main()
 
-"""
-# rpLens, rpLensFirst,rplensLast, rpBend , L_Lens
-----------Solution-----------   
-injector element spacing optimum configuration: None
-storage ring tuned params 1 optimum configuration: array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
-storage ring tuned params 2 optimum configuration: None
-cost: 0.5982274404677516
-percent max flux multiplication: 40.30475837756654
-scipy message: None
 
-"""
-
-
-# many particles:
 
 """----------Solution-----------   
-injector element spacing optimum configuration: None
-storage ring tuned params 1 optimum configuration: array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
-storage ring tuned params 2 optimum configuration: None
-cost: 0.5911770700478259
-percent max flux multiplication: 41.00979780702859
-scipy message: None
-----------------------------"""
+------ITERATIONS:  4350
+POPULATION VARIABILITY: [0.03897526 0.02361456 0.0131504  0.00323601 0.02216822]
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
+cost: 0.5838620992518562"""
 
-# many particles, full method of moments
 
 
 

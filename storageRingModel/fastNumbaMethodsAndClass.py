@@ -106,10 +106,10 @@ def vec_interp3D(xLoc,yLoc,zLoc,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
         c1_z=c01_z*(1-yd)+c11_z*yd
         c_z=c0_z*(1-zd)+c1_z*zd
     else:
-        print(xLoc,yLoc,zLoc)
-        print(xCoords.min(),xCoords.max())
-        print(yCoords.min(),yCoords.max())
-        print(zCoords.min(),zCoords.max())
+        # print(xLoc,yLoc,zLoc)
+        # print(xCoords.min(),xCoords.max())
+        # print(yCoords.min(),yCoords.max())
+        # print(zCoords.min(),zCoords.max())
         raise Exception('out of bounds')
     return c_x,c_y,c_z
 
@@ -137,9 +137,9 @@ def interp2D(xLoc,yLoc,xCoords,yCoords,v_c):
         c10=v_c[Y*x0+y1]*(1-xd)+v_c[Y*x1+y1]*xd
         c=c00*(1-yd)+c10*yd
     else:
-        print(xLoc, yLoc)
-        print(xCoords.min(), xCoords.max())
-        print(yCoords.min(), yCoords.max())
+        # print(xLoc, yLoc)
+        # print(xCoords.min(), xCoords.max())
+        # print(yCoords.min(), yCoords.max())
         raise Exception('out of bounds')
     return c
 @numba.njit()
@@ -1062,17 +1062,13 @@ class SegmentedBenderSimFieldHelper_Numba:
         """Misalignment factor in longitudinal direction through bender. Exists to enforce energy conservation with
         transverse force fact. Otherwise there would be discontinuities"""
         theta = full_Arctan2(y, x)
-        # print('------',x,y,z,self.Lcap,theta)
-        # print(-self.Lcap <= y < 0.0 ,np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap)
         if 0.0 <= theta <= self.ang:
             fact = abs(np.sin(.5 * np.pi * theta / self.ucAng + np.pi / 2))
         elif -self.Lcap <= y < 0.0 and np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap:
             fact = 1.0 - abs(y / self.Lcap)
-            # print('here1')
         else:
             rotAngle = -self.ang
             x, y = np.cos(rotAngle) * x - np.sin(rotAngle) * y, np.sin(rotAngle) * x + np.cos(rotAngle) * y
-            # print('here2')
             assert 0.0 <= y <= self.Lcap + 1e-9  # allow for error
             fact = 1.0 - abs(y / self.Lcap)
         return fact

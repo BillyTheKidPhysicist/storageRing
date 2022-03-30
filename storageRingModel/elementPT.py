@@ -893,7 +893,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=[self.is_Valid_Internal_Fringe(coord) for coord in fieldCoords]
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                        numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
+                                numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def generate_Segment_Field_Data(self)->tuple:
@@ -906,7 +906,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=np.sqrt((fieldCoords[:,0]-self.rb)**2+fieldCoords[:,1]**2)<self.rp
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                            numLenses=self.numModelLenses+2,applyMethodOfMoments=True)
+                                                        numLenses=self.numModelLenses+2,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def compute_Valid_Field_Data(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
@@ -1015,13 +1015,22 @@ class HalbachLensSim(LensIdeal):
         self.L=L
         self.build()
 
+    def get_Valid_Jitter_Amplitude(self,Print=False):
+        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
+        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
+        maxJitterAmp = self.apMax - self.ap
+        jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
+        if Print==True:
+            if jitterAmpProposed==maxJitterAmp:
+                print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
+        return jitterAmp
+
     def set_extraFieldLength(self)->None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
         is too large for good field region, extra length is clipped"""
-        jitterAmp=self.PTL.jitterAmp*np.sqrt(2) #consider circular aperture
-        assert jitterAmp<self.L/10.0 #small angles
-        maxJitterAmp=self.apMax-self.ap
-        tiltMax=jitterAmp/self.L if jitterAmp<maxJitterAmp else maxJitterAmp/self.L
+        jitterAmp=self.get_Valid_Jitter_Amplitude(Print=True)
+        tiltMax=jitterAmp/self.L
+        assert tiltMax<.1 # small angle. Not sure if valid outside that range
         self.extraFieldLength=self.rp*tiltMax*1.5 #safety factor for approximations
 
     def build(self)->None:
@@ -1058,7 +1067,8 @@ class HalbachLensSim(LensIdeal):
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
-        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.ap-TINY_OFFSET, self.numGridPointsXY)
+        jitterAmp=self.get_Valid_Jitter_Amplitude()
+        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp, self.numGridPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zMin = -TINY_OFFSET # inside the lens
         zMax = self.Lcap+TINY_OFFSET + self.extraFieldLength  # outside the lens
@@ -1163,13 +1173,15 @@ class HalbachLensSim(LensIdeal):
 
 class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
-    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int, mode:str,build:bool=True):
+    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int, mode:str, useStandardMagErrors: bool,
+                 apFrac: float, build:bool=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
         #layers: Number of concentric layers
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         assert  mode in ('storageRing','injector')
+        assert apFrac<=1.0
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
         # LensIdeal.__init__(self,PTL,None,None,None,None,build=False)
         # HalbachLensSim
@@ -1183,13 +1195,14 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
-        self.ap=.9*self.rp
+        self.ap=apFrac*self.rp
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
         self.fieldFact=-1.0 if mode=='injector' else 1.0
         self.space=None
         self.extraFieldLength=0.0
         self.apMax=None
+        self.useStandardMagErrors=useStandardMagErrors
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -1213,7 +1226,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True)
+        self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
+                                                useStandardMagErrors=self.useStandardMagErrors)
         inputAngle, inputOffset, trajectoryLength = self.compute_Orbit_Characteristics()
 
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -1247,11 +1261,11 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
         numY=self.numGridPointsXY
-        numX=int(self.numGridPointsXY*self.ap/yMax)
+        numX=int(self.numGridPointsXY*self.rp/yMax)
         zMax=self.compute_Valid_zMax(La,ang)
 
         yArr_Quadrant = np.linspace(-TINY_OFFSET, yMax, numY)  # this remains y in element frame
-        xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes x in element frame
+        xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes z in element frame
         zArr = np.linspace(-TINY_OFFSET, zMax + self.extraFieldLength, num=self.numGridPointsZ)
         return xArr_Quadrant,yArr_Quadrant,zArr
 
@@ -1305,17 +1319,22 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
     def update_Field_Fact(self,fieldStrengthFact)->None:
         self.fastFieldHelper.fieldFact=fieldStrengthFact
         self.fieldFact=fieldStrengthFact
+    def get_Valid_Jitter_Amplitude(self,Print=False):
+        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
+        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
+        maxJitterAmp = self.apMax - self.ap
+        jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
+        if Print==True:
+            if jitterAmpProposed==maxJitterAmp:
+                print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
+        return jitterAmp
 
     def set_extraFieldLength(self)->None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
         is too large for good field region, extra length is clipped. Misalignment is a translational and/or rotational,
         so extra length needs to be accounted for in the case of rotational."""
-        xArr, yArr, zArr = self.make_Grid_Coords_Arrays(self.La, self.ang)
-        assert np.max(np.abs(xArr))>self.ap+self.PTL.jitterAmp #check we won't exit interpolation region
-        assert np.max(np.abs(yArr))>self.ap+self.PTL.jitterAmp #check we won't exit interpolation region
-        shiftMaxRadial=np.sqrt(2)*self.PTL.jitterAmp #two maximal shifts in each dimension
-        assert self.ap+shiftMaxRadial<self.apMax
-        tiltMax1D=np.arctan(self.PTL.jitterAmp/self.L) #Tilt in x,y can be higher but I only need to consider 1D
+        jitterAmp=self.get_Valid_Jitter_Amplitude(Print=True)
+        tiltMax1D=np.arctan(jitterAmp/self.L) #Tilt in x,y can be higher but I only need to consider 1D
         #because interpolation grid is square
         assert tiltMax1D<.05 #insist small angle approx
         self.extraFieldLength=self.rp*np.tan(tiltMax1D)*1.5 #safety factor
@@ -1331,7 +1350,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact=.9*maxShift/totalShift #safety factor
-            print('proposed', totalShift, 'new', reductionFact*maxShift)
+            print('proposed', totalShift, 'new', reductionFact*totalShift)
             shiftY,shiftZ,rotY,rotZ=[val*reductionFact for val in [shiftY,shiftZ,rotY,rotZ]]
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 

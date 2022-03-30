@@ -61,7 +61,7 @@ class SimpleLocalMinimizer:
 class ParticleTracerLattice:
 
     def __init__(self,v0Nominal: Union[float,int],latticeType: str='storageRing',
-                 jitterAmp: float=0.0, fieldDensityMultiplier:float =1.0):
+                 jitterAmp: float=0.0, fieldDensityMultiplier:float =1.0, standardMagnetErrors: bool =False):
         assert fieldDensityMultiplier>0.0
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
@@ -76,6 +76,7 @@ class ParticleTracerLattice:
         self.totalLength=None #total length of lattice, m
         self.jitterAmp=jitterAmp
         self.fieldDensityMultiplier=fieldDensityMultiplier
+        self.standardMagnetErrors=standardMagnetErrors
 
         self.bender1=None #bender element object
         self.bender2=None #bender element object
@@ -83,7 +84,7 @@ class ParticleTracerLattice:
         self.linearElementsToConstraint=[] #elements whos length will be changed when the lattice is constrained to
         # satisfy geometry. Must be inside bending region
 
-        self.elList=[] #to hold all the lattice elements
+        self.elList: list[Element]=[] #to hold all the lattice elements
 
     def __iter__(self)-> Iterable[Element]:
         return (element for element in self.elList)
@@ -168,7 +169,8 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2)-> None:
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,apFrac: float =.9)\
+            -> None:
         """
         Add halbach hexapole lens combiner element.
 
@@ -182,7 +184,7 @@ class ParticleTracerLattice:
         :param layers: Number of concentric layers of magnets
         :return: None
         """
-        el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType)
+        el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType,self.standardMagnetErrors,apFrac)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner=el
@@ -191,7 +193,7 @@ class ParticleTracerLattice:
 
     def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
                 bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,
-                             methodOfMomentsHighPrecision: bool=False, useStandardMagErrors: bool=False)-> None:
+                             methodOfMomentsHighPrecision: bool=False)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -205,11 +207,9 @@ class ParticleTracerLattice:
         fringe fields
         :param methodOfMomentsHighPrecision: Wether to subdivide the magnet into small pieces when applying method of
         moments
-        :param useStandardMagErrors: Include random variations originating from manufactoring errors of neodymium. Will
-        have a repeatable effect if lens is same shape and number of layers and slices
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,methodOfMomentsHighPrecision, useStandardMagErrors)
+        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,methodOfMomentsHighPrecision, self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
