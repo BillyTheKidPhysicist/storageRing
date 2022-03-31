@@ -86,7 +86,6 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
-    print(LmCombiner, rpCombiner,loadBeamDiam)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
@@ -133,9 +132,9 @@ def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):
     # if sol.fluxMultiplicationPercent>10.0:
     #     print(sol)
     return sol
-def solve_For_Lattice_Params(X,tuning):
+def solve_For_Lattice_Params(X,tuning,magnetErrors):
     assert tuning in (None,'field','spacing')
-    PTL_Ring, PTL_Injector=generate_Ring_And_Injector_Lattice(X,tuning)
+    PTL_Ring, PTL_Injector=generate_Ring_And_Injector_Lattice(X,tuning,standardMagnetErrors=magnetErrors)
     if PTL_Ring is None or PTL_Injector is None:
         sol = invalid_Solution(X)
     else:

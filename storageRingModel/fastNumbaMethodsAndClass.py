@@ -950,7 +950,6 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             x = x - symmetryPlaneX
             Fx, Fy, Fz = self._force_Func(x, y, z)
         else:
-            print(x0,y0,z0)
             raise ValueError
         Fy = Fy * FySymmetryFact
         Fz = Fz * FzSymmetryFact

@@ -347,7 +347,6 @@ class ElementTestRunner:
             PTL=self.elTestHelper.make_Latice(magnetErrors=magnetError,jitterAmp=jitterAmp)
             el=self.elTestHelper.get_Element(PTL)
             el.perturb_Element(.1*jitterAmp,.1*jitterAmp,.1*jitterAmp/el.L,.1*jitterAmp/el.L)
-            # print(el.)
             particleList = self.trace_Different_Conditions(PTL)
             with pytest.raises(ValueError) as excInfo:
                 self.assert_Particle_List_Is_Expected(particleList, qf0Temp, pf0Temp)
@@ -430,11 +429,3 @@ def run_Tests(parallel=False):
         func()
     processes=-1 if parallel==True else 1
     tool_Parallel_Process(run_Func,funcsToRun,processes=processes)
-# run_Tests(parallel=True)
-# # DriftTestHelper().run_Tests()
-# # LensIdealTestHelper().run_Tests()
-# # BenderIdealTestHelper().run_Tests()
-# # CombinerIdealTestHelper().run_Tests()
-# # CombinerHalbachTestHelper().run_Tests()
-# # HexapoleLensSimTestHelper().run_Tests()
-# # HexapoleSegmentedBenderTestHelper().run_Tests()

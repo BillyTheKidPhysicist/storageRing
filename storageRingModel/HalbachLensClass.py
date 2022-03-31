@@ -27,7 +27,6 @@ def B_NUMBA(r,r0,m):
     Bvec=(MAGNETIC_PERMEABILITY/(4*np.pi))*(3*r*mrDot/rNorm**5-m/rNorm**3)
     return Bvec
 
-
 class Sphere:
 
     def __init__(self, radius: float,M: float=M_Default):
@@ -352,12 +351,13 @@ class HalbachLens(billyHalbachCollectionWrapper):
 
         if self.applyMethodOfMoments == True:
             self.method_Of_Moments()
+
     def standard_Magnet_Errors(self):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
         if self.sameSeed==True:
             np.random.seed(42)
         dimTol=.004*.0254 #dimension variation,inch to meter, +/- meters
-        MagVecAngleTol=2*np.pi/180 #magnetization vector angle tolerane,degree to radian,, +/- radians
+        MagVecAngleTol=1.5*np.pi/180 #magnetization vector angle tolerane,degree to radian,, +/- radians
         MagNormTol=.0125 #magnetization value tolerance, +/- fraction
         dimVariation=self.make_Base_Error_Arr(numParams=3)*dimTol
         MagVecAngleVariation=self.make_Base_Error_Arr(numParams=2)*MagVecAngleTol/np.sqrt(2) #two dimensional variation
@@ -366,9 +366,11 @@ class HalbachLens(billyHalbachCollectionWrapper):
             #todo: Does this random seed thing work, or is it a pitfall?
             np.random.seed(int(time.time()))
         return dimVariation,MagVecAngleVariation,magNormVariation
+
     def make_Base_Error_Arr(self,numParams=1):
         """values range between -1 and 1 with shape (12,numParams)"""
         return 2*(np.random.random_sample((self.numMagnetsInLayer,numParams)) - .5)
+
     def subdivide_Lens(self):
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
          if the lens is composed of slices"""

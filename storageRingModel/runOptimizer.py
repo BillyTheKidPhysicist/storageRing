@@ -1,14 +1,14 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from helperTools import *
-
+from profilehooks import profile
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
 from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
-def survival_Optimize(bounds,tuning,workers):
+def survival_Optimize(bounds: list,tuning: Optional[str],workers: int,magnetErrors: bool):
     def wrapper(args):
         try:
-            sol=solve_For_Lattice_Params(args,tuning)
+            sol=solve_For_Lattice_Params(args,tuning,magnetErrors)
             if sol.fluxMultiplicationPercent>1.0:
                 print(sol)
         except:
@@ -18,7 +18,7 @@ def survival_Optimize(bounds,tuning,workers):
         return sol.cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
     solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
-    # args0 = np.array([0.02126719, 0.03330273, 0.01353354, 0.008943  , 0.39831075])
+    # args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
     # wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
@@ -63,13 +63,16 @@ def main():
         # (.02,.05)  #rpCombiner
     ]
     # stability_And_Survival_Optimize(bounds,None,8)
-    survival_Optimize(bounds,None,8)
+    survival_Optimize(bounds,None,8,True)
 if __name__=='__main__':
     main()
 
 
 
-"""----------Solution-----------   
+"""----------Solution-----------  
+
+ideal case
+ 
 ------ITERATIONS:  4350
 POPULATION VARIABILITY: [0.03897526 0.02361456 0.0131504  0.00323601 0.02216822]
 BEST MEMBER BELOW

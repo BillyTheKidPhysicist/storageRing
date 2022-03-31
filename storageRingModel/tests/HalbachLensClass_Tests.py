@@ -141,7 +141,7 @@ class HalbachLenstestHelper:
         #test that standard magnet tolerances changes values
         np.random.seed(42) #for repeatable results
         BNormsVals_STD_NoError=0.11674902392610367
-        BNormsVals_STD_Error=0.11648535357552772
+        BNormsVals_STD_Error=0.11653023297363536
         magnetWidth1,magnetWidth2=.0254,.0254*1.5
         lens=HalbachLens((self.rp,self.rp+.0254),(magnetWidth1,magnetWidth2),self.length,useStandardMagErrors=True)
         xArr=np.linspace(-self.rp*.5,self.rp*.5)
