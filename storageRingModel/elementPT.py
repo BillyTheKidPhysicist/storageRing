@@ -153,10 +153,10 @@ class Element:
         """
         Return magnetic potential energy at position qEl.
 
-        Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is 
+        Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is
         1kg, at cartesian 3D coordinate qEl in the local element frame. This is done by calling up fastFieldHelper, a
         jitclass, which does the actual math/interpolation.
-         
+
         :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
         """
@@ -169,8 +169,8 @@ class Element:
         Return 3D cartesian force of a lithium at cartesian 3D coordinate qEl in the local element frame. Force vector
         has simulation units where lithium-7 mass is 1kg. This is done by calling up fastFieldHelper, a
         jitclass, which does the actual math/interpolation.
-        
-         
+
+
         :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
         :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
         """
@@ -179,8 +179,8 @@ class Element:
     def transform_Lab_Coords_Into_Global_Orbit_Frame(self, qLab:np.ndarray, cumulativeLength:float)->np.ndarray:
         """
         Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
-        observer/lab cartesian coordinates. 
-        
+        observer/lab cartesian coordinates.
+
         :param qLab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
         :param cumulativeLength: total length in orbit frame traveled so far. For a series of linear elements this
         would simply be the sum of their length, float
@@ -374,21 +374,21 @@ class LensIdeal(Element):
         qNew-=self.r1
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
-    
+
     def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew = qEl.copy()
         qNew=self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew+=self.r1
         return qNew
-    
+
     def transform_Orbit_Frame_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]
         qNew+=self.r1
         return qNew
-    
+
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, q:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element. Element and orbit frame is identical"""
         return q.copy()
@@ -415,7 +415,7 @@ class Drift(LensIdeal):
         self.fastFieldHelper=self.init_fastFieldHelper([L,ap])
         if build==True:
             self.build()
-            
+
     def build(self)->None:
         """Overrides abstract method from Element"""
         self.Lo = self.L
@@ -450,7 +450,7 @@ class BenderIdeal(Element):
         segmented: Wether the element is made up of discrete segments, or is continuous. Used in
             ParticleTracerLatticeClass
         """
-    
+
     def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
         if all(arg is not None for arg in [ap,rb,ang])==True:
             assert ap<rp<rb/2.0 and 0.0<ang<2*np.pi
@@ -481,7 +481,7 @@ class BenderIdeal(Element):
         qNew = qLab - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
-    
+
     def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element."""
         qNew=qEl.copy()
@@ -518,7 +518,7 @@ class CombinerIdeal(Element):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
-    
+
     def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float,apR: float,apZ: float, mode: str,
                  sizeScale: float,build: bool=True):
         Element.__init__(self,PTL, build=False)
@@ -544,7 +544,7 @@ class CombinerIdeal(Element):
 
         if build==True:
             self.build()
-    
+
     def build(self)->None:
         """Overrides abstract method from Element"""
         self.apR,self.apL,self.apz,self.Lm=[val*self.sizeScale for val in (self.apR,self.apL,self.apz,self.Lm)]
@@ -615,7 +615,7 @@ class CombinerIdeal(Element):
             return outputAngle, outputOffset, qArr, minSep
         else:
             return outputAngle, outputOffset, qArr
-    
+
     def compute_Trajectory_Length(self, qTracedArr:np.ndarray)->float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
         # length
@@ -627,7 +627,7 @@ class CombinerIdeal(Element):
         dLArr = np.sqrt(xDelta ** 2 + yDelta ** 2)
         Lo = float(np.sum(dLArr))
         return Lo
-    
+
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
         qEl = self.transform_Lab_Frame_Vector_Into_Element_Frame(qLab-self.r2) #a simple vector trick
@@ -641,13 +641,13 @@ class CombinerIdeal(Element):
         qo[0] = self.Lo - qo[0]
         qo[1] = 0  # qo[1]
         return qo
-    
+
     def transform_Element_Coords_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
         qNew=q.copy()
         qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
         return qNew
-    
+
     def transform_Orbit_Frame_Into_Lab_Frame(self,qo:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
         qNew=qo.copy()
@@ -658,7 +658,7 @@ class CombinerIdeal(Element):
 
 
 class CombinerSim(CombinerIdeal):
-    
+
     def __init__(self, PTL, combinerFileName: str, mode: str,sizeScale: float=1.0,build: bool=True):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
@@ -1002,7 +1002,7 @@ class HalbachLensSim(LensIdeal):
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
-        self.lengthEffective=None #if the magnet is very long, to save simulation
+        self.effectiveLength=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap=None
         self.extraFieldLength=None #extra field added to end of lens to account misalignment
@@ -1011,6 +1011,8 @@ class HalbachLensSim(LensIdeal):
         #2D
         self.magnetic_Potential_Func_Fringe = None
         self.magnetic_Potential_Func_Inner = None
+        self.exploitSymmetry=not useStandardMagErrorss
+        self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
         if build==True:
             self.build()
@@ -1038,16 +1040,24 @@ class HalbachLensSim(LensIdeal):
         F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
         F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
         assert F_edge/F_center<.01
+    def set_Effective_Length(self):
+        """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
+        is effectively isotropic a sufficient depth inside. This is then modeled as a 2d slice, and the outer edges
+        as 3D slice"""
+        if self.exploitSymmetry==False:
+            if self.Lm/self.rp>5:
+                raise NotImplementedError
+            self.effectiveLength= self.Lm
+        else:
+            self.effectiveLength=self.minLengthLongSymmetry if self.minLengthLongSymmetry<self.Lm else self.Lm
 
     def fill_Geometric_Params(self)->None:
         """Compute dependent geometric values"""
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
         self.Lo=self.L
-        self.lengthEffective=min(self.fringeFracInnerMin*max(self.rpLayers),
-                                 self.Lm)  #if the magnet is very long, to save simulation
-        #time use a smaller length that still captures the physics, and then model the inner portion as 2D
-        self.Lcap=self.lengthEffective/2+self.fringeFracOuter*max(self.rpLayers)
+        self.set_Effective_Length()
+        self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
         maximumMagnetWidth=tuple(rp*np.tan(2*np.pi/24)*2 for rp in self.rpLayers)
         if self.magnetWidth is None:
             self.magnetWidth=maximumMagnetWidth
@@ -1063,11 +1073,16 @@ class HalbachLensSim(LensIdeal):
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
         jitterAmp=self.get_Valid_Jitter_Amplitude()
-        yArr_Quadrant = np.linspace(-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp, self.numGridPointsXY)
+
+        yMin,yMax=-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp
+        zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
+        numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
+        if self.exploitSymmetry==False: #range will have to fully capture lens.
+            yMin,zMin=-yMax,-zMax
+            numPointsXY, numPointsZ=2*numPointsXY,2*numPointsZ
+        yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
-        zMin = -TINY_OFFSET # inside the lens
-        zMax = self.Lcap+TINY_OFFSET + self.extraFieldLength  # outside the lens
-        zArr = np.linspace(zMin, zMax, self.numGridPointsZ)
+        zArr = np.linspace(zMin, zMax, numPointsZ)
         return xArr_Quadrant,yArr_Quadrant,zArr
 
     def make_2D_Field_Data(self,lens:_HalbachLensFieldGenerator,xArr:np.ndarray,
@@ -1083,8 +1098,12 @@ class HalbachLensSim(LensIdeal):
         :param yArr: Grid edge y values of quarter of plane
         :return: Either 2d array of field data, or None
         """
-        if self.lengthEffective<self.Lm: #if total magnet length is large enough to ignore fringe fields for interior
-            # portion inside then use a 2D plane to represent the inner portion to save resources
+        if self.exploitSymmetry==False or self.Lm<self.minLengthLongSymmetry:
+            data2D=None
+        else:
+            # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
+            # save resources
+
             planeCoords=np.asarray(np.meshgrid(xArr,yArr,0)).T.reshape(-1,3)
             validIndices=np.linalg.norm(planeCoords,axis=1)<=self.rp
             BNormGrad,BNorm=np.zeros((len(validIndices),3))*np.nan,np.ones(len(validIndices))*np.nan
@@ -1092,8 +1111,6 @@ class HalbachLensSim(LensIdeal):
             # BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
             data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
-        else:
-            data2D=None
         return data2D
 
     def make_3D_Field_Data(self,lens:_HalbachLensFieldGenerator,xArr:np.ndarray,yArr:np.ndarray,
@@ -1123,7 +1140,7 @@ class HalbachLensSim(LensIdeal):
         return data3D
 
     def make_Field_Data(self)->tuple:
-        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,self.lengthEffective,
+        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,self.effectiveLength,
                         applyMethodOfMoments=True,useStandardMagErrors=self.useStandardMagErrors)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
@@ -1139,8 +1156,10 @@ class HalbachLensSim(LensIdeal):
         else:
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
         fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
-        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,self.L,self.Lcap,self.ap,
-                                                                                   self.extraFieldLength])
+        Lcap = np.nan if self.exploitSymmetry == False else self.Lcap
+
+        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,self.L,Lcap,self.ap,
+                                                                        self.extraFieldLength,self.exploitSymmetry])
         self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
 
@@ -1156,7 +1175,7 @@ class HalbachLensSim(LensIdeal):
         maxJitterAmp = self.apMax - self.ap
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
         if Print==True:
-            if jitterAmpProposed==maxJitterAmp:
+            if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:
                 print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
         return jitterAmp
 
@@ -1330,7 +1349,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         maxJitterAmp = self.apMax - self.ap
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
         if Print==True:
-            if jitterAmpProposed==maxJitterAmp:
+            if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:
                 print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
         return jitterAmp
 
@@ -1417,7 +1436,7 @@ class geneticLens(LensIdeal):
         assert self.lens.minimum_Radius() >= ap
         self.fringeFracInnerMin = np.inf  # if the total hard edge magnet length is longer than this value * rp, then it can
         # can safely be modeled as a magnet "cap" with a 2D model of the interior
-        self.lengthEffective = None  # if the magnet is very long, to save simulation
+        self.self.effectiveLength = None  # if the magnet is very long, to save simulation
         # time use a smaller length that still captures the physics, and then model the inner portion as 2D
 
         self.magnetic_Potential_Func_Fringe = None

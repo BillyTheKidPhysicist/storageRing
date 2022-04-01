@@ -7,6 +7,8 @@ from constants import SIMULATION_MAGNETON
 
 #this needs to be refactored
 
+tupleOf3Floats=tuple[float,float,float]
+
 @numba.njit()
 def scalar_interp3D(x,y,z,xCoords,yCoords,zCoords,vec):
     X,Y,Z=len(xCoords),len(yCoords),len(zCoords)
@@ -402,6 +404,7 @@ spec = [
     ('ap', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
+    ('exploitSymmetry', numba.boolean),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
 
@@ -409,7 +412,7 @@ spec = [
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self,fieldData,L,Lcap,ap,extraFieldLength):
+    def __init__(self,fieldData,L,Lcap,ap,extraFieldLength,exploitSymmetry):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
         self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn=fieldData
         self.L=L
@@ -417,13 +420,14 @@ class LensHalbachFieldHelper_Numba:
         self.ap=ap
         self.fieldFact=1.0
         self.extraFieldLength=extraFieldLength
+        self.exploitSymmetry=exploitSymmetry
         self.baseClass=BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData=self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,\
                   self.xArrIn,self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn
-        return fieldData,self.L,self.Lcap,self.ap,self.extraFieldLength
+        return fieldData,self.L,self.Lcap,self.ap,self.extraFieldLength,self.exploitSymmetry
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -443,17 +447,17 @@ class LensHalbachFieldHelper_Numba:
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
         else: return False
 
-    def _magnetic_Potential_Func_Fringe(self,x,y,z):
+    def _magnetic_Potential_Func_Fringe(self,x,y,z)-> float:
         """Wrapper for interpolation of magnetic fields at ends of lens. self.magnetic_Potential"""
         V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
         return V
 
-    def _magnetic_Potential_Func_Inner(self,x,y,z):
+    def _magnetic_Potential_Func_Inner(self,x,y,z)->float:
         """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_Potential"""
         V=interp2D(-z, y,self.xArrIn,self.yArrIn,self.VArrIn)
         return V
 
-    def _force_Func_Outer(self,x,y,z):
+    def _force_Func_Outer(self,x,y,z)-> tupleOf3Floats:
         """Wrapper for interpolation of force fields at ends of lens. see self.force"""
         Fx0,Fy0,Fz0=vec_interp3D(-z, y,x,self.xArrEnd,self.yArrEnd,self.zArrEnd,
                                  self.FxArrEnd, self.FyArrEnd,self.FzArrEnd)
@@ -462,14 +466,20 @@ class LensHalbachFieldHelper_Numba:
         Fz = -Fx0
         return Fx,Fy,Fz
 
-    def _force_Func_Inner(self,x:float,y:float,z:float)->tuple:
+    def _force_Func_Inner(self,x:float,y:float,z:float)->tupleOf3Floats:
         """Wrapper for interpolation of force fields of plane at center lens. see self.force"""
         Fx = 0.0
         Fy = interp2D(-z,y, self.xArrIn,self.yArrIn,self.FyArrIn)
         Fz = -interp2D(-z,y,self.xArrIn,self.yArrIn,self.FxArrIn)
         return Fx, Fy, Fz
 
-    def force(self,x:float, y:float, z:float)->tuple:
+    def force(self,x:float, y:float, z:float)->tupleOf3Floats:
+        if self.exploitSymmetry==True:
+            return self._force_Symmetry(x,y,z)
+        else:
+            return self._force_No_Symmetry(x,y,z)
+
+    def _force_Symmetry(self,x:float, y:float, z:float)->tupleOf3Floats:
         """
         Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
@@ -491,7 +501,7 @@ class LensHalbachFieldHelper_Numba:
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if -self.extraFieldLength <= x<= self.Lcap: #at beginning of lends
+        if -self.extraFieldLength <= x<= self.Lcap: #at beginning of lens
             x = self.Lcap - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
             Fx = -Fx
@@ -508,7 +518,26 @@ class LensHalbachFieldHelper_Numba:
         Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
 
-    def magnetic_Potential(self, x:float,y:float,z:float):
+    def _force_No_Symmetry(self,x0: float,y0: float,z0: float)-> tupleOf3Floats:
+        if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
+            return np.nan,np.nan,np.nan
+        x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+        x=x-self.L/2
+        Fx, Fy, Fz = self._force_Func_Outer(x, y, z) #being used to hold fields for entire lens
+        Fx = Fx * self.fieldFact
+        Fy = Fy * self.fieldFact
+        Fz = Fz * self.fieldFact
+        Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
+        return Fx, Fy, Fz
+
+    def magnetic_Potential(self,x:float,y:float,z:float) -> float:
+
+        if self.exploitSymmetry==True:
+            return self._magnetic_Potential_Symmetry(x,y,z)
+        else:
+            return self._magnetic_Potential_No_Symmetry(x,y,z)
+
+    def _magnetic_Potential_Symmetry(self, x:float,y:float,z:float)-> float:
         """
         Magnetic potential energy of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
@@ -539,6 +568,14 @@ class LensHalbachFieldHelper_Numba:
             raise Exception("Particle outside field region")
         V0=V0*self.fieldFact
         return V0
+
+    def _magnetic_Potential_No_Symmetry(self,x0: float,y0: float,z0: float)-> float:
+         if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
+             return np.nan
+         x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+         x=x-self.L/2
+         V0= self._magnetic_Potential_Func_Fringe(x, y, z)
+         return V0
 
 
 
