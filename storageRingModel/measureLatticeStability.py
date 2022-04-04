@@ -1,4 +1,7 @@
 import os
+
+import numpy as np
+
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from helperTools import *
 from typing import Union
@@ -9,20 +12,7 @@ from SwarmTracerClass import SwarmTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
 
-
-
-# def wrapper(args,seed):
-#     np.random.seed(seed)
-#     try:
-#         tuning=None
-#         sol=solve_For_Lattice_Params(args,tuning,bumpOffsetAmp)
-#         cost=sol.swarmCost
-#         print(cost)
-#     except:
-#         np.set_printoptions(precision=100)
-#         print('assert during evaluation on args: ',args)
-#         assert False
-#     return cost
+combinerTypes=(elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementPT.CombinerSim)
 
 
 
@@ -42,76 +32,72 @@ class StabilityAnalyzer:
         self.tuning=tuning
         self.precision=precision
         self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.CombinerHalbachLensSim)
-    def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool):
+    def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool,fieldDensityMul: float)-> \
+                                                                    tuple[ParticleTracerLattice,ParticleTracerLattice]:
         return optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(self.paramsOptimal,None,
-                                jitterAmp=0*self.precision/2.0,fieldDensityMultiplier=1.0,standardMagnetErrors=useMagnetErrors)
-    def make_Jitter_Amplitudes(self, element: elementPT.Element):
+                                jitterAmp=self.precision,fieldDensityMultiplier=fieldDensityMul,standardMagnetErrors=useMagnetErrors)
+    def make_Jitter_Amplitudes(self, element: elementPT.Element,randomOverRide=None):
         L = element.L
         angleMax = np.arctan(self.precision / L)
-        randomNum = np.random.random_sample()
+        randomNum = np.random.random_sample() if randomOverRide is None else randomOverRide[0]
+        random4Nums=np.random.random_sample(4) if randomOverRide is None else randomOverRide[1]
         angleAmp, shiftAmp = angleMax * randomNum, self.precision * (1 - randomNum)
         angleAmp = angleAmp / np.sqrt(2)  # consider both dimensions being misaligned
         shiftAmp = shiftAmp / np.sqrt(2) # consider both dimensions being misaligned
-        rotAngleY = 2 * (np.random.random_sample() - .5)* angleAmp
-        rotAngleZ = 2 * (np.random.random_sample() - .5)* angleAmp
-        shiftY = 2 * (np.random.random_sample() - .5) * shiftAmp
-        shiftZ = 2 * (np.random.random_sample() - .5) * shiftAmp
+        rotAngleY = 2 * (random4Nums[0] - .5)* angleAmp
+        rotAngleZ = 2 * (random4Nums[1] - .5)* angleAmp
+        shiftY = 2 * (random4Nums[2] - .5) * shiftAmp
+        shiftZ = 2 * (random4Nums[3] - .5) * shiftAmp
         return shiftY, shiftZ, rotAngleY,rotAngleZ
 
-    def jitter_Element(self,element:elementPT.Element):
-        shiftY,shiftZ,rotY,rotZ=self.make_Jitter_Amplitudes(element)
-        element.perturb_Element(shiftY,shiftZ,rotY,rotZ)
-    def jitter_Lattice(self,PTL):
+    def jitter_Lattice(self,PTL,combinerRandomOverride):
         for el in PTL:
             if any(validElementType==type(el) for validElementType in self.jitterableElements):
-                self.jitter_Element(el)
-    def cost(self,PTL_Ring,PTL_Injector):
+                if any(type(el)==elType for elType in combinerTypes):
+                    print(combinerRandomOverride)
+                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el,randomOverRide=combinerRandomOverride)
+                else:
+                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el)
+                print(shiftY, shiftZ, rotY, rotZ)
+                el.perturb_Element(shiftY, shiftZ, rotY, rotZ)
+    def jitter_System(self,PTL_Ring,PTL_Injector):
+        print('jitter')
+        combinerRandomOverride=(np.random.random_sample(),np.random.random_sample(4))
+        self.jitter_Lattice(PTL_Ring,combinerRandomOverride)
+        self.jitter_Lattice(PTL_Injector,combinerRandomOverride)
+    def dejitter_System(self,PTL_Ring,PTL_Injector):
+        print('dejitter')
+        precision0 = self.precision
+        self.precision = 0.0
+        self.jitter_Lattice(PTL_Ring,None)
+        self.jitter_Lattice(PTL_Injector,None)
+        self.precision=precision0
+    def cost(self,PTL_Ring,PTL_Injector, misalign):
+        if misalign==True:
+            self.jitter_System(PTL_Ring,PTL_Injector)
         cost=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,self.paramsOptimal,self.tuning).cost
+        if misalign==True:
+            self.dejitter_System(PTL_Ring,PTL_Injector)
+
         return cost
-    def measure_Alingment_Sensitivity(self):
-        # np.random.seed(42)
-
-        import dill
-        # # file=open('temp1','wb')
-        # # dill.dump(PTL_Ring,file)
-        # file = open('temp2', 'wb')
-        # dill.dump(PTL_Injector, file)
-        # exit()
-        #
-        # import dill
-        # file = open('temp1', 'rb')
-        # PTL_Ring=dill.load(file)
-        # file = open('temp2', 'rb')
-        # PTL_Injector = dill.load(file)
-        # file.close()
-        # self.jitter_Lattice(PTL_Injector)
-
+    def measure_Sensitivity(self,useMagnetErrors,fieldDensity=1.0):
         def _cost(i):
+            PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(useMagnetErrors,fieldDensity)
             if i!=0:
-                PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(True)
-                np.random.seed(i)
-                self.jitter_Lattice(PTL_Ring)
-                self.jitter_Lattice(PTL_Injector)
-                cost=self.cost(PTL_Ring, PTL_Injector)
+                self.jitter_System(PTL_Ring, PTL_Injector)
+                cost=self.cost(PTL_Ring, PTL_Injector,True)
             else:
-                try:
-                    PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(False)
-                    cost=self.cost(PTL_Ring, PTL_Injector)
-                except:
-                    print('issue')
-                    cost= np.nan
-            print(cost)
+                cost=self.cost(PTL_Ring, PTL_Injector,False)
             return cost
-        # _cost(0)
-        # _cost(2)
-        results=tool_Parallel_Process(_cost,list(range(10)),processes=5)
+        results=tool_Parallel_Process(_cost,list(range(1,8)),processes=1,resultsAsArray=True)
+        # np.savetxt('data',results)
         # print(repr(results))
-
+        _cost(1)
 
 
 
 sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-sa.measure_Alingment_Sensitivity()
+sa.measure_Sensitivity(True,1.5)
 
 
 

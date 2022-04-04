@@ -1059,7 +1059,8 @@ spec = [
     ('RIn_Ang', numba.float64[:,::1]),
     ('misalignmentCoeffArr', numba.float64[:,::1]),
     ('fieldFact',numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None))),
+    ('applyMagnetErrors', numba.boolean)
 ]
 @jitclass(spec)
 class SegmentedBenderSimFieldHelper_Numba:
@@ -1080,6 +1081,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.fieldFact=1.0
         self.misalignmentCoeffArr=2.0*(np.random.random_sample((numMagnets+1,12))-.5)
         self.baseClass = BaseClassFieldHelper_Numba(None)
+        self.applyMagnetErrors=False
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -1133,11 +1135,11 @@ class SegmentedBenderSimFieldHelper_Numba:
         fact = c * np.sin(thetaMinorSlice)
         return fact
 
-    def misalignment_Force_Fact(self,x, y, z):
-        """Function to model misalignment in bending section. This is a qualitatvely correct model derived by inspecting
-        the nature of actal misalignments, which for technical reasons would be very challenging to implement. Mostly
-        becuase symmetry would be broken"""
-        amp = .05
+    def magnet_Error_Field_Fact(self, x, y, z):
+        """Function to model magnet errors in bending section. This is a qualitatvely correct model derived by
+        inspecting the nature of actal errors, which for technical reasons would be very challenging to implement.
+        Mostly becuase symmetry would be broken"""
+        amp = .01
         factLong = self._misalignment_Force_Fact_Longitudinal(x,y,z)
         assert abs(factLong) <= 1.0
         factTrans = self._misalignment_Force_Fact_Trans(x, y, z)
@@ -1258,8 +1260,8 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fx*=self.fieldFact
         Fy*=self.fieldFact
         Fz*=self.fieldFact
-        # if np.isnan(Fx)==False:
-        #     fact=self.misalignment_Force_Fact(x, y, z)
+        # if np.isnan(Fx)==False and self.applyMagnetErrors==True:
+        #     fact=self.magnet_Error_Field_Fact(x, y, z)
         #     Fx*=fact
         #     Fy*=fact
         #     Fz*=fact

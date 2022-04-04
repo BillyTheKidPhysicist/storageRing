@@ -191,7 +191,7 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
+    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: float,apFrac:Optional[float]=.9,constrain: bool=False,
                 bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,
                              methodOfMomentsHighPrecision: bool=False)-> None:
         """
@@ -811,7 +811,7 @@ class ParticleTracerLattice:
 
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
                      showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None,finalCoords=True,
-                     saveTitle=None,dpi=150):
+                     saveTitle=None,dpi=150,defaultMarkerSize=1000):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -826,7 +826,7 @@ class ParticleTracerLattice:
         #extraObjects: List of shapely objects to add to the plot. Used for adding things like apetures. Limited
         #functionality right now
         plt.close('all')
-        def plot_Particle(particle,xMarkerSize=1000):
+        def plot_Particle(particle,xMarkerSize=defaultMarkerSize):
             if particle.color is None: #use default plotting behaviour
                 if particle.clipped==True:
                     color='red'

@@ -17,13 +17,13 @@ def survival_Optimize(bounds: list,tuning: Optional[str],workers: int,magnetErro
             assert False
         return sol.cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
-    # args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
-    # wrapper(args0)
+    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
+    args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
+    wrapper(args0)
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
-            sol=solve_For_Lattice_Params(args,tuning)
+            sol=solve_For_Lattice_Params(args,tuning,False)
             floorPlanCost=sol.floorPlanCost
             swarmCost=sol.swarmCost
         except:
@@ -32,7 +32,7 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
             assert False
         return swarmCost,floorPlanCost
     def wrapper(args0):
-        stabilityTestStep=500e-6
+        stabilityTestStep=100e-6
         args0=np.asarray(args0)
         swarmCost0,floorPlanCost0=get_Individual_Costs(args0)
         nominalCost=swarmCost0+floorPlanCost0
@@ -44,26 +44,27 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         testArr = mask * stabilityTestStep + args0
         results=np.asarray([get_Individual_Costs(arg) for arg in testArr])
         swarmCosts,floorPlanCosts=results[:,0],results[:,1]
+        print(swarmCosts)
         variability=np.std(swarmCosts)
         # print(repr(args0),nominalCost,variability)
         return nominalCost+variability
-    solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
-    # args0 = np.asarray([0.01505976, 0.0388815, 0.0191172, 0.01054996, 0.1])
-    # wrapper(args0)
+    # solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
+    args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
+    wrapper(args0)
 def main():
     bounds = [
         (.005, .03),  # rpLens
         (.02, .04),  # rpLensFirst
         (.005, .02),  # rplensLast
-        (.008, .012),  # rpBend
+        (.005, .012),  # rpBend
         (.1, .4)  # L_Lens
         # (.125,.2125), #L_Injector
         # (.01,.03), #rpInjector
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    # stability_And_Survival_Optimize(bounds,None,8)
-    survival_Optimize(bounds,None,8,True)
+    stability_And_Survival_Optimize(bounds,None,8)
+    # survival_Optimize(bounds,None,8,False)
 if __name__=='__main__':
     main()
 

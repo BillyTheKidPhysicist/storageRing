@@ -157,7 +157,7 @@ def gradient_Descent(funcObj,xi,stepSizeInitial,maxIters,momentumFact=.9,gradMet
     return solver.solve_Grad_Descent()
 
 def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,momentumFact=.9,disp=False,
-                           gradMethod='central',maxStepSize=np.inf):
+                           gradMethod='central',maxStepSize=np.inf,descentMethod='adam'):
     samples=np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
     wrap=lambda x: gradient_Descent(funcObj,x,stepSizeInitial,maxIters,momentumFact=momentumFact,
                                         disp=disp
@@ -166,7 +166,7 @@ def batch_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,mo
         results=pool.map(wrap,samples)
     return results
 def global_Gradient_Descent(funcObj,bounds,numSamples,stepSizeInitial,maxIters,gradStepSize,momentumFact=.9,disp=False,
-                           gradMethod='central',parallel=True,Plot=False,descentMethod='momentum'):
+                           gradMethod='central',parallel=True,Plot=False,descentMethod='adam'):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
     if parallel==True:
         with mp.Pool(maxtasksperchild=1) as pool:

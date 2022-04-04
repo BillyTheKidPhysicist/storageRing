@@ -1055,6 +1055,8 @@ class HalbachLensSim(LensIdeal):
         """Compute dependent geometric values"""
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
+        if self.exploitSymmetry==False and (self.fringeFracInnerMin*2*self.rp)<self.L:
+            raise NotImplementedError
         self.Lo=self.L
         self.set_Effective_Length()
         self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
@@ -1173,6 +1175,8 @@ class HalbachLensSim(LensIdeal):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
         maxJitterAmp = self.apMax - self.ap
+        if maxJitterAmp==0.0:
+            print('Aperture is set to maximum, no room to misalign element')
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
         if Print==True:
             if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:

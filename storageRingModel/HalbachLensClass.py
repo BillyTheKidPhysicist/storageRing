@@ -10,6 +10,7 @@ from magpylib import Collection
 from typing import Union,Optional
 from demag_functions import apply_demag
 import copy
+from helperTools import *
 
 M_Default=1.018E6 #default magnetization value, SI. Magnetization for N48 grade
 
@@ -26,6 +27,7 @@ def B_NUMBA(r,r0,m):
     mrDot[:,0]=mrDotTemp
     Bvec=(MAGNETIC_PERMEABILITY/(4*np.pi))*(3*r*mrDot/rNorm**5-m/rNorm**3)
     return Bvec
+
 
 class Sphere:
 
@@ -204,13 +206,14 @@ class Layer(billyHalbachCollectionWrapper):
     meterTo_mm=1e3 #magpy takes distance in mm
 
     numMagnetsInLayer = 12
-    def __init__(self, rp: float,length: float,magnetWidth: float,position: list_tuple_arr=(0.0,0.0,0.0),
+    def __init__(self, rp: float,magnetWidth: float,length: float,position: Optional[list_tuple_arr]=None,
                  orientation: Optional[Rotation]=None, M: float=M_Default,mur: float=1.05,
                  rMagnetShift=None, thetaShift=None,phiShift=None, M_NormShiftRelative=None,dimShift=None,M_AngleShift=None,
                  applyMethodOfMoments=False):
         super().__init__()
         assert magnetWidth > 0.0 and length > 0.0  and M > 0.0
         assert isinstance(orientation,(type(None),Rotation))==True
+        position=(0.0,0.0,0.0) if position is None else position
         self.rMagnetShift: np.ndarray=self.make_Arr_If_None_Else_Copy(rMagnetShift)
         self.thetaShift: np.ndarray=self.make_Arr_If_None_Else_Copy(thetaShift)
         self.phiShift: np.ndarray=self.make_Arr_If_None_Else_Copy(phiShift)
@@ -242,7 +245,6 @@ class Layer(billyHalbachCollectionWrapper):
         dimensionArr=self.make_Cuboid_Dimensions_Magpy()
         positionArr=self.make_Cuboid_Positions_Magpy()
         orientationList=self.make_Cuboid_Orientation_Magpy()
-
         for M,dim,pos,orientation in zip(magnetizationArr,dimensionArr,positionArr,orientationList):
             box =Box(magnetization=M, dimension=dim,
                      position=pos, orientation=orientation,mur=self.mur)
@@ -268,6 +270,9 @@ class Layer(billyHalbachCollectionWrapper):
         thetaArr = np.linspace(0, 2 * np.pi, 12, endpoint=False) # location of 12 magnets.
         thetaArr+=np.ravel(self.thetaShift) #add specified rotation, typically errors
         rArr = self.rp + np.ravel(self.rMagnetShift)
+
+        # rArr+=1e-3*(2*(np.random.random_sample(12)-.5))
+
         rMagnetCenter = rArr + self.magnetWidth / 2 #add specified rotation, typically errors
         xCenter, yCenter = rMagnetCenter * np.cos(thetaArr), rMagnetCenter * np.sin(thetaArr)
         positionAll=np.column_stack((xCenter,yCenter,np.zeros(self.numMagnetsInLayer)))
@@ -279,7 +284,7 @@ class Layer(billyHalbachCollectionWrapper):
         """Make array of dimension of each magpylib cuboid in units of mm. add error effects (may be zero though)"""
         dimensionSingle = np.asarray([self.magnetWidth, self.magnetWidth, self.length])
         dimensionAll=dimensionSingle*np.ones((self.numMagnetsInLayer,3))
-        dimensionAll+=self.dimShift #add specified rotation, typically errors
+        dimensionAll+=self.dimShift
         assert np.all(10*np.abs(self.dimShift)<dimensionAll) #model probably doesn't work
         dimensionAll*=self.meterTo_mm
         assert dimensionAll.shape == (self.numMagnetsInLayer, 3)
@@ -308,13 +313,15 @@ class HalbachLens(billyHalbachCollectionWrapper):
     numMagnetsInLayer = 12
 
     def __init__(self,rp: Union[float,tuple],magnetWidth: Union[float,tuple],length: float,
-                 position: list_tuple_arr=(0.0,0.0,0.0), orientation: Optional[Rotation]=None,
+                 position: Optional[list_tuple_arr]=None, orientation: Optional[Rotation]=None,
                  M: float=M_Default,numSlices: int =1, applyMethodOfMoments=False, useStandardMagErrors=False,
-                 sameSeed=True):
+                 sameSeed=False):
+        #todo: Better seeding system
         super().__init__()
         assert length > 0.0 and M > 0.0
         assert isinstance(orientation, (type(None), Rotation)) == True
         assert isinstance(rp,(float,tuple)) and isinstance(magnetWidth,(float,tuple))
+        position=(0.0,0.0,0.0) if position is None else position
         self.position = position
         self.orientation = orientation  # orientation about body frame
         self.rp: tuple=rp if isinstance(rp,tuple) else (rp,)
@@ -339,7 +346,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                     dimVariation, magVecAngleVariation, magNormVariation=self.standard_Magnet_Errors()
                 else:
                     dimVariation, magVecAngleVariation, magNormVariation=[np.zeros((12,1))]*3
-                layer=Layer(radiusLayer,length,widthLayer,M=self.M,position=(0,0,zLayer),
+                layer=Layer(radiusLayer,widthLayer,length,M=self.M,position=(0,0,zLayer),
                             M_AngleShift=magVecAngleVariation,dimShift=dimVariation,
                             M_NormShiftRelative=magNormVariation)
                 self.add(layer)
@@ -356,8 +363,8 @@ class HalbachLens(billyHalbachCollectionWrapper):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
         if self.sameSeed==True:
             np.random.seed(42)
-        dimTol=.004*.0254 #dimension variation,inch to meter, +/- meters
-        MagVecAngleTol=1.5*np.pi/180 #magnetization vector angle tolerane,degree to radian,, +/- radians
+        dimTol=inch_To_Meter(.004) #dimension variation,inch to meter, +/- meters
+        MagVecAngleTol=radians(1.5) #magnetization vector angle tolerane,degree to radian,, +/- radians
         MagNormTol=.0125 #magnetization value tolerance, +/- fraction
         dimVariation=self.make_Base_Error_Arr(numParams=3)*dimTol
         MagVecAngleVariation=self.make_Base_Error_Arr(numParams=2)*MagVecAngleTol/np.sqrt(2) #two dimensional variation
@@ -383,6 +390,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
 class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
+
     def __init__(self,rp:float,rb: float,UCAngle: float,Lm: float,numLenses: int=3,
                  M: float=M_Default,positiveAngleMagnetsOnly: bool=False,applyMethodOfMoments=False,lensSlices: int=1):
         super().__init__()

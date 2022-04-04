@@ -20,7 +20,7 @@ def tool_Parallel_Process(
     reRandomize: bool = True,
     reapplyArgs: Optional[int] = None,
     extraArgs: lst_tup_arr_type = None,
-    extraKeyWordArgs=None
+    extraKeyWordArgs: Optional[dict]=None
 ) -> Union[list, np.ndarray]:
 
     extraArgs_Constant = tuple() if extraArgs is None else extraArgs
@@ -49,7 +49,7 @@ def tool_Parallel_Process(
         with mp.Pool(processes) as pool:
             results = pool.starmap(wrapper, poolIter)
     elif processes == 1:
-        results = [func(arg, *extraArgs, **extraKeyWordArgs) for arg in argsIter]
+        results = [func(arg, *extraArgs_Constant, **extraKeyWordArgs_Constant) for arg in argsIter]
     else:
         raise ValueError
     results = np.array(results) if resultsAsArray == True else results
@@ -67,12 +67,8 @@ def tool_Make_Image_Cartesian(
 
     extraArgs = tuple() if extraArgs is None else extraArgs
     extraKeyWordArgs = dict() if extraKeyWordArgs is None else extraKeyWordArgs
-    assert isinstance(extraKeyWordArgs, dict) and isinstance(
-        extraArgs, (list, tuple, np.ndarray)
-    )
-    assert isinstance(xGridEdges, (list, tuple, np.ndarray)) and isinstance(
-        yGridEdges, (list, tuple, np.ndarray)
-    )
+    assert isinstance(extraKeyWordArgs, dict) and isinstance(extraArgs, (list, tuple, np.ndarray))
+    assert isinstance(xGridEdges, (list, tuple, np.ndarray)) and isinstance(yGridEdges, (list, tuple, np.ndarray))
     assert isinstance(func, Callable)
     coords = np.array(np.meshgrid(xGridEdges, yGridEdges)).T.reshape(-1, 2)
     if arrInput == True:
@@ -80,16 +76,46 @@ def tool_Make_Image_Cartesian(
         vals = func(coords, *extraArgs)
     else:
         print("looping over function inputs to make image data")
-        vals = np.asarray(
-            [func(*coord, *extraArgs, **extraKeyWordArgs) for coord in coords]
-        )
+        vals = np.asarray([func(*coord, *extraArgs, **extraKeyWordArgs) for coord in coords])
     image = vals.reshape(len(xGridEdges), len(yGridEdges))
     image = np.rot90(image)
     extent = [xGridEdges.min(), xGridEdges.max(), yGridEdges.min(), yGridEdges.max()]
     return image, extent
 
+def radians(degrees: float):
+    return (degrees/180)*np.pi
+def degrees(radians: float):
+    return (radians/np.pi)*180
+def inch_To_Meter(inches: float):
+    return .0254*inches
+def test_Degree_Radians():
+    degree=1.0
+    tol=1e-12
+    assert abs(degree-degrees(radians(degree)))<tol
+    assert radians(degree)==degree*np.pi/180
 
-def _test_tool_Make_Image_Cartesian():
+def test_Parallel_Process():
+    tol=1e-12
+    def dummy(X,a,b=None):
+        b=0.0 if b is None else b['stuff']
+        return np.sin(X[0])+a+np.tanh(X[1])-b
+    X_Arr=np.linspace(0.0,10.0,40).reshape(-1,2)
+    a0=(7.5,)
+    b0=np.pi
+    optionalArgs={'b':{'stuff':b0}}
+    results=np.asarray([dummy(X,a0[0],b={'stuff':b0}) for X in X_Arr])
+    resultsParallel=tool_Parallel_Process(dummy,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
+                                                  resultsAsArray=True)
+    assert np.all(np.abs(np.mean(results-resultsParallel))<tol)
+
+    def dummy2(X,a,b=None):
+        b=0.0 if b is None else b['stuff']
+        return np.random.random_sample()*1e-6
+    resultsParallel=np.sort(tool_Parallel_Process(dummy2,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
+                                                  resultsAsArray=True,reRandomize=True))
+    assert len(np.unique(resultsParallel))==len(X_Arr)
+
+def test_tool_Make_Image_Cartesian():
     def fake_Func(x, y, z):
         assert z is None
         if np.abs(x + 1.0) < 1e-9 and np.abs(y + 1.0) < 1e-9:  # x=-1.0,y=-1.0   BL

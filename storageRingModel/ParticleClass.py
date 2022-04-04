@@ -229,7 +229,7 @@ class Particle:
 class Swarm:
 
     def __init__(self):
-        self.particles = [] #list of particles in swarm
+        self.particles: list[Particle] = [] #list of particles in swarm
 
     def add_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None)->None:
         #add an additional particle to phase space

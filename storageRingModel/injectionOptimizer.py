@@ -196,13 +196,13 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
-    (.05,.5),(.05,.3)]
-    for _ in range(3):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=8))
-    # X0=np.array([0.15831797, 0.01681428, 0.19546755, 0.02932734, 0.15318842,
-    #    0.03942919, 0.01484423, 0.01      , 0.42291596, 0.22561926])
-    # injector_Cost(X0)
+    # bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
+    # (.05,.5),(.05,.3)]
+    # for _ in range(3):
+    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=8))
+    X0=np.array([0.20585844, 0.03      , 0.10421198, 0.02284784, 0.21853755,
+       0.04      , 0.01701195, 0.1733694 , 0.30854762, 0.22761157])
+    injector_Cost(X0)
 
 if __name__=="__main__":
     main()

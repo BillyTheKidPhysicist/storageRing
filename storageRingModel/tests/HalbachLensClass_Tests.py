@@ -4,6 +4,7 @@ import time
 from HalbachLensClass import Layer,HalbachLens,Sphere
 import scipy.optimize as spo
 import multiprocess as mp
+from helperTools import *
 class SpheretestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
@@ -63,7 +64,7 @@ class LayertestHelper:
     def test1(self):
         #test that fields point as expected
         z,width,length,rp=1.0,.02,.5,.05
-        layer1=Layer(rp,length,width,position=(0.0,0.0,z))
+        layer1=Layer(rp,width,length,position=(0.0,0.0,z))
         rtest=np.asarray([[.02,.02,1.0]])
         BVec=layer1.B_Vec(rtest)
         BVec_0=np.asarray([7.04735665657541e-09 ,0.1796475065591648 ,0.0])
@@ -79,10 +80,10 @@ class LayertestHelper:
        [ 8.1041300350840118e-05,  1.7963843761049603e-01,0.0]])
         rtest=np.asarray([[.02,.02,1.0]])
         z,width,length,rp=1.0,.02,.5,.05
-        layer1=Layer(rp,length,width,position=(0.0,0.0,z),rMagnetShift=1e-3*np.random.random_sample((12,1)))
-        layer2=Layer(rp,length,width,position=(0.0,0.0,z),dimShift=1e-3*np.random.random_sample((12,3)))
-        layer3=Layer(rp,length,width,position=(0.0,0.0,z),thetaShift=1e-3*np.random.random_sample((12,1)))
-        layer4=Layer(rp,length,width,position=(0.0,0.0,z),phiShift=1e-3*np.random.random_sample((12,1)))
+        layer1=Layer(rp,width,length,position=(0.0,0.0,z),rMagnetShift=1e-3*np.random.random_sample((12,1)))
+        layer2=Layer(rp,width,length,position=(0.0,0.0,z),dimShift=1e-3*np.random.random_sample((12,3)))
+        layer3=Layer(rp,width,length,position=(0.0,0.0,z),thetaShift=1e-3*np.random.random_sample((12,1)))
+        layer4=Layer(rp,width,length,position=(0.0,0.0,z),phiShift=1e-3*np.random.random_sample((12,1)))
         BVecEachLens=[]
         for layer,BVecError0 in zip([layer1,layer2,layer3,layer4],BVecErrorEachLens_0):
             BVec=layer.B_Vec(rtest)
@@ -100,9 +101,10 @@ class HalbachLenstestHelper:
         self.length=.15
         self.magnetWidth=.0254
     def run_tests(self):
-        # self.test1()
-        # self.test2()
+        self.test1()
+        self.test2()
         self.test3()
+        self.test4()
     def hexapole_Fit(self,r,B0):
         return B0*(r/self.rp)**2
     def test1(self):
@@ -143,7 +145,8 @@ class HalbachLenstestHelper:
         BNormsVals_STD_NoError=0.11674902392610367
         BNormsVals_STD_Error=0.11653023297363536
         magnetWidth1,magnetWidth2=.0254,.0254*1.5
-        lens=HalbachLens((self.rp,self.rp+.0254),(magnetWidth1,magnetWidth2),self.length,useStandardMagErrors=True)
+        lens=HalbachLens((self.rp,self.rp+.0254),(magnetWidth1,magnetWidth2),self.length,useStandardMagErrors=True
+                         ,sameSeed=True)
         xArr=np.linspace(-self.rp*.5,self.rp*.5)
         coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
         BNormsVals_STD = np.std(lens.BNorm(coords))
@@ -151,14 +154,21 @@ class HalbachLenstestHelper:
         assert abs(BNormsVals_STD-BNormsVals_STD_Error)<self.numericTol #assert magnet errors cause same field value
         # changes with same seed
         np.random.seed(int(time.time()))
+    def test4(self):
+        #test that the a single layer lens has the same field as a single layer
+        magnetWidth=.0254
+        lens=HalbachLens(self.rp,magnetWidth,self.length)
+        layer=Layer(self.rp,magnetWidth,self.length)
+        xArr=np.linspace(-self.rp*.5,self.rp*.5)
+        testCoords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
+        BNormsValsLayer_STD = np.std(layer.BNorm(testCoords))
+        BNormsValsLens_STD = np.std(lens.BNorm(testCoords))
+        assert abs(BNormsValsLens_STD-BNormsValsLayer_STD)<self.numericTol
 
 
 def run_Tests(parallel=False):
     def run(func):
         func()
     funcList=[SpheretestHelper().run_tests,LayertestHelper().run_tests,HalbachLenstestHelper().run_tests]
-    if parallel==True:
-        with mp.Pool() as pool:
-            pool.map(run,funcList)
-    else:
-        list(map(run,funcList))
+    processes=-1 if parallel==True else 1
+    tool_Parallel_Process(run,funcList,processes=processes)
