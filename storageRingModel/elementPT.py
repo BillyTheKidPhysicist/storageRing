@@ -2,7 +2,7 @@ import scipy.interpolate as spi
 import time
 import matplotlib.pyplot as plt
 import numpy as np
-from math import sqrt
+from math import sqrt,isclose
 from typing import Optional,Union
 import warnings
 import fastNumbaMethodsAndClass
@@ -1278,8 +1278,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # to the hard edge of the input in a straight line. This is that section
         self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
                                                 useStandardMagErrors=self.useStandardMagErrors)
-        inputAngle, inputOffset, trajectoryLength = self.compute_Orbit_Characteristics()
-
+        inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
+        assert trajectoryLength>self.Lm+2*self.space
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
         self.ang = inputAngle
@@ -1292,7 +1292,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         fieldData = self.make_Field_Data(self.La,self.ang)
         self.set_extraFieldLength()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
-                                self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,self.extraFieldLength])
+                                            self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,
+                                                self.extraFieldLength,not self.useStandardMagErrors])
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
@@ -1310,13 +1311,19 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
-        numY=self.numGridPointsXY
+        yMin=-TINY_OFFSET if self.useStandardMagErrors==False else -yMax
+        xMin=-(self.rp - TINY_OFFSET)
+        xMax=TINY_OFFSET if self.useStandardMagErrors==False else -xMin
+        numY=self.numGridPointsXY if self.useStandardMagErrors==False else self.numGridPointsXY*2-1 #minus 1 ensures
+        #same grid spacing!!
         numX=int(self.numGridPointsXY*self.rp/yMax)
+        numX=numX if self.useStandardMagErrors==False else 2*numX-1
+        numZ=self.numGridPointsZ if self.useStandardMagErrors==False else self.numGridPointsZ*2-1
         zMax=self.compute_Valid_zMax(La,ang)
-
-        yArr_Quadrant = np.linspace(-TINY_OFFSET, yMax, numY)  # this remains y in element frame
-        xArr_Quadrant = np.linspace(-(self.rp - TINY_OFFSET), TINY_OFFSET, numX)  # this becomes z in element frame
-        zArr = np.linspace(-TINY_OFFSET, zMax + self.extraFieldLength, num=self.numGridPointsZ)
+        zMin=-TINY_OFFSET if self.useStandardMagErrors==False else -zMax
+        yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
+        xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
+        zArr = np.linspace(zMin, zMax + self.extraFieldLength, numZ) #this becomes x in element frame
         return xArr_Quadrant,yArr_Quadrant,zArr
 
     def compute_Valid_zMax(self,La:float,ang:float)->float:
@@ -1339,6 +1346,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         return zMax
 
     def make_Field_Data(self,La:float,ang:float)->tuple:
+        """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang)
         self.apMax = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
         assert self.ap < self.apMax
@@ -1352,12 +1360,15 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         fieldData = self.shape_Field_Data_3D(data3D)
         return fieldData
 
-    def compute_Orbit_Characteristics(self)->tuple:
+    def compute_Input_Orbit_Characteristics(self)->tuple:
+        """compute characteristics of the input orbit. This applies for injected beam, or recirculating beam"""
+
         LaMax = (self.ap + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                                                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
         fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng)
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb,
-                                        self.Lm,self.space, self.ap,np.nan,self.fieldFact,self.extraFieldLength])
+                                                            self.Lm,self.space, self.ap,np.nan,self.fieldFact,
+                                                          self.extraFieldLength,not self.useStandardMagErrors])
         self.outputOffset = self.find_Ideal_Offset()
         inputAngle, inputOffset, qTracedArr, minSep = self.compute_Input_Angle_And_Offset(self.outputOffset)
         trajectoryLength = self.compute_Trajectory_Length(qTracedArr)
@@ -1405,47 +1416,35 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
     def find_Ideal_Offset(self)->float:
-        #use newton's method to find where the minimum seperation between atomic beam PATH and lens is equal to the
-        #beam diameter for INJECTED beam. This requires modeling high field seekers. A larger output offset produces
-        # a smaller input seperation, and a larger loading/circulating beam angular speration. Particle is traced
-        # backwards from the end of the combiner to the input. Uses forward difference.
+        """use newton's method to find where the minimum seperation between atomic beam path and lens is equal to the
+         specified beam diameter for INJECTED beam. This requires modeling high field seekers. Particle is traced
+         backwards from the output of the combiner to the input. Can possibly error out from modeling magnet or
+         assembly error"""
+
         fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
-
-        #try and find an initial gradient that works
-        keepTrying=True
-        dxInitial=self.ap/2.0
-        sepWithNoOffset=self.ap #maximum seperation occurs with no added offset
-        maxTries=30
-        numTries=0
-        while keepTrying:
-            try:
-                grad=(self.compute_Input_Angle_And_Offset(dxInitial)[-1]-sepWithNoOffset)/dxInitial
-                keepTrying=False
-            except:
-                dxInitial*=.5
-            numTries+=1
-            assert numTries<maxTries
-
-        x=0.0 #initial value of output offset
-        f=self.ap #initial value of lens/atom seperation. This should be equal to input deam diamter/2 eventuall
+        yInitial=self.ap/10.0
+        inputAngle,inputOffset,qArr,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial)
+        assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
+        gradientInitial=(seperationInitial-self.ap)/(yInitial-0.0)
+        y=yInitial
+        seperation=seperationInitial #initial value of lens/atom seperation. This should be equal to input deam diamter/2 eventuall
+        gradient=gradientInitial
         i,iterMax=0,10 #to prevent possibility of ifnitne loop
-        tolAbsolute=1e-4 #m
+        tolAbsolute=1e-6 #m
         targetSep=self.loadBeamDiam/2
-        while(abs(f-targetSep)>tolAbsolute):
-            deltaX=-.8*(f-targetSep)/grad # I like to use a little damping
-            x=x+deltaX
-            angle,offset,qArr,fNew = self.compute_Input_Angle_And_Offset(x)
-            assert angle<0 #This doesn't work if the beam is exiting upwards. This can happpen physical of course,
-            #but shouldn't happen
-            grad=(fNew-f)/deltaX
-            f=fNew
+        while isclose(seperation,targetSep,abs_tol=tolAbsolute)==False:
+            deltaX=-.8*(seperation-targetSep)/gradient # I like to use a little damping
+            y=y+deltaX
+            inputAngle,inputOffset,qArr,seperationNew = self.compute_Input_Angle_And_Offset(y)
+            assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
+            gradient=(seperationNew-seperation)/deltaX
+            seperation=seperationNew
             i+=1
             assert i<iterMax
-        assert x>0
+        assert 0.0<y<self.ap
         self.update_Field_Fact(fieldFact0)
-        return x
-
+        return y
 
 class geneticLens(LensIdeal):
     def __init__(self, PTL, geneticLens, ap):

@@ -937,12 +937,13 @@ spec = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
+    ('useSymmetry', numba.boolean),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
 @jitclass(spec)
 class CombinerHalbachLensSimFieldHelper_Numba:
 
-    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength):
+    def __init__(self,fieldData,La,Lb,Lm,space,ap,ang,fieldFact,extraFieldLength,useSymmetry):
         self.xArr,self.yArr,self.zArr,self.FxArr,self.FyArr,self.FzArr,self.VArr=fieldData
         self.La=La
         self.Lb=Lb
@@ -952,12 +953,14 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.ang=ang
         self.fieldFact=fieldFact
         self.extraFieldLength=extraFieldLength
+        self.useSymmetry=useSymmetry
         self.baseClass=self.baseClass=BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData=self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return fieldData,self.La,self.Lb,self.Lm,self.space,self.ap,self.ang,self.fieldFact,self.extraFieldLength
+        return fieldData,self.La,self.Lb,self.Lm,self.space,self.ap,self.ang,self.fieldFact,\
+               self.extraFieldLength,self.useSymmetry
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -992,22 +995,26 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
                 return np.nan,np.nan,np.nan
         x,y,z=self.baseClass.misalign_Coords(x0,y0,z0)
-        FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
-        FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
-        y = abs(y)  # confine to upper right quadrant
-        z = abs(z)
-        symmetryPlaneX = self.Lm/2 + self.space #field symmetry plane location
-        if -self.extraFieldLength <= x <= symmetryPlaneX:
-            x = symmetryPlaneX - x
-            Fx, Fy, Fz = self._force_Func(x, y, z)
-            Fx = -Fx
-        elif symmetryPlaneX < x:
+        symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
+        if self.useSymmetry==True:
+            FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
+            FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
+            y = abs(y)  # confine to upper right quadrant
+            z = abs(z)
+            if -self.extraFieldLength <= x <= symmetryPlaneX:
+                x = symmetryPlaneX - x
+                Fx, Fy, Fz = self._force_Func(x, y, z)
+                Fx = -Fx
+            elif symmetryPlaneX < x:
+                x = x - symmetryPlaneX
+                Fx, Fy, Fz = self._force_Func(x, y, z)
+            else:
+                raise ValueError
+            Fy = Fy * FySymmetryFact
+            Fz = Fz * FzSymmetryFact
+        else:
             x = x - symmetryPlaneX
             Fx, Fy, Fz = self._force_Func(x, y, z)
-        else:
-            raise ValueError
-        Fy = Fy * FySymmetryFact
-        Fz = Fz * FzSymmetryFact
         Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         Fx*=self.fieldFact
         Fy*=self.fieldFact
@@ -1021,14 +1028,18 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryPlaneX = self.Lm/2 + self.space #field symmetry plane location
-        if -self.extraFieldLength <= x <= symmetryPlaneX:
-            x = symmetryPlaneX - x
-            V = self._magnetic_Potential_Func(x, y, z)
-        elif symmetryPlaneX  < x: #particle can extend past 2*symmetryPlaneX
-            x = x - symmetryPlaneX
-            V = self._magnetic_Potential_Func(x, y, z)
+        if self.useSymmetry==True:
+            if -self.extraFieldLength <= x <= symmetryPlaneX:
+                x = symmetryPlaneX - x
+                V = self._magnetic_Potential_Func(x, y, z)
+            elif symmetryPlaneX  < x: #particle can extend past 2*symmetryPlaneX
+                x = x - symmetryPlaneX
+                V = self._magnetic_Potential_Func(x, y, z)
+            else:
+                raise Exception(ValueError)
         else:
-            raise Exception(ValueError)
+            x = x - symmetryPlaneX
+            V=self._magnetic_Potential_Func(x,y,z)
         V=V*self.fieldFact
         return V
 

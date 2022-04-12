@@ -86,13 +86,12 @@ def radians(degrees: float):
     return (degrees/180)*np.pi
 def degrees(radians: float):
     return (radians/np.pi)*180
-def inch_To_Meter(inches: float):
+def iscloseAll(a: np.ndarray,b: np.ndarray,abstol: float)->bool:
+    """Test that each element in array a and b are within tolerance of each other"""
+    return np.all(np.isclose(a,b,atol=abstol))
+def inch_To_Meter(inches: float)-> float:
     return .0254*inches
-def test_Degree_Radians():
-    degree=1.0
-    tol=1e-12
-    assert abs(degree-degrees(radians(degree)))<tol
-    assert radians(degree)==degree*np.pi/180
+
 
 def test_Parallel_Process():
     tol=1e-12

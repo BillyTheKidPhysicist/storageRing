@@ -1,3 +1,5 @@
+import numpy as np
+
 from helperTools import *
 import sys
 import pytest
@@ -310,8 +312,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.2069013255699223   , -0.005645368613789925 ,0.0038676224910690624])
-        pf0=np.array([-200.37467330813962 ,  -13.490755466189594,   10.275047176148538])
+        qf0=np.array([-0.20690099825252437  , -0.005645254505453696 ,0.0038676237870725943])
+        pf0=np.array([-200.37568804455236 ,  -13.476265993642304,   10.274064275795029])
         super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def make_coordTestRules(self):
@@ -393,40 +395,38 @@ class ElementTestRunner:
         convert_Invert_Consistency()
 
     def test_Magnet_Imperfections(self):
-        """Test that there is no symmetry. Misalinging breaks the symmetry"""
-        if self.elTestHelper.testMagnetErrors==False or type(self.elTestHelper)==CombinerHalbachTestHelper:
-            if type(self.elTestHelper)==CombinerHalbachTestHelper:
-                warnings.warn("temporary pass is being given to combiner!! don't forget!!")
-            return
-        PTL = self.elTestHelper.make_Latice(magnetErrors=True)
-        el = self.elTestHelper.get_Element(PTL)
-        @given(*self.elTestHelper.coordTestRules)
-        @settings(max_examples=50, deadline=None)
-        def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
-            coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
-            F = el.force(coord)
-            for y in [coord[1],-coord[1]]:
-                z=-coord[2]
-                if np.isnan(F[0])==False and y!=0 and z!=0:
-                    assert np.all(F!=el.force(np.array([coord[0],y,z]))) #assert there is no symmetry
-        test_Magnetic_Imperfection_Field_Symmetry()
+        """Test that there is no symmetry. Misalinging should break the symmetry. This is sort of as silly test"""
+        if self.elTestHelper.testMagnetErrors==True:
+            PTL = self.elTestHelper.make_Latice(magnetErrors=True)
+            el = self.elTestHelper.get_Element(PTL)
+            @given(*self.elTestHelper.coordTestRules)
+            @settings(max_examples=50, deadline=None)
+            def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
+                coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
+                F0 = np.abs(el.force(coord))
+                for y in [coord[1],-coord[1]]:
+                    z=-coord[2]
+                    if np.isnan(F0[0])==False and y!=0 and z!=0:
+                        FSym=np.abs(el.force(np.array([coord[0],y,z])))
+                        assert iscloseAll(F0,FSym,1e-10)==False #assert there is no symmetry
+            test_Magnetic_Imperfection_Field_Symmetry()
 
     def test_Imperfections_Tracing(self):
         """test that misalignment and errors change results"""
-        jitterAmp0=1e-6
-        PTL = self.elTestHelper.make_Latice(jitterAmp=jitterAmp0)
-        particleList = self.trace_Different_Conditions(PTL)
-        qf0Temp,pf0Temp=particleList[0].qf,particleList[0].pf
-        def wrapper(magnetError,jitterAmp):
-            PTL=self.elTestHelper.make_Latice(magnetErrors=magnetError,jitterAmp=jitterAmp)
-            el=self.elTestHelper.get_Element(PTL)
-            el.perturb_Element(.1*jitterAmp,.1*jitterAmp,.1*jitterAmp/el.L,.1*jitterAmp/el.L)
-            particleList = self.trace_Different_Conditions(PTL)
-            with pytest.raises(ValueError) as excInfo:
-                self.assert_Particle_List_Is_Expected(particleList, qf0Temp, pf0Temp)
-            assert str(excInfo.value)=="particle test mismatch"
-        if self.elTestHelper.testMisalignment==True: wrapper(False,jitterAmp0)
-        if self.elTestHelper.testMagnetErrors: wrapper(True,0.0)
+        if self.elTestHelper.testMisalignment==True or self.elTestHelper.testMagnetErrors==True:
+            particleList = self.trace_Different_Conditions(self.elTestHelper.PTL)
+            qf0Temp,pf0Temp=particleList[0].qf,particleList[0].pf
+            def wrapper(magnetError,jitterAmp):
+                PTL=self.elTestHelper.make_Latice(magnetErrors=magnetError,jitterAmp=jitterAmp)
+                el=self.elTestHelper.get_Element(PTL)
+                el.perturb_Element(.1*jitterAmp,.1*jitterAmp,.1*jitterAmp/el.L,.1*jitterAmp/el.L)
+                particleList = self.trace_Different_Conditions(PTL)
+                with pytest.raises(ValueError) as excInfo:
+                    #it's possible this won't trigger if the magnet or misalignment errors are really small
+                    self.assert_Particle_List_Is_Expected(particleList, qf0Temp, pf0Temp,absTol=1e-6)
+                assert str(excInfo.value)=="particle test mismatch"
+            if self.elTestHelper.testMisalignment==True: wrapper(False,1e-3)
+            if self.elTestHelper.testMagnetErrors: wrapper(True,0.0)
 
     def test_Misalignment1(self):
         """Test that misaligning element does not results in any errors or conflicts with other methods"""
@@ -466,13 +466,12 @@ class ElementTestRunner:
                              accelerated=accelerated))
         return particleList
 
-    def assert_Particle_List_Is_Expected(self, particleList: list[Particle],qf0,pf0):
-        tol = 1e-14
+    def assert_Particle_List_Is_Expected(self, particleList: list[Particle],qf0: np.ndarray,pf0: np.ndarray,
+                                         absTol:float=1e-14)-> None:
         for particle in particleList:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
-            if np.all(np.abs((qf - qf0)) < tol) == False or \
-                    np.all(np.abs((pf - pf0)) < tol) == False:
+            if iscloseAll(qf,qf0,absTol)==False or iscloseAll(pf,pf0,absTol)==False:
                 # print(repr(qf), repr(pf))
                 # print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
