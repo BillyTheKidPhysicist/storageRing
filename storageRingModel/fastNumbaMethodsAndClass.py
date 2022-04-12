@@ -8,6 +8,7 @@ from constants import SIMULATION_MAGNETON
 #this needs to be refactored
 
 tupleOf3Floats=tuple[float,float,float]
+nanArr7Tuple=tuple([np.ones(1)*np.nan]*7)
 
 @numba.njit()
 def scalar_interp3D(x,y,z,xCoords,yCoords,zCoords,vec):
@@ -399,12 +400,13 @@ spec = [
     ('FxArrIn',numba.float64[::1]),
     ('FyArrIn',numba.float64[::1]),
     ('VArrIn',numba.float64[::1]),
+    ('fieldImperfectionData',numba.types.UniTuple(numba.float64[::1],7)),
     ('L', numba.float64),
     ('Lcap', numba.float64),
     ('ap', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
-    ('exploitSymmetry', numba.boolean),
+    ('useFieldImperfections', numba.boolean),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
 
@@ -412,7 +414,7 @@ spec = [
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self,fieldData,L,Lcap,ap,extraFieldLength,exploitSymmetry):
+    def __init__(self,fieldData,fieldImperfectionData,L,Lcap,ap,extraFieldLength):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
         self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn=fieldData
         self.L=L
@@ -420,14 +422,16 @@ class LensHalbachFieldHelper_Numba:
         self.ap=ap
         self.fieldFact=1.0
         self.extraFieldLength=extraFieldLength
-        self.exploitSymmetry=exploitSymmetry
+        self.useFieldImperfections=True if fieldImperfectionData is not None else False
+        self.fieldImperfectionData=fieldImperfectionData if fieldImperfectionData is not None else nanArr7Tuple
         self.baseClass=BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData=self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,\
                   self.xArrIn,self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn
-        return fieldData,self.L,self.Lcap,self.ap,self.extraFieldLength,self.exploitSymmetry
+        fieldImperfectionData=None if self.useFieldImperfections==False else self.fieldImperfectionData
+        return fieldData,fieldImperfectionData,self.L,self.Lcap,self.ap,self.extraFieldLength
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -438,29 +442,37 @@ class LensHalbachFieldHelper_Numba:
         self.fieldFact, alignmentParams = params
         self.baseClass.set_Misalignment_Params(alignmentParams)
 
-    def update_Element_Perturb_Params(self,shiftY, shiftZ, rotY, rotZ):
+    def update_Element_Perturb_Params(self,shiftY: float, shiftZ: float, rotY: float, rotZ: float):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
-    def is_Coord_Inside_Vacuum(self,x,y,z):
+    def is_Coord_Inside_Vacuum(self,x: float,y: float,z: float)-> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
         if 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2: return True
         else: return False
 
-    def _magnetic_Potential_Func_Fringe(self,x,y,z)-> float:
-        """Wrapper for interpolation of magnetic fields at ends of lens. self.magnetic_Potential"""
-        V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
+    def _magnetic_Potential_Func_Fringe(self,x: float,y: float,z: float,useImperfectInterp: bool=False)-> float:
+        """Wrapper for interpolation of magnetic fields at ends of lens. see self.magnetic_Potential"""
+        if useImperfectInterp==False:
+            V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
+        else:
+            xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldImperfectionData
+            V=scalar_interp3D(-z, y, x,xArr, yArr, zArr, VArr)
         return V
 
-    def _magnetic_Potential_Func_Inner(self,x,y,z)->float:
+    def _magnetic_Potential_Func_Inner(self,x: float,y: float,z: float)->float:
         """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_Potential"""
         V=interp2D(-z, y,self.xArrIn,self.yArrIn,self.VArrIn)
         return V
 
-    def _force_Func_Outer(self,x,y,z)-> tupleOf3Floats:
+    def _force_Func_Outer(self,x,y,z,useImperfectInterp=False)-> tupleOf3Floats:
         """Wrapper for interpolation of force fields at ends of lens. see self.force"""
-        Fx0,Fy0,Fz0=vec_interp3D(-z, y,x,self.xArrEnd,self.yArrEnd,self.zArrEnd,
+        if useImperfectInterp==False:
+            Fx0,Fy0,Fz0=vec_interp3D(-z, y,x,self.xArrEnd,self.yArrEnd,self.zArrEnd,
                                  self.FxArrEnd, self.FyArrEnd,self.FzArrEnd)
+        else:
+            xArr,yArr,zArr,FxArr,FyArr,FzArr,VArr=self.fieldImperfectionData
+            Fx0, Fy0, Fz0 = vec_interp3D(-z, y, x, xArr,yArr,zArr,FxArr,FyArr,FzArr)
         Fx = Fz0
         Fy = Fy0
         Fz = -Fx0
@@ -474,16 +486,20 @@ class LensHalbachFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def force(self,x:float, y:float, z:float)->tupleOf3Floats:
-        if self.exploitSymmetry==True:
-            return self._force_Symmetry(x,y,z)
-        else:
-            return self._force_No_Symmetry(x,y,z)
+        """Force on lithium atom. Functions to combine perfect force and extra force from imperfections.
+         Imperfection force is messed up force minus perfect force."""
+        
+        Fx,Fy,Fz= self._force(x,y,z)
+        if self.useFieldImperfections==True:
+            deltaFx,deltaFy,deltaFz=self._force_Field_Deviations(x,y,z) #extra force from design imperfections
+            Fx, Fy, Fz=Fx+deltaFx,Fy+deltaFy,Fz+deltaFz
+        return Fx,Fy,Fz
 
-    def _force_Symmetry(self,x:float, y:float, z:float)->tupleOf3Floats:
+    def _force(self,x:float, y:float, z:float)->tupleOf3Floats:
         """
         Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
-        Symmetry if used to simplify the computation of force. Either end of the lens is identical, so coordinates
+        Symmetry is used to simplify the computation of force. Either end of the lens is identical, so coordinates
         falling within some range are mapped to an interpolation of the force field at the lenses end. If the lens is
         long enough, the inner region is modeled as a single plane as well. (nan,nan,nan) is returned if coordinate
         is outside vacuum tube
@@ -518,12 +534,12 @@ class LensHalbachFieldHelper_Numba:
         Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
 
-    def _force_No_Symmetry(self,x0: float,y0: float,z0: float)-> tupleOf3Floats:
+    def _force_Field_Deviations(self,x0: float,y0: float,z0: float)-> tupleOf3Floats:
         if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
             return np.nan,np.nan,np.nan
         x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x=x-self.L/2
-        Fx, Fy, Fz = self._force_Func_Outer(x, y, z) #being used to hold fields for entire lens
+        Fx, Fy, Fz = self._force_Func_Outer(x, y, z,useImperfectInterp=True) #being used to hold fields for entire lens
         Fx = Fx * self.fieldFact
         Fy = Fy * self.fieldFact
         Fz = Fz * self.fieldFact
@@ -531,13 +547,15 @@ class LensHalbachFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def magnetic_Potential(self,x:float,y:float,z:float) -> float:
+        """Magnetic potential of lithium atom. Functions to combine perfect potential and extra potential from 
+        imperfections. Imperfection potential is messed up potential minus perfect potential."""
+        V= self._magnetic_Potential(x,y,z)
+        if self.useFieldImperfections==True:
+            deltaV=self._magnetic_Potential_Deviations(x,y,z) #extra potential from design imperfections
+            V+=deltaV
+        return V
 
-        if self.exploitSymmetry==True:
-            return self._magnetic_Potential_Symmetry(x,y,z)
-        else:
-            return self._magnetic_Potential_No_Symmetry(x,y,z)
-
-    def _magnetic_Potential_Symmetry(self, x:float,y:float,z:float)-> float:
+    def _magnetic_Potential(self, x:float,y:float,z:float)-> float:
         """
         Magnetic potential energy of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
@@ -569,12 +587,12 @@ class LensHalbachFieldHelper_Numba:
         V0=V0*self.fieldFact
         return V0
 
-    def _magnetic_Potential_No_Symmetry(self,x0: float,y0: float,z0: float)-> float:
+    def _magnetic_Potential_Deviations(self,x0: float,y0: float,z0: float)-> float:
          if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
              return np.nan
          x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
          x=x-self.L/2
-         V0= self._magnetic_Potential_Func_Fringe(x, y, z)
+         V0= self._magnetic_Potential_Func_Fringe(x, y, z,useImperfectInterp=True)
          return V0
 
 

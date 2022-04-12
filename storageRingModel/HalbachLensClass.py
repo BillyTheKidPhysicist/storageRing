@@ -152,6 +152,8 @@ class billyHalbachCollectionWrapper(Collection):
         BVec=self.B_Vec(evalCoords)
         if len(evalCoords.shape)==1:
             return norm(BVec)
+        elif len(evalCoords)==1:
+            return np.asarray([norm(BVec)])
         else:
             return norm(BVec,axis=1)
 

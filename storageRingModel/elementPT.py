@@ -968,8 +968,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
 class HalbachLensSim(LensIdeal):
 
-    def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: float,bumpOffset: float,
-        magnetWidth: Union[float,tuple], methodOfMomentsHighPrecision: bool,useStandardMagErrorss: bool, build: bool=True):
+    def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: Optional[float],bumpOffset: float,
+        magnetWidth: Union[float,tuple,None],useStandardMagErrorss: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
@@ -995,7 +995,7 @@ class HalbachLensSim(LensIdeal):
         self.fringeFracOuter=1.5
         self.L=L
         self.bumpOffset=bumpOffset
-        self.methodOfMomentsHighPrecision=methodOfMomentsHighPrecision
+        self.methodOfMomentsHighPrecision=False
         self.useStandardMagErrors=useStandardMagErrorss
         self.Lo=None
         self.magnetWidth=magnetWidth
@@ -1011,7 +1011,6 @@ class HalbachLensSim(LensIdeal):
         #2D
         self.magnetic_Potential_Func_Fringe = None
         self.magnetic_Potential_Func_Inner = None
-        self.exploitSymmetry=not useStandardMagErrorss
         self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
         if build==True:
@@ -1025,6 +1024,7 @@ class HalbachLensSim(LensIdeal):
     def set_extraFieldLength(self)->None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
         is too large for good field region, extra length is clipped"""
+
         jitterAmp=self.get_Valid_Jitter_Amplitude(Print=True)
         tiltMax=jitterAmp/self.L
         assert tiltMax<.1 # small angle. Not sure if valid outside that range
@@ -1032,6 +1032,7 @@ class HalbachLensSim(LensIdeal):
 
     def build(self)->None:
         """Overrides abstract method from Element"""
+
         if self.L is None: #defer building until constraints are satisified
             return
         self.set_extraFieldLength()
@@ -1040,23 +1041,19 @@ class HalbachLensSim(LensIdeal):
         F_edge=np.linalg.norm(self.force(np.asarray([0.0,self.ap/2,.0])))
         F_center=np.linalg.norm(self.force(np.asarray([self.Lcap,self.ap/2,.0])))
         assert F_edge/F_center<.01
+
     def set_Effective_Length(self):
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
         is effectively isotropic a sufficient depth inside. This is then modeled as a 2d slice, and the outer edges
         as 3D slice"""
-        if self.exploitSymmetry==False:
-            if self.Lm/self.rp>5:
-                raise NotImplementedError
-            self.effectiveLength= self.Lm
-        else:
-            self.effectiveLength=self.minLengthLongSymmetry if self.minLengthLongSymmetry<self.Lm else self.Lm
+
+        self.effectiveLength=self.minLengthLongSymmetry if self.minLengthLongSymmetry<self.Lm else self.Lm
 
     def fill_Geometric_Params(self)->None:
         """Compute dependent geometric values"""
+
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
-        if self.exploitSymmetry==False and (self.fringeFracInnerMin*2*self.rp)<self.L:
-            raise NotImplementedError
         self.Lo=self.L
         self.set_Effective_Length()
         self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
@@ -1068,7 +1065,7 @@ class HalbachLensSim(LensIdeal):
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth=max(self.rpLayers)+self.magnetWidth[np.argmax(self.rpLayers)] +mountThickness
 
-    def make_Grid_Coord_Arrays(self)->tuple:
+    def make_Grid_Coord_Arrays(self,useSymmetry)->tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
@@ -1079,16 +1076,18 @@ class HalbachLensSim(LensIdeal):
         yMin,yMax=-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
-        if self.exploitSymmetry==False: #range will have to fully capture lens.
-            yMin,zMin=-yMax,-zMax
-            numPointsXY, numPointsZ=2*numPointsXY,2*numPointsZ
+        if useSymmetry==False: #range will have to fully capture lens.
+            yMin=-yMax
+            zMax=self.L/2+TINY_OFFSET
+            zMin=-zMax
+            numPointsZ=min([int(self.L/(.3*self.rp)),2*numPointsZ])
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zArr = np.linspace(zMin, zMax, numPointsZ)
         return xArr_Quadrant,yArr_Quadrant,zArr
 
     def make_2D_Field_Data(self,lens:_HalbachLensFieldGenerator,xArr:np.ndarray,
-                           yArr:np.ndarray)->Union[np.ndarray,None]:
+                           yArr:np.ndarray)->Optional[np.ndarray]:
         """
         Make 2d field data for interpolation.
 
@@ -1100,7 +1099,7 @@ class HalbachLensSim(LensIdeal):
         :param yArr: Grid edge y values of quarter of plane
         :return: Either 2d array of field data, or None
         """
-        if self.exploitSymmetry==False or self.Lm<self.minLengthLongSymmetry:
+        if self.Lm<self.minLengthLongSymmetry:
             data2D=None
         else:
             # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
@@ -1141,29 +1140,52 @@ class HalbachLensSim(LensIdeal):
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         return data3D
 
-    def make_Field_Data(self)->tuple:
-        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,self.effectiveLength,
-                        applyMethodOfMoments=True,useStandardMagErrors=self.useStandardMagErrors)
-        xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays()
-        data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant)
+    def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool)->tuple[np.ndarray,np.ndarray]:
+        """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
+
+        lensLength=self.effectiveLength if useSymmetry==True else self.Lm
+        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,lensLength,
+                        applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors)
+        xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
+        #data2D may still be none if the lens is not short enough for symmetry
+        data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant) if useSymmetry==True else None
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
         return data2D,data3D
 
     def build_Field_Helper(self)->None:
-        """Generate magnetic field gradients and norms for """
-        data2D, data3D = self.make_Field_Data()
+        """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
+        data may added on top of high density symmetry exploiting perfect data. """
+
+        data2D, data3D = self.make_Field_Data(True,False)
         xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd=self.shape_Field_Data_3D(data3D)
         if data2D is not None: #if no inner plane being used
             xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn=self.shape_Field_Data_2D(data2D)
         else:
             xArrIn,yArrIn,FxArrIn, FyArrIn,VArrIn=[np.ones(1)*np.nan]*5
-        fieldData=List([xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn])
-        Lcap = np.nan if self.exploitSymmetry == False else self.Lcap
-
-        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,self.L,Lcap,self.ap,
-                                                                        self.extraFieldLength,self.exploitSymmetry])
+        fieldData=(xArrEnd,yArrEnd,zArrEnd,FxArrEnd,FyArrEnd,FzArrEnd,VArrEnd,xArrIn,yArrIn,FxArrIn,FyArrIn,VArrIn)
+        fieldDataDeviations=self.make_Field_Deviation_Data()
+        self.fastFieldHelper=self.init_fastFieldHelper([fieldData,fieldDataDeviations,self.L,self.Lcap,self.ap,
+                                                                        self.extraFieldLength])
         self.fastFieldHelper.force(1e-3,1e-3,1e-3) #force compile
         self.fastFieldHelper.magnetic_Potential(1e-3,1e-3,1e-3) #force compile
+
+    def make_Field_Deviation_Data(self)-> Optional[tuple]:
+        """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
+        and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
+        force is small, and so I can get away with interpolating with low density, while keeping my high density
+        symmetry region"""
+
+        if self.useStandardMagErrors==True:
+            data2D_1, data3D_NoDeviations = self.make_Field_Data(False, False)
+            data2D_2, data3D_Deviations = self.make_Field_Data(False, True)
+            assert data2D_1 is None and data2D_2 is None
+            coords=data3D_NoDeviations[:,:3]
+            fieldValsDifference=data3D_Deviations[:,3:]-data3D_NoDeviations[:,3:]
+            data3D_Difference=np.column_stack((coords,fieldValsDifference))
+            data3D_Difference= tuple(self.shape_Field_Data_3D(data3D_Difference))
+        else:
+            data3D_Difference=None
+        return data3D_Difference
 
     def update_Field_Fact(self,fieldStrengthFact:float)->None:
         """Update value used to model magnet strength tunability. fieldFact multiplies force and magnetic potential to
@@ -1175,7 +1197,7 @@ class HalbachLensSim(LensIdeal):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
         maxJitterAmp = self.apMax - self.ap
-        if maxJitterAmp==0.0:
+        if maxJitterAmp==0.0 and jitterAmpProposed!=0.0:
             print('Aperture is set to maximum, no room to misalign element')
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
         if Print==True:

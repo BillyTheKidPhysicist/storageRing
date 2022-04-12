@@ -209,7 +209,7 @@ class ParticleTracerLattice:
         moments
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth,methodOfMomentsHighPrecision, self.standardMagnetErrors)
+        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth, self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)

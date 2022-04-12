@@ -9,6 +9,8 @@ from hypothesis import given,settings,strategies as st
 from constants import SIMULATION_MAGNETON
 from shapely.geometry import Point
 import warnings
+from math import isclose
+from HalbachLensClass import HalbachLens
 
 def absDif(x1,x2):
     return abs(abs(x1)-abs(x2))
@@ -119,10 +121,57 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
     def __init__(self):
         self.L=.1321432
         self.rp=.01874832
+        self.magnetWidth=.0254*self.rp/.05
         particle0=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
         qf0=np.array([-0.13132135641683346 ,  0.005449608408724787,-0.008571529140918292])
         pf0=np.array([-201.18840500039474  ,   -2.9789389202302856,3.7022004607757926])
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
+
+    def run_Tests(self):
+        tester=ElementTestRunner(self)
+        tester.run_Tests()
+        self.test_Field_Deviations_And_Interpolation()
+
+    def test_Field_Deviations_And_Interpolation(self):
+        """Test that the interpolation of magnetic fields match with calculating the magnetic field at each point. Test
+        this with magnet imperfections as well"""
+        class PTL_Dummy: #fake class to just pass some args along
+            def __init__(self):
+                self.fieldDensityMultiplier = 2.0
+                self.jitterAmp = 0.0
+        seed = int(time.time())
+        tol=.025 #tolerance on the maximum value
+        magnetErrors = True
+        np.random.seed(seed)
+        lensElement = HalbachLensSim(PTL_Dummy(), self.rp, self.L, None, 0.0, self.magnetWidth, magnetErrors)
+        gridSpacing = lensElement.apMax / lensElement.numGridPointsXY
+        np.random.seed(seed)
+        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
+                                         applyMethodOfMoments=True, useStandardMagErrors=magnetErrors)
+        qMaxField = np.asarray([self.L / 2, .95 * lensElement.apMax / np.sqrt(2), .95 * lensElement.apMax / np.sqrt(2)])
+        FMax = np.linalg.norm(lensElement.force(qMaxField))
+        VMax = lensElement.magnetic_Potential(qMaxField)
+        assert np.isnan(FMax) == False
+        @given(*self.coordTestRules)
+        @settings(max_examples=500, deadline=None)
+        def check_Force_Agrees(x, y, z):
+            qEl1 = np.asarray([x, y, z])
+            minInterpPointsFromOrigin = 2  # if I test very near the origin, the differences can be much larger.
+            maxAperture = .8 * lensElement.rp  # larger aperture requires for fine grid for comparison
+            if lensElement.is_Coord_Inside(qEl1) == True and np.sqrt(y ** 2 + z ** 2) < maxAperture and \
+                    y / gridSpacing > minInterpPointsFromOrigin and z / gridSpacing > minInterpPointsFromOrigin:
+                Fx1, Fy1, Fz1 = lensElement.force(qEl1)
+                V1 = lensElement.magnetic_Potential(qEl1)
+                x, y, z = -z, y, x - self.L / 2 #shift coords for lens field generator. Points along z instead of x
+                qEl2 = np.asarray([x, y, z])
+                (BGradx, BGrady, BGradz), BNorm = lensFieldGenerator.BNorm_Gradient(qEl2, returnNorm=True)
+                Fx2, Fy2, Fz2 = -np.array([BGradx, BGrady, BGradz]) * SIMULATION_MAGNETON
+                Fx2, Fz2 = Fz2, -Fx2
+                V2 = BNorm * SIMULATION_MAGNETON
+                for Fi1, Fi2 in zip([Fx1, Fy1, Fz1], [Fx2, Fy2, Fz2]):
+                    assert isclose(Fi1, Fi2, abs_tol=tol * FMax)
+                assert isclose(V1, V2, abs_tol=tol * VMax)
+        check_Force_Agrees()
 
     def make_coordTestRules(self):
         floatyz = st.floats(min_value=-1.5 * self.rp, max_value=1.5 * self.rp)
@@ -345,6 +394,10 @@ class ElementTestRunner:
 
     def test_Magnet_Imperfections(self):
         """Test that there is no symmetry. Misalinging breaks the symmetry"""
+        if self.elTestHelper.testMagnetErrors==False or type(self.elTestHelper)==CombinerHalbachTestHelper:
+            if type(self.elTestHelper)==CombinerHalbachTestHelper:
+                warnings.warn("temporary pass is being given to combiner!! don't forget!!")
+            return
         PTL = self.elTestHelper.make_Latice(magnetErrors=True)
         el = self.elTestHelper.get_Element(PTL)
         @given(*self.elTestHelper.coordTestRules)
@@ -356,12 +409,7 @@ class ElementTestRunner:
                 z=-coord[2]
                 if np.isnan(F[0])==False and y!=0 and z!=0:
                     assert np.all(F!=el.force(np.array([coord[0],y,z]))) #assert there is no symmetry
-        if self.elTestHelper.testMagnetErrors==True:
-            if type(self.elTestHelper)==CombinerHalbachTestHelper:
-                warnings.warn("temporary pass is being given to combiner!! don't forget!!")
-            else:
-                test_Magnetic_Imperfection_Field_Symmetry
-
+        test_Magnetic_Imperfection_Field_Symmetry()
 
     def test_Imperfections_Tracing(self):
         """test that misalignment and errors change results"""
