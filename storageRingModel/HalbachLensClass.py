@@ -394,7 +394,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     #symmetric field
 
     def __init__(self,rp:float,rb: float,UCAngle: float,Lm: float,numLenses: int=3,
-                 M: float=M_Default,positiveAngleMagnetsOnly: bool=False,applyMethodOfMoments=False,lensSlices: int=1):
+                 M: float=M_Default,positiveAngleMagnetsOnly: bool=False,applyMethodOfMoments=False,lensSlices: int=1,
+                 useMagnetError: bool=False):
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
         self.rp: float=rp #radius of bore of magnet, ie to the pole
@@ -409,9 +410,10 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         #or positive
         self.magnetWidth: float=rp * np.tan(2 * np.pi / 24) * 2 #set to size that exactly fits
         self.numLenses: int=numLenses #number of lenses in the model
-        self.lensList: list=[] #list to hold lenses
+        self.lensList: list[HalbachLens]=[] #list to hold lenses
         self.applyMethodsOfMoments=applyMethodOfMoments
         self.slices=lensSlices
+        self.useStandardMagnetErrors=useMagnetError
         self._build()
 
     def _build(self)->None:
@@ -426,7 +428,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             angleArr=angleArr-angleArr.min()
         for i in range(angleArr.shape[0]):
             lens=HalbachLens(self.rp,self.magnetWidth,self.Lm,M=self.M,position=(self.rb,0.0,0.0),
-                             numSlices=self.slices)
+                             numSlices=self.slices,useStandardMagErrors=self.useStandardMagnetErrors,
+                             applyMethodOfMoments=True)
 
             R=Rotation.from_rotvec([0.0,-angleArr[i],0.0])
             lens.rotate(R,anchor=0)

@@ -269,7 +269,7 @@ class ParticleTracerLattice:
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact)
+        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,self.standardMagnetErrors)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)

@@ -400,13 +400,13 @@ spec = [
     ('FxArrIn',numba.float64[::1]),
     ('FyArrIn',numba.float64[::1]),
     ('VArrIn',numba.float64[::1]),
-    ('fieldImperfectionData',numba.types.UniTuple(numba.float64[::1],7)),
+    ('fieldPerturbationData',numba.types.UniTuple(numba.float64[::1],7)),
     ('L', numba.float64),
     ('Lcap', numba.float64),
     ('ap', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
-    ('useFieldImperfections', numba.boolean),
+    ('useFieldPerturbations', numba.boolean),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
 ]
 
@@ -414,7 +414,7 @@ spec = [
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self,fieldData,fieldImperfectionData,L,Lcap,ap,extraFieldLength):
+    def __init__(self,fieldData,fieldPerturbationData,L,Lcap,ap,extraFieldLength):
         self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,self.xArrIn,\
         self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn=fieldData
         self.L=L
@@ -422,16 +422,16 @@ class LensHalbachFieldHelper_Numba:
         self.ap=ap
         self.fieldFact=1.0
         self.extraFieldLength=extraFieldLength
-        self.useFieldImperfections=True if fieldImperfectionData is not None else False
-        self.fieldImperfectionData=fieldImperfectionData if fieldImperfectionData is not None else nanArr7Tuple
+        self.useFieldPerturbations=True if fieldPerturbationData is not None else False
+        self.fieldPerturbationData=fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
         self.baseClass=BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData=self.xArrEnd,self.yArrEnd,self.zArrEnd,self.FxArrEnd,self.FyArrEnd,self.FzArrEnd,self.VArrEnd,\
                   self.xArrIn,self.yArrIn,self.FxArrIn,self.FyArrIn,self.VArrIn
-        fieldImperfectionData=None if self.useFieldImperfections==False else self.fieldImperfectionData
-        return fieldData,fieldImperfectionData,self.L,self.Lcap,self.ap,self.extraFieldLength
+        fieldPerturbationData=None if self.useFieldPerturbations==False else self.fieldPerturbationData
+        return fieldData,fieldPerturbationData,self.L,self.Lcap,self.ap,self.extraFieldLength
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -456,7 +456,7 @@ class LensHalbachFieldHelper_Numba:
         if useImperfectInterp==False:
             V=scalar_interp3D(-z, y, x,self.xArrEnd,self.yArrEnd,self.zArrEnd,self.VArrEnd)
         else:
-            xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldImperfectionData
+            xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
             V=scalar_interp3D(-z, y, x,xArr, yArr, zArr, VArr)
         return V
 
@@ -471,7 +471,7 @@ class LensHalbachFieldHelper_Numba:
             Fx0,Fy0,Fz0=vec_interp3D(-z, y,x,self.xArrEnd,self.yArrEnd,self.zArrEnd,
                                  self.FxArrEnd, self.FyArrEnd,self.FzArrEnd)
         else:
-            xArr,yArr,zArr,FxArr,FyArr,FzArr,VArr=self.fieldImperfectionData
+            xArr,yArr,zArr,FxArr,FyArr,FzArr,VArr=self.fieldPerturbationData
             Fx0, Fy0, Fz0 = vec_interp3D(-z, y, x, xArr,yArr,zArr,FxArr,FyArr,FzArr)
         Fx = Fz0
         Fy = Fy0
@@ -487,11 +487,11 @@ class LensHalbachFieldHelper_Numba:
 
     def force(self,x:float, y:float, z:float)->tupleOf3Floats:
         """Force on lithium atom. Functions to combine perfect force and extra force from imperfections.
-         Imperfection force is messed up force minus perfect force."""
+         Perturbation force is messed up force minus perfect force."""
         
         Fx,Fy,Fz= self._force(x,y,z)
-        if self.useFieldImperfections==True:
-            deltaFx,deltaFy,deltaFz=self._force_Field_Deviations(x,y,z) #extra force from design imperfections
+        if self.useFieldPerturbations==True:
+            deltaFx,deltaFy,deltaFz=self._force_Field_Perturbations(x,y,z) #extra force from design imperfections
             Fx, Fy, Fz=Fx+deltaFx,Fy+deltaFy,Fz+deltaFz
         return Fx,Fy,Fz
 
@@ -534,7 +534,7 @@ class LensHalbachFieldHelper_Numba:
         Fx,Fy,Fz=self.baseClass.rotate_Force_For_Misalignment(Fx,Fy,Fz)
         return Fx, Fy, Fz
 
-    def _force_Field_Deviations(self,x0: float,y0: float,z0: float)-> tupleOf3Floats:
+    def _force_Field_Perturbations(self,x0: float,y0: float,z0: float)-> tupleOf3Floats:
         if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
             return np.nan,np.nan,np.nan
         x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
@@ -548,10 +548,10 @@ class LensHalbachFieldHelper_Numba:
 
     def magnetic_Potential(self,x:float,y:float,z:float) -> float:
         """Magnetic potential of lithium atom. Functions to combine perfect potential and extra potential from 
-        imperfections. Imperfection potential is messed up potential minus perfect potential."""
+        imperfections. Perturbation potential is messed up potential minus perfect potential."""
         V= self._magnetic_Potential(x,y,z)
-        if self.useFieldImperfections==True:
-            deltaV=self._magnetic_Potential_Deviations(x,y,z) #extra potential from design imperfections
+        if self.useFieldPerturbations==True:
+            deltaV=self._magnetic_Potential_Perturbations(x,y,z) #extra potential from design imperfections
             V+=deltaV
         return V
 
@@ -587,7 +587,7 @@ class LensHalbachFieldHelper_Numba:
         V0=V0*self.fieldFact
         return V0
 
-    def _magnetic_Potential_Deviations(self,x0: float,y0: float,z0: float)-> float:
+    def _magnetic_Potential_Perturbations(self,x0: float,y0: float,z0: float)-> float:
          if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
              return np.nan
          x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
@@ -1089,12 +1089,14 @@ spec = [
     ('misalignmentCoeffArr', numba.float64[:,::1]),
     ('fieldFact',numba.float64),
     ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None))),
-    ('applyMagnetErrors', numba.boolean)
+    ('fieldPerturbationData',numba.types.UniTuple(numba.float64[::1],7)),
+    ('useFieldPerturbations', numba.boolean)
 ]
 @jitclass(spec)
 class SegmentedBenderSimFieldHelper_Numba:
 
-    def __init__(self,fieldDataSeg,fieldDataInternal,fieldDataCap,ap,ang,ucAng,rb,numMagnets,Lcap,M_uc,M_ang,RIn_Ang):
+    def __init__(self,fieldDataSeg,fieldDataInternal,fieldDataCap,fieldPerturbationData,ap,ang,ucAng,rb,
+                 numMagnets,Lcap,M_uc,M_ang,RIn_Ang):
         self.fieldDataSeg=fieldDataSeg
         self.fieldDataInternal=fieldDataInternal
         self.fieldDataCap=fieldDataCap
@@ -1108,14 +1110,16 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.Lcap=Lcap
         self.RIn_Ang=RIn_Ang
         self.fieldFact=1.0
-        self.misalignmentCoeffArr=2.0*(np.random.random_sample((numMagnets+1,12))-.5)
         self.baseClass = BaseClassFieldHelper_Numba(None)
-        self.applyMagnetErrors=False
+        self.misalignmentCoeffArr=2.0*(np.random.random_sample((numMagnets+1,12))-.5)
+        self.useFieldPerturbations=True if fieldPerturbationData is not None else False #apply magnet Perturbation data
+        self.fieldPerturbationData=fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldDataSeg,self.fieldDataInternal,self.fieldDataCap,self.ap,self.ang,self.ucAng,self.rb,\
-               self.numMagnets,self.Lcap,self.M_uc,self.M_ang,self.RIn_Ang
+        fieldPerturbationData = None if self.useFieldPerturbations == False else self.fieldPerturbationData
+        return self.fieldDataSeg,self.fieldDataInternal,self.fieldDataCap,fieldPerturbationData,self.ap,self.ang,\
+               self.ucAng,self.rb,self.numMagnets,self.Lcap,self.M_uc,self.M_ang,self.RIn_Ang
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -1123,58 +1127,36 @@ class SegmentedBenderSimFieldHelper_Numba:
 
     def set_Internal_Params(self, params):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
+
         self.fieldFact, alignmentParams = params
         self.baseClass.set_Misalignment_Params(alignmentParams)
 
-    def _misalignment_Force_Fact_Longitudinal(self,x, y, z):
-        """Misalignment factor in longitudinal direction through bender. Exists to enforce energy conservation with
-        transverse force fact. Otherwise there would be discontinuities"""
-        theta = full_Arctan2(y, x)
-        if 0.0 <= theta <= self.ang:
-            fact = abs(np.sin(.5 * np.pi * theta / self.ucAng + np.pi / 2))
-        elif -self.Lcap <= y < 0.0 and np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap:
-            fact = 1.0 - abs(y / self.Lcap)
-        else:
-            rotAngle = -self.ang
-            x, y = np.cos(rotAngle) * x - np.sin(rotAngle) * y, np.sin(rotAngle) * x + np.cos(rotAngle) * y
-            assert 0.0 <= y <= self.Lcap + 1e-9  # allow for error
-            fact = 1.0 - abs(y / self.Lcap)
-        return fact
+    def cartesian_To_Center(self,x, y, z):
+        """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
+        evaluation by interpolator"""
 
-    def _misalignment_Force_Fact_Trans(self,x, y, z):
-        """Misalignment factor in transverse to origin through geometric center of bender. Attempts to model 12 peak
-         noise functino"""
-        thetaMajor = full_Arctan2(y, x)
-        if 0.0 <= thetaMajor <= self.ang:
-            cLongIndex = int((thetaMajor + self.ucAng) / (2 * self.ucAng))
-            deltaR_Major = np.sqrt(x ** 2 + y ** 2) - self.rb
-            thetaMinor = full_Arctan2(z, deltaR_Major)
-        elif -self.Lcap <= y < 0.0:  # in a straight section
-            cLongIndex = 0
-            thetaMinor = full_Arctan2(z, x - self.rb)
+        if x > 0.0 and -self.Lcap <= z <= 0.0:
+            s = self.Lcap + z
+            xc = x - self.rb
+            yc = y
         else:
-            rotAngle = -self.ang
-            x, y = np.cos(rotAngle) * x - np.sin(rotAngle) * y, np.sin(rotAngle) * x + np.cos(rotAngle) * y
-            cLongIndex = len(self.misalignmentCoeffArr) - 1
-            thetaMinor = full_Arctan2(z, x - self.rb)
-        cTransIndex = int(thetaMinor / (np.pi / 6))
-        c = self.misalignmentCoeffArr[cLongIndex][cTransIndex]
-        thetaMinorRel = thetaMinor - 2 * np.pi * cTransIndex / 12
-        thetaMinorSlice = np.pi * thetaMinorRel / (2 * np.pi / 12)
-        fact = c * np.sin(thetaMinorSlice)
-        return fact
-
-    def magnet_Error_Field_Fact(self, x, y, z):
-        """Function to model magnet errors in bending section. This is a qualitatvely correct model derived by
-        inspecting the nature of actal errors, which for technical reasons would be very challenging to implement.
-        Mostly becuase symmetry would be broken"""
-        amp = .01
-        factLong = self._misalignment_Force_Fact_Longitudinal(x,y,z)
-        assert abs(factLong) <= 1.0
-        factTrans = self._misalignment_Force_Fact_Trans(x, y, z)
-        assert abs(factTrans) <= 1.0
-        forceFact = (1.0 + amp * factLong * factTrans)
-        return forceFact
+            theta = full_Arctan2(z, x)
+            if theta <= self.ang:
+                s = theta * self.rb + self.Lcap
+                xc = np.sqrt(x ** 2 + z ** 2) - self.rb
+                yc = y
+            elif self.ang < theta <= 2 * np.pi:  # i'm being lazy here and not limiting the real end
+                x0, z0 = np.cos(self.ang) * self.rb, np.sin(self.ang) * self.rb
+                thetaEndPerp = np.pi - np.arctan(-1 / np.tan(self.ang))
+                x, z = x - x0, z - z0
+                deltaS, xc = np.cos(thetaEndPerp) * x + np.sin(-thetaEndPerp) * z, np.sin(thetaEndPerp) * x + np.cos(
+                    thetaEndPerp) * z
+                yc = y
+                xc = -xc
+                s = (self.ang * self.rb + self.Lcap) + deltaS
+            else:
+                raise ValueError
+        return s, xc, yc
 
     def _force_Func_Seg(self,x,y,z):
         Fx0,Fy0,Fz0=vec_interp3D(x,-z,y,*self.fieldDataSeg[:6])
@@ -1185,6 +1167,14 @@ class SegmentedBenderSimFieldHelper_Numba:
 
     def _force_Func_Internal_Fringe(self,x,y,z):
         Fx0, Fy0, Fz0 = vec_interp3D(x,-z,y,*self.fieldDataInternal[:6])
+        Fx = Fx0
+        Fy = Fz0
+        Fz = -Fy0
+        return Fx, Fy, Fz
+    
+    def _force_Func_Perturbation(self,x,y,z):
+        s,xc,yc=self.cartesian_To_Center(x, -z, y)
+        Fx0, Fy0, Fz0 = vec_interp3D(s,xc,yc, *self.fieldPerturbationData[:6])
         Fx = Fx0
         Fy = Fz0
         Fz = -Fy0
@@ -1231,9 +1221,13 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fy = np.sin(rotAngle) * Fx0 + np.cos(rotAngle) * Fy0
         return Fx, Fy, Fz
 
-    def force(self,x,y,z):
+    def force(self,x0,y0,z0):
         # force at point q in element frame
         # q: particle's position in element frame
+
+        #todo: change this x0,y0,z0 stuff
+
+        x,y,z=x0,y0,z0
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         z = abs(z)
         phi = np.arctan2(y, x)
@@ -1289,11 +1283,9 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fx*=self.fieldFact
         Fy*=self.fieldFact
         Fz*=self.fieldFact
-        # if np.isnan(Fx)==False and self.applyMagnetErrors==True:
-        #     fact=self.magnet_Error_Field_Fact(x, y, z)
-        #     Fx*=fact
-        #     Fy*=fact
-        #     Fz*=fact
+        if self.useFieldPerturbations==True and np.isnan(Fx)==False:
+            deltaFx, deltaFy, deltaFz = self._force_Func_Perturbation(x0, y0,z0)  # extra force from design imperfections
+            Fx, Fy, Fz = Fx + deltaFx, Fy + deltaFy, Fz + deltaFz
         return Fx, Fy, Fz
 
     def transform_Element_Coords_Into_Unit_Cell_Frame(self,x, y, z):

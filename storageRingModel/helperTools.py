@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import os
 import sympy as sym
@@ -84,14 +86,27 @@ def tool_Make_Image_Cartesian(
 
 def radians(degrees: float):
     return (degrees/180)*np.pi
+
 def degrees(radians: float):
     return (radians/np.pi)*180
+
 def iscloseAll(a: np.ndarray,b: np.ndarray,abstol: float)->bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a,b,atol=abstol))
+
 def inch_To_Meter(inches: float)-> float:
     return .0254*inches
 
+def arr_Product(*args):
+    """Use itertools to form a product of provided arrays, and return an array instead of iterable"""
+    return np.asarray(list(itertools.product(*args)))
+
+def full_Arctan(y,x):
+    """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
+    phi = np.arctan2(y, x)
+    if phi < 0:  # confine phi to be between 0 and 2pi
+        phi += 2 * np.pi
+    return phi
 
 def test_Parallel_Process():
     tol=1e-12
