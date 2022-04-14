@@ -898,7 +898,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         numS = self.numMagnets+2 #about one plane in each magnet and cap
         numR = 10
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
-        xcArr = np.linspace(-self.rp-TINY_OFFSET, self.rp+TINY_OFFSET, numR) #radial deviation along major radius
+        xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numR) #radial deviation along major radius
         ycArr = xcArr.copy() #deviation in vertical from center of bender, along y in cartesian
         coordsCenter = arr_Product(sArr, xcArr, ycArr)
         coords = np.asarray([self.convert_Center_To_Cartesian_Coords(*coordCenter) for coordCenter in coordsCenter])
@@ -913,6 +913,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         valsAligned=np.column_stack(lensAligned.BNorm_Gradient(coordsCartesian,returnNorm=True))
         valsMisaligned=np.column_stack(lensMisaligned.BNorm_Gradient(coordsCartesian,returnNorm=True))
         valsPerturbation=valsMisaligned-valsAligned
+        rArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
+        valsPerturbation[rArr>self.rp]*=0.0
         interpData=np.column_stack((coordsCenter,valsPerturbation))
         interpData=self.shape_Field_Data_3D(interpData)
         return interpData
@@ -1225,7 +1227,9 @@ class HalbachLensSim(LensIdeal):
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
         and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
         force is small, and so I can get away with interpolating with low density, while keeping my high density
-        symmetry region"""
+        symmetry region. interpolation points inside magnet material are set to zero, so the interpolation may be poor
+        near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of ideal and
+        perturbation interpolation"""
 
         if self.useStandardMagErrors==True:
             data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False)
@@ -1234,6 +1238,8 @@ class HalbachLensSim(LensIdeal):
             coords=data3D_NoPerturbations[:,:3]
             fieldValsDifference=data3D_Perturbations[:,3:]-data3D_NoPerturbations[:,3:]
             data3D_Difference=np.column_stack((coords,fieldValsDifference))
+            # print(np.sum(np.isnan(data3D_Difference)),data3D_Difference.size)
+            data3D_Difference[np.isnan(data3D_Difference)]=0.0
             data3D_Difference= tuple(self.shape_Field_Data_3D(data3D_Difference))
         else:
             data3D_Difference=None

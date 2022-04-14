@@ -20,7 +20,6 @@ def absDif(x1,x2):
 def blockPrint():
     sys.stdout = open(os.devnull, 'w')
 
-# Restore
 def enablePrint():
     sys.stdout = sys.__stdout__
 
@@ -30,6 +29,7 @@ class PTL_Dummy:
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.jitterAmp = 0.0
         self.v0Nominal=210.0
+
 
 class ElementTestHelper:
 
@@ -142,7 +142,9 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
 
     def test_Field_Deviations_And_Interpolation(self):
         """Test that the interpolation of magnetic fields match with calculating the magnetic field at each point. Test
-        this with magnet imperfections as well"""
+        this with magnet imperfections as well. Keep in mind that interpolation points inside magnet material are set to
+        zero, so the interpolation may be poor near bore of magnet. This is done to avoid dealing with mistmatch
+        between good field region of ideal and perturbation interpolation"""
         seed = int(time.time())
         tol=.025 #tolerance on the maximum value
         magnetErrors = True
@@ -158,7 +160,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         VMax = lensElement.magnetic_Potential(qMaxField)
         assert np.isnan(FMax) == False
         @given(*self.coordTestRules)
-        @settings(max_examples=500, deadline=None)
+        @settings(max_examples=50000, deadline=None)
         def check_Force_Agrees(x, y, z):
             qEl1 = np.asarray([x, y, z])
             minInterpPointsFromOrigin = 2  # if I test very near the origin, the differences can be much larger.
@@ -298,6 +300,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         np.random.seed(42)
         elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, True)
         elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, False)
+        Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         np.random.seed(42)
         lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,
@@ -312,6 +315,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         @settings(max_examples=100,deadline=None)
         def foo_Field_Perturbation(index):
             x, y, z = coordsCartesian[index]
+            s,xc,yc=coordsCenter[index]
+            if np.sqrt(xc**2+yc**2)>elPerfect.ap or not 0.0<s<Ls:
+                return
             qEl = np.asarray([x, y, z])
             [Bgradx, Bgrady, Bgradz], B0 = lensIdeal.BNorm_Gradient(qEl, returnNorm=True)
             valsIdeal = np.array([Bgradx, Bgrady, Bgradz, B0])
@@ -327,9 +333,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             qEl = np.asarray([x, y, z])
             deltaF_el=elDeviation.force(qEl) - elPerfect.force(qEl)
             #todo: add potential
-            iscloseAll(deltaF_el,deltaF_Direct,abstol=1e-6)
-
+            assert iscloseAll(deltaF_el,deltaF_Direct,abstol=1e-6)
         foo_Field_Perturbation()
+
 
 class CombinerIdealTestHelper(ElementTestHelper):
 
@@ -522,8 +528,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf,qf0,absTol)==False or iscloseAll(pf,pf0,absTol)==False:
-                print(repr(qf), repr(pf))
-                print(repr(qf0), repr(pf0))
+                # print(repr(qf), repr(pf))
+                # print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self,qEl):
@@ -542,6 +548,8 @@ class ElementTestRunner:
             # right on the edge, so go ahead and check
             isInside2D = self.elTestHelper.el.is_Coord_Inside(coord2D)
             assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
+
+
 def run_Tests(parallel=False):
     funcsToRun=[DriftTestHelper().run_Tests,
     LensIdealTestHelper().run_Tests,
