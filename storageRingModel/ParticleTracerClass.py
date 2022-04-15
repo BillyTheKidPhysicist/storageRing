@@ -1,20 +1,15 @@
-from ParticleClass import Particle
-import numpy.linalg as npl
-import numba
 import warnings
-from numba.core.errors import NumbaPerformanceWarning
-warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
-import time
-import numpy as np
 import math
-from math import isnan
-from numba.experimental import jitclass
-import matplotlib.pyplot as plt
-import sys
-from shapely.geometry import Polygon,Point
 from typing import Optional
+from math import isnan
+import numba
+import numpy.linalg as npl
+import numpy as np
+from numba.core.errors import NumbaPerformanceWarning
+from ParticleClass import Particle
 import elementPT
-from constants import BOLTZMANN_CONSTANT,MASS_HELIUM
+
+warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
 
@@ -119,7 +114,7 @@ class ParticleTracer:
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.qi)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
             self.E0=self.particle.get_Energy(self.currentEl,self.qEl,self.pEl)
-        if self.fastMode==False and self.particle.clipped == False:
+        if self.fastMode is False and self.particle.clipped is False:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
 
     def trace(self,particle: Optional[Particle],h: float,T0: float,fastMode: bool=False,accelerated: bool=False,
@@ -140,10 +135,10 @@ class ParticleTracer:
         self.stepsBetweenLogging=stepsBetweenLogging
         if particle is None:
             particle=Particle()
-        if particle.traced==True:
+        if particle.traced:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
-        if self.particle.clipped==True: #some particles may come in clipped so ignore them
+        if self.particle.clipped: #some particles may come in clipped so ignore them
             self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=0)
             return self.particle
         self.fastMode=fastMode
@@ -151,15 +146,15 @@ class ParticleTracer:
         self.T0=float(T0)
         self.initialize()
         self.accelerated=accelerated
-        if self.particle.clipped==True: #some a particles may be clipped after initializing them because they were about
+        if self.particle.clipped: #some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=0)
             return particle
         self.time_Step_Loop()
         self.forceLast=None #reset last force to zero
-        self.particle._q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
-        self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
-        self.particle.currentEl=self.currentEl
+        # self.particle._q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
+        # self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
+        # self.particle.currentEl=self.currentEl
 
         self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=self.totalLatticeLength)
         return self.particle
@@ -171,10 +166,10 @@ class ParticleTracer:
                 break
             if isinstance(self.currentEl,elementPT.Drift):
                 self.handle_Drift_Region()
-                if self.particle.clipped==True:
+                if self.particle.clipped:
                     break
             else:
-                if self.fastMode==False or self.currentEl.fastFieldHelper is None: #either recording data at each step
+                if self.fastMode is False or self.currentEl.fastFieldHelper is None: #either recording data at each step
                     #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                     self.time_Step_Verlet()
                     if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
@@ -182,7 +177,7 @@ class ParticleTracer:
                     self.logTracker+=1
                 else:
                     self.multi_Step_Verlet()
-                if self.particle.clipped == True:
+                if self.particle.clipped:
                     break
                 self.T+=self.h
                 self.particle.T=self.T
@@ -198,6 +193,7 @@ class ParticleTracer:
     @staticmethod
     @numba.njit()
     def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper):
+        #pylint: disable = E, W, R, C
         # copy the input arrays to prevent modifying them outside the function
         force=helper.force
         x, y, z = qEln
@@ -271,18 +267,18 @@ class ParticleTracer:
             self.qEl=qi+pi*dt
         else:
             self.T += dt
-            if clipped==False:
+            if not clipped:
                 qEl=qi+pi*dt
                 self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl,qi,pi) #put the particle just on the other
                 #side. This is how this is done with other elements, so I am resuing code. really I don't need to do
                 #because I know the particle finished
-                if self.particle.clipped==True:
+                if self.particle.clipped:
                     self.qEl=qEl
             else:
                 self.qEl=qi+pi*dt
                 self.pEl=self.pEl
                 self.particle.clipped=True
-        if self.fastMode==False: #need to log the parameters
+        if not self.fastMode: #need to log the parameters
             qf = qi + pi * dt  # the final position of the particle. Either at the end, or at some place where it
             # clipped, or where time ran out
             self.particle.log_Params_In_Drift_Region(qi, pi, qf, self.h,driftEl)
@@ -292,7 +288,7 @@ class ParticleTracer:
         #possible
         qEl=self.qEl #q old or q sub n
         pEl=self.pEl #p old or p sub n
-        if self.elHasChanged==False and self.forceLast is not None: #if the particle is inside the lement it was in
+        if not self.elHasChanged and self.forceLast is not None: #if the particle is inside the lement it was in
             #last time step, and it's not the first time step, then recycle the force. The particle is starting at the
             #same position it stopped at last time, thus same force
             F=self.forceLast
@@ -301,7 +297,7 @@ class ParticleTracer:
         #a = F # acceleration old or acceleration sub n
         qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
         F_n=self.currentEl.force(qEl_n)
-        if isnan(F_n[0]) == True: #particle is outside element if an array of length 1 with np.nan is returned
+        if isnan(F_n[0]): #particle is outside element if an array of length 1 with np.nan is returned
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,qEl,pEl)  #check if element has changed.
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
@@ -317,20 +313,21 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged=False
 
-    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n,qEl,pEl)-> None:
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n: np.ndarray,qEl: np.ndarray,pEl: np.ndarray)\
+            -> None:
         #qEl_n: coordinates that are outside the current element and possibley in the next
         #qEl: coordinates right before this method was called, should still be in the element
         #pEl: momentum for both qEl_n and qEl
         qEl_Scooted=qEl_n+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
-        if self.accelerated==True:
-            if self.energyCorrection == True:
+        if self.accelerated:
+            if self.energyCorrection:
                 pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
             nextEl = self.get_Next_Element()
             q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Scooted,pEl,nextEl)
-            if nextEl.is_Coord_Inside(q_nextEl)==False:
+            if not nextEl.is_Coord_Inside(q_nextEl):
                 self.particle.clipped=True
             else:
-                if self.energyCorrection == True:
+                if self.energyCorrection:
                     p_nextEl = p_nextEl + self.momentum_Correction_At_Bounday(q_nextEl, p_nextEl,
                                                                               nextEl, 'entering')
                 self.particle.cumulativeLength+=self.currentEl.Lo  # add the previous orbit length
@@ -344,7 +341,7 @@ class ParticleTracer:
             if el is None: #if outside the lattice
                 self.particle.clipped = True
             elif el is not self.currentEl: #element has changed
-                if self.energyCorrection==True:
+                if self.energyCorrection:
                     pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
@@ -356,7 +353,7 @@ class ParticleTracer:
                 self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(pElLab)  # at the beginning of the next
                 # element
                 self.elHasChanged = True
-                if self.energyCorrection==True:
+                if self.energyCorrection:
                     self.pEl=self.pEl+self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
@@ -382,9 +379,9 @@ class ParticleTracer:
             deltaP = deltaPNorm * F_unit
             return deltaP
 
-    def which_Element_Lab_Coords(self,qLab)-> Optional[elementPT.Element]:
+    def which_Element_Lab_Coords(self,qLab: np.ndarray)-> Optional[elementPT.Element]:
         for el in self.latticeElementList:
-            if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab))==True:
+            if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab)):
                 return el
         return None
 
@@ -395,24 +392,25 @@ class ParticleTracer:
             nextEl=self.latticeElementList[self.currentEl.index+1]
         return nextEl
 
-    def which_Element(self,qEl: np.ndarray)-> elementPT.Element:
+    def which_Element(self,qEl: np.ndarray)-> Optional[elementPT.Element]:
         #find which element the particle is in, but check the next element first ,which save time
         #and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
         nextEl=self.get_Next_Element()
-        if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)) == True: #try the next element
+        if nextEl.is_Coord_Inside(nextEl.transform_Lab_Coords_Into_Element_Frame(qElLab)): #try the next element
             return nextEl
         else:
             #now instead look everywhere, except the next element we already checked
             for el in self.latticeElementList:
                 if el is not nextEl: #don't waste rechecking current element or next element
-                    if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab))==True:
+                    if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab)):
                         return el
+            return None
 
-    def sample_Helium_Momentum(self):
-        T_Room = 300.0
-        sigma = np.sqrt(BOLTZMANN_CONSTANT * T_Room / MASS_HELIUM)
-        px = np.random.normal(loc=0.0, scale=sigma)
-        py = np.random.normal(loc=0.0, scale=sigma)
-        pz = np.random.normal(loc=0.0, scale=sigma)
-        return px, py, pz
+    # def sample_Helium_Momentum(self)-> tuple[float,float,float]:
+    #     T_Room = 300.0
+    #     sigma = np.sqrt(BOLTZMANN_CONSTANT * T_Room / MASS_HELIUM)
+    #     px = np.random.normal(loc=0.0, scale=sigma)
+    #     py = np.random.normal(loc=0.0, scale=sigma)
+    #     pz = np.random.normal(loc=0.0, scale=sigma)
+    #     return px, py, pz

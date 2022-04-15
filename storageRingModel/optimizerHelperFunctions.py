@@ -1,12 +1,6 @@
-import os
-import random
-
-os.environ['OPENBLAS_NUM_THREADS']='1'
-from asyncDE import solve_Async
+import time
 import numpy as np
 from typing import Optional
-from ParticleTracerClass import ParticleTracer
-from SwarmTracerClass import SwarmTracer
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 SMALL_NUMBER=1E-9
@@ -29,7 +23,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                           tuning,jitterAmp=0.0,fieldDensityMultiplier: float =1.0,
-                          standardMagnetErrors: bool=False)->Optional[ParticleTracerLattice]:
+                          standardMagnetErrors: bool=False,seed: Optional[int]=None)->Optional[ParticleTracerLattice]:
     assert tuning in (None, 'field', 'spacing')
     tunableDriftGap=2.54e-2
     jeremyGap=.05
@@ -51,6 +45,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
         PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
     PTL_Ring.add_Drift(lastGap)
+    np.random.seed(seed)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
@@ -66,7 +61,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
 
 
 def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDensityMultiplier: float=1.0,
-                                          standardMagnetErrors: bool=False) -> Optional[ParticleTracerLattice]:
+                        standardMagnetErrors: bool=False,seed: Optional[int]=None) -> Optional[ParticleTracerLattice]:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
@@ -86,6 +81,7 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
+    np.random.seed(seed)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
@@ -100,14 +96,14 @@ def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultip
     loadBeamDiam, L1, L2, L3=XInjector
 
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
-    #value2 from seperate optimizer
+    seed = None if standardMagnetErrors==False else int(1e6*np.random.rand())
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                                    tuning,jitterAmp=jitterAmp,fieldDensityMultiplier=fieldDensityMultiplier,
-                                   standardMagnetErrors=standardMagnetErrors)
+                                   standardMagnetErrors=standardMagnetErrors,seed=seed)
     if PTL_Ring is None:
         return None,None
     PTL_Injector=generate_Injector_Lattice_Double_Lens(XInjector,jitterAmp=jitterAmp,fieldDensityMultiplier
-                    =fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors)
+                    =fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors,seed=seed)
     if PTL_Injector is None:
         return None,None
     assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset
@@ -128,6 +124,7 @@ def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):
     elif tuning=='spacing':
         sol = optimizer.optimize((1, 9), whichKnobs='ring', tuningChoice=tuning)
     else: raise ValueError
+    print(sol)
     sol.xRing_TunedParams1 = X
     # if sol.fluxMultiplicationPercent>10.0:
     #     print(sol)

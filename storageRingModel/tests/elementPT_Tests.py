@@ -304,11 +304,11 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         np.random.seed(42)
         lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,
-                                           numLenses=numMagnets, applyMethodOfMoments=True,
+                                           numLenses=numMagnets, applyMethodOfMoments=False,
                                            positiveAngleMagnetsOnly=True, useMagnetError=False)
         np.random.seed(42)
         lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,
-                                              numLenses=numMagnets, applyMethodOfMoments=True,
+                                              numLenses=numMagnets, applyMethodOfMoments=False,
                                               positiveAngleMagnetsOnly=True, useMagnetError=True)
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian)-1)
         @given(testStrategy)
@@ -456,15 +456,18 @@ class ElementTestRunner:
             PTL = self.elTestHelper.make_Latice(magnetErrors=True)
             el = self.elTestHelper.get_Element(PTL)
             @given(*self.elTestHelper.coordTestRules)
-            @settings(max_examples=50, deadline=None)
+            @settings(max_examples=100, deadline=None)
             def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
-                coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
-                F0 = np.abs(el.force(coord))
-                for y in [coord[1],-coord[1]]:
-                    z=-coord[2]
-                    if np.isnan(F0[0])==False and y!=0 and z!=0:
-                        FSym=np.abs(el.force(np.array([coord[0],y,z])))
-                        assert iscloseAll(F0,FSym,1e-10)==False #assert there is no symmetry
+                if any(isclose(x,0.0,abs_tol=1e-6) for x in [x1,x2,x3]):
+                    return
+                else:
+                    coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
+                    F0 = np.abs(el.force(coord))
+                    for y in [coord[1],-coord[1]]:
+                        z=-coord[2]
+                        if np.isnan(F0[0])==False and y!=0 and z!=0:
+                            FSym=np.abs(el.force(np.array([coord[0],y,z])))
+                            assert iscloseAll(F0,FSym,1e-10)==False #assert there is no symmetry
             test_Magnetic_Imperfection_Field_Symmetry()
 
     def test_Imperfections_Tracing(self):

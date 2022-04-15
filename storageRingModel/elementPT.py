@@ -1,14 +1,16 @@
-import numpy as np
-
-from helperTools import *
+import warnings
 from math import sqrt,isclose
 from typing import Optional,Union
-import fastNumbaMethodsAndClass
+import time
 import pandas as pd
+from scipy.spatial.transform import Rotation as Rot
+from shapely.geometry import Polygon
+import numpy as np
+import fastNumbaMethodsAndClass
+from helperTools import arr_Product
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import SIMULATION_MAGNETON
-from scipy.spatial.transform import Rotation as Rot
 
 
 
@@ -46,7 +48,7 @@ class Element:
     and construct itself, which is not always trivial.
     """
 
-    def __init__(self, PTL,ang: float=0.0,build: bool=True,L: Optional[float]=None):
+    def __init__(self, PTL,ang: float=0.0,build: bool=True,L=None):
         # self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -59,35 +61,35 @@ class Element:
         # combiner: theta=0 has the outlet at the origin and pointing to the west, with the inlet some distance to the right
         # and pointing in the NE direction
         self.PTL = PTL  # particle tracer lattice object. Used for various constants
-        self.nb = None  # normal vector to beginning (clockwise sense) of element.
-        self.ne = None  # normal vector to end (clockwise sense) of element
-        self.r0 = None  # coordinates of center of bender, minus any caps
-        self.ROut = None  # 2d matrix to rotate a vector out of the element's reference frame
-        self.RIn = None  # 2d matrix to rotate a vector into the element's reference frame
-        self.r1 = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
-        self.r2 = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
-        self.SO = None  # the shapely object for the element. These are used for plotting, and for finding if the coordinates
+        self.nb: Optional[np.ndarray] = None  # normal vector to beginning (clockwise sense) of element.
+        self.ne: Optional[np.ndarray] = None  # normal vector to end (clockwise sense) of element
+        self.r0: Optional[np.ndarray] = None  # coordinates of center of bender, minus any caps
+        self.ROut: Optional[np.ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
+        self.RIn: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
+        self.r1: Optional[np.ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
+        self.r2: Optional[np.ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
+        self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for finding if the coordinates
         # # are inside an element that can't be found with simple geometry
-        self.SO_Outer=None #shapely object that represents the outer edge of the element
-        self.outerHalfWidth=None #outer diameter/width of the element, where applicable. For example, outer diam of lens is the
-        # #bore radius plus magnets and mount material radial thickness
+        self.SO_Outer: Optional[Polygon]=None #shapely object that represents the outer edge of the element
+        self.outerHalfWidth: Optional[float]=None #outer diameter/width of the element, where applicable. For example,
+        # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
-        self.L=L
-        self.index=None
-        self.Lo = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
+        self.L: Optional[float]=L
+        self.index: Optional[int]=None
+        self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
         # # value because for segmented benders the path length is not simple to compute
-        self.bumpOffset=0.0 # the transverse translational. Only applicable to bump lenses now
+        self.bumpOffset: float=0.0 # the transverse translational. Only applicable to bump lenses now
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
-        self.outputOffset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
+        self.outputOffset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
-        self.fieldFact = 1.0  # factor to modify field values everywhere in space by, including force
+        self.fieldFact: float = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper=None
-        self.maxCombinerAng=.2 #because the field value is a right rectangular prism, it must extend to past the
+        self.maxCombinerAng: float=.2 #because the field value is a right rectangular prism, it must extend to past the
         # #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
         self._fastFieldHelperInitParams=None #variable to assist in workaround for jitclass pickling issue
         self._fastFieldHelperInternalParam=None
-        self.shape=None
-        if build==True:
+        self.shape: Optional[str]=None
+        if build:
             self.build()
 
     def init_fastFieldHelper(self,initParams):
@@ -354,7 +356,7 @@ class LensIdeal(Element):
         self.shape = 'STRAIGHT'  # The element's geometry
         self.bumpOffset=bumpOffset
         self.K=None
-        if build==True:
+        if build:
             self.build()
 
 
@@ -379,16 +381,16 @@ class LensIdeal(Element):
         qNew+=self.r1
         return qNew
 
-    def transform_Orbit_Frame_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew=q.copy()
+        qNew=qOrbit.copy()
         qNew[:2]=self.ROut@qNew[:2]
         qNew+=self.r1
         return qNew
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, q:np.ndarray)->np.ndarray:
+    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element. Element and orbit frame is identical"""
-        return q.copy()
+        return qEl.copy()
 
     def set_Length(self, L:float)->None:
         """this is used typically for setting the length after satisfying constraints"""
@@ -410,7 +412,7 @@ class Drift(LensIdeal):
         """
         super().__init__(PTL, L, 0, np.inf, ap,build=False) #set Bp to zero and bore radius to infinite
         self.fastFieldHelper=self.init_fastFieldHelper([L,ap])
-        if build==True:
+        if build:
             self.build()
 
     def build(self)->None:
@@ -449,7 +451,7 @@ class BenderIdeal(Element):
         """
 
     def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
-        if all(arg is not None for arg in [ap,rb,ang])==True:
+        if all(arg is not None for arg in [ap,rb,ang]):
             assert ap<rp<rb/2.0 and 0.0<ang<2*np.pi
         super().__init__(PTL, ang=ang, build=False)
         self.Bp:float  = Bp
@@ -460,7 +462,7 @@ class BenderIdeal(Element):
         self.shape:str = 'BEND'
         self.ro: Optional[float] =None  # bending radius of orbit, ie rb + rOffset.
         self.segmented:bool = False  # wether the element is made up of discrete segments, or is continuous
-        if build==True:
+        if build:
             self.build()
 
     def build(self)->None:
@@ -500,6 +502,7 @@ class BenderIdeal(Element):
 
     def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element."""
+        raise NotImplementedError #there is an error here with yo
         xo,yo,zo=qOrbit
         phi=self.ang-xo/self.ro
         xLab=self.ro*np.cos(phi)
@@ -539,7 +542,7 @@ class CombinerIdeal(Element):
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
 
-        if build==True:
+        if build:
             self.build()
 
     def build(self)->None:
@@ -549,7 +552,7 @@ class CombinerIdeal(Element):
         self.Lb = self.Lm  # length of segment after kink after the inlet
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2,np.nan, self.Lb,
                                                                             self.apL,self.apR, np.nan, np.nan])
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+        inputAngle, inputOffset, qTracedArr,_ = self.compute_Input_Angle_And_Offset()
         self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
@@ -558,7 +561,7 @@ class CombinerIdeal(Element):
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La,self.Lb,
                                                                                 self.apL,self.apR, self.apz, self.ang])
 
-    def compute_Input_Angle_And_Offset(self, inputOffset:float=0.0, h:float=1e-6)->tuple:
+    def compute_Input_Angle_And_Offset(self, inputOffset:float=0.0, h:float=1e-6,ap: Optional[float]=None)->tuple:
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -573,10 +576,9 @@ class CombinerIdeal(Element):
         p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
         coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
 
-        # #of orbit.
         def force(x):
-            if isinstance(self,CombinerHalbachLensSim):
-                if x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > self.ap:
+            if ap is not None:
+                if x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > ap:
                     return np.empty(3) * np.nan
             return np.asarray(self.fastFieldHelper.force_NoSearchInside(x[0], x[1], x[2]))
 
@@ -594,7 +596,7 @@ class CombinerIdeal(Element):
                 coordList.append(q)
                 break
             F_n = force(q_n)
-            assert np.all(np.isnan(F_n) == False)
+            assert not np.any(np.isnan(F_n))
 
             F_n[2] = 0.0
             a_n = F_n  # accselferation new or accselferation sub n+1
@@ -606,12 +608,12 @@ class CombinerIdeal(Element):
         qArr = np.asarray(coordList)
         outputAngle = np.arctan2(p[1], p[0])
         outputOffset = q[1]
-        if type(self)==CombinerHalbachLensSim:
-            lensCorner = np.asarray([self.space + self.Lm, -self.ap, 0.0])
+        if ap is not None:
+            lensCorner = np.asarray([self.space + self.Lm, -ap, 0.0])
             minSep = np.min(np.linalg.norm(qArr - lensCorner, axis=1))
-            return outputAngle, outputOffset, qArr, minSep
         else:
-            return outputAngle, outputOffset, qArr
+            minSep=None
+        return outputAngle, outputOffset, qArr,minSep
 
     def compute_Trajectory_Length(self, qTracedArr:np.ndarray)->float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
@@ -639,15 +641,15 @@ class CombinerIdeal(Element):
         qo[1] = 0  # qo[1]
         return qo
 
-    def transform_Element_Coords_Into_Lab_Frame(self,q:np.ndarray)->np.ndarray:
+    def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
-        qNew=q.copy()
+        qNew=qEl.copy()
         qNew[:2]=self.ROut@qNew[:2]+self.r2[:2]
         return qNew
 
-    def transform_Orbit_Frame_Into_Lab_Frame(self,qo:np.ndarray)->np.ndarray:
+    def transform_Orbit_Frame_Into_Lab_Frame(self,qOrbit:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
-        qNew=qo.copy()
+        qNew=qOrbit.copy()
         qNew[0]=-qNew[0]
         qNew[:2]=self.ROut@qNew[:2]
         qNew+=self.r1
@@ -672,7 +674,7 @@ class CombinerSim(CombinerIdeal):
         super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale, build=False)
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
-        if build==True:
+        if build:
             self.build()
 
     def build(self)->None:
@@ -691,7 +693,7 @@ class CombinerSim(CombinerIdeal):
         fieldData=self.shape_Field_Data_3D(data)
         self.fastFieldHelper=self.init_fastFieldHelper([fieldData,np.nan,self.Lb,self.Lm,
                                                         self.space,self.apL,self.apR,self.apz,np.nan,self.fieldFact])
-        inputAngle, inputOffset, qTracedArr = self.compute_Input_Angle_And_Offset()
+        inputAngle, inputOffset, qTracedArr,_ = self.compute_Input_Angle_And_Offset()
         # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
          # 0.07891892567413786
         # to find the length
@@ -739,26 +741,26 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.space=extraSpace
         self.Lm=Lm
         self.rp=rp
-        self.Lseg = self.Lm + self.space * 2
+        self.Lseg: float = self.Lm + self.space * 2
         self.magnetWidth = rp * np.tan(2 * np.pi / 24) * 2
         self.yokeWidth = self.magnetWidth
-        self.ucAng = None
+        self.ucAng: Optional[float] = None
         self.rOffsetFact=rOffsetFact #factor to times the theoretic optimal bending radius by
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
-        self.segmented=True
-        self.RIn_Ang=None
-        self.M_uc=None
-        self.M_ang=None
-        self.numPointsBoreAp=20 #This many points should span the bore ap for good field sampling
-        self.numPointsBoreAp=int(self.numPointsBoreAp*self.PTL.fieldDensityMultiplier)
-        self.longitudinalCoordSpacing = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
-        self.numModelLenses=5 #number of lenses in halbach model to represent repeating system. Testing has shown
+        self.segmented: bool=True
+        self.RIn_Ang: Optional[np.ndarray]=None
+        self.M_uc: Optional[np.ndarray]=None
+        self.M_ang: Optional[np.ndarray]=None
+        self.numPointsBoreAp: int=20 #This many points should span the bore ap for good field sampling
+        self.numPointsBoreAp: int=int(self.numPointsBoreAp*self.PTL.fieldDensityMultiplier)
+        self.longitudinalCoordSpacing: float = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
+        self.numModelLenses: float=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
-        self.cap = True
-        self.K = None #spring constant of field strength to set the offset of the lattice
-        self.K_Func=None #function that returns the spring constant as a function of bending radii. This is used in the
+        self.cap: bool = True
+        self.K: Optional[float] = None #spring constant of field strength to set the offset of the lattice
+        self.K_Func: Optional[callable]=None #function that returns the spring constant as a function of bending radii. This is used in the
         #constraint solver
         self.useStandardMagErrors = useStandardMagErrors
         self.build()
@@ -771,7 +773,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         else:
             self.build_Pre_Constraint()
 
-    def compute_Aperture(self)->None:
+    def compute_Aperture(self)->float:
         #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
         vacuumTubeThickness=1e-3
@@ -833,7 +835,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
-        fieldDataPerturbation=self.generate_Perturbation_Data() if self.useStandardMagErrors==True else None
+        fieldDataPerturbation=self.generate_Perturbation_Data() if self.useStandardMagErrors else None
         assert np.all(fieldDataCap[0]==fieldDataInternal[0]) and np.all(fieldDataCap[1]==fieldDataInternal[1])
         self.fastFieldHelper=self.init_fastFieldHelper([fieldDataSeg,fieldDataInternal,fieldDataCap,fieldDataPerturbation
                                                            ,self.ap,self.ang,
@@ -896,7 +898,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         
         Ls = 2 * self.Lcap + self.ang * self.rb
         numS = self.numMagnets+2 #about one plane in each magnet and cap
-        numR = 10
+        numR =9 #i found this to be a decent compromise
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
         xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numR) #radial deviation along major radius
         ycArr = xcArr.copy() #deviation in vertical from center of bender, along y in cartesian
@@ -907,16 +909,25 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Perturbation_Data(self)-> tuple[np.ndarray,...]:
         coordsCenter,coordsCartesian=self.make_Perturbation_Data_Coords()
         lensMisaligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                numLenses=self.numMagnets, applyMethodOfMoments=True,positiveAngleMagnetsOnly=True, useMagnetError=True)
+                numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True)
         lensAligned=_HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-           numLenses=self.numMagnets, applyMethodOfMoments=True,positiveAngleMagnetsOnly=True,useMagnetError=False)
-        valsAligned=np.column_stack(lensAligned.BNorm_Gradient(coordsCartesian,returnNorm=True))
-        valsMisaligned=np.column_stack(lensMisaligned.BNorm_Gradient(coordsCartesian,returnNorm=True))
+           numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False)
+
+        t=time.time()
+
+        rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
+        validIndices=rCenterArr<self.rp
+        valsMisaligned=np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned,coordsCartesian,validIndices))
+        valsAligned=np.column_stack(self.compute_Valid_Field_Vals(lensAligned,coordsCartesian,validIndices))
+
         valsPerturbation=valsMisaligned-valsAligned
+        valsPerturbation[np.isnan(valsPerturbation)]=0.0
         rArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         valsPerturbation[rArr>self.rp]*=0.0
         interpData=np.column_stack((coordsCenter,valsPerturbation))
         interpData=self.shape_Field_Data_3D(interpData)
+
+        print(time.time()-t)
         return interpData
 
     def generate_Cap_Field_Data(self)->tuple[np.ndarray,...]:
@@ -968,13 +979,18 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                                         numLenses=self.numModelLenses+2,applyMethodOfMoments=True)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
-    def compute_Valid_Field_Data(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
-                                 validIndices:lst_tup_arr)->tuple[np.ndarray,...]:
+    def compute_Valid_Field_Vals(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
+                                 validIndices:lst_tup_arr)-> tuple[np.ndarray,np.ndarray]:
         BNormGradArr, BNormArr = np.zeros((len(fieldCoords), 3)) * np.nan, np.zeros(len(fieldCoords)) * np.nan
         BNormGradArr[validIndices], BNormArr[validIndices] = lens.BNorm_Gradient(fieldCoords[validIndices],
                                                                                  returnNorm=True)
-        fieldData = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
-        return self.shape_Field_Data_3D(fieldData)
+        return BNormGradArr,BNormArr
+
+    def compute_Valid_Field_Data(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
+                                 validIndices:lst_tup_arr)->tuple[np.ndarray,...]:
+        BNormGradArr,BNormArr=self.compute_Valid_Field_Vals(lens,fieldCoords,validIndices)
+        fieldDataUnshaped = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
+        return self.shape_Field_Data_3D(fieldDataUnshaped)
 
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
         # q: element coordinates (x,y,z)
@@ -1011,7 +1027,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def _get_Shapely_Object_Of_Bore(self):
         """Shapely object of bore in x,z plane with y=0. Not of vacuum tube, but of largest possible bore. For two
         unit cells."""
-        from shapely.geometry import Polygon
         bore=Polygon([(self.rb+self.rp,0.0),(self.rb+self.rp,(self.rb+self.rp)*np.tan(self.ucAng)),
         ((self.rb+self.rp)*np.cos(self.ucAng*2),
          (self.rb+self.rp)*np.sin(self.ucAng*2)),
@@ -1067,7 +1082,7 @@ class HalbachLensSim(LensIdeal):
         self.magnetic_Potential_Func_Inner = None
         self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
-        if build==True:
+        if build:
             self.build()
 
     def set_Length(self,L:float)->None:
@@ -1130,7 +1145,7 @@ class HalbachLensSim(LensIdeal):
         yMin,yMax=-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
-        if useSymmetry==False: #range will have to fully capture lens.
+        if not useSymmetry: #range will have to fully capture lens.
             yMin=-yMax
             zMax=self.L/2+TINY_OFFSET
             zMin=-zMax
@@ -1197,12 +1212,12 @@ class HalbachLensSim(LensIdeal):
     def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool)->tuple[np.ndarray,np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
 
-        lensLength=self.effectiveLength if useSymmetry==True else self.Lm
+        lensLength=self.effectiveLength if useSymmetry else self.Lm
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,lensLength,
                         applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
         #data2D may still be none if the lens is not short enough for symmetry
-        data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant) if useSymmetry==True else None
+        data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant) if useSymmetry else None
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
         return data2D,data3D
 
@@ -1231,7 +1246,7 @@ class HalbachLensSim(LensIdeal):
         near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of ideal and
         perturbation interpolation"""
 
-        if self.useStandardMagErrors==True:
+        if self.useStandardMagErrors:
             data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False)
             data2D_2, data3D_Perturbations = self.make_Field_Data(False, True)
             assert data2D_1 is None and data2D_2 is None
@@ -1254,11 +1269,12 @@ class HalbachLensSim(LensIdeal):
     def get_Valid_Jitter_Amplitude(self,Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
+        assert jitterAmpProposed>=0.0
         maxJitterAmp = self.apMax - self.ap
         if maxJitterAmp==0.0 and jitterAmpProposed!=0.0:
             print('Aperture is set to maximum, no room to misalign element')
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
-        if Print==True:
+        if Print:
             if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:
                 print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
         return jitterAmp
@@ -1266,6 +1282,8 @@ class HalbachLensSim(LensIdeal):
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
+        if self.PTL.jitterAmp==0.0:
+            warnings.warn("No jittering was accomodated for, so their will be no effect")
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
         totalShiftY=shiftY+rotZ*self.L
         totalShiftZ=shiftZ+rotY*self.L
@@ -1320,7 +1338,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         self.lens: Optional[_HalbachLensFieldGenerator]=None
-        if build==True:
+        if build:
             self.build()
 
     def build(self)->None:
@@ -1369,16 +1387,16 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
-        yMin=-TINY_OFFSET if self.useStandardMagErrors==False else -yMax
+        yMin=-TINY_OFFSET if not self.useStandardMagErrors else -yMax
         xMin=-(self.rp - TINY_OFFSET)
-        xMax=TINY_OFFSET if self.useStandardMagErrors==False else -xMin
-        numY=self.numGridPointsXY if self.useStandardMagErrors==False else self.numGridPointsXY*2-1 #minus 1 ensures
+        xMax=TINY_OFFSET if not self.useStandardMagErrors else -xMin
+        numY=self.numGridPointsXY if not self.useStandardMagErrors else self.numGridPointsXY*2-1 #minus 1 ensures
         #same grid spacing!!
         numX=int(self.numGridPointsXY*self.rp/yMax)
-        numX=numX if self.useStandardMagErrors==False else 2*numX-1
-        numZ=self.numGridPointsZ if self.useStandardMagErrors==False else self.numGridPointsZ*2-1
+        numX=numX if not self.useStandardMagErrors else 2*numX-1
+        numZ=self.numGridPointsZ if not self.useStandardMagErrors else self.numGridPointsZ*2-1
         zMax=self.compute_Valid_zMax(La,ang)
-        zMin=-TINY_OFFSET if self.useStandardMagErrors==False else -zMax
+        zMin=-TINY_OFFSET if not self.useStandardMagErrors else -zMax
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
         zArr = np.linspace(zMin, zMax + self.extraFieldLength, numZ) #this becomes x in element frame
@@ -1428,7 +1446,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
                                                             self.Lm,self.space, self.ap,np.nan,self.fieldFact,
                                                           self.extraFieldLength,not self.useStandardMagErrors])
         self.outputOffset = self.find_Ideal_Offset()
-        inputAngle, inputOffset, qTracedArr, _ = self.compute_Input_Angle_And_Offset(self.outputOffset)
+        inputAngle, inputOffset, qTracedArr, _ = self.compute_Input_Angle_And_Offset(self.outputOffset,ap=self.ap)
         trajectoryLength = self.compute_Trajectory_Length(qTracedArr)
         assert np.abs(inputAngle) < self.maxCombinerAng  # tilt can't be too large or it exceeds field region.
         assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
@@ -1440,10 +1458,11 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.fieldFact=fieldStrengthFact
     def get_Valid_Jitter_Amplitude(self,Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
+        assert self.PTL.jitterAmp >= 0.0
         jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
         maxJitterAmp = self.apMax - self.ap
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
-        if Print==True:
+        if Print:
             if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:
                 print('jitter amplitude of:' +str(jitterAmpProposed)+' clipped to maximum value:'+str(maxJitterAmp))
         return jitterAmp
@@ -1462,6 +1481,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
+        if self.PTL.jitterAmp==0.0:
+            warnings.warn("No jittering was accomodated for, so their will be no effect")
         totalShiftY=shiftY+np.sin(rotZ)*self.L
         totalShiftZ=shiftZ+np.sin(rotY)*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
@@ -1482,7 +1503,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
         yInitial=self.ap/10.0
-        inputAngle,_,_,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial)
+        inputAngle,_,_,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial,ap=self.ap)
         assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
         gradientInitial=(seperationInitial-self.ap)/(yInitial-0.0)
         y=yInitial
@@ -1491,10 +1512,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         i,iterMax=0,10 #to prevent possibility of ifnitne loop
         tolAbsolute=1e-6 #m
         targetSep=self.loadBeamDiam/2
-        while isclose(seperation,targetSep,abs_tol=tolAbsolute)==False:
+        while not isclose(seperation,targetSep,abs_tol=tolAbsolute):
             deltaX=-.8*(seperation-targetSep)/gradient # I like to use a little damping
             y=y+deltaX
-            inputAngle,_,_,seperationNew = self.compute_Input_Angle_And_Offset(y)
+            inputAngle,_,_,seperationNew = self.compute_Input_Angle_And_Offset(y,ap=self.ap)
             assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
             gradient=(seperationNew-seperation)/deltaX
             seperation=seperationNew
@@ -1559,10 +1580,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 #         # assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
 #         assert len(xArr_Quadrant) % 2 == 1 and len(yArr_Quadrant) % 2 == 1
 #         assert all((arr[-1] - arr[-2]) / self.rp < .1 for arr in [xArr_Quadrant, yArr_Quadrant]), "" \
-#                                                                                                   "spatial step size must be small compared to radius"
+#                                                                "spatial step size must be small compared to radius"
 #
 #         volumeCoords = np.asarray(np.meshgrid(xArr_Quadrant, yArr_Quadrant, zArr)).T.reshape(-1,
-#                                                                                              3)  # note that these coordinates can have
+#                                                                             3)  # note that these coordinates can have
 #         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 #         # input coordinates will be shifted in a wrapper function
 #         BNormGrad, BNorm = self.lens.BNorm_Gradient(volumeCoords, returnNorm=True)
