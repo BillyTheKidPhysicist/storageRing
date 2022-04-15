@@ -14,6 +14,10 @@ from elementPT import *
 #todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 #people, I need to change that. This was before my cleaner code approach
 
+#todo: refactor!
+
+benderTypes=Union[elementPT.BenderIdeal,elementPT.HalbachBenderSimSegmented]
+
 class SimpleLocalMinimizer:
     #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
     #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
@@ -60,31 +64,33 @@ class SimpleLocalMinimizer:
 
 class ParticleTracerLattice:
 
-    def __init__(self,v0Nominal: Union[float,int],latticeType: str='storageRing',
+    def __init__(self,v0Nominal: float,latticeType: str='storageRing',
                  jitterAmp: float=0.0, fieldDensityMultiplier:float =1.0, standardMagnetErrors: bool =False):
         assert fieldDensityMultiplier>0.0
         if latticeType!='storageRing' and latticeType!='injector':
             raise Exception('invalid lattice type provided')
+        if jitterAmp>5e-3:
+            raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
+                            "depend on this value, and relatively large values were not planned for")
         self.latticeType=latticeType#options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
         #input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         #is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
-        self.mass_Li7 = 1.1648E-26  # mass of lithium 7, SI
-        self.benderIndices=[] #list that holds index values of benders. First bender is the first one that the particle sees
+        self.benderIndices: list[int]=[] #list that holds index values of benders. First bender is the first one that the particle sees
         #if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
-        self.combinerIndex=None #the index in the lattice where the combiner is
-        self.totalLength=None #total length of lattice, m
+        self.combinerIndex: Optional[int]=None #the index in the lattice where the combiner is
+        self.totalLength: Optional[float]=None #total length of lattice, m
         self.jitterAmp=jitterAmp
         self.fieldDensityMultiplier=fieldDensityMultiplier
         self.standardMagnetErrors=standardMagnetErrors
 
-        self.bender1=None #bender element object
-        self.bender2=None #bender element object
-        self.combiner=None #combiner element object
-        self.linearElementsToConstraint=[] #elements whos length will be changed when the lattice is constrained to
-        # satisfy geometry. Must be inside bending region
+        self.bender1: Optional[benderTypes]=None #bender element object
+        self.bender2: Optional[benderTypes]=None #bender element object
+        self.combiner: Optional[elementPT.Element]=None #combiner element object
+        self.linearElementsToConstraint: list[elementPT.HalbachLensSim]=[] #elements whos length will be changed when the
+        # lattice is constrained to satisfy geometry. Must be inside bending region
 
-        self.elList: list[Element]=[] #to hold all the lattice elements
+        self.elList: list=[] #to hold all the lattice elements
 
     def __iter__(self)-> Iterable[Element]:
         return (element for element in self.elList)
@@ -192,8 +198,8 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: float,apFrac:Optional[float]=.9,constrain: bool=False,
-                bumpOffset: float=0.0,magnetWidth: Union[float,tuple,None]=None,
-                             methodOfMomentsHighPrecision: bool=False)-> None:
+                magnetWidth: float=None,
+                             )-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -202,14 +208,11 @@ class ParticleTracerLattice:
         :param apFrac: Size of aperture as fraction of bore radius
         :param constrain: Wether element is being used as part of a constraint. If so, fields construction will be
         deferred
-        :param bumpOffset: How much to shift the vacuum and element in xy plane
         :param magnetWidth: Width of both side cuboid magnets in polar plane of lens, m. Magnets length is L minus
         fringe fields
-        :param methodOfMomentsHighPrecision: Wether to subdivide the magnet into small pieces when applying method of
-        moments
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,bumpOffset,magnetWidth, self.standardMagnetErrors)
+        el=HalbachLensSim(self, rp,L,apFrac,magnetWidth, self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -226,7 +229,7 @@ class ParticleTracerLattice:
     #     el.index = len(self.elList) #where the element is in the lattice
     #     self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Lens_Ideal(self,L,Bp,rp,ap=None,constrain=False,bumpOffset=0.0)-> None:
+    def add_Lens_Ideal(self,L: float,Bp: float,rp: float,ap: float=None,constrain: bool=False)-> None:
         """
         Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
 
@@ -244,7 +247,7 @@ class ParticleTracerLattice:
         else:
             if ap > rp:
                 raise Exception('Apeture cant be bigger than bore radius')
-        el=LensIdeal(self, L, Bp, rp, ap,bumpOffset=bumpOffset) #create a lens element object
+        el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True:
@@ -633,35 +636,28 @@ class ParticleTracerLattice:
 
         for el in self.elList: #loop through elements in the lattice
             if i==0: #if the element is the first in the lattice
-                el.bumpVector[0] = 0
-                el.bumpVector[1] = -el.bumpOffset
-                xb=el.bumpVector[0]#set beginning coords
-                yb=el.bumpVector[1]#set beginning coords
-                # if el.bumpOffset is not None:
-                #     raise Exception('First element cannot be bump element')
+                xb,yb=0.0,0.0#set beginning coords
                 if self.latticeType=='storageRing' or self.latticeType=='injector':
-                    el.theta=np.pi #first element is straight. It can't be a bender
+                    el.theta=np.pi
                 else:
                     el.theta=0.0
-                xe=el.L*np.cos(el.theta)+el.bumpVector[0] #set ending coords
-                ye=el.L*np.sin(el.theta)+el.bumpVector[1] #set ending coords
+                xe=el.L*np.cos(el.theta)#+el.bumpVector[0] #set ending coords
+                ye=el.L*np.sin(el.theta)#+el.bumpVector[1] #set ending coords
                 el.nb=-np.asarray([np.cos(el.theta),np.sin(el.theta)]) #normal vector to input
                 el.ne=-el.nb
             else: #if element is not the first
                 prevEl = self.elList[i - 1]
-                if el.shape!='STRAIGHT' and np.all(el.bumpVector!=0.0):
-                    raise Exception('Bump offset is only allowed on straight elements')
                 angle=np.arctan2(prevEl.ne[1],prevEl.ne[0])
                 anglePerp=angle+np.pi/2
-                el.bumpVector[0]=el.bumpOffset*np.cos(anglePerp)
-                el.bumpVector[1]=el.bumpOffset*np.sin(anglePerp)
+                # el.bumpVector[0]=el.bumpOffset*np.cos(anglePerp)
+                # el.bumpVector[1]=el.bumpOffset*np.sin(anglePerp)
 
                 xb=self.elList[i-1].r2[0]#set beginning coordinates to end of last
                 yb=self.elList[i-1].r2[1]#set beginning coordinates to end of last
-                xb=xb-prevEl.bumpVector[0] #move element back to trajectory from bump offset of previous
-                yb=yb-prevEl.bumpVector[1] #move element back to trajectory from bump offset of previous
-                xb=xb+el.bumpVector[0] #now add the bump offset of current element
-                yb=yb+el.bumpVector[1] #now add the bump offset of current element
+                # xb=xb-prevEl.bumpVector[0] #move element back to trajectory from bump offset of previous
+                # yb=yb-prevEl.bumpVector[1] #move element back to trajectory from bump offset of previous
+                # xb=xb+el.bumpVector[0] #now add the bump offset of current element
+                # yb=yb+el.bumpVector[1] #now add the bump offset of current element
 
                 #set end coordinates
                 if el.shape=='STRAIGHT':
@@ -784,7 +780,7 @@ class ParticleTracerLattice:
             print('vector between ending and beginning',deltax, deltay)
             warnings.warn('ENDING POINTS DOES NOT MEET WITH BEGINNING POINT. LATTICE IS NOT CLOSED')
 
-    def get_Element_Before_And_After(self,elCenter: np.ndarray)-> tuple[Element,Element]:
+    def get_Element_Before_And_After(self,elCenter: elementPT.Element)-> tuple[Element,Element]:
         if (elCenter.index==len(self.elList)-1 or elCenter.index==0) and self.latticeType=='injector':
             raise Exception('Element cannot be first or last if lattice is injector type')
         elBeforeIndex=elCenter.index-1 if elCenter.index!=0 else len(self.elList)-1

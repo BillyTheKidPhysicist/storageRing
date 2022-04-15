@@ -21,9 +21,7 @@ class Solution:
     # class to hold onto results of each solution
 
     def __init__(self):
-        self.xInjector_TunedParams = None
-        self.xRing_TunedParams1 = None  # paramters tuned by the 'outer' gp minimize
-        self.xRing_TunedParams2 = None  # paramters tuned by the 'inner' gp minimize
+        self.params = None  # paramters tuned by the 'outer' gp minimize
         self.fluxMultiplicationPercent = None
         self.cost=None
         self.swarmCost=None
@@ -37,9 +35,7 @@ class Solution:
 
     def __str__(self):  # method that gets called when you do print(Solution())
         string = '----------Solution-----------   \n'
-        string += 'injector element spacing optimum configuration: ' + repr(self.xInjector_TunedParams) + '\n'
-        string += 'storage ring tuned params 1 optimum configuration: ' + repr(self.xRing_TunedParams1) + '\n'
-        string += 'storage ring tuned params 2 optimum configuration: ' + repr(self.xRing_TunedParams2) + '\n'
+        string += 'parameters: ' + repr(self.params) + '\n'
         # string+='stable configuration:'+str(self.stable)+'\n'
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
@@ -88,7 +84,7 @@ class LatticeOptimizer:
         # length. this to prevent any numerical round issues causing the tunable length to change from initial value
         # if I do many iterations
         self.tuningBounds = None
-        self.numParticlesFullSwarm=500
+        self.numParticlesFullSwarm=5000
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None

@@ -17,31 +17,45 @@ combinerTypes=(elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementP
 
 
 class StabilityAnalyzer:
-    def __init__(self,paramsOptimal: Sequence,tolerance: float=1e-3,tuning: Union[str]=None):
+    def __init__(self,paramsOptimal: np.ndarray,alignmentTol: float=1e-3,tuning: str=None,
+                 machineTolerance: float=250e-6):
         """
         Analyze stability of ring and injector system. Elements are perturbed by random amplitudes by sampling from
         a gaussian. Heavy lifiting is done in optimizerHelperFunctions.py
 
         :param paramsOptimal: Optimal parameters of a lattice solution.
-        :param tolerance: Maximum displacement from ideal trajectory perpindicular to vacuum tube in one direction.
-        This is our accepted tolerance
+        :param alignmentTol: Maximum displacement from ideal trajectory perpindicular to vacuum tube in one direction.
+        This is our accepted alignmentTol
         :param tuning: Type of tuning for the lattice.
         """
+
         assert tuning in ('spacing','field',None)
         self.paramsOptimal=paramsOptimal
         self.tuning=tuning
-        self.tolerance=tolerance
-        self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.CombinerHalbachLensSim)
-    def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool,fieldDensityMul: float)-> \
-                                                                    tuple[ParticleTracerLattice,ParticleTracerLattice]:
-        return optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(self.paramsOptimal,None,
-                                jitterAmp=self.tolerance,fieldDensityMultiplier=fieldDensityMul,standardMagnetErrors=useMagnetErrors)
-    def make_Jitter_Amplitudes(self, element: elementPT.Element,randomOverRide=None):
-        L = element.L
-        angleMax = np.arctan(self.tolerance / L)
+        self.alignmentTol=alignmentTol
+        self.machineTolerance=machineTolerance
+        self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.HalbachLensSim)
+
+    def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool,useMachineError: bool,misalign: bool,
+                                fieldDensityMul: float)-> tuple[ParticleTracerLattice,ParticleTracerLattice,np.ndarray]:
+        params=self.apply_Machining_Errors(self.paramsOptimal) if useMachineError==True else self.paramsOptimal
+        PTL_Ring,PTL_Injector= optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(params,None,
+                    jitterAmp=self.alignmentTol,fieldDensityMultiplier=fieldDensityMul,standardMagnetErrors=useMagnetErrors)
+        if misalign:
+            self.jitter_System(PTL_Ring,PTL_Injector)
+        return PTL_Ring,PTL_Injector,params
+
+    def apply_Machining_Errors(self,params: np.ndarray)-> np.ndarray:
+        deltaParams=2*(np.random.random_sample(params.shape)-.5)*self.machineTolerance
+        params_Error=params+deltaParams
+        return params_Error
+
+    def make_Jitter_Amplitudes(self, element: elementPT.Element,randomOverRide: Optional[tuple])-> tuple[float,...]:
+        angleMax = np.arctan(self.alignmentTol / element.L)
         randomNum = np.random.random_sample() if randomOverRide is None else randomOverRide[0]
         random4Nums=np.random.random_sample(4) if randomOverRide is None else randomOverRide[1]
-        angleAmp, shiftAmp = angleMax * randomNum, self.tolerance * (1 - randomNum)
+        fractionAngle,fractionShift=randomNum,1-randomNum
+        angleAmp, shiftAmp = angleMax *fractionAngle, self.alignmentTol * fractionShift
         angleAmp = angleAmp / np.sqrt(2)  # consider both dimensions being misaligned
         shiftAmp = shiftAmp / np.sqrt(2) # consider both dimensions being misaligned
         rotAngleY = 2 * (random4Nums[0] - .5)* angleAmp
@@ -56,48 +70,71 @@ class StabilityAnalyzer:
                 if any(type(el)==elType for elType in combinerTypes):
                     shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el,randomOverRide=combinerRandomOverride)
                 else:
-                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el)
+                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el,None)
                 el.perturb_Element(shiftY, shiftZ, rotY, rotZ)
-    def jitter_System(self,PTL_Ring,PTL_Injector):
+
+    def jitter_System(self,PTL_Ring: ParticleTracerLattice,PTL_Injector: ParticleTracerLattice)-> None:
         combinerRandomOverride=(np.random.random_sample(),np.random.random_sample(4))
         self.jitter_Lattice(PTL_Ring,combinerRandomOverride)
         self.jitter_Lattice(PTL_Injector,combinerRandomOverride)
+
     def dejitter_System(self,PTL_Ring,PTL_Injector):
-        tolerance0 = self.tolerance
-        self.tolerance = 0.0
+        #todo: possibly useless
+        tolerance0 = self.alignmentTol
+        self.alignmentTol = 0.0
         self.jitter_Lattice(PTL_Ring,None)
         self.jitter_Lattice(PTL_Injector,None)
-        self.tolerance=tolerance0
-    def cost(self,PTL_Ring,PTL_Injector, misalign):
-        if misalign==True:
-            self.jitter_System(PTL_Ring,PTL_Injector)
-        cost=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,self.paramsOptimal,self.tuning).cost
-        if misalign==True:
-            self.dejitter_System(PTL_Ring,PTL_Injector)
+        self.alignmentTol=tolerance0
 
-        return cost
-    def measure_Sensitivity(self,useMagnetErrors,fieldDensity):
-        # PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(True, fieldDensity)
-        # self.cost(PTL_Ring, PTL_Injector, False)
-        # exit()
+    def inject_And_Trace_Through_Ring(self, useMagnetErrors: bool, useMachineError: bool, fieldDensityMul: float,
+                                      misalign: bool):
+        PTL_Ring, PTL_Injector,params = self.generate_Ring_And_Injector_Lattice(useMagnetErrors, useMachineError,misalign,
+                                                                         fieldDensityMul)
+        sol=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,self.tuning)
+        sol.params=params
+        return sol
+
+    def measure_Sensitivity(self)-> None:
+
+        #todo: now that i'm doing much more than just jittering elements, I should refactor this. Previously
+        #it worked by reusing the lattice over and over again. Maybe I still want that to be a feature? Or maybe
+        #that's dumb
+
+        #todo: I need to figure out what all this is doing
+
         def _cost(i):
+            print(i)
             np.random.seed(i)
-            PTL_Ring, PTL_Injector = self.generate_Ring_And_Injector_Lattice(useMagnetErrors,fieldDensity)
-            if i!=0:
-                cost=self.cost(PTL_Ring, PTL_Injector,True)
+            if i==0:
+                sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
             else:
-                cost=self.cost(PTL_Ring, PTL_Injector,False)
-            return cost
-        indices=[1,2,3]#list(range(1,8))
-        results=tool_Parallel_Process(_cost,indices,processes=3,resultsAsArray=True,)
+                sol=self.inject_And_Trace_Through_Ring(True, True, 1.0, True)
+            print(sol)
+            print('seed',i)
+            return sol.cost
+        indices=list(range(1,30))
+        results=tool_Parallel_Process(_cost,indices,processes=10,resultsAsArray=True)
         print(np.mean(results),np.std(results))
+        print(repr(results))
         # np.savetxt('data',results)
         # print(repr(results))
         # _cost(1)
 
 
-sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]),tolerance=0.0)
-sa.measure_Sensitivity(True,1.0)
+sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+sa.measure_Sensitivity()
+
+
+
+"""
+
+3
+0.003988344188046878 -0.04120157274022366 0.1550951381024917
+-0.039999999999 0.039999999999
+-0.04113940273463844 0.04113940273463844
+-0.16405032000000003 0.16405032000000003
+
+"""
 
 
 #     perfect bender field
@@ -115,10 +152,11 @@ sa.measure_Sensitivity(True,1.0)
 
 
 
-# 7 points:  0.896675367008891 0.009885088830867797 t: ~250
-# 9 points: 0.8346502377017649 0.03829933350921161, t: ~500
-# 11 points: 0.8347214827543971 0.04581475138471638, t: ~800
-
+"""
+cost: 0.5857515739680698
+cost: 0.5747971424938154
+cost: 0.7570404978803216
+"""
 
 
 """

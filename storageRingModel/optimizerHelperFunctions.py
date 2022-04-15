@@ -23,7 +23,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                           tuning,jitterAmp=0.0,fieldDensityMultiplier: float =1.0,
-                          standardMagnetErrors: bool=False,seed: Optional[int]=None)->Optional[ParticleTracerLattice]:
+                          standardMagnetErrors: bool=False,seed: int=None)->Optional[ParticleTracerLattice]:
     assert tuning in (None, 'field', 'spacing')
     tunableDriftGap=2.54e-2
     jeremyGap=.05
@@ -61,7 +61,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
 
 
 def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDensityMultiplier: float=1.0,
-                        standardMagnetErrors: bool=False,seed: Optional[int]=None) -> Optional[ParticleTracerLattice]:
+                        standardMagnetErrors: bool=False,seed: int=None) -> Optional[ParticleTracerLattice]:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
@@ -108,7 +108,8 @@ def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultip
         return None,None
     assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset
     return PTL_Ring,PTL_Injector
-def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):
+def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice,tuning: Optional[str])\
+        -> Solution:
     optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
     if tuning is None:
         sol = Solution()
@@ -124,8 +125,6 @@ def solution_From_Lattice(PTL_Ring, PTL_Injector,X,tuning):
     elif tuning=='spacing':
         sol = optimizer.optimize((1, 9), whichKnobs='ring', tuningChoice=tuning)
     else: raise ValueError
-    print(sol)
-    sol.xRing_TunedParams1 = X
     # if sol.fluxMultiplicationPercent>10.0:
     #     print(sol)
     return sol
@@ -135,5 +134,5 @@ def solve_For_Lattice_Params(X,tuning,magnetErrors):
     if PTL_Ring is None or PTL_Injector is None:
         sol = invalid_Solution(X)
     else:
-        sol=solution_From_Lattice(PTL_Ring,PTL_Injector,X,tuning)
+        sol=solution_From_Lattice(PTL_Ring,PTL_Injector,tuning)
     return sol

@@ -131,8 +131,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp=.01874832
         self.magnetWidth=.0254*self.rp/.05
         particle0=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.13132135641683346 ,  0.005449608408724787,-0.008571529140918292])
-        pf0=np.array([-201.18840500039474  ,   -2.9789389202302856,3.7022004607757926])
+        qf0=np.array([-0.1313202800665356   ,  0.0054499132078432684, -0.008571339228694436 ])
+        pf0=np.array([-201.18579096379648  ,   -2.9768429754454937, 3.7021411631577097])
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
@@ -149,13 +149,14 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         tol=.025 #tolerance on the maximum value
         magnetErrors = True
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), self.rp, self.L, None, 0.0,
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), self.rp, self.L, None,
                                      self.magnetWidth, magnetErrors)
-        gridSpacing = lensElement.apMax / lensElement.numGridPointsXY
+        gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
                                          applyMethodOfMoments=True, useStandardMagErrors=magnetErrors)
-        qMaxField = np.asarray([self.L / 2, .95 * lensElement.apMax / np.sqrt(2), .95 * lensElement.apMax / np.sqrt(2)])
+        rMax=.95 * lensElement.apMaxGoodField
+        qMaxField = np.asarray([self.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
         FMax = np.linalg.norm(lensElement.force(qMaxField))
         VMax = lensElement.magnetic_Potential(qMaxField)
         assert np.isnan(FMax) == False

@@ -1,7 +1,6 @@
 import warnings
 from math import sqrt,isclose
 from typing import Optional,Union
-import time
 import pandas as pd
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
@@ -14,10 +13,8 @@ from constants import SIMULATION_MAGNETON
 
 
 
-#todo: this needs a good scrubbing. It would be nice to get the opinion of someone who know what they are talking about
-#Where should type hints go exactly when there are many subfunctions?
-#Are type hints more for readers, or more for pycharm/mypy
-#When is there too much logic in init?
+#todo: this needs a good scrubbing and refactoring
+
 
 
 realNumber=(int,float)
@@ -26,6 +23,7 @@ lst_tup_arr=Union[list,tuple,np.ndarray]
 
 TINY_STEP=1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
+SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
 
 def full_Arctan(q):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
@@ -68,17 +66,18 @@ class Element:
         self.RIn: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
         self.r1: Optional[np.ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
         self.r2: Optional[np.ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
-        self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for finding if the coordinates
+        self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for
+        # finding if the coordinates
         # # are inside an element that can't be found with simple geometry
         self.SO_Outer: Optional[Polygon]=None #shapely object that represents the outer edge of the element
         self.outerHalfWidth: Optional[float]=None #outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
         self.L: Optional[float]=L
+        self.Lm: Optional[float]=None #hard edge length of magnet
         self.index: Optional[int]=None
-        self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the length. This is a nominal
-        # # value because for segmented benders the path length is not simple to compute
-        self.bumpOffset: float=0.0 # the transverse translational. Only applicable to bump lenses now
+        self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the
+        # length. This is a nominal value because for segmented benders the path length is not simple to compute
         self.bumpVector=np.zeros(3) #positoin vector of the bump displacement. zero vector for no bump amount
         self.outputOffset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
@@ -326,8 +325,7 @@ class Element:
 
     def get_Valid_Jitter_Amplitude(self):
         """If jitter (radial misalignment) amplitude is too large, it is clipped."""
-        jitterAmpRadial = self.PTL.jitterAmp * np.sqrt(2)
-        return jitterAmpRadial
+        return self.PTL.jitterAmp
 
 
 class LensIdeal(Element):
@@ -338,14 +336,13 @@ class LensIdeal(Element):
     forward velocity. Interior vacuum tube is a cylinder
     """
 
-    def __init__(self, PTL, L:float, Bp:float, rp:float, ap:float,bumpOffset:float =0.0,build=True):
+    def __init__(self, PTL, L:float, Bp:float, rp:float, ap:float,build=True):
         """
         :param PTL: Instance of ParticleTracerLatticeClass
         :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
         :param Bp: Magnetic field at the pole face, T.
         :param rp: Bore radius, m. Distance from center of magnet to the magnetic material
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
-        :param bumpOffset: dubious
         :param fillParams: Wether to carry out filling the element parameters. dubious
         """
         # fillParams is used to avoid filling the parameters in inherited classes
@@ -354,7 +351,6 @@ class LensIdeal(Element):
         self.rp = rp
         self.ap = ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
-        self.bumpOffset=bumpOffset
         self.K=None
         if build:
             self.build()
@@ -557,7 +553,7 @@ class CombinerIdeal(Element):
         self.ang = inputAngle
         self.inputOffset = inputOffset
         self.La = .5*(self.apR+self.apL) * np.sin(self.ang)
-        self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING
+        self.L = self.La * np.cos(self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La,self.Lb,
                                                                                 self.apL,self.apR, self.apz, self.ang])
 
@@ -699,7 +695,7 @@ class CombinerSim(CombinerIdeal):
         # to find the length
         self.Lo = self.compute_Trajectory_Length(
             qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
-        self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
+        self.L = self.Lo
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space
@@ -717,7 +713,6 @@ class CombinerSim(CombinerIdeal):
 
 
 class HalbachBenderSimSegmented(BenderIdeal):
-    #todo: a feature to prevent the interpolation introducing ridiculous fields into the bore by ending inside the
     #magnet
     #this element is a model of a bending magnet constructed of segments. There are three models from which data is
     # extracted required to construct the element. All exported data must be in a grid, though it the spacing along
@@ -756,7 +751,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.numPointsBoreAp: int=20 #This many points should span the bore ap for good field sampling
         self.numPointsBoreAp: int=int(self.numPointsBoreAp*self.PTL.fieldDensityMultiplier)
         self.longitudinalCoordSpacing: float = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
-        self.numModelLenses: float=5 #number of lenses in halbach model to represent repeating system. Testing has shown
+        self.numModelLenses: int=5 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
         self.cap: bool = True
         self.K: Optional[float] = None #spring constant of field strength to set the offset of the lattice
@@ -913,8 +908,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         lensAligned=_HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
            numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False)
 
-        t=time.time()
-
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices=rCenterArr<self.rp
         valsMisaligned=np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned,coordsCartesian,validIndices))
@@ -927,7 +920,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         interpData=np.column_stack((coordsCenter,valsPerturbation))
         interpData=self.shape_Field_Data_3D(interpData)
 
-        print(time.time()-t)
         return interpData
 
     def generate_Cap_Field_Data(self)->tuple[np.ndarray,...]:
@@ -1037,13 +1029,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
 class HalbachLensSim(LensIdeal):
 
-    def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: Optional[float],bumpOffset: float,
+    def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: Optional[float],
         magnetWidth: Union[float,tuple,None],useStandardMagErrorss: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         if isinstance(rpLayers,realNumber):
             rpLayers=(rpLayers,)
-            if magnetWidth is not None: #todo: when would it be none?
+            if magnetWidth is not None:
                 assert isinstance(magnetWidth,realNumber)
                 magnetWidth=(magnetWidth,)
         elif isinstance(rpLayers,tuple):
@@ -1055,15 +1047,13 @@ class HalbachLensSim(LensIdeal):
         self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
         self.numGridPointsXY=int(self.numGridPointsXY*PTL.fieldDensityMultiplier)
         rp=min(rpLayers)
-        self.apMax=(rp-TINY_STEP)*(1-np.sqrt(2)/self.numGridPointsXY) #from geometric arguments of grid inside circle.
-        #imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
-        #has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material
-        ap=self.apMax if apFrac is None else apFrac*rp
-        assert ap<=self.apMax
-        super().__init__(PTL, L, None, rp, ap, bumpOffset,build=False)
+        self.apMaxGoodField=self.calculate_Maximum_Good_Field_Aperture(rp)
+        ap=self.apMaxGoodField if apFrac is None else apFrac*rp
+        assert ap<=self.apMaxGoodField
+        assert ap>5*rp/self.numGridPointsXY #ap shouldn't be too small. Value below may be dubiuos from interpolation
+        super().__init__(PTL, L, None, rp, ap, build=False)
         self.fringeFracOuter=1.5
         self.L=L
-        self.bumpOffset=bumpOffset
         self.methodOfMomentsHighPrecision=False
         self.useStandardMagErrors=useStandardMagErrorss
         self.Lo=None
@@ -1071,19 +1061,22 @@ class HalbachLensSim(LensIdeal):
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
-        self.effectiveLength=None #if the magnet is very long, to save simulation
+        self.effectiveLength: Optional[float]=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
-        self.Lcap=None
-        self.extraFieldLength=None #extra field added to end of lens to account misalignment
-        self.force_Func_Outer=None #function that returns 3D vector of force values towards the end of the magnet, if
-        #the magent is short, then it returns the values for one half, otherwise symmetry is used  to model interior as
-        #2D
-        self.magnetic_Potential_Func_Fringe = None
-        self.magnetic_Potential_Func_Inner = None
+        self.Lcap: Optional[float]=None
+        self.extraFieldLength: Optional[float]=None #extra field added to end of lens to account misalignment
         self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
         if build:
             self.build()
+
+    def calculate_Maximum_Good_Field_Aperture(self,rp: float)-> float:
+        """ from geometric arguments of grid inside circle.
+        imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
+        has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
+
+        apMax=(rp-SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY-1))
+        return apMax
 
     def set_Length(self,L:float)->None:
         assert L>0.0
@@ -1095,7 +1088,7 @@ class HalbachLensSim(LensIdeal):
         is too large for good field region, extra length is clipped"""
 
         jitterAmp=self.get_Valid_Jitter_Amplitude(Print=True)
-        tiltMax=jitterAmp/self.L
+        tiltMax=np.arctan(jitterAmp/self.L)
         assert tiltMax<.1 # small angle. Not sure if valid outside that range
         self.extraFieldLength=self.rp*tiltMax*1.5 #safety factor for approximations
 
@@ -1140,16 +1133,16 @@ class HalbachLensSim(LensIdeal):
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
-        jitterAmp=self.get_Valid_Jitter_Amplitude()
 
-        yMin,yMax=-TINY_OFFSET, self.ap+TINY_OFFSET+jitterAmp
+        yMin,yMax=-TINY_OFFSET, self.rp-TINY_OFFSET
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
         if not useSymmetry: #range will have to fully capture lens.
             yMin=-yMax
-            zMax=self.L/2+TINY_OFFSET
+            zMax=self.L/2+self.extraFieldLength+TINY_OFFSET
             zMin=-zMax
             numPointsZ=min([int(self.L/(.3*self.rp)),2*numPointsZ])
+            numPointsXY=numPointsXY*2-1
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zArr = np.linspace(zMin, zMax, numPointsZ)
@@ -1216,7 +1209,8 @@ class HalbachLensSim(LensIdeal):
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,lensLength,
                         applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
-        #data2D may still be none if the lens is not short enough for symmetry
+        maxGridSep=np.sqrt((xArr_Quadrant[1]-xArr_Quadrant[0])**2+(xArr_Quadrant[1]-xArr_Quadrant[0])**2)
+        assert self.rp-maxGridSep>=self.apMaxGoodField
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant) if useSymmetry else None
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
         return data2D,data3D
@@ -1253,7 +1247,6 @@ class HalbachLensSim(LensIdeal):
             coords=data3D_NoPerturbations[:,:3]
             fieldValsDifference=data3D_Perturbations[:,3:]-data3D_NoPerturbations[:,3:]
             data3D_Difference=np.column_stack((coords,fieldValsDifference))
-            # print(np.sum(np.isnan(data3D_Difference)),data3D_Difference.size)
             data3D_Difference[np.isnan(data3D_Difference)]=0.0
             data3D_Difference= tuple(self.shape_Field_Data_3D(data3D_Difference))
         else:
@@ -1268,9 +1261,9 @@ class HalbachLensSim(LensIdeal):
 
     def get_Valid_Jitter_Amplitude(self,Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
-        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
+        jitterAmpProposed = self.PTL.jitterAmp
         assert jitterAmpProposed>=0.0
-        maxJitterAmp = self.apMax - self.ap
+        maxJitterAmp = self.apMaxGoodField - self.ap
         if maxJitterAmp==0.0 and jitterAmpProposed!=0.0:
             print('Aperture is set to maximum, no room to misalign element')
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
@@ -1282,17 +1275,18 @@ class HalbachLensSim(LensIdeal):
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
-        if self.PTL.jitterAmp==0.0:
+
+        if self.PTL.jitterAmp==0.0 and self.PTL.jitterAmp!=0.0:
             warnings.warn("No jittering was accomodated for, so their will be no effect")
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
-        totalShiftY=shiftY+rotZ*self.L
-        totalShiftZ=shiftZ+rotY*self.L
+        totalShiftY=shiftY+np.tan(rotZ)*self.L
+        totalShiftZ=shiftZ+np.tan(rotY)*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
         maxShift=self.get_Valid_Jitter_Amplitude()
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
-            reductionFact=.9*maxShift/totalShift #safety factor
-            print('proposed', totalShift, 'new', .9*maxShift)
+            reductionFact=.95*maxShift/totalShift #safety factor
+            print('proposed', totalShift, 'new', reductionFact*maxShift)
             shiftY,shiftZ,rotY,rotZ=[val*reductionFact for val in [shiftY,shiftZ,rotY,rotZ]]
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
@@ -1307,16 +1301,16 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         #layers: Number of concentric layers
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         assert  mode in ('storageRing','injector')
-        assert apFrac<=1.0
+        assert 0.0<apFrac<=1.0
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
         # LensIdeal.__init__(self,PTL,None,None,None,None,build=False)
         # HalbachLensSim
-        self.numGridPointsZ = 25
-        self.numGridPointsXY = 25
+        numGridPointsZ: int = 25
+        numGridPointsXY: int = 25
 
-        self.numGridPointsZ = int(self.numGridPointsZ * self.PTL.fieldDensityMultiplier)
-        self.numGridPointsXY = int(self.numGridPointsXY * self.PTL.fieldDensityMultiplier)
-        self.outerFringeFrac = 1.5
+        self.numGridPointsZ: int = int(numGridPointsZ * self.PTL.fieldDensityMultiplier)
+        self.numGridPointsXY: int = int(numGridPointsXY * self.PTL.fieldDensityMultiplier)
+        self.outerFringeFrac: float = 1.5
 
         self.Lm = Lm
         self.rp = rp
@@ -1324,18 +1318,18 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.ap=apFrac*self.rp
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
-        self.fieldFact=-1.0 if mode=='injector' else 1.0
-        self.space=None
-        self.extraFieldLength=0.0
-        self.apMax=None
+        self.fieldFact: float=-1.0 if mode=='injector' else 1.0
+        self.space: Optional[float]=None
+        self.extraFieldLength: float=0.0
+        self.apMaxGoodField: Optional[float]=None
         self.useStandardMagErrors=useStandardMagErrors
 
-        self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
+        self.La: Optional[float] = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
-        self.Lb = None  # length of straight section after the kink after the inlet actuall inside the magnet
+        self.Lb: Optional[float] = None  # length of straight section after the kink after the inlet actuall inside the magnet
 
-        self.shape = 'COMBINER_CIRCULAR'
-        self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
+        self.shape: str = 'COMBINER_CIRCULAR'
+        self.inputOffset: Optional[float] = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         self.lens: Optional[_HalbachLensFieldGenerator]=None
         if build:
@@ -1353,11 +1347,12 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
         self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
-                                                useStandardMagErrors=self.useStandardMagErrors)
+                                                useStandardMagErrors=self.useStandardMagErrors) #must reuse lens
+        #because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
         assert trajectoryLength>self.Lm+2*self.space
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
-        self.L = self.Lo  # TODO: WHAT IS THIS DOING?? is it used anywhere
+        self.L = self.Lo
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space
@@ -1365,7 +1360,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        fieldData = self.make_Field_Data(self.La,self.ang)
+        fieldData = self.make_Field_Data(self.La,self.ang,True)
         self.set_extraFieldLength()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
                                             self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,
@@ -1375,18 +1370,17 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
 
 
-        # F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
-        # F_center = np.linalg.norm(self.force(np.asarray([self.Lm/2 + self.space, self.ap / 2, .0])))
-        # assert F_edge / F_center < .01
+        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        F_center = np.linalg.norm(self.force(np.asarray([self.Lm/2 + self.space, self.ap / 2, .0])))
+        assert F_edge / F_center < .01
 
-    def make_Grid_Coords_Arrays(self,La:float,ang:float)->tuple:
+    def make_Grid_Coords_Arrays(self,La:float,ang:float,accomodateJitter: bool)->tuple:
         # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-
-
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
+        yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
         yMin=-TINY_OFFSET if not self.useStandardMagErrors else -yMax
         xMin=-(self.rp - TINY_OFFSET)
         xMax=TINY_OFFSET if not self.useStandardMagErrors else -xMin
@@ -1395,14 +1389,14 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         numX=int(self.numGridPointsXY*self.rp/yMax)
         numX=numX if not self.useStandardMagErrors else 2*numX-1
         numZ=self.numGridPointsZ if not self.useStandardMagErrors else self.numGridPointsZ*2-1
-        zMax=self.compute_Valid_zMax(La,ang)
+        zMax=self.compute_Valid_zMax(La,ang,accomodateJitter)
         zMin=-TINY_OFFSET if not self.useStandardMagErrors else -zMax
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
-        zArr = np.linspace(zMin, zMax + self.extraFieldLength, numZ) #this becomes x in element frame
+        zArr = np.linspace(zMin, zMax, numZ) #this becomes x in element frame
         return xArr_Quadrant,yArr_Quadrant,zArr
 
-    def compute_Valid_zMax(self,La:float,ang:float)->float:
+    def compute_Valid_zMax(self,La:float,ang:float, accomodateJitter: bool)->float:
         """Interpolation points inside magnetic material are set to nan. This can cause a problem near externel face of
         combiner because particles may see np.nan when they are actually in a valid region. To circumvent, zMax is
         chosen such that the first z point above the lens is just barely above it, and vacuum tube is configured to
@@ -1412,7 +1406,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location. See how force is computed
         zMax=maxLength-symmetryPlaneX #subtle. The interpolation must extend to long enough to account for the
         #combiner not being symmetric, but the interpolation field being symmetric. See how force symmetry is handled
-        zMax+=self.extraFieldLength
+        zMax=zMax+self.extraFieldLength if not accomodateJitter else zMax
         pointSpacing=zMax/(self.numGridPointsZ-1)
         lastPointInLensIndex=int((self.Lm/2)/pointSpacing) #last point in magnetic material
         distToJustOutsideLens=firstValidPointSpacing+self.Lm/2-lastPointInLensIndex*pointSpacing #just outside material
@@ -1421,11 +1415,11 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         assert abs((lastPointInLensIndex*zMax/(self.numGridPointsZ-1)-self.Lm/2)-1e-6),1e-12
         return zMax
 
-    def make_Field_Data(self,La:float,ang:float)->tuple[np.ndarray,...]:
+    def make_Field_Data(self,La:float,ang:float, accomodateJitter: bool)->tuple[np.ndarray,...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
-        xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang)
-        self.apMax = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
-        assert self.ap < self.apMax
+        xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang,accomodateJitter)
+        self.apMaxGoodField = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
+        assert self.ap < self.apMaxGoodField
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
         BNormGrad, BNorm = np.zeros((len(volumeCoords), 3)) * np.nan, np.zeros(len(volumeCoords)) * np.nan
         validIndices = np.logical_or(np.linalg.norm(volumeCoords[:, :2], axis=1) <= self.rp,
@@ -1441,7 +1435,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
         LaMax = (self.ap + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                                                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
-        fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng)
+        fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng,False)
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb,
                                                             self.Lm,self.space, self.ap,np.nan,self.fieldFact,
                                                           self.extraFieldLength,not self.useStandardMagErrors])
@@ -1456,11 +1450,12 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
     def update_Field_Fact(self,fieldStrengthFact)->None:
         self.fastFieldHelper.fieldFact=fieldStrengthFact
         self.fieldFact=fieldStrengthFact
+
     def get_Valid_Jitter_Amplitude(self,Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         assert self.PTL.jitterAmp >= 0.0
-        jitterAmpProposed = self.PTL.jitterAmp * np.sqrt(2)  # consider circular aperture
-        maxJitterAmp = self.apMax - self.ap
+        jitterAmpProposed = self.PTL.jitterAmp
+        maxJitterAmp = self.apMaxGoodField - self.ap
         jitterAmp=maxJitterAmp if jitterAmpProposed>maxJitterAmp else jitterAmpProposed
         if Print:
             if jitterAmpProposed==maxJitterAmp and jitterAmpProposed!=0.0:
@@ -1480,16 +1475,17 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
+
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
-        if self.PTL.jitterAmp==0.0:
-            warnings.warn("No jittering was accomodated for, so their will be no effect")
-        totalShiftY=shiftY+np.sin(rotZ)*self.L
-        totalShiftZ=shiftZ+np.sin(rotY)*self.L
+        totalShiftY=shiftY+np.tan(rotZ)*self.L
+        totalShiftZ=shiftZ+np.tan(rotY)*self.L
         totalShift=np.sqrt(totalShiftY**2+totalShiftZ**2)
         maxShift=self.get_Valid_Jitter_Amplitude()
+        if maxShift==0.0 and self.PTL.jitterAmp!=0.0 :
+            warnings.warn("No jittering was accomodated for, so their will be no effect")
         if totalShift>maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
-            reductionFact=.9*maxShift/totalShift #safety factor
+            reductionFact=.95*maxShift/totalShift #safety factor
             print('proposed', totalShift, 'new', reductionFact*totalShift)
             shiftY,shiftZ,rotY,rotZ=[val*reductionFact for val in [shiftY,shiftZ,rotY,rotZ]]
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
@@ -1555,7 +1551,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 #         self.build()
 #
 #     def build(self):
-#         # todo: more robust way to pick number of points in element. It should be done by using the typical lengthscale
+#         more robust way to pick number of points in element. It should be done by using the typical lengthscale
 #         # of the bore radius
 #
 #         numPointsLongitudinal = 31
