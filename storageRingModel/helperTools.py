@@ -12,7 +12,7 @@ from typing import Optional, Union, Callable, Any
 import math
 
 lst_tup_arr_type = Union[list, tuple, np.ndarray]
-
+realNumType=Union[int,float]
 
 def tool_Parallel_Process(
     func: Callable,
@@ -93,6 +93,9 @@ def degrees(radians: float):
 def iscloseAll(a: np.ndarray,b: np.ndarray,abstol: float)->bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a,b,atol=abstol,equal_nan=False))
+
+def within_Tol(a: realNumType,b: realNumType,tol: realNumType=1e-12):
+    return math.isclose(a,b,abs_tol=tol,rel_tol=0.0)
 
 def inch_To_Meter(inches: float)-> float:
     return .0254*inches

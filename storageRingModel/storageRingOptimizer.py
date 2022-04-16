@@ -3,6 +3,8 @@ import time
 import skopt
 from shapely.affinity import rotate, translate
 import copy
+
+import elementPT
 from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm, Particle
@@ -80,11 +82,8 @@ class LatticeOptimizer:
         fractionalMarginOfError = 1.25
         self.minElementLength = fractionalMarginOfError * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
-        self.tunableTotalLengthList = []  # list to hold initial tunable lengths for when optimizing by tuning element
-        # length. this to prevent any numerical round issues causing the tunable length to change from initial value
-        # if I do many iterations
         self.tuningBounds = None
-        self.numParticlesFullSwarm=5000
+        self.numParticlesFullSwarm=500
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None
@@ -261,16 +260,20 @@ class LatticeOptimizer:
             el.fieldFact = arg
 
     def update_Ring_Spacing(self, X: list_array_tuple)-> None:
-        for elCenter, spaceFracElBefore, totalLength in zip(self.tunedElementList, X, self.tunableTotalLengthList):
-            assert 0<=spaceFracElBefore<=1.0
-            elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
-            assert isinstance(elBefore,Drift) and isinstance(elAfter,Drift)
-            tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
-            LBefore = spaceFracElBefore * tunableLength + self.minElementLength
-            LAfter = totalLength - LBefore
-            elBefore.set_Length(LBefore)
-            elAfter.set_Length(LAfter)
+        for elCenter, spaceFracElBefore in zip(self.tunedElementList, X):
+            self.move_Element_Longitudinally(elCenter,spaceFracElBefore)
         self.latticeRing.build_Lattice()
+
+    def move_Element_Longitudinally(self,elCenter: elementPT.Element,spaceFracElBefore: float)-> None:
+        assert 0 <= spaceFracElBefore <= 1.0
+        elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
+        assert isinstance(elBefore, Drift) and isinstance(elAfter, Drift)
+        totalBorderingElLength=elBefore.L + elAfter.L
+        tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
+        LBefore = spaceFracElBefore * tunableLength + self.minElementLength
+        LAfter = totalBorderingElLength - LBefore
+        elBefore.set_Length(LBefore)
+        elAfter.set_Length(LAfter)
 
     def compute_Swarm_Flux_Mult_Percent(self, swarmTraced:Swarm)-> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
@@ -343,10 +346,6 @@ class LatticeOptimizer:
         if whichKnobs not in ('all','ring'):
             raise Exception('Knobs must be either \'all\' (full system) or \'ring\' (only storage ring)')
 
-    def fill_Initial_Total_Tuning_Elements_Length_List(self)-> None:
-        for elCenter in self.tunedElementList:
-            elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
-            self.tunableTotalLengthList.append(elBefore.L + elAfter.L)
 
     def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningChoice: str,whichKnobs: str,
                                 ringTuningBounds: list_array_tuple, injectorTuningBounds: list_array_tuple)-> None:
@@ -358,8 +357,6 @@ class LatticeOptimizer:
             self.tuningBounds.extend(injectorTuningBounds)
         self.tunedElementList = [self.latticeRing.elList[index] for index in tuningElementIndices]
         self.tuningChoice = tuningChoice
-        if tuningChoice == 'spacing':
-            self.fill_Initial_Total_Tuning_Elements_Length_List()
         if self.sameSeedForSearch == True:
             np.random.seed(42)
 
@@ -445,17 +442,3 @@ class LatticeOptimizer:
             return sol
         sol=self._minimize()
         return sol
-        # def wrapper(X):
-        #     swarmCost,floorPlanCost =self.mode_Match_Cost(X, False, False,rejectIllegalFloorPlan=False,rejectUnstable=False
-        #                                          ,returnCostsSeperate=True)
-        #     return swarmCost
-        # xArr = np.linspace(self.tuningBounds[0][0], self.tuningBounds[0][1], 30)
-        # coords = np.asarray(np.meshgrid(xArr, xArr)).T.reshape(-1, 2)
-        # import multiprocess
-        # with multiprocess.Pool() as pool:
-        #     vals = np.asarray(pool.map(wrapper, coords))
-        # image = vals.reshape(len(xArr), len(xArr))
-        # if np.abs(np.mean(image)-1.0)<1e-2:
-        #     pass
-        # plt.imshow(image)
-        # plt.show()

@@ -1,3 +1,4 @@
+from math import isclose
 from numbers import Number
 import time
 from constants import MAGNETIC_PERMEABILITY
@@ -15,6 +16,7 @@ from helperTools import *
 M_Default=1.018E6 #default magnetization value, SI. Magnetization for N48 grade
 
 list_tuple_arr=Union[list,tuple,np.ndarray]
+tuple3Float=tuple[float,float,float]
 
 @numba.njit(numba.float64[:,:](numba.float64[:,:],numba.float64[:],numba.float64[:]))
 def B_NUMBA(r,r0,m):
@@ -208,8 +210,8 @@ class Layer(billyHalbachCollectionWrapper):
     meterTo_mm=1e3 #magpy takes distance in mm
 
     numMagnetsInLayer = 12
-    def __init__(self, rp: float,magnetWidth: float,length: float,position: Optional[list_tuple_arr]=None,
-                 orientation: Optional[Rotation]=None, M: float=M_Default,mur: float=1.05,
+    def __init__(self, rp: float,magnetWidth: float,length: float,position: tuple3Float=None,
+                 orientation: Rotation=None, M: float=M_Default,mur: float=1.05,
                  rMagnetShift=None, thetaShift=None,phiShift=None, M_NormShiftRelative=None,dimShift=None,M_AngleShift=None,
                  applyMethodOfMoments=False):
         super().__init__()
@@ -315,12 +317,12 @@ class HalbachLens(billyHalbachCollectionWrapper):
     numMagnetsInLayer = 12
 
     def __init__(self,rp: Union[float,tuple],magnetWidth: Union[float,tuple],length: float,
-                 position: Optional[list_tuple_arr]=None, orientation: Optional[Rotation]=None,
+                 position: list_tuple_arr=None, orientation: Rotation=None,
                  M: float=M_Default,numSlices: int =1, applyMethodOfMoments=False, useStandardMagErrors=False,
                  sameSeed=False):
         #todo: Better seeding system
         super().__init__()
-        assert length > 0.0 and M > 0.0
+        assert length > 0.0 and M > 0.0 and numSlices>=1
         assert isinstance(orientation, (type(None), Rotation)) == True
         assert isinstance(rp,(float,tuple)) and isinstance(magnetWidth,(float,tuple))
         position=(0.0,0.0,0.0) if position is None else position
@@ -385,7 +387,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
          if the lens is composed of slices"""
         LArr=np.ones(self.numSlices)*self.length/self.numSlices
         zArr=np.cumsum(LArr)-self.length/2-.5*self.length/self.numSlices
-        assert abs(np.sum(LArr)-self.length)<1e-12 and np.abs(np.mean(zArr))<1e-12 #length adds up and centered on 0
+        assert within_Tol(np.sum(LArr),self.length) and within_Tol(np.mean(zArr),0.0)#length adds up and centered on 0
         return zArr,LArr
 
 

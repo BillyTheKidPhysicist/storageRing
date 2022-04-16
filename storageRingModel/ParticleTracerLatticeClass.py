@@ -212,7 +212,9 @@ class ParticleTracerLattice:
         fringe fields
         :return: None
         """
-        el=HalbachLensSim(self, rp,L,apFrac,magnetWidth, self.standardMagnetErrors)
+        rpLayers=rp if isinstance(rp,tuple) else (rp,)
+        magnetWidth=(magnetWidth,) if isinstance(magnetWidth,float) else magnetWidth
+        el=HalbachLensSim(self, rpLayers,L,apFrac,magnetWidth, self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)

@@ -1,4 +1,5 @@
 import warnings
+import itertools
 from math import sqrt,isclose
 from typing import Optional,Union
 import pandas as pd
@@ -12,7 +13,6 @@ from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenera
 from constants import SIMULATION_MAGNETON
 
 
-
 #todo: this needs a good scrubbing and refactoring
 
 
@@ -24,6 +24,7 @@ lst_tup_arr=Union[list,tuple,np.ndarray]
 TINY_STEP=1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
+MAGNET_ASPECT_RATIO=np.inf  #length of individual neodymium magnet relative to width of magnet
 
 def full_Arctan(q):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
@@ -865,7 +866,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     def convert_Center_To_Cartesian_Coords(self,s: float, xc: float, yc: float)-> tuple[float,float,float]:
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""
-        
+
         if -TINY_OFFSET <= s < self.Lcap:
             x, y, z = self.rb + xc,yc, s - self.Lcap
         elif self.Lcap <= s < self.Lcap + self.ang * self.rb:
@@ -884,13 +885,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return x, y, z
 
     def make_Perturbation_Data_Coords(self)-> tuple[np.ndarray,np.ndarray]:
-        """Make coordinates for computing and interpolation perturbation data. The perturbation field exists in an 
-        evenly spaced grid in "center" coordinates [s,xc,yc] where s is distance along bender through center, xc is 
-        radial distance from center with positive meaning along larger radius and 0 meaning right  at the center, 
+        """Make coordinates for computing and interpolation perturbation data. The perturbation field exists in an
+        evenly spaced grid in "center" coordinates [s,xc,yc] where s is distance along bender through center, xc is
+        radial distance from center with positive meaning along larger radius and 0 meaning right  at the center,pu
         and yc is distance along z axis. HalbachLensClass.SegmentedBenderHalbach is in (x,z) plane with z=0 at start
         and going clockwise in +y. This needs to be converted to cartesian coordinates to actually evaluate the field
         value"""
-        
+
         Ls = 2 * self.Lcap + self.ang * self.rb
         numS = self.numMagnets+2 #about one plane in each magnet and cap
         numR =9 #i found this to be a decent compromise
@@ -1029,19 +1030,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
 class HalbachLensSim(LensIdeal):
 
-    def __init__(self,PTL, rpLayers:Union[float,tuple],L: float,apFrac: Optional[float],
-        magnetWidth: Union[float,tuple,None],useStandardMagErrorss: bool, build: bool=True):
+    def __init__(self,PTL, rpLayers:tuple,L: float,apFrac: Optional[float],
+        magnetWidths: Optional[tuple],useStandardMagErrors: bool, build: bool=True):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
-        if isinstance(rpLayers,realNumber):
-            rpLayers=(rpLayers,)
-            if magnetWidth is not None:
-                assert isinstance(magnetWidth,realNumber)
-                magnetWidth=(magnetWidth,)
-        elif isinstance(rpLayers,tuple):
-            if magnetWidth is not None:
-                assert isinstance(magnetWidth,tuple)
-        else: raise TypeError
+        self.magnetWidths=self.set_Magnet_Widths(rpLayers,magnetWidths)
         self.numGridPointsZ = 25
         self.numGridPointsXY = 20
         self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
@@ -1055,9 +1048,8 @@ class HalbachLensSim(LensIdeal):
         self.fringeFracOuter=1.5
         self.L=L
         self.methodOfMomentsHighPrecision=False
-        self.useStandardMagErrors=useStandardMagErrorss
+        self.useStandardMagErrors=useStandardMagErrors
         self.Lo=None
-        self.magnetWidth=magnetWidth
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
@@ -1089,7 +1081,7 @@ class HalbachLensSim(LensIdeal):
 
         jitterAmp=self.get_Valid_Jitter_Amplitude(Print=True)
         tiltMax=np.arctan(jitterAmp/self.L)
-        assert tiltMax<.1 # small angle. Not sure if valid outside that range
+        assert 0.0<=tiltMax<.1 # small angle. Not sure if valid outside that range
         self.extraFieldLength=self.rp*tiltMax*1.5 #safety factor for approximations
 
     def build(self)->None:
@@ -1111,6 +1103,27 @@ class HalbachLensSim(LensIdeal):
 
         self.effectiveLength=self.minLengthLongSymmetry if self.minLengthLongSymmetry<self.Lm else self.Lm
 
+    def set_Magnet_Widths(self,rpLayers: tuple[float,...],magnetWidthsProposed: Optional[tuple[float,...]])\
+            -> tuple[float,...]:
+        """
+        Return transverse width(w in L x w x w) of individual neodymium permanent magnets used in each layer to
+        build lens. Check that sizes are valid
+
+        :param rpLayers: tuple of bore radius of each concentric layer
+        :param magnetWidthsProposed: tuple of magnet widths in each concentric layer, or None, in which case the maximum value
+            will be calculated based on geometry
+        :return: tuple of transverse widths of magnets
+        """
+
+        maximumMagnetWidth = tuple(rp * np.tan(2 * np.pi / 24) * 2 for rp in rpLayers)
+        magnetWidths = maximumMagnetWidth if magnetWidthsProposed is None else magnetWidthsProposed
+        assert len(magnetWidths)==len(rpLayers)
+        assert all(width<=maxWidth for width,maxWidth in zip(magnetWidths,maximumMagnetWidth))
+        if len(rpLayers)>1:
+            for indexPrev,rp in enumerate(rpLayers[1:]):
+                assert rp>=rpLayers[indexPrev]+magnetWidths[indexPrev]-1e-12
+        return magnetWidths
+
     def fill_Geometric_Params(self)->None:
         """Compute dependent geometric values"""
 
@@ -1119,13 +1132,8 @@ class HalbachLensSim(LensIdeal):
         self.Lo=self.L
         self.set_Effective_Length()
         self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
-        maximumMagnetWidth=tuple(rp*np.tan(2*np.pi/24)*2 for rp in self.rpLayers)
-        if self.magnetWidth is None:
-            self.magnetWidth=maximumMagnetWidth
-        else:
-            assert np.all(np.array(self.magnetWidth)<=maximumMagnetWidth)
         mountThickness=1e-3 #outer thickness of mount, likely from space required by epoxy and maybe clamp
-        self.outerHalfWidth=max(self.rpLayers)+self.magnetWidth[np.argmax(self.rpLayers)] +mountThickness
+        self.outerHalfWidth=max(self.rpLayers)+self.magnetWidths[np.argmax(self.rpLayers)] +mountThickness
 
     def make_Grid_Coord_Arrays(self,useSymmetry: bool)->tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
@@ -1141,7 +1149,7 @@ class HalbachLensSim(LensIdeal):
             yMin=-yMax
             zMax=self.L/2+self.extraFieldLength+TINY_OFFSET
             zMin=-zMax
-            numPointsZ=min([int(self.L/(.3*self.rp)),2*numPointsZ])
+            numPointsZ=min([int(self.L/(.3*self.rp)),2*numPointsZ-1])
             numPointsXY=numPointsXY*2-1
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
@@ -1166,12 +1174,10 @@ class HalbachLensSim(LensIdeal):
         else:
             # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
             # save resources
-
             planeCoords=np.asarray(np.meshgrid(xArr,yArr,0)).T.reshape(-1,3)
             validIndices=np.linalg.norm(planeCoords,axis=1)<=self.rp
             BNormGrad,BNorm=np.zeros((len(validIndices),3))*np.nan,np.ones(len(validIndices))*np.nan
             BNormGrad[validIndices],BNorm[validIndices] = lens.BNorm_Gradient(planeCoords[validIndices],returnNorm=True)
-            # BNormGrad,BNorm=lens.BNorm_Gradient(planeCoords,returnNorm=True)
             data2D=np.column_stack((planeCoords[:,:2],BNormGrad[:,:2],BNorm)) #2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data2D
@@ -1186,9 +1192,10 @@ class HalbachLensSim(LensIdeal):
         longitudinal symmetry. Otherwise, it is exactly half of the lens and fringe fields
 
         :param lens: lens object to compute fields values
-        :param xArr: Grid edge x values of quarter of plane
-        :param yArr: Grid edge y values of quarter of plane
-        :param zArr: Grid edge z values of half of lens, or region near end if long enough
+        :param xArr: Grid edge x values of quarter of plane if using symmetry, else full
+        :param yArr: Grid edge y values of quarter of plane if using symmetry, else full
+        :param zArr: Grid edge z values of half of lens, or region near end if long enough, if using symmetry. Else
+            full length
         :return: 2D array of field data
         """
         volumeCoords=np.asarray(np.meshgrid(xArr,yArr,zArr)).T.reshape(-1,3) #note that these coordinates can have
@@ -1206,8 +1213,10 @@ class HalbachLensSim(LensIdeal):
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
 
         lensLength=self.effectiveLength if useSymmetry else self.Lm
-        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidth,lensLength,
-                        applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors)
+        individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(self.magnetWidths)),self.Lm])
+        numSlicesApprox=1 if not useStandardMagnetErrors else int(self.Lm/individualMagnetLength)
+        lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidths,lensLength,
+                    applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlicesApprox)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep=np.sqrt((xArr_Quadrant[1]-xArr_Quadrant[0])**2+(xArr_Quadrant[1]-xArr_Quadrant[0])**2)
         assert self.rp-maxGridSep>=self.apMaxGoodField
@@ -1346,8 +1355,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
+        individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(magnetWidthList)),self.Lm])
+        numSlicesApprox = 1 if not self.useStandardMagErrors else int(self.Lm / individualMagnetLength)
         self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
-                                                useStandardMagErrors=self.useStandardMagErrors) #must reuse lens
+                            useStandardMagErrors=self.useStandardMagErrors,numSlices=numSlicesApprox) #must reuse lens
         #because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
         assert trajectoryLength>self.Lm+2*self.space

@@ -149,8 +149,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         tol=.025 #tolerance on the maximum value
         magnetErrors = True
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), self.rp, self.L, None,
-                                     self.magnetWidth, magnetErrors)
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), self.L, None,
+                                     (self.magnetWidth,), magnetErrors)
         gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,

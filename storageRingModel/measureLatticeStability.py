@@ -103,18 +103,18 @@ class StabilityAnalyzer:
         #todo: I need to figure out what all this is doing
 
         def _cost(i):
-            print(i)
+            # print(i)
             np.random.seed(i)
             if i==0:
                 sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
             else:
-                sol=self.inject_And_Trace_Through_Ring(True, True, 1.0, True)
+                sol=self.inject_And_Trace_Through_Ring(True, False, 1.0, False)
             print(sol)
             print('seed',i)
             return sol.cost
         indices=list(range(1,30))
-        results=tool_Parallel_Process(_cost,indices,processes=10,resultsAsArray=True)
-        print(np.mean(results),np.std(results))
+        results=tool_Parallel_Process(_cost,indices,processes=2,resultsAsArray=True)
+        print(np.mean(results[1:]),np.std(results[1:]))
         print(repr(results))
         # np.savetxt('data',results)
         # print(repr(results))
@@ -128,11 +128,87 @@ sa.measure_Sensitivity()
 
 """
 
-3
-0.003988344188046878 -0.04120157274022366 0.1550951381024917
--0.039999999999 0.039999999999
--0.04113940273463844 0.04113940273463844
--0.16405032000000003 0.16405032000000003
+-------only combiner------
+turn of magnet errors for everything but combiner
+
+
+slices with MOM only 
+turn off magnet errors
+manually tune slice number
+1 slices : 0.59358765
+2 slices: 0.59017531
+3 slices: 0.5954740379081979
+
+slices with MOM and errors:
+1 slices: about .59
+2 slices: about .59
+
+
+----------only short lenses----------
+only in ring, starting with 10 slices. 
+
+1 slices:  0.7268293349807858 0.06507508625763957
+2 slices: 0.7157740494294191 0.04613000206199112
+3 slice: 0.7119855214760513 0.04843951004834795
+5 slices: 0.6869815469708638 0.043694629731551374
+10 slicse: 0.6711612810962547 0.02473337107514755
+20 slices: 0.642223706952908 0.012517324025955645
+
+
+# only injector
+no combiner
+1 slice: about .59
+
+
+
+
+# only bender
+
+original z slices:
+0.7296869057061335 0.07165531405069497
+
+double z slices: 
+
+
+
+
+
+
+
+
+# no magnet aspect ratio
+0.8546059062068966, 0.07168749551587099
+array([0.57984456, 0.78309115, 0.83268921, 0.8671091 , 0.95749779,
+       0.82510633, 0.72136541, 0.85506473, 0.92286548, 0.79680241,
+       0.8618697 , 0.82773377, 0.88607702, 0.91018527, 0.91809394,
+       0.77758302, 0.84396167, 0.94114121, 0.8004069 , 0.85607278,
+       0.77116621, 0.93620748, 0.90577709, 0.68486005, 0.87391141,
+       0.75917725, 0.9085369 , 0.95586637, 0.83615051, 0.96720112])
+       
+#aspect ratio of 5
+0.7726052520689656, 0.04102837592284272
+array([0.59358765, 0.74308414, 0.80562999, 0.7679912 , 0.83342578,
+       0.73266141, 0.70230252, 0.7626731 , 0.80891237, 0.76717985,
+       0.84083178, 0.73039704, 0.74557384, 0.82882023, 0.76976731,
+       0.76990361, 0.8202544 , 0.77057172, 0.74728221, 0.76231874,
+       0.75682056, 0.75563324, 0.76214688, 0.77685373, 0.73842207,
+       0.73561506, 0.70658596, 0.79591469, 0.77855412, 0.88942476])
+       
+#aspect ratio of 4
+
+0.752351276551724, 0.03620937794199646
+array([0.59358765, 0.73831024, 0.71412211, 0.76487371, 0.77081482,
+       0.66915509, 0.73629484, 0.71798777, 0.82648226, 0.78208901,
+       0.74013826, 0.7573325 , 0.76545081, 0.81434752, 0.72557242,
+       0.73725031, 0.80170659, 0.76648397, 0.71676238, 0.76989566,
+       0.73966908, 0.81051598, 0.72064941, 0.70312636, 0.77790341,
+       0.73567753, 0.71063524, 0.78621325, 0.78050114, 0.73822535])
+       
+#aspect ratio of 2
+
+
+
+
 
 """
 

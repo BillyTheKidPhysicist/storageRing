@@ -4,7 +4,13 @@ import time
 from HalbachLensClass import Layer,HalbachLens,Sphere
 import scipy.optimize as spo
 import multiprocess as mp
+import itertools
 from helperTools import *
+
+numericTol=1e-14 #my working numeric tolerance
+def within_Tol(a: realNumType,b: realNumType):
+    return math.isclose(a,b,abs_tol=numericTol,rel_tol=0.0)
+
 class SpheretestHelper:
     def __init__(self):
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
@@ -96,7 +102,6 @@ class LayertestHelper:
 
 class HalbachLenstestHelper:
     def __init__(self):
-        self.numericTol = 1e-14  # same approach should be this accurate on different machines
         self.rp=5e-2
         self.length=.15
         self.magnetWidth=.0254
@@ -105,6 +110,9 @@ class HalbachLenstestHelper:
         self.test2()
         self.test3()
         self.test4()
+        self.test5()
+        self.test6()
+        self.test7()
     def hexapole_Fit(self,r,B0):
         return B0*(r/self.rp)**2
     def test1(self):
@@ -123,8 +131,8 @@ class HalbachLenstestHelper:
         mean1,mean2=np.mean(BNormVals1),np.mean(BNormVals2)
         RMS1_0,RMS2_0=0.07039945056080353, 0.07039945056080353
         mean1_0,mean2_0=0.089077017634823, 0.089077017634823
-        assert np.abs(RMS1_0-RMS1)<self.numericTol and np.abs(RMS2_0-RMS2)<self.numericTol
-        assert np.abs(mean1-mean1_0)<self.numericTol and np.abs(mean2-mean2_0)<self.numericTol
+        assert within_Tol(RMS1_0,RMS1) and within_Tol(RMS2_0,RMS2)
+        assert within_Tol(mean1,mean1_0) and within_Tol(mean2,mean2_0)
     def test2(self):
         #test that the lens is well fit to a parabolic potential
         magnetWidth1,magnetWidth2=.0254,.0254*1.5
@@ -138,7 +146,7 @@ class HalbachLenstestHelper:
         params=spo.curve_fit(self.hexapole_Fit,rArr,BNormVals)[0]
         residuals=1e2*np.abs(np.sum(BNormVals-self.hexapole_Fit(rArr,*params)))/np.sum(BNormVals)
         residuals0=0.03770965561603838
-        assert abs(residuals-residuals0)<self.numericTol
+        assert within_Tol(residuals,residuals0)
     def test3(self):
         #test that standard magnet tolerances changes values
         np.random.seed(42) #for repeatable results
@@ -151,21 +159,52 @@ class HalbachLenstestHelper:
         coords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
         BNormsVals_STD = np.std(lens.BNorm(coords))
         assert BNormsVals_STD!=BNormsVals_STD_NoError #assert magnet errors causes field changes
-        assert abs(BNormsVals_STD-BNormsVals_STD_Error)<self.numericTol #assert magnet errors cause same field value
+        assert within_Tol(BNormsVals_STD,BNormsVals_STD_Error) #assert magnet errors cause same field value
         # changes with same seed
         np.random.seed(int(time.time()))
     def test4(self):
         #test that the a single layer lens has the same field as a single layer
-        magnetWidth=.0254
-        lens=HalbachLens(self.rp,magnetWidth,self.length)
-        layer=Layer(self.rp,magnetWidth,self.length)
-        xArr=np.linspace(-self.rp*.5,self.rp*.5)
-        testCoords=np.asarray(np.meshgrid(xArr,xArr,0.0)).T.reshape(-1,3)
+        lens=HalbachLens(self.rp,self.magnetWidth,self.length)
+        layer=Layer(self.rp,self.magnetWidth,self.length)
+        xArr=np.linspace(-self.rp*.5,self.rp*.5,20)
+        testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
         BNormsValsLayer_STD = np.std(layer.BNorm(testCoords))
         BNormsValsLens_STD = np.std(lens.BNorm(testCoords))
-        assert abs(BNormsValsLens_STD-BNormsValsLayer_STD)<self.numericTol
-
-
+        assert within_Tol(BNormsValsLens_STD,BNormsValsLayer_STD)
+    def test5(self):
+        #test that slices of the lens results in same field values without magnetostatic method of moments, and the
+        #length and coordinates work
+        lensSingle=HalbachLens(self.rp,self.magnetWidth,self.length)
+        lensSliced=HalbachLens(self.rp,self.magnetWidth,self.length,numSlices=10)
+        lengthCounted=sum(layer.length for layer in lensSliced.layerList)
+        assert within_Tol(lensSliced.length,lengthCounted) and within_Tol(lensSliced.length,lensSliced.length)
+        zCenter=sum(layer.position[2] for layer in lensSliced.layerList)/lensSliced.numSlices
+        assert within_Tol(zCenter,0.0)
+        xArr = np.linspace(-self.rp * .5, self.rp * .5,20)
+        testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
+        BValsSingle,BValsSliced=lensSingle.BNorm(testCoords),lensSliced.BNorm(testCoords)
+        assert iscloseAll(BValsSingle,BValsSliced,numericTol)
+    def test6(self):
+        #test that magnet errors change field values
+        lensPerfect = HalbachLens(self.rp, self.magnetWidth, self.length)
+        np.random.seed(42)
+        lensError = HalbachLens(self.rp, self.magnetWidth, self.length,useStandardMagErrors=True)
+        np.random.seed(42)
+        lensErrorSliced = HalbachLens(self.rp, self.magnetWidth, self.length,useStandardMagErrors=True,numSlices=10)
+        self.test_All_Three_Are_Different(lensPerfect,lensError,lensErrorSliced)
+    def test7(self):
+        #test that magnetostatic method of moments (MOM) changes field values
+        lensNaive=HalbachLens(self.rp, self.magnetWidth, self.length)
+        lensMOM=HalbachLens(self.rp, self.magnetWidth, self.length,applyMethodOfMoments=True)
+        lensMOMSliced=HalbachLens(self.rp, self.magnetWidth, self.length,applyMethodOfMoments=True,numSlices=10)
+        self.test_All_Three_Are_Different(lensNaive,lensMOM,lensMOMSliced)
+    def test_All_Three_Are_Different(self,lens1,lens2,lens3):
+        xArr = np.linspace(-self.rp * .5, self.rp * .5)
+        coords = np.asarray(list(itertools.product(xArr, xArr, [0])))
+        vals1,vals2,vals3=[lens.BNorm(coords) for lens in [lens1,lens2,lens3]]
+        differenceTol=1e-6
+        for valsA,valsB in [[vals1,vals2],[vals1,vals3],[vals2,vals3]]:
+            iscloseAll(valsA,valsB, differenceTol)
 def run_Tests(parallel=False):
     def run(func):
         func()
