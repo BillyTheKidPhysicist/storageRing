@@ -10,7 +10,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     assert len(XLattice)==5,"must be lattice paramters"
     sol=Solution()
     sol.xRing_TunedParams1=XLattice
-    sol.fluxMultiplicationPercent=0.0
+    sol.fluxMultiplication=0.0
     sol.swarmCost,sol.floorPlanCost=1.0,1.0
     sol.cost=sol.swarmCost+sol.floorPlanCost
     sol.description='Pseudorandom search'
@@ -114,19 +114,17 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
     if tuning is None:
         sol = Solution()
         knobParams = None
-        swarmCost, floorPlanCost = optimizer.mode_Match_Cost(knobParams, False, True, rejectIllegalFloorPlan=False,
-                                                             rejectUnstable=False, returnCostsSeperate=True)
+        swarmCost, floorPlanCost,swarmTraced = optimizer.mode_Match_Cost(knobParams, False, True, rejectIllegalFloorPlan=False,
+                                                             rejectUnstable=False, returnFullResults=True)
         sol.cost = swarmCost + floorPlanCost
         sol.floorPlanCost = floorPlanCost
         sol.swarmCost = swarmCost
-        sol.fluxMultiplicationPercent = optimizer.flux_Percent_From_Cost(sol.cost, knobParams)
+        sol.fluxMultiplication = optimizer.compute_Flux_Multiplication(swarmTraced)
     elif tuning == 'field':
         sol = optimizer.optimize((0, 4), whichKnobs='ring', tuningChoice=tuning, ringTuningBounds=[(.25, 1.75)] * 2)
     elif tuning=='spacing':
         sol = optimizer.optimize((1, 9), whichKnobs='ring', tuningChoice=tuning)
     else: raise ValueError
-    # if sol.fluxMultiplicationPercent>10.0:
-    #     print(sol)
     return sol
 def solve_For_Lattice_Params(X,tuning,magnetErrors):
     assert tuning in (None,'field','spacing')

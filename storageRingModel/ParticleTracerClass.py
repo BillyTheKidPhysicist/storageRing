@@ -8,6 +8,7 @@ import numpy as np
 from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 import elementPT
+from constants import GRAVITATIONAL_ACCELERATION
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
@@ -164,7 +165,7 @@ class ParticleTracer:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if isinstance(self.currentEl,elementPT.Drift):
+            if False:#isinstance(self.currentEl,elementPT.Drift):
                 self.handle_Drift_Region()
                 if self.particle.clipped:
                     break
@@ -199,6 +200,7 @@ class ParticleTracer:
         x, y, z = qEln
         px, py, pz = pEln
         Fx, Fy, Fz = force(x,y,z)
+        Fz=Fz-GRAVITATIONAL_ACCELERATION #simulated mass is 1kg always
         if math.isnan(Fx) == True or T >= T0:
             particleOutside = True
             return qEln, qEln, pEln, T, particleOutside
@@ -213,6 +215,7 @@ class ParticleTracer:
             z =z+pz * h + .5 * Fz * h ** 2
 
             Fx_n, Fy_n, Fz_n = force(x,y,z)
+            Fz_n=Fz_n-GRAVITATIONAL_ACCELERATION #simulated mass is 1kg always
 
             if math.isnan(Fx_n) == True:
                 qEl = np.asarray([x, y, z])
@@ -246,6 +249,7 @@ class ParticleTracer:
         return x0
 
     def handle_Drift_Region(self)-> None:
+        raise NotImplementedError #This does not account for gravitational effects
         driftEl=self.currentEl #to  record the drift element for logging params
         self.particle.currentEl=driftEl
         pi=self.pEl.copy() #position at beginning of drift in drift frame
@@ -294,9 +298,11 @@ class ParticleTracer:
             F=self.forceLast
         else: #the last force is invalid because the particle is at a new position
             F=self.currentEl.force(qEl)
+            F[2]=F[2]-GRAVITATIONAL_ACCELERATION #simulated mass is 1kg always
         #a = F # acceleration old or acceleration sub n
         qEl_n=fast_qNew(qEl,F,pEl,self.h)#q new or q sub n+1
         F_n=self.currentEl.force(qEl_n)
+        F_n[2] =F_n[2]- GRAVITATIONAL_ACCELERATION  # simulated mass is 1kg always
         if isnan(F_n[0]): #particle is outside element if an array of length 1 with np.nan is returned
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,qEl,pEl)  #check if element has changed.
             return

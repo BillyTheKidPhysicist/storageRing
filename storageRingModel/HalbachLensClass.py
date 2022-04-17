@@ -193,6 +193,7 @@ class billyHalbachCollectionWrapper(Collection):
             else:
                 return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
     def method_Of_Moments(self):
+        # print('not demaging')
         apply_demag(self)
 
 

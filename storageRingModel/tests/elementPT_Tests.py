@@ -10,7 +10,7 @@ from ParticleClass import Particle
 from hypothesis import given,settings,strategies as st
 from constants import SIMULATION_MAGNETON
 from shapely.geometry import Point
-import warnings
+from constants import GRAVITATIONAL_ACCELERATION
 from math import isclose
 from HalbachLensClass import HalbachLens,SegmentedBenderHalbach
 
@@ -83,8 +83,10 @@ class DriftTestHelper(ElementTestHelper):
     def __init__(self):
         self.L, self.ap = .15432, .0392
         particle0=Particle(qi=np.asarray([0.0,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-3.8]))
-        qf0 = np.array([-0.15432, 0.004992358208955224,-0.004917492537313433])
-        pf0 = np.array([-201., 5.2, -3.8])
+        qf0 = np.array([-0.15376500000000048 ,  0.004978000000000016,
+       -0.004909867602500013])
+        pf0 = np.array([-201.                ,    5.2               ,
+         -3.8074970000000286])
         super().__init__(Drift,particle0,qf0,pf0,True,False,False)
 
     def make_coordTestRules(self):
@@ -106,21 +108,22 @@ class DriftTestHelper(ElementTestHelper):
     def test_Drift(self):
         # test that particle travels through drift region and ends where expected
         particleTracer = ParticleTracer(self.PTL)
-        tol, h = 1e-12, 1e-7
+        tol, h = 1e-5, 1e-7
+        vx = -200.0
         deltaX = -self.L  # negative because particles start by moving along -x
-        slopez = .5 * self.ap / deltaX
+        slopez_initial = .5 * self.ap / deltaX
         zi = -self.ap / 4.0
-        zf = deltaX * slopez + zi
+        zf = deltaX * slopez_initial + zi-.5*GRAVITATIONAL_ACCELERATION*(deltaX/vx)**2
         slopey = .25 * self.ap / deltaX
         yi = self.ap / 4.0
         yf = deltaX * slopey + yi
-        vx = -200.0
-        particle = Particle(qi=np.asarray([0.0, yi, zi]), pi=np.asarray([vx, slopey * vx, slopez * vx]))
-        particleTraced = particleTracer.trace(particle, 1e-7, 1.0, fastMode=True)
-        qfTrace, pfTrace = particleTraced.qf, particle.pf
+        particle = Particle(qi=np.asarray([0.0, yi, zi]), pi=np.asarray([vx, slopey * vx, slopez_initial * vx]))
+        particleTraced = particleTracer.trace(particle, h, 1.0, fastMode=True)
+        qfTrace, pfTrace = particleTraced.qf, particleTraced.pf
         slopeyTrace, slopezTrace = pfTrace[1] / pfTrace[0], pfTrace[2] / pfTrace[0]
         yfTrace, zfTrace = qfTrace[1], qfTrace[2]
-        assert absDif(slopey, slopeyTrace) < tol and absDif(slopez, slopezTrace) < tol
+        slopez_final=slopez_initial-GRAVITATIONAL_ACCELERATION*abs(deltaX/vx)/vx
+        assert isclose(slopey, slopeyTrace,abs_tol=tol) and isclose(slopez_final, slopezTrace,abs_tol=tol)
         assert abs(yf - yfTrace) < tol and abs(zf - zfTrace) < tol
 
 
@@ -131,8 +134,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp=.01874832
         self.magnetWidth=.0254*self.rp/.05
         particle0=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.1313202800665356   ,  0.0054499132078432684, -0.008571339228694436 ])
-        pf0=np.array([-201.18579096379648  ,   -2.9768429754454937, 3.7021411631577097])
+        qf0=np.array([-0.13132029854326824 ,  0.005449920861957329,-0.0085729887323767  ])
+        pf0=np.array([-201.18595034423112 ,   -2.976788104804964,    3.696796533463061])
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
@@ -197,8 +200,8 @@ class LensIdealTestHelper(ElementTestHelper):
     def __init__(self):
         self.L, self.rp, self.Bp = .51824792317429, .024382758923, 1.832484234
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,8.2,-6.8]))
-        qf0 = np.array([-5.1752499999999624e-01, -1.5840926495604049e-03,4.1051388875270863e-04])
-        pf0 = np.array([-201.               ,    7.735215296352372,   -8.064814463465714])
+        qf0 = np.array([-5.1752499999999624e-01, -1.5840926495604049e-03, 4.1005739568729166e-04])
+        pf0 = np.array([-201.               ,    7.735215296352372,   -8.061999426907333])
         super().__init__(LensIdeal,particle0,qf0,pf0,True,True,False)
 
     def make_coordTestRules(self):
@@ -240,8 +243,8 @@ class BenderIdealTestHelper(ElementTestHelper):
         self.rb = .94830284532
         self.rp = .01853423
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-6.8]))
-        qf0 = np.array([-9.639381030969734e-01,  9.576855890781706e-01,8.586086892465979e-05])
-        pf0 = np.array([ -4.741346774755123, 200.6975241302656  ,   7.922912689270208])
+        qf0 = np.array([-9.639381030969734e-01,  9.576855890781706e-01,8.143718656072168e-05])
+        pf0 = np.array([ -4.741346774755123, 200.6975241302656  ,   7.920531222158079])
         super().__init__(BenderIdeal,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -268,8 +271,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.2333783233842766e-01, 1.8186612189605076e+00, 8.9457046840576580e-04])
-        pf0 = np.array([ 158.69867004701382 , -123.26412834001808 ,    4.920358219152359])
+        qf0 = np.array([6.233369690826033e-01, 1.818660590811726e+00,8.918363599849415e-04])
+        pf0 = np.array([ 158.6982853694703  , -123.26460042242242 ,    4.915040926544949])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -344,8 +347,8 @@ class CombinerIdealTestHelper(ElementTestHelper):
         self.Lm=.218734921
         self.ap=.014832794
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,0.0,0.0]))
-        qf0 = np.array([-0.22328330008309497 ,  0.009988555672041705,-0.002335465242450282])
-        pf0 = np.array([-199.532144335288  , 16.87847481554656 ,-0.6666278524886048])
+        qf0 = np.array([-0.22328330064926563  ,  0.00998854916179846  ,-0.0023411835183533964])
+        pf0 = np.array([-199.53214662301482  ,   16.878448509595106 ,-0.6776825317367712])
         super().__init__(CombinerIdeal,particle0,qf0,pf0,True,False,False)
 
     def make_coordTestRules(self):
@@ -369,8 +372,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20690099825252437  , -0.005645254505453696 ,0.0038676237870725943])
-        pf0=np.array([-200.37568804455236 ,  -13.476265993642304,   10.274064275795029])
+        qf0=np.array([-0.2069009540301379   , -0.0056452690695848635,0.003865731441394568 ])
+        pf0=np.array([-200.37543910104478 ,  -13.476337726449302,   10.271894630702374])
         super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def make_coordTestRules(self):

@@ -24,7 +24,7 @@ class Solution:
 
     def __init__(self):
         self.params = None  # paramters tuned by the 'outer' gp minimize
-        self.fluxMultiplicationPercent = None
+        self.fluxMultiplication=None
         self.cost=None
         self.swarmCost=None
         self.floorPlanCost=None
@@ -41,9 +41,8 @@ class Solution:
         # string+='stable configuration:'+str(self.stable)+'\n'
         # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
-        string += 'percent max flux multiplication: ' + str(self.fluxMultiplicationPercent) + '\n'
+        string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
         string += 'scipy message: '+ str(self.scipyMessage)+'\n'
-        # string+='flux multiplication: '+str(int(self.fluxMultiplication)) +'\n'
         string += '----------------------------'
         return string
 
@@ -141,11 +140,11 @@ class LatticeOptimizer:
         plt.show()
 
     def mode_Match_Cost(self, X: Optional[list_array_tuple],useSurrogate: bool,energyCorrection: bool,
-                        rejectUnstable: bool=True,rejectIllegalFloorPlan: bool=True,
-                        returnCostsSeperate: bool=False)-> Union[float,tuple[float,float]]:
+                rejectUnstable: bool=True,rejectIllegalFloorPlan: bool=True,
+                returnFullResults: bool=False)-> Union[float,tuple[Optional[float],Optional[float],Optional[Swarm]]]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
-        swarmCost,floorPlanCost=None,None
+        swarmCost,floorPlanCost,swarmTraced=None,None,None
         if X is not None:
             for val, bounds in zip(X, self.tuningBounds):
                 assert bounds[0] <= val <= bounds[1]
@@ -160,7 +159,7 @@ class LatticeOptimizer:
             floorPlanCost = self.floor_Plan_Cost(X)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= 2.0
-        if returnCostsSeperate==True: return swarmCost,floorPlanCost
+        if returnFullResults: return swarmCost,floorPlanCost,swarmTraced
         else: return cost
         
     def inject_And_Trace_Swarm(self,X: list_array_tuple,useSurrogate: bool,energyCorrection: bool)-> Swarm:
@@ -275,17 +274,24 @@ class LatticeOptimizer:
         elBefore.set_Length(LBefore)
         elAfter.set_Length(LAfter)
 
+    def compute_Flux_Multiplication(self,swarmTraced:Swarm)->float:
+        """Return the multiplcation of flux expected in the ring. """
+
+        assert all([particle.traced == True for particle in swarmTraced.particles])
+        if swarmTraced.num_Particles()==0: return 0.0
+        weightedFluxMultInjectedSwarm=swarmTraced.weighted_Flux_Multiplication()
+        injectionSurvivalFrac=swarmTraced.num_Particles(weighted=True)/\
+                              self.swarmInjectorInitial.num_Particles(weighted=True) #particles may be lost
+        totalFluxMult=injectionSurvivalFrac*weightedFluxMultInjectedSwarm
+        return totalFluxMult
+
+
     def compute_Swarm_Flux_Mult_Percent(self, swarmTraced:Swarm)-> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         #all particles survived through the lattice.
-        assert all([particle.traced == True for particle in swarmTraced.particles])
-        if swarmTraced.num_Particles()==0: return 0.0
-        weightedFluxMult=swarmTraced.weighted_Flux_Multiplication()
-        weightedFluxMultMax=self.maximum_Weighted_Flux_Multiplication()
-        injectionSurvivalFrac=swarmTraced.num_Particles(weighted=True)/\
-                              self.swarmInjectorInitial.num_Particles(weighted=True) #particle may be lost
-        #during injection
-        fluxMultPerc=1e2*(weightedFluxMult/weightedFluxMultMax)*injectionSurvivalFrac
+        totalFluxMult=self.compute_Flux_Multiplication(swarmTraced)
+        weightedFluxMultMax = self.maximum_Weighted_Flux_Multiplication()
+        fluxMultPerc=1e2*totalFluxMult/weightedFluxMultMax
         assert 0.0 <= fluxMultPerc <= 100.0
         return fluxMultPerc
     
@@ -311,7 +317,7 @@ class LatticeOptimizer:
         assert 0.0<=swarmCost<=1.0
         return swarmCost
     
-    def flux_Percent_From_Cost(self, cost,X)-> float:
+    def flux_Mult_Percent_From_Cost(self, cost,X)-> float:
         fluxCost=cost-self.floor_Plan_Cost(X)
         fluxMulPerc=100.0*(1.0-fluxCost)
         assert 0.0<=fluxMulPerc<=100.0
@@ -416,7 +422,6 @@ class LatticeOptimizer:
         sol.scipyMessage=scipySol.message
         sol.cost = cost_Most_Accurate
         optimalConfig = scipySol.x
-        sol.fluxMultiplicationPercent = self.flux_Percent_From_Cost(cost_Most_Accurate, optimalConfig)
         sol.stable = True
         sol.xRing_TunedParams2 = optimalConfig[:2]
         if self.whichKnobs=='all':
@@ -436,7 +441,7 @@ class LatticeOptimizer:
         self.initialize_Optimizer(tuningElementIndices, tuningChoice,whichKnobs, ringTuningBounds, injectorTuningBounds)
         if self.test_Lattice_Stability(ringTuningBounds,injectorTuningBounds, parallel=parallel) == False:
             sol = Solution()
-            sol.fluxMultiplicationPercent = 0.0
+            sol.fluxMultiplication = 0.0
             sol.cost=1.0
             sol.stable=False
             return sol

@@ -9,7 +9,7 @@ def survival_Optimize(bounds: list,tuning: Optional[str],workers: int,magnetErro
     def wrapper(args):
         try:
             sol=solve_For_Lattice_Params(args,tuning,magnetErrors)
-            if sol.fluxMultiplicationPercent>1.0:
+            if sol.fluxMultiplication>10:
                 print(sol)
         except:
             np.set_printoptions(precision=100)

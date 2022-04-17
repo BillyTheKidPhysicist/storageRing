@@ -102,7 +102,7 @@ class StabilityAnalyzer:
 
         #todo: I need to figure out what all this is doing
 
-        def _cost(i):
+        def flux_Multiplication(i):
             # print(i)
             np.random.seed(i)
             if i==0:
@@ -110,11 +110,12 @@ class StabilityAnalyzer:
             else:
                 sol=self.inject_And_Trace_Through_Ring(True, False, 1.0, False)
             print(sol)
+
             print('seed',i)
             return sol.cost
-        indices=list(range(1,30))
-        results=tool_Parallel_Process(_cost,indices,processes=2,resultsAsArray=True)
-        print(np.mean(results[1:]),np.std(results[1:]))
+        indices=[0]#list(range(1,30))
+        results=tool_Parallel_Process(flux_Multiplication,indices,processes=1,resultsAsArray=True)
+        # print(np.mean(results[1:]),np.std(results[1:]))
         print(repr(results))
         # np.savetxt('data',results)
         # print(repr(results))
