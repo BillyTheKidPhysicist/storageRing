@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 import numpy as np
 import fastNumbaMethodsAndClass
-from helperTools import arr_Product
+from helperTools import arr_Product,iscloseAll
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import SIMULATION_MAGNETON
@@ -24,7 +24,7 @@ lst_tup_arr=Union[list,tuple,np.ndarray]
 TINY_STEP=1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
-MAGNET_ASPECT_RATIO=np.inf  #length of individual neodymium magnet relative to width of magnet
+MAGNET_ASPECT_RATIO=4  #length of individual neodymium magnet relative to width of magnet
 
 def full_Arctan(q):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
@@ -1059,6 +1059,8 @@ class HalbachLensSim(LensIdeal):
         self.extraFieldLength: Optional[float]=None #extra field added to end of lens to account misalignment
         self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
         self.fieldFact = 1.0 #factor to multiply field values by for tunability
+        self. individualMagnetLength: float = None
+        # or down
         if build:
             self.build()
 
@@ -1129,6 +1131,7 @@ class HalbachLensSim(LensIdeal):
 
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
+        self.individualMagnetLength=min([(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm])
         self.Lo=self.L
         self.set_Effective_Length()
         self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
@@ -1146,10 +1149,14 @@ class HalbachLensSim(LensIdeal):
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
         if not useSymmetry: #range will have to fully capture lens.
+            numSlices=int(round(self.Lm / self.individualMagnetLength))
             yMin=-yMax
             zMax=self.L/2+self.extraFieldLength+TINY_OFFSET
             zMin=-zMax
-            numPointsZ=min([int(self.L/(.3*self.rp)),2*numPointsZ-1])
+            assert self.fringeFracOuter==1.5 #pointsperslice mildly depends on this value
+            pointsPerSlice=3
+            numPointsZ =max([pointsPerSlice*numSlices,2*numPointsZ-1])
+            assert numPointsZ<100 #thing might start taking unreasonably long if not careful
             numPointsXY=numPointsXY*2-1
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
@@ -1211,12 +1218,10 @@ class HalbachLensSim(LensIdeal):
 
     def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool)->tuple[np.ndarray,np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
-
         lensLength=self.effectiveLength if useSymmetry else self.Lm
-        individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(self.magnetWidths)),self.Lm])
-        numSlicesApprox=1 if not useStandardMagnetErrors else int(self.Lm/individualMagnetLength)
+        numSlices=None if not useStandardMagnetErrors else int(round(self.Lm / self.individualMagnetLength))
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidths,lensLength,
-                    applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlicesApprox)
+                applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlices)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep=np.sqrt((xArr_Quadrant[1]-xArr_Quadrant[0])**2+(xArr_Quadrant[1]-xArr_Quadrant[0])**2)
         assert self.rp-maxGridSep>=self.apMaxGoodField
@@ -1252,6 +1257,8 @@ class HalbachLensSim(LensIdeal):
         if self.useStandardMagErrors:
             data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False)
             data2D_2, data3D_Perturbations = self.make_Field_Data(False, True)
+            assert len(data3D_Perturbations)==len(data3D_NoPerturbations)
+            assert iscloseAll(data3D_Perturbations[:,:3],data3D_NoPerturbations[:,:3],1e-12)
             assert data2D_1 is None and data2D_2 is None
             coords=data3D_NoPerturbations[:,:3]
             fieldValsDifference=data3D_Perturbations[:,3:]-data3D_NoPerturbations[:,3:]
@@ -1355,8 +1362,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(magnetWidthList)),self.Lm])
-        numSlicesApprox = 1 if not self.useStandardMagErrors else int(self.Lm / individualMagnetLength)
+        individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(magnetWidthList)),self.Lm])#this will get rounded up
+        #or down
+        numSlicesApprox=1 if not self.useStandardMagErrors else int(round(self.Lm/individualMagnetLength))
+        # print('combiner:',numSlicesApprox)
         self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
                             useStandardMagErrors=self.useStandardMagErrors,numSlices=numSlicesApprox) #must reuse lens
         #because field values are computed twice from same lens. Otherwise, magnet errors would change

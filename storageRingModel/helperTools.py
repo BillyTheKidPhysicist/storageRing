@@ -84,6 +84,16 @@ def tool_Make_Image_Cartesian(
     extent = [xGridEdges.min(), xGridEdges.max(), yGridEdges.min(), yGridEdges.max()]
     return image, extent
 
+def tool_Dense_Curve(x: lst_tup_arr_type,y: lst_tup_arr_type,numPoints: int=10_000,smoothing: float=0.0) \
+        ->tuple[np.ndarray,np.ndarray]:
+    import scipy.interpolate as spi
+    x=np.array(x) if isinstance(x,np.ndarray)==False else x
+    y=np.array(y) if isinstance(y,np.ndarray)==False else y
+    FWHM_Func=spi.RBFInterpolator(x[:,None],y[:,None],smoothing=smoothing)
+    xDense=np.linspace(x.min(),x.max(),numPoints)
+    yDense=np.ravel(FWHM_Func(xDense[:,None]))
+    return xDense,yDense
+
 def radians(degrees: float):
     return (degrees/180)*np.pi
 

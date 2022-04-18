@@ -139,8 +139,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
-        tester=ElementTestRunner(self)
-        tester.run_Tests()
+        # tester=ElementTestRunner(self)
+        # tester.run_Tests()
         self.test_Field_Deviations_And_Interpolation()
 
     def test_Field_Deviations_And_Interpolation(self):
@@ -152,12 +152,13 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         tol=.025 #tolerance on the maximum value
         magnetErrors = True
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), self.L, None,
-                                     (self.magnetWidth,), magnetErrors)
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), self.L/2.0, None,
+                                     (self.magnetWidth,), useStandardMagErrors=magnetErrors)
         gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
+        numSlices = None if not magnetErrors else int(round(lensElement.Lm / lensElement.individualMagnetLength))
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
-                                         applyMethodOfMoments=True, useStandardMagErrors=magnetErrors)
+                                    applyMethodOfMoments=True, useStandardMagErrors=magnetErrors,numSlices=numSlices)
         rMax=.95 * lensElement.apMaxGoodField
         qMaxField = np.asarray([self.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
         FMax = np.linalg.norm(lensElement.force(qMaxField))

@@ -154,7 +154,7 @@ class Particle:
                     elementIndexPrev=self._TList[i][0]
         self._TList,self._VList=[],[]
 
-    def finished(self,currentEl: Element,qEl: np.ndarray,pEl: np.ndarray,
+    def finished(self,currentEl: Optional[Element],qEl: np.ndarray,pEl: np.ndarray,
                  totalLatticeLength: Optional[float]=None)-> None:
         #finish tracing with the particle, tie up loose ends
         #totalLaticeLength: total length of periodic lattice

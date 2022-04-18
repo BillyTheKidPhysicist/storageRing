@@ -65,7 +65,7 @@ class LatticeOptimizer:
         # point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
         self.tunedElementList = None
         self.tuningChoice = None  # what type of tuning will occur
-        self.useLatticeUpperSymmetry = True  # exploit the fact that the lattice has symmetry in the z axis to use half
+        self.useLatticeUpperSymmetry = False  # exploit the fact that the lattice has symmetry in the z axis to use half
         # the number of particles. Symmetry is broken if including gravity
         self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
         # generation with the same number, 42
@@ -82,7 +82,7 @@ class LatticeOptimizer:
         self.minElementLength = fractionalMarginOfError * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
         self.tuningBounds = None
-        self.numParticlesFullSwarm=500
+        self.numParticlesFullSwarm=1000
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None

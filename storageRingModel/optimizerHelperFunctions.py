@@ -62,6 +62,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
 
 def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDensityMultiplier: float=1.0,
                         standardMagnetErrors: bool=False,seed: int=None) -> Optional[ParticleTracerLattice]:
+    standardMagnetErrors=False
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5

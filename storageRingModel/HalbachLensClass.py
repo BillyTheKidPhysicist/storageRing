@@ -139,14 +139,39 @@ class billyHalbachCollectionWrapper(Collection):
         displacement=[entry*self.meterTo_mm for entry in displacement]
         super().move(displacement)
 
-    def B_Vec(self, evalCoords: np.ndarray)->np.ndarray:
-        # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        assert len(self)>0
-        mTesla_To_Tesla=1e-3
-        meterTo_mm=1e3
-        evalCoords_mm = meterTo_mm * evalCoords
-        BVec=mTesla_To_Tesla*self.getB(evalCoords_mm)
+    def getB_Wrapper(self, evalCoords_mm: np.ndarray)-> np.ndarray:
+        """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
+        applied to sources when ram usage would be too hight"""
+        sourcesAll = self.sources
+        size = len(evalCoords_mm) * len(self)
+        sizeMax = 2_000_000
+        splits = min([int(size / sizeMax), len(sourcesAll)])
+        splits = 1 if splits < 1 else splits
+        splitSize = math.ceil(len(sourcesAll) / splits)
+        splitSources = [sourcesAll[splitSize * i:splitSize * (i + 1)] for i in range(splits)] if splits > 1 else [
+            sourcesAll]
+        BVec = np.zeros(evalCoords_mm.shape)
+        counter = 0
+        for sources in splitSources:
+            if len(sources) == 0:
+                break
+            counter += len(sources)
+            self.sources = sources
+            BVec += self.getB(evalCoords_mm)
+        BVec=BVec[0] if len(BVec)==1 else BVec
+        self.sources = sourcesAll
+        assert counter == len(sourcesAll)
         return BVec
+
+    def B_Vec(self, evalCoords: np.ndarray) -> np.ndarray:
+        # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
+        assert len(self) > 0
+        mTesla_To_Tesla = 1e-3
+        meterTo_mm = 1e3
+        evalCoords_mm = meterTo_mm * evalCoords
+        BVec=mTesla_To_Tesla*self.getB_Wrapper(evalCoords_mm)
+        return BVec
+
     def BNorm(self,evalCoords:np.ndarray)->np.ndarray:
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
@@ -193,7 +218,6 @@ class billyHalbachCollectionWrapper(Collection):
             else:
                 return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
     def method_Of_Moments(self):
-        # print('not demaging')
         apply_demag(self)
 
 
@@ -213,8 +237,8 @@ class Layer(billyHalbachCollectionWrapper):
     numMagnetsInLayer = 12
     def __init__(self, rp: float,magnetWidth: float,length: float,position: tuple3Float=None,
                  orientation: Rotation=None, M: float=M_Default,mur: float=1.05,
-                 rMagnetShift=None, thetaShift=None,phiShift=None, M_NormShiftRelative=None,dimShift=None,M_AngleShift=None,
-                 applyMethodOfMoments=False):
+                 rMagnetShift=None, thetaShift=None,phiShift=None, M_NormShiftRelative=None,dimShift=None,
+                 M_AngleShift=None, applyMethodOfMoments=False):
         super().__init__()
         assert magnetWidth > 0.0 and length > 0.0  and M > 0.0
         assert isinstance(orientation,(type(None),Rotation))==True
@@ -319,11 +343,12 @@ class HalbachLens(billyHalbachCollectionWrapper):
 
     def __init__(self,rp: Union[float,tuple],magnetWidth: Union[float,tuple],length: float,
                  position: list_tuple_arr=None, orientation: Rotation=None,
-                 M: float=M_Default,numSlices: int =1, applyMethodOfMoments=False, useStandardMagErrors=False,
+                 M: float=M_Default,numSlices: Optional[int] =1, applyMethodOfMoments=False, useStandardMagErrors=False,
                  sameSeed=False):
         #todo: Better seeding system
         super().__init__()
-        assert length > 0.0 and M > 0.0 and numSlices>=1
+        assert length > 0.0 and M > 0.0
+        assert (isinstance(numSlices,int) and numSlices>=1) if numSlices is not None else numSlices is None
         assert isinstance(orientation, (type(None), Rotation)) == True
         assert isinstance(rp,(float,tuple)) and isinstance(magnetWidth,(float,tuple))
         position=(0.0,0.0,0.0) if position is None else position
@@ -353,7 +378,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                     dimVariation, magVecAngleVariation, magNormVariation=[np.zeros((12,1))]*3
                 layer=Layer(radiusLayer,widthLayer,length,M=self.M,position=(0,0,zLayer),
                             M_AngleShift=magVecAngleVariation,dimShift=dimVariation,
-                            M_NormShiftRelative=magNormVariation)
+                            M_NormShiftRelative=magNormVariation,mur=self.mur)
                 self.add(layer)
                 self.layerList.append(layer)
 
@@ -386,8 +411,11 @@ class HalbachLens(billyHalbachCollectionWrapper):
     def subdivide_Lens(self):
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
          if the lens is composed of slices"""
-        LArr=np.ones(self.numSlices)*self.length/self.numSlices
-        zArr=np.cumsum(LArr)-self.length/2-.5*self.length/self.numSlices
+        if self.numSlices is None:
+            LArr,zArr=np.array([self.length]),np.zeros(1)
+        else:
+            LArr=np.ones(self.numSlices)*self.length/self.numSlices
+            zArr=np.cumsum(LArr)-self.length/2-.5*self.length/self.numSlices
         assert within_Tol(np.sum(LArr),self.length) and within_Tol(np.mean(zArr),0.0)#length adds up and centered on 0
         return zArr,LArr
 
