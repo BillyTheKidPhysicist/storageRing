@@ -1156,8 +1156,8 @@ class HalbachLensSim(LensIdeal):
             assert self.fringeFracOuter==1.5 #pointsperslice mildly depends on this value
             pointsPerSlice=3
             numPointsZ =max([pointsPerSlice*numSlices,2*numPointsZ-1])
-            assert numPointsZ<100 #thing might start taking unreasonably long if not careful
-            numPointsXY=numPointsXY*2-1
+            assert numPointsZ<100 #things might start taking unreasonably long if not careful
+            numPointsXY=round((numPointsXY*2-1)*.8)
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zArr = np.linspace(zMin, zMax, numPointsZ)
@@ -1216,7 +1216,8 @@ class HalbachLensSim(LensIdeal):
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         return data3D
 
-    def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool)->tuple[np.ndarray,np.ndarray]:
+    def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool, enforceGoodField: bool=True)\
+            ->tuple[np.ndarray,np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength=self.effectiveLength if useSymmetry else self.Lm
         numSlices=None if not useStandardMagnetErrors else int(round(self.Lm / self.individualMagnetLength))
@@ -1224,7 +1225,8 @@ class HalbachLensSim(LensIdeal):
                 applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlices)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep=np.sqrt((xArr_Quadrant[1]-xArr_Quadrant[0])**2+(xArr_Quadrant[1]-xArr_Quadrant[0])**2)
-        assert self.rp-maxGridSep>=self.apMaxGoodField
+        if enforceGoodField==True:
+            assert self.rp-maxGridSep>=self.apMaxGoodField
         data2D=self.make_2D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant) if useSymmetry else None
         data3D=self.make_3D_Field_Data(lens,xArr_Quadrant,yArr_Quadrant,zArr)
         return data2D,data3D
@@ -1255,11 +1257,13 @@ class HalbachLensSim(LensIdeal):
         perturbation interpolation"""
 
         if self.useStandardMagErrors:
-            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False)
-            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True)
+            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False,enforceGoodField=False)
+            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True,enforceGoodField=False)
             assert len(data3D_Perturbations)==len(data3D_NoPerturbations)
             assert iscloseAll(data3D_Perturbations[:,:3],data3D_NoPerturbations[:,:3],1e-12)
             assert data2D_1 is None and data2D_2 is None
+            data3D_Perturbations[np.isnan(data3D_Perturbations)]=0.0
+            data3D_NoPerturbations[np.isnan(data3D_NoPerturbations)]=0.0
             coords=data3D_NoPerturbations[:,:3]
             fieldValsDifference=data3D_Perturbations[:,3:]-data3D_NoPerturbations[:,3:]
             data3D_Difference=np.column_stack((coords,fieldValsDifference))

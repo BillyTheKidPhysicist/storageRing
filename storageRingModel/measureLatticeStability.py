@@ -1,3 +1,4 @@
+import itertools
 import os
 # os.environ['OPENBLAS_NUM_THREADS']='1'
 
@@ -11,6 +12,7 @@ import optimizerHelperFunctions
 from SwarmTracerClass import SwarmTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
+from temp3 import MUT
 
 combinerTypes=(elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementPT.CombinerSim)
 
@@ -109,26 +111,43 @@ class StabilityAnalyzer:
                 sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
             else:
                 sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
-            print(sol)
+            # print(sol)
 
             # print('seed',i)
             return sol.cost,sol.fluxMultiplication
         indices=list(range(1,31))
         results=tool_Parallel_Process(flux_Multiplication,indices,processes=10,resultsAsArray=True)
-        os.system("say 'done bitch!'")
-        print(np.mean(results[:,0]),np.std(results[:,0]))
-        print(np.mean(results[:,1]),np.std(results[:,1]))
-        print(repr(results))
+        # os.system("say 'done bitch!'")
+        print('cost',np.mean(results[:,0]),np.std(results[:,0]))
+        print('flux',np.mean(results[:,1]),np.std(results[:,1]))
+        # print(repr(results))
         # np.savetxt('data',results)
         # print(repr(results))
         # _cost(1)
 
 
 
-sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-sa.measure_Sensitivity()
 
+# aVals=[.5,.6,.7,.8,.9,1.0,1.1,1.2]
+# for a in aVals:
+#     print(a)
+#     MUT.set_a(a)
+#     sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+#     sa.measure_Sensitivity()
 
+#
+# MUT.set_b(0.0)
+# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+# sa.measure_Sensitivity()
+#
+# MUT.set_c(0.0)
+# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+# sa.measure_Sensitivity()
+
+"""
+cost 0.741651810121768 0.0899743429824311
+flux 81.41907789070954 28.27186612050469
+"""
 
 """
 

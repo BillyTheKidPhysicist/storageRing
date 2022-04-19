@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 
 from helperTools import *
@@ -139,8 +141,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
-        # tester=ElementTestRunner(self)
-        # tester.run_Tests()
+        tester=ElementTestRunner(self)
+        tester.run_Tests()
         self.test_Field_Deviations_And_Interpolation()
 
     def test_Field_Deviations_And_Interpolation(self):
@@ -148,11 +150,12 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         this with magnet imperfections as well. Keep in mind that interpolation points inside magnet material are set to
         zero, so the interpolation may be poor near bore of magnet. This is done to avoid dealing with mistmatch
         between good field region of ideal and perturbation interpolation"""
+        L=self.L*.5
         seed = int(time.time())
         tol=.025 #tolerance on the maximum value
         magnetErrors = True
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), self.L/2.0, None,
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), L, None,
                                      (self.magnetWidth,), useStandardMagErrors=magnetErrors)
         gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
@@ -160,21 +163,21 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
                                     applyMethodOfMoments=True, useStandardMagErrors=magnetErrors,numSlices=numSlices)
         rMax=.95 * lensElement.apMaxGoodField
-        qMaxField = np.asarray([self.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
+        qMaxField = np.asarray([lensElement.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
         FMax = np.linalg.norm(lensElement.force(qMaxField))
         VMax = lensElement.magnetic_Potential(qMaxField)
         assert np.isnan(FMax) == False
         @given(*self.coordTestRules)
-        @settings(max_examples=50000, deadline=None)
+        @settings(max_examples=500, deadline=None)
         def check_Force_Agrees(x, y, z):
             qEl1 = np.asarray([x, y, z])
             minInterpPointsFromOrigin = 2  # if I test very near the origin, the differences can be much larger.
-            maxAperture = .8 * lensElement.rp  # larger aperture requires for fine grid for comparison
+            maxAperture = .8 * lensElement.rp  # larger aperture require finer grid for comparison
             if lensElement.is_Coord_Inside(qEl1) == True and np.sqrt(y ** 2 + z ** 2) < maxAperture and \
                     y / gridSpacing > minInterpPointsFromOrigin and z / gridSpacing > minInterpPointsFromOrigin:
                 Fx1, Fy1, Fz1 = lensElement.force(qEl1)
                 V1 = lensElement.magnetic_Potential(qEl1)
-                x, y, z = -z, y, x - self.L / 2 #shift coords for lens field generator. Points along z instead of x
+                x, y, z = -z, y, x - lensElement.L / 2 #shift coords for lens field generator. Points along z instead of x
                 qEl2 = np.asarray([x, y, z])
                 (BGradx, BGrady, BGradz), BNorm = lensFieldGenerator.BNorm_Gradient(qEl2, returnNorm=True)
                 Fx2, Fy2, Fz2 = -np.array([BGradx, BGrady, BGradz]) * SIMULATION_MAGNETON
