@@ -110,8 +110,8 @@ class StabilityAnalyzer:
             if i==0:
                 sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
             else:
-                sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
-            # print(sol)
+                sol=self.inject_And_Trace_Through_Ring(True, False, 1.0, False)
+            print(sol)
 
             # print('seed',i)
             return sol.cost,sol.fluxMultiplication
@@ -120,7 +120,7 @@ class StabilityAnalyzer:
         # os.system("say 'done bitch!'")
         print('cost',np.mean(results[:,0]),np.std(results[:,0]))
         print('flux',np.mean(results[:,1]),np.std(results[:,1]))
-        # print(repr(results))
+        print(repr(results))
         # np.savetxt('data',results)
         # print(repr(results))
         # _cost(1)
@@ -128,13 +128,18 @@ class StabilityAnalyzer:
 
 
 
-# aVals=[.5,.6,.7,.8,.9,1.0,1.1,1.2]
-# for a in aVals:
-#     print(a)
-#     MUT.set_a(a)
-#     sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-#     sa.measure_Sensitivity()
 
+# vals=[1.0,1.25,1.5,1.75,2.]
+#
+# for a in vals:
+#     MUT.set_a(a)
+sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+sa.measure_Sensitivity()
+
+#
+# MUT.set_a(0.0)
+# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+# sa.measure_Sensitivity()
 #
 # MUT.set_b(0.0)
 # sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))

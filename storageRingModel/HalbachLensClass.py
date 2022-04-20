@@ -1,3 +1,4 @@
+import itertools
 from math import isclose
 from numbers import Number
 import time
@@ -139,7 +140,7 @@ class billyHalbachCollectionWrapper(Collection):
         displacement=[entry*self.meterTo_mm for entry in displacement]
         super().move(displacement)
 
-    def getB_Wrapper(self, evalCoords_mm: np.ndarray)-> np.ndarray:
+    def _getB_Wrapper(self, evalCoords_mm: np.ndarray)-> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
         applied to sources when ram usage would be too hight"""
         sourcesAll = self.sources
@@ -163,20 +164,22 @@ class billyHalbachCollectionWrapper(Collection):
         assert counter == len(sourcesAll)
         return BVec
 
-    def B_Vec(self, evalCoords: np.ndarray) -> np.ndarray:
+    def B_Vec(self, evalCoords: np.ndarray,useApprox: int=False) -> np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
         assert len(self) > 0
+        if useApprox==True:
+            raise NotImplementedError #this is only implement on the bender
         mTesla_To_Tesla = 1e-3
         meterTo_mm = 1e3
         evalCoords_mm = meterTo_mm * evalCoords
-        BVec=mTesla_To_Tesla*self.getB_Wrapper(evalCoords_mm)
+        BVec=mTesla_To_Tesla*self._getB_Wrapper(evalCoords_mm)
         return BVec
 
-    def BNorm(self,evalCoords:np.ndarray)->np.ndarray:
+    def BNorm(self,evalCoords:np.ndarray,useApprox: bool=False)->np.ndarray:
         #r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         #Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
 
-        BVec=self.B_Vec(evalCoords)
+        BVec=self.B_Vec(evalCoords,useApprox=useApprox)
         if len(evalCoords.shape)==1:
             return norm(BVec)
         elif len(evalCoords)==1:
@@ -184,39 +187,60 @@ class billyHalbachCollectionWrapper(Collection):
         else:
             return norm(BVec,axis=1)
 
-    def BNorm_Gradient(self,evalCoords: np.ndarray,returnNorm: bool=False,dr: float=1e-7)->Union[np.ndarray,tuple]:
+    def central_Difference(self,evalCoords: np.ndarray,returnNorm: bool,useApprox: bool,dx: float=1e-7)->\
+            Union[tuple[np.ndarray,...],np.ndarray]:
+
+        def grad(index: int)-> np.ndarray:
+            coordb = evalCoords.copy()  # upper step
+            coordb[:, index] += dx
+            BNormB=self.BNorm(coordb,useApprox=useApprox)
+            coorda = evalCoords.copy()  # upper step
+            coorda[:, index] += -dx
+            BNormA=self.BNorm(coorda,useApprox=useApprox)
+            return (BNormB-BNormA)/(2*dx)
+        BNormGrad=np.column_stack((grad(0),grad(1),grad(2)))
+        if returnNorm:
+            BNorm=self.BNorm(evalCoords,useApprox=useApprox)
+            return BNormGrad,BNorm
+        else:
+            return BNormGrad
+
+    def forward_Difference(self,evalCoords: np.ndarray,returnNorm: bool,useApprox: bool,dx: float=1e-7)\
+            ->Union[tuple[np.ndarray,...],np.ndarray]:
+        BNorm=self.BNorm(evalCoords,useApprox=useApprox)
+        def grad(index):
+            coordb = evalCoords.copy()  # upper step
+            coordb[:, index] += dx
+            BNormB=self.BNorm(coordb,useApprox=useApprox)
+            return (BNormB-BNorm)/dx
+        BNormGrad=np.column_stack((grad(0),grad(1),grad(2)))
+        if returnNorm:
+            return BNormGrad, BNorm
+        else:
+            return BNormGrad
+
+    def BNorm_Gradient(self,evalCoords: np.ndarray,returnNorm: bool=False,differenceMethod='central',
+                       useApprox: bool=False) ->Union[np.ndarray,tuple]:
         #Return the gradient of the norm of the B field. use forward difference theorom
         #r: (N,3) vector of coordinates or (3) vector of coordinates.
         #returnNorm: Wether to return the norm as well as the gradient.
         #dr: step size
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
+
+        evalCoordsShaped=np.array([evalCoords]) if len(evalCoords.shape)!=2 else evalCoords
+
+        assert differenceMethod in ('central','forward')
+        results=self.central_Difference(evalCoordsShaped,returnNorm,useApprox) if differenceMethod=='central' else \
+            self.forward_Difference(evalCoordsShaped,returnNorm,useApprox)
         if len(evalCoords.shape)==1:
-            rEval=np.asarray([evalCoords])
-        else:
-            rEval=evalCoords.copy()
-        def grad(index):
-            coordb = rEval.copy()  # upper step
-            coordb[:, index] += dr
-            BNormB=self.BNorm(coordb)
-            coorda = rEval.copy()  # upper step
-            coorda[:, index] += -dr
-            BNormA=self.BNorm(coorda)
-            return (BNormB-BNormA)/(2*dr)
-        BNormGradx=grad(0)
-        BNormGrady=grad(1)
-        BNormGradz=grad(2)
-        if len(evalCoords.shape)==1:
-            if returnNorm == True:
-                BNormCenter=self.BNorm(rEval)
-                return np.asarray([BNormGradx[0], BNormGrady[0], BNormGradz[0]]),BNormCenter[0]
-            else:
-                return np.asarray([BNormGradx[0],BNormGrady[0],BNormGradz[0]])
-        else:
             if returnNorm==True:
-                BNormCenter=self.BNorm(rEval)
-                return np.column_stack((BNormGradx, BNormGrady, BNormGradz)),BNormCenter
+                [[Bgradx, Bgrady, Bgradz]], [B0]=results
+                results=(np.array([Bgradx, Bgrady, Bgradz]),B0)
             else:
-                return np.column_stack((BNormGradx,BNormGrady,BNormGradz))
+                [[Bgradx, Bgrady, Bgradz]] = results
+                results=np.array([Bgradx,Bgrady,Bgradz])
+        return results
+
     def method_Of_Moments(self):
         apply_demag(self)
 
@@ -427,6 +451,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     def __init__(self,rp:float,rb: float,UCAngle: float,Lm: float,numLenses: int=3,
                  M: float=M_Default,positiveAngleMagnetsOnly: bool=False,applyMethodOfMoments=False,lensSlices: int=1,
                  useMagnetError: bool=False):
+        #todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
         self.rp: float=rp #radius of bore of magnet, ie to the pole
@@ -442,27 +467,29 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         self.magnetWidth: float=rp * np.tan(2 * np.pi / 24) * 2 #set to size that exactly fits
         self.numLenses: int=numLenses #number of lenses in the model
         self.lensList: list[HalbachLens]=[] #list to hold lenses
+        self.lensAngleArr: np.ndarray=self.make_Lens_Angle_Array()
         self.applyMethodsOfMoments=applyMethodOfMoments
         self.slices=lensSlices
         self.useStandardMagnetErrors=useMagnetError
         self._build()
 
-    def _build(self)->None:
-        self.lensList=[]
+    def make_Lens_Angle_Array(self)-> np.ndarray:
         if self.numLenses==1:
             if self.positiveAngleMagnetsOnly==True:
                 raise Exception('Not applicable with only 1 magnet')
             angleArr=np.asarray([0.0])
         else:
             angleArr=np.linspace(-2*self.UCAngle*(self.numLenses-1)/2,2*self.UCAngle*(self.numLenses-1)/2,num=self.numLenses)
-        if self.positiveAngleMagnetsOnly==True:
-            angleArr=angleArr-angleArr.min()
-        for i in range(angleArr.shape[0]):
+        angleArr=angleArr-angleArr.min() if self.positiveAngleMagnetsOnly else angleArr
+        return angleArr
+
+    def _build(self)->None:
+        for angle in self.lensAngleArr:
             lens=HalbachLens(self.rp,self.magnetWidth,self.Lm,M=self.M,position=(self.rb,0.0,0.0),
                              numSlices=self.slices,useStandardMagErrors=self.useStandardMagnetErrors,
                              applyMethodOfMoments=True)
 
-            R=Rotation.from_rotvec([0.0,-angleArr[i],0.0])
+            R=Rotation.from_rotvec([0.0,-angle,0.0])
             lens.rotate(R,anchor=0)
             #my angle convention is unfortunately opposite what it should be here. positive theta
             # is clockwise about y axis in the xz plane looking from the negative side of y
@@ -471,3 +498,86 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             self.add(lens)
         if self.applyMethodsOfMoments==True:
             self.method_Of_Moments()
+
+    def get_Seperated_Split_Indices(self,thetaArr: np.ndarray,deltaTheta: float,thetaMin: float,thetaMax: float)\
+            -> tuple[int,int]:
+        """Return indices that split thetaArr such that the beginning and ending stretch past by -deltaTheta and
+        deltaTheta respectively. If thetaMin (thetaMax) is <=thetaArr.min() (>=thetaArr.max()) then don't check that
+        the seperation is satisfied at the beginning (ending). The ending index is one index past the desired index
+         per slicing rules"""
+
+        assert thetaMax>thetaMin and len(thetaArr.shape)==1
+        assert np.all(thetaArr==thetaArr[np.argsort(thetaArr)]) #must be ascending order
+        indexStart=0 if thetaMin-deltaTheta<thetaArr.min() else np.argmax(thetaArr>thetaMin-deltaTheta)-1
+        #remember, indexEnd is one past the last index!
+        indexEnd=len(thetaArr) if thetaMax+deltaTheta>thetaArr.max() else np.argmax(thetaArr>thetaMax+deltaTheta)
+        if not indexStart==0:
+            assert thetaArr[indexStart]<=thetaMin-deltaTheta
+        if not indexEnd==len(thetaArr):
+            assert thetaArr[indexEnd]>=thetaMax+deltaTheta
+        return indexStart,indexEnd
+
+    def get_Valid_SubCoord_Indices(self,thetaArr: np.ndarray,lensSplitIndex1: int,lensSplitIndex2: int,
+                                   thetaLower: float,thetaUpper: float)-> tuple[int,int]:
+        """Get indices of field coordinates that lie within thetaLower and thetaUpper. If the lens being used is the
+        first (last), then all coords before (after) that lens in theta are valid"""
+
+        if lensSplitIndex2==len(self.lensAngleArr) and lensSplitIndex1==0:#use all coords indices because all
+            # lenses are used
+            validCoordIndices=np.ones(len(thetaArr)).astype(bool)
+        elif lensSplitIndex1==0:
+            validCoordIndices= thetaArr<=thetaUpper
+        elif lensSplitIndex2==len(self.lensAngleArr):
+            validCoordIndices=thetaArr>thetaLower
+        else:
+            validCoordIndices=(thetaArr<=thetaUpper) & (thetaArr>thetaLower)
+        return validCoordIndices
+
+    def B_Vec_Approx(self, evalCoords: np.ndarray) -> np.ndarray:
+        """Compute the magnetic field vector without using all the individual lenses, only the lenses that are close.
+        This should be accurate within 1% based on testing, but 5 times faster"""
+
+        angleSymCutoff=1.5*np.pi
+        assert self.lensAngleArr.max()<angleSymCutoff # Any angle above this is assumed to be negative, so
+        # the bender shouldn't be this long
+        numLensBorder=2 #number of lenses boarding region for field computationg
+        lensBorderSep=2*self.UCAngle*numLensBorder+1e-6
+        # coordAngles=np.linspace(layerAngles[0],layerAngles[-1],1000)
+        splitFactor=10 #roughly number of lenses (minus number of lenses bordering) per split
+        numSplits=round(len(self.lensList)/(2*numLensBorder+splitFactor))
+        numSplits=1 if numSplits==0 else numSplits
+        angleSplits=np.linspace(self.lensAngleArr.min(),self.lensAngleArr.max(),numSplits+1)
+        BVec=np.zeros(evalCoords.shape)
+        thetaArrCoords=np.arctan2(evalCoords[:,2],evalCoords[:,0])
+        thetaArrCoords[thetaArrCoords<angleSymCutoff-2*np.pi]+=2*np.pi #if an angle is larger than 3.14,
+        # arctan2 doesn't know this, and confines angles between -pi to pi. So I make an assumption here that lets
+        # me change the angle
+        indicesComputed=np.zeros(len(thetaArrCoords)) #to track which indices fields are computed for. Only for an assert check
+        for i in range(len(angleSplits)-1):
+            thetaLower,thetaUpper=angleSplits[i],angleSplits[i+1]
+            lensSplitIndex1,lensSplitIndex2=self.get_Seperated_Split_Indices(self.lensAngleArr,lensBorderSep,
+                                                                             thetaLower,thetaUpper)
+            subLenses=self.lensList[lensSplitIndex1:lensSplitIndex2]
+            collection=billyHalbachCollectionWrapper(subLenses)
+            validCoordIndices=self.get_Valid_SubCoord_Indices(thetaArrCoords,lensSplitIndex1,lensSplitIndex2,
+                                                              thetaLower,thetaUpper)
+            if sum(validCoordIndices)>0:
+                indicesComputed+=validCoordIndices
+                BVec[validCoordIndices]+=collection.B_Vec(evalCoords[validCoordIndices])
+        assert np.all(indicesComputed==1) #check that every coord index was used once and only once
+        return BVec
+
+    def B_Vec(self, evalCoords: np.ndarray,useApprox=False) -> np.ndarray:
+        """
+        overrides billyHalbachCollectionWrapper
+
+        :param evalCoords: Coordinate to evaluate magnetic field vector at, m. shape (n,3)
+        :param useApprox: Wether to use the approximately true, within 1%, method of neglecting lenses that are
+        far from a given coordinate in evalCorods
+        :return: The magnetic field vector, T. shape (n,3)
+        """
+
+        if useApprox:
+            return self.B_Vec_Approx(evalCoords)
+        else:
+            return super().B_Vec(evalCoords)

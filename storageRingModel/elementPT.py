@@ -894,7 +894,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
         Ls = 2 * self.Lcap + self.ang * self.rb
         numS = self.numMagnets+2 #about one plane in each magnet and cap
-        numR =9 #i found this to be a decent compromise
+        numR =13 #i found this to be a decent compromise
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
         xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numR) #radial deviation along major radius
         ycArr = xcArr.copy() #deviation in vertical from center of bender, along y in cartesian
@@ -976,7 +976,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                  validIndices:lst_tup_arr)-> tuple[np.ndarray,np.ndarray]:
         BNormGradArr, BNormArr = np.zeros((len(fieldCoords), 3)) * np.nan, np.zeros(len(fieldCoords)) * np.nan
         BNormGradArr[validIndices], BNormArr[validIndices] = lens.BNorm_Gradient(fieldCoords[validIndices],
-                                                                                 returnNorm=True)
+                                                                                returnNorm=True,useApprox=True)
         return BNormGradArr,BNormArr
 
     def compute_Valid_Field_Data(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,

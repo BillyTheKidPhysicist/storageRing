@@ -90,7 +90,7 @@ class ParticleTracerLattice:
         self.linearElementsToConstraint: list[elementPT.HalbachLensSim]=[] #elements whos length will be changed when the
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
-        self.elList: list=[] #to hold all the lattice elements
+        self.elList: list[elementPT.Element]=[] #to hold all the lattice elements
 
     def __iter__(self)-> Iterable[Element]:
         return (element for element in self.elList)
