@@ -893,11 +893,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
         value"""
 
         Ls = 2 * self.Lcap + self.ang * self.rb
-        numS = self.numMagnets+2 #about one plane in each magnet and cap
-        numR =13 #i found this to be a decent compromise
+        numS = 4*self.numMagnets+2 #about 4 points in each magnet and cap. This was measured carefully
+        numYc=13
+        numXc =numYc
+
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
-        xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numR) #radial deviation along major radius
-        ycArr = xcArr.copy() #deviation in vertical from center of bender, along y in cartesian
+        xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numXc) #radial deviation along major radius
+        ycArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numYc) #deviation in vertical from center of
+        # bender, along y in cartesian
         coordsCenter = arr_Product(sArr, xcArr, ycArr)
         coords = np.asarray([self.convert_Center_To_Cartesian_Coords(*coordCenter) for coordCenter in coordsCenter])
         return coordsCenter,coords
@@ -908,16 +911,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
                 numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True)
         lensAligned=_HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
            numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False)
-
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices=rCenterArr<self.rp
         valsMisaligned=np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned,coordsCartesian,validIndices))
         valsAligned=np.column_stack(self.compute_Valid_Field_Vals(lensAligned,coordsCartesian,validIndices))
-
         valsPerturbation=valsMisaligned-valsAligned
         valsPerturbation[np.isnan(valsPerturbation)]=0.0
-        rArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
-        valsPerturbation[rArr>self.rp]*=0.0
         interpData=np.column_stack((coordsCenter,valsPerturbation))
         interpData=self.shape_Field_Data_3D(interpData)
 
@@ -1155,7 +1154,7 @@ class HalbachLensSim(LensIdeal):
             zMin=-zMax
             assert self.fringeFracOuter==1.5 #pointsperslice mildly depends on this value
             pointsPerSlice=3
-            numPointsZ =max([pointsPerSlice*numSlices,2*numPointsZ-1])
+            numPointsZ =max([pointsPerSlice*numSlices+2,2*numPointsZ-1])
             assert numPointsZ<100 #things might start taking unreasonably long if not careful
             numPointsXY=round((numPointsXY*2-1)*.8)
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)

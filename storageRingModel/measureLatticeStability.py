@@ -19,7 +19,7 @@ combinerTypes=(elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementP
 
 
 class StabilityAnalyzer:
-    def __init__(self,paramsOptimal: np.ndarray,alignmentTol: float=1e-3,tuning: str=None,
+    def __init__(self,paramsOptimal: np.ndarray,alignmentTol: float=1e-3,
                  machineTolerance: float=250e-6):
         """
         Analyze stability of ring and injector system. Elements are perturbed by random amplitudes by sampling from
@@ -28,21 +28,20 @@ class StabilityAnalyzer:
         :param paramsOptimal: Optimal parameters of a lattice solution.
         :param alignmentTol: Maximum displacement from ideal trajectory perpindicular to vacuum tube in one direction.
         This is our accepted alignmentTol
-        :param tuning: Type of tuning for the lattice.
         """
 
-        assert tuning in ('spacing','field',None)
         self.paramsOptimal=paramsOptimal
-        self.tuning=tuning
         self.alignmentTol=alignmentTol
         self.machineTolerance=machineTolerance
         self.jitterableElements=(elementPT.CombinerHalbachLensSim,elementPT.LensIdeal,elementPT.HalbachLensSim)
 
     def generate_Ring_And_Injector_Lattice(self,useMagnetErrors: bool,useMachineError: bool,misalign: bool,
-                                fieldDensityMul: float)-> tuple[ParticleTracerLattice,ParticleTracerLattice,np.ndarray]:
+                                fieldDensityMul: float,combinerSeed: int=None)\
+                                -> tuple[ParticleTracerLattice,ParticleTracerLattice,np.ndarray]:
         params=self.apply_Machining_Errors(self.paramsOptimal) if useMachineError==True else self.paramsOptimal
         PTL_Ring,PTL_Injector= optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(params,None,
-                    jitterAmp=self.alignmentTol,fieldDensityMultiplier=fieldDensityMul,standardMagnetErrors=useMagnetErrors)
+                jitterAmp=self.alignmentTol,fieldDensityMultiplier=fieldDensityMul,
+                standardMagnetErrors=useMagnetErrors,combinerSeed=combinerSeed)
         if misalign:
             self.jitter_System(PTL_Ring,PTL_Injector)
         return PTL_Ring,PTL_Injector,params
@@ -89,10 +88,10 @@ class StabilityAnalyzer:
         self.alignmentTol=tolerance0
 
     def inject_And_Trace_Through_Ring(self, useMagnetErrors: bool, useMachineError: bool, fieldDensityMul: float,
-                                      misalign: bool):
-        PTL_Ring, PTL_Injector,params = self.generate_Ring_And_Injector_Lattice(useMagnetErrors, useMachineError,misalign,
-                                                                         fieldDensityMul)
-        sol=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,self.tuning)
+                                      misalign: bool,combinerSeed: int=None):
+        PTL_Ring, PTL_Injector,params = self.generate_Ring_And_Injector_Lattice(useMagnetErrors, useMachineError,
+                                                                misalign,fieldDensityMul,combinerSeed=combinerSeed)
+        sol=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,None)
         sol.params=params
         return sol
 
@@ -105,17 +104,18 @@ class StabilityAnalyzer:
         #todo: I need to figure out what all this is doing
 
         def flux_Multiplication(i):
-            # print(i)
             np.random.seed(i)
             if i==0:
                 sol=self.inject_And_Trace_Through_Ring(False, False, 1.0, False)
             else:
-                sol=self.inject_And_Trace_Through_Ring(True, False, 1.0, False)
-            print(sol)
+                # t=time.time()
+                sol=self.inject_And_Trace_Through_Ring(True, False, 1.0, False,combinerSeed=i)
+                # print(time.time()-t)
 
             # print('seed',i)
+            # print(sol)
             return sol.cost,sol.fluxMultiplication
-        indices=list(range(1,31))
+        indices=[0]#list(range(1,31))
         results=tool_Parallel_Process(flux_Multiplication,indices,processes=10,resultsAsArray=True)
         # os.system("say 'done bitch!'")
         print('cost',np.mean(results[:,0]),np.std(results[:,0]))
@@ -126,16 +126,39 @@ class StabilityAnalyzer:
         # _cost(1)
 
 
-
-
-
-# vals=[1.0,1.25,1.5,1.75,2.]
-#
-# for a in vals:
-#     MUT.set_a(a)
 sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
 sa.measure_Sensitivity()
 
+# for a in [19]:#range(12,30):
+#     print(a)
+#     MUT.set_a(a)
+#     sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
+#     t=time.time()
+#     sa.measure_Sensitivity()
+#     print(time.time()-t)
+
+"""
+cost 0.722327186619278 0.028545171039622976
+flux 87.49116325974461 8.969504274976623
+"""
+
+"""
+array([[  0.63446924, 115.09801186],
+       [  0.65183042, 109.64275847],
+       [  0.70120433,  94.12841809],
+       [  0.72436033,  86.85230662],
+       [  0.7330989 ,  84.10645887],
+       [  0.65487233, 108.68692294],
+       [  0.67829281, 101.32770684],
+       [  0.67482588, 102.4170921 ],
+       [  0.74577102,  80.1246072 ],
+       [  0.66843761, 104.42442301],
+       [  0.66743459, 104.73959441],
+       [  0.65744768, 107.87769558],
+       [  0.66802113, 104.55528895],
+       [  0.69671807,  95.53809593],
+
+"""
 #
 # MUT.set_a(0.0)
 # sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))

@@ -145,7 +145,7 @@ class billyHalbachCollectionWrapper(Collection):
         applied to sources when ram usage would be too hight"""
         sourcesAll = self.sources
         size = len(evalCoords_mm) * len(self)
-        sizeMax = 2_000_000
+        sizeMax = 500_000
         splits = min([int(size / sizeMax), len(sourcesAll)])
         splits = 1 if splits < 1 else splits
         splitSize = math.ceil(len(sourcesAll) / splits)
@@ -219,7 +219,7 @@ class billyHalbachCollectionWrapper(Collection):
         else:
             return BNormGrad
 
-    def BNorm_Gradient(self,evalCoords: np.ndarray,returnNorm: bool=False,differenceMethod='central',
+    def BNorm_Gradient(self,evalCoords: np.ndarray,returnNorm: bool=False,differenceMethod='forward',
                        useApprox: bool=False) ->Union[np.ndarray,tuple]:
         #Return the gradient of the norm of the B field. use forward difference theorom
         #r: (N,3) vector of coordinates or (3) vector of coordinates.
@@ -536,14 +536,13 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     def B_Vec_Approx(self, evalCoords: np.ndarray) -> np.ndarray:
         """Compute the magnetic field vector without using all the individual lenses, only the lenses that are close.
         This should be accurate within 1% based on testing, but 5 times faster"""
-
         angleSymCutoff=1.5*np.pi
         assert self.lensAngleArr.max()<angleSymCutoff # Any angle above this is assumed to be negative, so
         # the bender shouldn't be this long
         numLensBorder=2 #number of lenses boarding region for field computationg
         lensBorderSep=2*self.UCAngle*numLensBorder+1e-6
         # coordAngles=np.linspace(layerAngles[0],layerAngles[-1],1000)
-        splitFactor=10 #roughly number of lenses (minus number of lenses bordering) per split
+        splitFactor=5 #roughly number of lenses (minus number of lenses bordering) per split
         numSplits=round(len(self.lensList)/(2*numLensBorder+splitFactor))
         numSplits=1 if numSplits==0 else numSplits
         angleSplits=np.linspace(self.lensAngleArr.min(),self.lensAngleArr.max(),numSplits+1)

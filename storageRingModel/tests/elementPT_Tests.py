@@ -136,8 +136,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp=.01874832
         self.magnetWidth=.0254*self.rp/.05
         particle0=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.13132029854326824 ,  0.005449920861957329,-0.0085729887323767  ])
-        pf0=np.array([-201.18595034423112 ,   -2.976788104804964,    3.696796533463061])
+        qf0=np.array([-0.13132029883183147  ,  0.0054498980010129466,-0.008573009308270535 ])
+        pf0=np.array([-201.18595073779883  ,   -2.9768558703157493,3.696735465939851 ])
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
@@ -275,8 +275,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.233369690826033e-01, 1.818660590811726e+00,8.918363599849415e-04])
-        pf0 = np.array([ 158.6982853694703  , -123.26460042242242 ,    4.915040926544949])
+        qf0 = np.array([6.233372895662294e-01, 1.818660362774736e+00,8.904195581461853e-04])
+        pf0 = np.array([ 158.69829239192993 , -123.26456889601728 ,    4.915416797204975])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -303,8 +303,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         This also implictely tests the accuracy of the unit cell model becuase the force is calculated assuming the
         bender"""
 
-        numMagnets=10
-        PTL=PTL_Dummy(fieldDensityMultiplier=.5)
+        numMagnets=20
+        PTL=PTL_Dummy()
         np.random.seed(42)
         elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, True)
         elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, False)
@@ -327,21 +327,22 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             if np.sqrt(xc**2+yc**2)>elPerfect.ap or not 0.0<s<Ls:
                 return
             qEl = np.asarray([x, y, z])
-            [Bgradx, Bgrady, Bgradz], B0 = lensIdeal.BNorm_Gradient(qEl, returnNorm=True)
+            [Bgradx, Bgrady, Bgradz], B0 = lensIdeal.BNorm_Gradient(qEl, returnNorm=True,useApprox=True)
             valsIdeal = np.array([Bgradx, Bgrady, Bgradz, B0])
-            [Bgradx, Bgrady, Bgradz], B0 = lensDeviated.BNorm_Gradient(qEl, returnNorm=True)
+            [Bgradx, Bgrady, Bgradz], B0 = lensDeviated.BNorm_Gradient(qEl, returnNorm=True,useApprox=True)
             valsDeviated = np.array([Bgradx, Bgrady, Bgradz, B0])
             vals = valsDeviated - valsIdeal
             Fx, Fy, Fz = -vals[:3] * SIMULATION_MAGNETON
             Fy, Fz = Fz, -Fy
+            deltaV_Direct=vals[-1]*SIMULATION_MAGNETON
             deltaF_Direct=np.asarray([Fx,Fy,Fz])
-            # V = vals[-1] * SIMULATION_MAGNETON
             x, y, z = coordsCartesian[index]
             x, y, z = x, z, -y
             qEl = np.asarray([x, y, z])
             deltaF_el=elDeviation.force(qEl) - elPerfect.force(qEl)
-            #todo: add potential
             assert iscloseAll(deltaF_el,deltaF_Direct,abstol=1e-6)
+            deltaV_El=elDeviation.magnetic_Potential(qEl)-elPerfect.magnetic_Potential(qEl)
+            assert isclose(deltaV_El,deltaV_Direct,abs_tol=1e-6)
         foo_Field_Perturbation()
 
 
@@ -376,8 +377,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.2069009540301379   , -0.0056452690695848635,0.003865731441394568 ])
-        pf0=np.array([-200.37543910104478 ,  -13.476337726449302,   10.271894630702374])
+        qf0=np.array([-0.20690093144646687  , -0.0056455496151366896,0.0038656775041670992])
+        pf0=np.array([-200.37541040248527 ,  -13.476687445730372,   10.271988717628279])
         super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def make_coordTestRules(self):

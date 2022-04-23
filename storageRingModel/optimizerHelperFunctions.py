@@ -23,7 +23,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
 
 def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                           tuning,jitterAmp=0.0,fieldDensityMultiplier: float =1.0,
-                          standardMagnetErrors: bool=False,seed: int=None)->Optional[ParticleTracerLattice]:
+                          standardMagnetErrors: bool=False,combinerSeed: int=None)->Optional[ParticleTracerLattice]:
     assert tuning in (None, 'field', 'spacing')
     tunableDriftGap=2.54e-2
     jeremyGap=.05
@@ -45,7 +45,8 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
         PTL_Ring.add_Drift(tunableDriftGap/2)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensLast,L_Lens)
     PTL_Ring.add_Drift(lastGap)
-    np.random.seed(seed)
+    if combinerSeed is not None:
+        np.random.seed(combinerSeed)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner,rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Ring.add_Drift(jeremyGap)
     PTL_Ring.add_Halbach_Lens_Sim(rpLensFirst,L_Lens)
@@ -61,7 +62,7 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
 
 
 def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDensityMultiplier: float=1.0,
-                        standardMagnetErrors: bool=False,seed: int=None) -> Optional[ParticleTracerLattice]:
+                        standardMagnetErrors: bool=False,combinerSeed: int=None) -> Optional[ParticleTracerLattice]:
     L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
     fringeFrac = 1.5
@@ -81,14 +82,15 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
     PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
-    np.random.seed(seed)
+    if combinerSeed is not None:
+        np.random.seed(combinerSeed)
     PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
     PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
     assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
     return PTL_Injector
 
 def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultiplier=1.0,
-                                       standardMagnetErrors:bool =False):
+                                       standardMagnetErrors:bool =False, combinerSeed: int=None):
     # rpBend=1e-2
     XInjector=(0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
        0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834)
@@ -96,14 +98,14 @@ def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultip
     loadBeamDiam, L1, L2, L3=XInjector
 
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
-    seed = None if standardMagnetErrors==False else int(1e6*np.random.rand())
+    combinerSeed = None if standardMagnetErrors==False else combinerSeed
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                                    tuning,jitterAmp=jitterAmp,fieldDensityMultiplier=fieldDensityMultiplier,
-                                   standardMagnetErrors=standardMagnetErrors,seed=seed)
+                                   standardMagnetErrors=standardMagnetErrors,combinerSeed=combinerSeed)
     if PTL_Ring is None:
         return None,None
     PTL_Injector=generate_Injector_Lattice_Double_Lens(XInjector,jitterAmp=jitterAmp,fieldDensityMultiplier
-                    =fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors,seed=seed)
+                    =fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors,combinerSeed=combinerSeed)
     if PTL_Injector is None:
         return None,None
     assert PTL_Ring.combiner.outputOffset == PTL_Injector.combiner.outputOffset

@@ -487,7 +487,7 @@ class LensHalbachFieldHelper_Numba:
     def force(self,x:float, y:float, z:float)->tupleOf3Floats:
         """Force on lithium atom. Functions to combine perfect force and extra force from imperfections.
          Perturbation force is messed up force minus perfect force."""
-        
+
         Fx,Fy,Fz= self._force(x,y,z)
         if self.useFieldPerturbations==True:
             deltaFx,deltaFy,deltaFz=self._force_Field_Perturbations(x,y,z) #extra force from design imperfections
@@ -546,8 +546,9 @@ class LensHalbachFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def magnetic_Potential(self,x:float,y:float,z:float) -> float:
-        """Magnetic potential of lithium atom. Functions to combine perfect potential and extra potential from 
+        """Magnetic potential of lithium atom. Functions to combine perfect potential and extra potential from
         imperfections. Perturbation potential is messed up potential minus perfect potential."""
+
         V= self._magnetic_Potential(x,y,z)
         if self.useFieldPerturbations==True:
             deltaV=self._magnetic_Potential_Perturbations(x,y,z) #extra potential from design imperfections
@@ -1170,7 +1171,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fy = Fz0
         Fz = -Fy0
         return Fx, Fy, Fz
-    
+
     def _force_Func_Perturbation(self,x,y,z):
         s,xc,yc=self.cartesian_To_Center(x, -z, y)
         Fx0, Fy0, Fz0 = vec_interp3D(s,xc,yc, *self.fieldPerturbationData[:6])
@@ -1194,6 +1195,10 @@ class SegmentedBenderSimFieldHelper_Numba:
 
     def _magnetic_Potential_Func_Cap(self,x,y,z):
         return scalar_interp3D(x,-z,y,*self.fieldDataCap[:3],self.fieldDataCap[-1])
+
+    def _magnetic_Potential_Func_Perturbation(self,x,y,z):
+        s,xc,yc=self.cartesian_To_Center(x, -z, y)
+        return scalar_interp3D(s,xc,yc, *self.fieldPerturbationData[:3],self.fieldPerturbationData[-1])
 
     def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(self,Fx, Fy, Fz, x, y):
         # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
@@ -1321,9 +1326,10 @@ class SegmentedBenderSimFieldHelper_Numba:
                 else:  # if not in either cap, then outside the bender
                     return False
 
-    def magnetic_Potential(self, x,y,z):
+    def magnetic_Potential(self, x0,y0,z0):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
+        x,y,z=x0,y0,z0
         if self.is_Coord_Inside_Vacuum(x,y,z)==False:
             return np.nan
         z=abs(z)
@@ -1356,7 +1362,10 @@ class SegmentedBenderSimFieldHelper_Numba:
                     V0 = self._magnetic_Potential_Func_Cap(xTest, yTest, z)
                 else:  # if not in either cap
                     V0=np.nan
-        V0*=self.fieldFact
+        if self.useFieldPerturbations==True and np.isnan(V0)==False:
+            deltaV = self._magnetic_Potential_Func_Perturbation(x0, y0,z0)  # extra force from design imperfections
+            V0= V0 + deltaV
+        V0 *= self.fieldFact
         return V0
 
     def magnetic_Potential_First_And_Last(self, x,y,z, position):
