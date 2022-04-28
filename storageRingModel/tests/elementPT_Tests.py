@@ -136,8 +136,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp=.01874832
         self.magnetWidth=.0254*self.rp/.05
         particle0=Particle(qi=np.asarray([-.01,5e-3,-7.43e-3]),pi=np.asarray([-201.0,5.0,-8.2343]))
-        qf0=np.array([-0.13132029883183147  ,  0.0054498980010129466,-0.008573009308270535 ])
-        pf0=np.array([-201.18595073779883  ,   -2.9768558703157493,3.696735465939851 ])
+        qf0=np.array([-0.13132158088021298 ,  0.005449978510930973,-0.008573858031929796])
+        pf0=np.array([-201.18865808223083  ,   -2.9780591461212036,3.695121970829412 ])
         super().__init__(HalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def run_Tests(self):
@@ -275,8 +275,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.233372895662294e-01, 1.818660362774736e+00,8.904195581461853e-04])
-        pf0 = np.array([ 158.69829239192993 , -123.26456889601728 ,    4.915416797204975])
+        qf0 = np.array([6.2334706803126083e-01, 1.8186480695766232e+00,8.8931014512116978e-04])
+        pf0 = np.array([ 158.70159991898365 , -123.2610808053195  ,    4.918740792027409])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -377,8 +377,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.20690093144646687  , -0.0056455496151366896,0.0038656775041670992])
-        pf0=np.array([-200.37541040248527 ,  -13.476687445730372,   10.271988717628279])
+        qf0=np.array([-0.2069017180107142   , -0.005645918307301063 ,0.0038662287776495517])
+        pf0=np.array([-200.37613625317655 ,  -13.477494327817205,   10.273175593186906])
         super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def make_coordTestRules(self):
@@ -421,7 +421,7 @@ class ElementTestRunner:
         isInsideList = []
         el=self.elTestHelper.el
         @given(*self.elTestHelper.coordTestRules)
-        @settings(max_examples=5_000, deadline=None)
+        @settings(max_examples=1_000, deadline=None)
         def is_Inside_Consistency(x1: float, x2: float, x3: float):
             coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
             F = el.force(coord)
@@ -447,7 +447,7 @@ class ElementTestRunner:
         tol=1e-12
         el = self.elTestHelper.el
         @given(*self.elTestHelper.coordTestRules)
-        @settings(max_examples=5_000,deadline=None)
+        @settings(max_examples=1_000,deadline=None)
         def convert_Invert_Consistency(x1,x2,x3):
             coordEl0=self.elTestHelper.convert_Test_Coord_To_El_Frame(x1,x2,x3)
             coordLab=el.transform_Element_Coords_Into_Lab_Frame(coordEl0)

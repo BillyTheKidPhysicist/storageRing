@@ -249,6 +249,7 @@ class Box(_Box):
     def __init__(self,mur: float=1.0,*args,**kwargs):
         super().__init__(*args,**kwargs)
         self.mur=mur
+        self.magnetization0=self.magnetization.copy()
 
 
 class Layer(billyHalbachCollectionWrapper):
@@ -467,7 +468,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         self.magnetWidth: float=rp * np.tan(2 * np.pi / 24) * 2 #set to size that exactly fits
         self.numLenses: int=numLenses #number of lenses in the model
         self.lensList: list[HalbachLens]=[] #list to hold lenses
-        self.lensAngleArr: np.ndarray=self.make_Lens_Angle_Array()
+        self.lensAnglesArr: np.ndarray=self.make_Lens_Angle_Array()
         self.applyMethodsOfMoments=applyMethodOfMoments
         self.slices=lensSlices
         self.useStandardMagnetErrors=useMagnetError
@@ -484,10 +485,11 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         return angleArr
 
     def _build(self)->None:
-        for angle in self.lensAngleArr:
+        for angle in self.lensAnglesArr:
+            singleLensMethodOfMoment=True if self.applyMethodsOfMoments else True
             lens=HalbachLens(self.rp,self.magnetWidth,self.Lm,M=self.M,position=(self.rb,0.0,0.0),
                              numSlices=self.slices,useStandardMagErrors=self.useStandardMagnetErrors,
-                             applyMethodOfMoments=True)
+                             applyMethodOfMoments=singleLensMethodOfMoment)
 
             R=Rotation.from_rotvec([0.0,-angle,0.0])
             lens.rotate(R,anchor=0)
@@ -522,12 +524,12 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         """Get indices of field coordinates that lie within thetaLower and thetaUpper. If the lens being used is the
         first (last), then all coords before (after) that lens in theta are valid"""
 
-        if lensSplitIndex2==len(self.lensAngleArr) and lensSplitIndex1==0:#use all coords indices because all
+        if lensSplitIndex2==len(self.lensAnglesArr) and lensSplitIndex1==0:#use all coords indices because all
             # lenses are used
             validCoordIndices=np.ones(len(thetaArr)).astype(bool)
         elif lensSplitIndex1==0:
             validCoordIndices= thetaArr<=thetaUpper
-        elif lensSplitIndex2==len(self.lensAngleArr):
+        elif lensSplitIndex2==len(self.lensAnglesArr):
             validCoordIndices=thetaArr>thetaLower
         else:
             validCoordIndices=(thetaArr<=thetaUpper) & (thetaArr>thetaLower)
@@ -535,35 +537,52 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def B_Vec_Approx(self, evalCoords: np.ndarray) -> np.ndarray:
         """Compute the magnetic field vector without using all the individual lenses, only the lenses that are close.
-        This should be accurate within 1% based on testing, but 5 times faster"""
-        angleSymCutoff=1.5*np.pi
-        assert self.lensAngleArr.max()<angleSymCutoff # Any angle above this is assumed to be negative, so
-        # the bender shouldn't be this long
-        numLensBorder=2 #number of lenses boarding region for field computationg
-        lensBorderSep=2*self.UCAngle*numLensBorder+1e-6
-        # coordAngles=np.linspace(layerAngles[0],layerAngles[-1],1000)
-        splitFactor=5 #roughly number of lenses (minus number of lenses bordering) per split
+        This should be accurate within 1% based on testing, but 5 times faster. There are some very annoying issues with
+        degeneracy of angles from -pi to pi and 0 to 2pi. I avoid this by insisting the bender starts at theta=0 and is
+        no longer than 1.5pi when the total length is longer than 1pi. If the total length is less than 1pi
+        (from thetaArr.max()-thetaArr.min()), the bender has be confined between -pi and pi continuously. It of course
+        doesn't actually have to be, but then it will look longer with the max-min approach. Basically this function
+        will not work for benders that are either greater in length than 1pi and don't start at 0, or benders that are
+        greater in length than some cutoff and start at 0.0. This can be tricked by a very coarse bender, which I try
+        to catch"""
+        assert self.Lm/self.rp >=1 #this isn't validated for smaller aspect ratios
+        assert self.lensAnglesArr[1]-self.lensAnglesArr[0]<np.pi/10.0 # i don't expect this to work with small angular
+        #differences
+        #todo: assert that the spacing is the same
+        #todo: make a test that this accepts benders as exptected, and behaves as epxcted. Look at temp4 for a good way to do it
+        #todo: rename stuff to be more intelligeable
+        thetaArrCoords=np.arctan2(evalCoords[:,2],evalCoords[:,0])
+        angularLength=self.lensAnglesArr.max()-self.lensAnglesArr.min()
+        if angularLength<np.pi: #bender exists between -pi and pi. Don't need to change anything
+            pass
+        else:
+            angleSymmetryCutoff = 1.5 * np.pi 
+            assert angularLength < angleSymmetryCutoff
+            assert not np.any((self.lensAnglesArr<0) & (self.lensAnglesArr>angleSymmetryCutoff-2*np.pi)) #see docstring
+            thetaArrCoords[thetaArrCoords<angleSymmetryCutoff-2*np.pi]+=2*np.pi #if an angle is larger than 3.14,
+            # arctan2 doesn't know this, and confines angles between -pi to pi. so I assume the bender starts at 0, then
+            #change the values
+        numLensBorder=7 #number of lenses boarding region for field computationg. Must be enough for valid approx
+        lensBorderAngleSep=2*self.UCAngle*numLensBorder+1e-6
+        splitFactor=3 #roughly number of lenses (minus number of lenses bordering) per split
+
         numSplits=round(len(self.lensList)/(2*numLensBorder+splitFactor))
         numSplits=1 if numSplits==0 else numSplits
-        angleSplits=np.linspace(self.lensAngleArr.min(),self.lensAngleArr.max(),numSplits+1)
+        splitAngles=np.linspace(self.lensAnglesArr.min(),self.lensAnglesArr.max(),numSplits+1)
         BVec=np.zeros(evalCoords.shape)
-        thetaArrCoords=np.arctan2(evalCoords[:,2],evalCoords[:,0])
-        thetaArrCoords[thetaArrCoords<angleSymCutoff-2*np.pi]+=2*np.pi #if an angle is larger than 3.14,
-        # arctan2 doesn't know this, and confines angles between -pi to pi. So I make an assumption here that lets
-        # me change the angle
-        indicesComputed=np.zeros(len(thetaArrCoords)) #to track which indices fields are computed for. Only for an assert check
-        for i in range(len(angleSplits)-1):
-            thetaLower,thetaUpper=angleSplits[i],angleSplits[i+1]
-            lensSplitIndex1,lensSplitIndex2=self.get_Seperated_Split_Indices(self.lensAngleArr,lensBorderSep,
+        indicesEvaluated=np.zeros(len(thetaArrCoords)) #to track which indices fields are computed for. Only for an assert check
+        for i in range(len(splitAngles)-1):
+            thetaLower,thetaUpper=splitAngles[i],splitAngles[i+1]
+            lensSplitIndex1,lensSplitIndex2=self.get_Seperated_Split_Indices(self.lensAnglesArr,lensBorderAngleSep,
                                                                              thetaLower,thetaUpper)
-            subLenses=self.lensList[lensSplitIndex1:lensSplitIndex2]
-            collection=billyHalbachCollectionWrapper(subLenses)
+            benderLensesSubSection=self.lensList[lensSplitIndex1:lensSplitIndex2]
             validCoordIndices=self.get_Valid_SubCoord_Indices(thetaArrCoords,lensSplitIndex1,lensSplitIndex2,
                                                               thetaLower,thetaUpper)
             if sum(validCoordIndices)>0:
-                indicesComputed+=validCoordIndices
+                collection = billyHalbachCollectionWrapper(benderLensesSubSection)
+                indicesEvaluated+=validCoordIndices
                 BVec[validCoordIndices]+=collection.B_Vec(evalCoords[validCoordIndices])
-        assert np.all(indicesComputed==1) #check that every coord index was used once and only once
+        assert np.all(indicesEvaluated==1) #check that every coord index was used once and only once
         return BVec
 
     def B_Vec(self, evalCoords: np.ndarray,useApprox=False) -> np.ndarray:

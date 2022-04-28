@@ -214,34 +214,57 @@ class SegmentedBenderHalbachHelper:
     def run_test(self):
         self.test1()
 
-    def test1(self):
-        """Test that the much faster approximate method is faster and still very accurate"""
-        Lm,rb,rp=.025,.9,.011
-        ucAngle=.6*Lm/1.0
-        bender=SegmentedBenderHalbach(rp,rb,ucAngle,Lm,numLenses=100,positiveAngleMagnetsOnly=True)
-        numPoints=10
-        thetaArr=np.linspace(bender.lensAngleArr.min()-2*ucAngle,bender.lensAngleArr.max()+2*ucAngle,numPoints)
-        rArr=np.linspace(rb-rp/2,rb+rp/2,numPoints)
-        yArr=np.linspace(-rp/2,rp/2,numPoints)
-        coordsPolar=np.array(list(itertools.product(thetaArr,rArr,yArr)))
-        xArr,zArr=np.cos(coordsPolar[:,0])*coordsPolar[:,1],np.sin(coordsPolar[:,0])*coordsPolar[:,1]
-        yArr=coordsPolar[:,2]
-        coords=np.column_stack((xArr,yArr,zArr))
+    def make_Bender_Test_Coords(self,bender: SegmentedBenderHalbach)-> np.ndarray:
+        """Coords for testing bender that span the angular length and a little more."""
+        ucAngle, rb, rp = bender.UCAngle, bender.rb, bender.rp
+        thetaArr = np.linspace(bender.lensAnglesArr.min() - 2 * ucAngle, bender.lensAnglesArr.max() + 2 * ucAngle,
+                               2 * bender.numLenses)
+        rArr = np.linspace(rb - rp / 2, rb + rp / 2, 5)
+        yArr = np.linspace(-rp / 2, rp / 2, 6)
+        coordsPolar = np.array(list(itertools.product(thetaArr, rArr, yArr)))
+        xArr, zArr = np.cos(coordsPolar[:, 0]) * coordsPolar[:, 1], np.sin(coordsPolar[:, 0]) * coordsPolar[:, 1]
+        yArr = coordsPolar[:, 2]
+        coords = np.column_stack((xArr, yArr, zArr))
+        return coords
 
-        t=time.time()
-        BNormGrad_Exact=bender.BNorm_Gradient(coords)
-        t1=time.time()-t
-        t=time.time()
-        BNormGrad_Apprx=bender.BNorm_Gradient(coords,useApprox=True)
-        t2=time.time()-t
-        assert t2<.25*t1 #should be much faster
-        error=1e2*np.abs((BNormGrad_Exact-BNormGrad_Apprx)/(BNormGrad_Exact+1e-6))
-        assert np.max(error)<.5 #less than .5% error max
+    def test_Bender_Approx(self,bender: SegmentedBenderHalbach)-> None:
+        """Test that the bender satisifes speed and accuracy limits over it's length for exact and approximate
+        values."""
+        coords=self.make_Bender_Test_Coords(bender)
+        t = time.time()
+        BVec_Exact = bender.B_Vec(coords)
+        t1 = time.time() - t
+        t = time.time()
+        BVec_Approx = bender.B_Vec(coords, useApprox=True)
+        t2 = time.time() - t
+        assert t2 < .5 * t1  # should be faster. For some cases it is much faster
+        precisionCutoff = 1e-9 #absolute values below this are neglected for tolerance reasons
+        nanIndices = np.abs(BVec_Exact) < precisionCutoff
+        BVec_Exact[nanIndices] = np.nan
+        BVec_Approx[nanIndices] = np.nan
+        error = 1e2 * np.abs((BVec_Exact - BVec_Approx) / BVec_Exact)
+        percentErrorMax = .01
+        assert np.nanmax(error) < percentErrorMax
+
+    def test1(self):
+        """Test that the approximate method of finding field values by splitting the bender up is faster and
+        still very accurate"""
+        Lm,rb,rp=.0254,.9,.011
+        ucAngle=.6*Lm/1.0
+        #-------bender starting at theta=0
+        bender=SegmentedBenderHalbach(rp,rb,ucAngle,Lm,numLenses=130,positiveAngleMagnetsOnly=True)
+        self.test_Bender_Approx(bender)
+        #------bender symmetric about theta=0
+        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, numLenses=80, positiveAngleMagnetsOnly=False)
+        self.test_Bender_Approx(bender)
+
 
 def run_Tests(parallel=False):
     def run(func):
         func()
-    funcList=[SpheretestHelper().run_tests,LayertestHelper().run_tests,HalbachLenstestHelper().run_tests,
+    funcList=[SpheretestHelper().run_tests,
+              LayertestHelper().run_tests,
+              HalbachLenstestHelper().run_tests,
               SegmentedBenderHalbachHelper().run_test]
     processes=-1 if parallel==True else 1
     tool_Parallel_Process(run,funcList,processes=processes)

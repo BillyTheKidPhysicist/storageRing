@@ -12,7 +12,7 @@ import optimizerHelperFunctions
 from SwarmTracerClass import SwarmTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
-from temp3 import MUT
+
 
 combinerTypes=(elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementPT.CombinerSim)
 
@@ -116,7 +116,7 @@ class StabilityAnalyzer:
             # print(sol)
             return sol.cost,sol.fluxMultiplication
         indices=[0]#list(range(1,31))
-        results=tool_Parallel_Process(flux_Multiplication,indices,processes=10,resultsAsArray=True)
+        results=tool_Parallel_Process(flux_Multiplication,indices,processes=1,resultsAsArray=True)
         # os.system("say 'done bitch!'")
         print('cost',np.mean(results[:,0]),np.std(results[:,0]))
         print('flux',np.mean(results[:,1]),np.std(results[:,1]))
@@ -129,13 +129,6 @@ class StabilityAnalyzer:
 sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
 sa.measure_Sensitivity()
 
-# for a in [19]:#range(12,30):
-#     print(a)
-#     MUT.set_a(a)
-#     sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-#     t=time.time()
-#     sa.measure_Sensitivity()
-#     print(time.time()-t)
 
 """
 cost 0.722327186619278 0.028545171039622976
@@ -159,18 +152,7 @@ array([[  0.63446924, 115.09801186],
        [  0.69671807,  95.53809593],
 
 """
-#
-# MUT.set_a(0.0)
-# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-# sa.measure_Sensitivity()
-#
-# MUT.set_b(0.0)
-# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-# sa.measure_Sensitivity()
-#
-# MUT.set_c(0.0)
-# sa=StabilityAnalyzer(np.array([0.02054458, 0.0319046 , 0.01287383, 0.008     , 0.38994521]))
-# sa.measure_Sensitivity()
+
 
 """
 cost 0.741651810121768 0.0899743429824311

@@ -121,6 +121,10 @@ def full_Arctan(y,x):
         phi += 2 * np.pi
     return phi
 
+def make_Odd(num: int)-> int:
+    assert isinstance(num,int) and num!=0 and not num<0 # i didn't verify this on negative numbers
+    return num + (num + 1) % 2
+
 def test_Parallel_Process():
     tol=1e-12
     def dummy(X,a,b=None):

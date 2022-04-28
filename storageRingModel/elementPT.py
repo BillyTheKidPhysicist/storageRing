@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 import numpy as np
 import fastNumbaMethodsAndClass
-from helperTools import arr_Product,iscloseAll
+from helperTools import arr_Product,iscloseAll,make_Odd
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import SIMULATION_MAGNETON
@@ -749,10 +749,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.RIn_Ang: Optional[np.ndarray]=None
         self.M_uc: Optional[np.ndarray]=None
         self.M_ang: Optional[np.ndarray]=None
-        self.numPointsBoreAp: int=20 #This many points should span the bore ap for good field sampling
-        self.numPointsBoreAp: int=int(self.numPointsBoreAp*self.PTL.fieldDensityMultiplier)
-        self.longitudinalCoordSpacing: float = self.rp/self.numPointsBoreAp #Spacing through unit cell. invariant scale
-        self.numModelLenses: int=5 #number of lenses in halbach model to represent repeating system. Testing has shown
+        self.numPointsBoreAp: int=make_Odd(round(25*self.PTL.fieldDensityMultiplier)) #This many points should span the
+        # bore ap for good field sampling
+        self.longitudinalCoordSpacing: float = .8*self.PTL.fieldDensityMultiplier*self.rp/10.0 #Spacing through unit
+        # cell. .8 was carefully chosen
+        self.numModelLenses: int=7 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
         self.cap: bool = True
         self.K: Optional[float] = None #spring constant of field strength to set the offset of the lattice
@@ -791,7 +792,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         def find_K(rb:float):
             ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
             #approximation
-            lens = _HalbachBenderFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=3,applyMethodOfMoments=True)
+            lens = _HalbachBenderFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=5,applyMethodOfMoments=True)
             xArr = np.linspace(-self.rp/3, self.rp/3) + rb
             coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
             FArr = SIMULATION_MAGNETON*lens.BNorm_Gradient(coords)[:, 0]
@@ -813,8 +814,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         assert self.rb-self.rp-self.yokeWidth>0.0
         self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
         #500um works very well, but 1mm may be acceptable
-        numModelLenes=3 #3 turns out to be a good number
-        assert numModelLenes%2==1
         self.ang = 2 * self.numMagnets * self.ucAng
         assert self.ang<2*np.pi*3/4
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
@@ -842,10 +841,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def make_Grid_Coords(self,xMin:float,xMax:float,zMin:float,zMax:float)->np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
-        numPointsX=int(self.numPointsBoreAp*(xMax-xMin)/self.ap)
+        assert not is_Even(self.numPointsBoreAp) #points should be odd to there is a point at zero field, if possible
+        numPointsX=make_Odd(round(self.numPointsBoreAp*(xMax-xMin)/self.ap))
         yMin,yMax = -(self.ap + TINY_STEP),TINY_STEP #same for every part of bender
-        numPointsY = int(self.numPointsBoreAp * (yMax - yMin) / self.ap)
-        numPointsZ=int((zMax-zMin)/self.longitudinalCoordSpacing)
+        numPointsY = self.numPointsBoreAp
+        numPointsZ=make_Odd(round((zMax-zMin)/self.longitudinalCoordSpacing))
         assert (numPointsX+1)/numPointsY>=(xMax-xMin)/(yMax-yMin) # should be at least this ratio
         xArrArgs,yArrArgs,zArrArgs=(xMin,xMax,numPointsX),(yMin,yMax,numPointsY),(zMin,zMax,numPointsZ)
         coordArrList=[np.linspace(arrArgs[0],arrArgs[1],arrArgs[2]) for arrArgs in (xArrArgs,yArrArgs,zArrArgs)]
@@ -967,8 +967,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         zMax=np.tan(self.ucAng)*(self.rb+self.ap)+TINY_STEP
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=np.sqrt((fieldCoords[:,0]-self.rb)**2+fieldCoords[:,1]**2)<self.rp
+        assert not is_Even(self.numModelLenses) #must be odd so magnet is centered at z=0
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                        numLenses=self.numModelLenses+2,applyMethodOfMoments=True)
+                                numLenses=self.numModelLenses,applyMethodOfMoments=True,positiveAngleMagnetsOnly=False)
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def compute_Valid_Field_Vals(self,lens:_HalbachBenderFieldGenerator,fieldCoords:np.ndarray,
@@ -1034,24 +1035,26 @@ class HalbachLensSim(LensIdeal):
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         self.magnetWidths=self.set_Magnet_Widths(rpLayers,magnetWidths)
-        self.numGridPointsZ = 25
-        self.numGridPointsXY = 20
-        self.numGridPointsZ=int(self.numGridPointsZ*PTL.fieldDensityMultiplier)
-        self.numGridPointsXY=int(self.numGridPointsXY*PTL.fieldDensityMultiplier)
+        self.fringeFracOuter: float=1.5
+        self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
+        #can safely be modeled as a magnet "cap" with a 2D model of the interior
+        #----num points depends on a few paremters to be the same as when I determined the optimal values
+        assert self.fringeFracOuter==1.5 and self.fringeFracInnerMin==4.0, "May need to change numgrid points if " \
+                                                                           "this changes"
         rp=min(rpLayers)
+        self.numGridPointsZ = make_Odd(round(21 * PTL.fieldDensityMultiplier))
+        self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
         self.apMaxGoodField=self.calculate_Maximum_Good_Field_Aperture(rp)
         ap=self.apMaxGoodField if apFrac is None else apFrac*rp
         assert ap<=self.apMaxGoodField
         assert ap>5*rp/self.numGridPointsXY #ap shouldn't be too small. Value below may be dubiuos from interpolation
         super().__init__(PTL, L, None, rp, ap, build=False)
-        self.fringeFracOuter=1.5
         self.L=L
         self.methodOfMomentsHighPrecision=False
         self.useStandardMagErrors=useStandardMagErrors
         self.Lo=None
         self.rpLayers=rpLayers #can be multiple bore radius for different layers
-        self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
-        #can safely be modeled as a magnet "cap" with a 2D model of the interior
+
         self.effectiveLength: Optional[float]=None #if the magnet is very long, to save simulation
         #time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap: Optional[float]=None
@@ -1148,15 +1151,16 @@ class HalbachLensSim(LensIdeal):
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
         if not useSymmetry: #range will have to fully capture lens.
-            numSlices=int(round(self.Lm / self.individualMagnetLength))
+            numSlices=round(self.Lm / self.individualMagnetLength)
             yMin=-yMax
             zMax=self.L/2+self.extraFieldLength+TINY_OFFSET
             zMin=-zMax
             assert self.fringeFracOuter==1.5 #pointsperslice mildly depends on this value
             pointsPerSlice=3
-            numPointsZ =max([pointsPerSlice*numSlices+2,2*numPointsZ-1])
+            numPointsZ =make_Odd(max([pointsPerSlice*numSlices+2,2*numPointsZ-1]))
             assert numPointsZ<100 #things might start taking unreasonably long if not careful
-            numPointsXY=round((numPointsXY*2-1)*.8)
+            numPointsXY=make_Odd(round((numPointsXY*2-1)*.8))
+        assert not is_Even(numPointsXY) and not is_Even(numPointsZ)
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
         zArr = np.linspace(zMin, zMax, numPointsZ)
@@ -1219,7 +1223,7 @@ class HalbachLensSim(LensIdeal):
             ->tuple[np.ndarray,np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength=self.effectiveLength if useSymmetry else self.Lm
-        numSlices=None if not useStandardMagnetErrors else int(round(self.Lm / self.individualMagnetLength))
+        numSlices=None if not useStandardMagnetErrors else round(self.Lm / self.individualMagnetLength)
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidths,lensLength,
                 applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlices)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
@@ -1322,14 +1326,16 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         assert  mode in ('storageRing','injector')
         assert 0.0<apFrac<=1.0
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
-        # LensIdeal.__init__(self,PTL,None,None,None,None,build=False)
-        # HalbachLensSim
-        numGridPointsZ: int = 25
-        numGridPointsXY: int = 25
 
-        self.numGridPointsZ: int = int(numGridPointsZ * self.PTL.fieldDensityMultiplier)
-        self.numGridPointsXY: int = int(numGridPointsXY * self.PTL.fieldDensityMultiplier)
         self.outerFringeFrac: float = 1.5
+        #----num points depends on a few paremters to be the same as when I determined the optimal values
+        assert self.maxCombinerAng ==.2 and self.outerFringeFrac==1.5, "May need to change " \
+                                                                       "numgrid points if this changes"
+        pointPerBoreRadZ=2
+        self.numGridPointsZ: int = make_Odd(max([round(pointPerBoreRadZ*(Lm+2*self.outerFringeFrac*rp)/rp),10]))
+        #less than 10 and maybe my model to find optimal value doesn't work so well
+        self.numGridPointsZ=make_Odd(round(self.numGridPointsZ*self.PTL.fieldDensityMultiplier))
+        self.numGridPointsXY: int = make_Odd(round(25*self.PTL.fieldDensityMultiplier))
 
         self.Lm = Lm
         self.rp = rp
@@ -1367,7 +1373,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # to the hard edge of the input in a straight line. This is that section
         individualMagnetLength=min([(MAGNET_ASPECT_RATIO*min(magnetWidthList)),self.Lm])#this will get rounded up
         #or down
-        numSlicesApprox=1 if not self.useStandardMagErrors else int(round(self.Lm/individualMagnetLength))
+        numSlicesApprox=1 if not self.useStandardMagErrors else round(self.Lm/individualMagnetLength)
         # print('combiner:',numSlicesApprox)
         self.lens = _HalbachLensFieldGenerator( tuple(rpList),tuple(magnetWidthList),self.Lm,applyMethodOfMoments=True,
                             useStandardMagErrors=self.useStandardMagErrors,numSlices=numSlicesApprox) #must reuse lens
@@ -1409,7 +1415,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         xMax=TINY_OFFSET if not self.useStandardMagErrors else -xMin
         numY=self.numGridPointsXY if not self.useStandardMagErrors else self.numGridPointsXY*2-1 #minus 1 ensures
         #same grid spacing!!
-        numX=int(self.numGridPointsXY*self.rp/yMax)
+        numX=make_Odd(round(self.numGridPointsXY*self.rp/yMax))
         numX=numX if not self.useStandardMagErrors else 2*numX-1
         numZ=self.numGridPointsZ if not self.useStandardMagErrors else self.numGridPointsZ*2-1
         zMax=self.compute_Valid_zMax(La,ang,accomodateJitter)
@@ -1417,6 +1423,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
         zArr = np.linspace(zMin, zMax, numZ) #this becomes x in element frame
+        assert not is_Even(len(xArr_Quadrant)) and not is_Even(len(yArr_Quadrant)) and not is_Even(len(zArr))
         return xArr_Quadrant,yArr_Quadrant,zArr
 
     def compute_Valid_zMax(self,La:float,ang:float, accomodateJitter: bool)->float:

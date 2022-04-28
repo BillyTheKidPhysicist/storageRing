@@ -57,7 +57,7 @@ class LatticeOptimizer:
         self.particleTracerInjector = ParticleTracer(latticeInjector)
         self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
         self.whichKnobs=None #injector or lattice and injector knobs may be tuned
-        self.h = 1e-5  # timestep size
+        self.h = 7.5e-6  # timestep size
         self.T = 10.0
         self.injectTuneElIndices=(0,2)
         self.swarmTracerRing = SwarmTracer(self.latticeRing)
@@ -93,7 +93,6 @@ class LatticeOptimizer:
             self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
             sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry,gammaSpace=self.gamma_Space,
             probabilityMin=.05)
-        np.random.shuffle(self.swarmInjectorInitial.particles)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
         
