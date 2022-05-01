@@ -32,8 +32,11 @@ def full_Arctan(q):
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     return phi
-def is_Even(x):
-    assert type(x) is int
+
+def is_Even(x: int)-> bool:
+    """Test if a number is even"""
+
+    assert type(x) is int and x>0
     return True if x%2==0 else False
 
 class Element:
@@ -893,14 +896,15 @@ class HalbachBenderSimSegmented(BenderIdeal):
         value"""
 
         Ls = 2 * self.Lcap + self.ang * self.rb
-        numS = 4*self.numMagnets+2 #about 4 points in each magnet and cap. This was measured carefully
-        numYc=13
+        numS = make_Odd(round(5*(self.numMagnets+2))) #about 4 points in each magnet and cap. This was measured carefully
+        numYc=35
         numXc =numYc
 
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
         xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numXc) #radial deviation along major radius
         ycArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numYc) #deviation in vertical from center of
         # bender, along y in cartesian
+        assert not is_Even(len(sArr)) and not is_Even(len(xcArr)) and not is_Even(len(ycArr))
         coordsCenter = arr_Product(sArr, xcArr, ycArr)
         coords = np.asarray([self.convert_Center_To_Cartesian_Coords(*coordCenter) for coordCenter in coordsCenter])
         return coordsCenter,coords
@@ -1133,7 +1137,8 @@ class HalbachLensSim(LensIdeal):
 
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
         assert self.Lm>0.0
-        self.individualMagnetLength=min([(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm])
+        self.individualMagnetLength=min([(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm]) #this may get rounded
+        #up later to satisfy that the total length is Lm
         self.Lo=self.L
         self.set_Effective_Length()
         self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
@@ -1151,15 +1156,15 @@ class HalbachLensSim(LensIdeal):
         zMin,zMax=-TINY_OFFSET,self.Lcap+TINY_OFFSET + self.extraFieldLength
         numPointsXY,numPointsZ=self.numGridPointsXY,self.numGridPointsZ
         if not useSymmetry: #range will have to fully capture lens.
-            numSlices=round(self.Lm / self.individualMagnetLength)
+            numSlices=self.get_Num_Lens_Slices()
             yMin=-yMax
             zMax=self.L/2+self.extraFieldLength+TINY_OFFSET
             zMin=-zMax
             assert self.fringeFracOuter==1.5 #pointsperslice mildly depends on this value
-            pointsPerSlice=3
-            numPointsZ =make_Odd(max([pointsPerSlice*numSlices+2,2*numPointsZ-1]))
-            assert numPointsZ<100 #things might start taking unreasonably long if not careful
-            numPointsXY=make_Odd(round((numPointsXY*2-1)*.8))
+            pointsPerSlice=5
+            numPointsZ =make_Odd(round(max([pointsPerSlice*(numSlices+2),2*numPointsZ-1])))
+            assert numPointsZ<150 #things might start taking unreasonably long if not careful
+            numPointsXY=45
         assert not is_Even(numPointsXY) and not is_Even(numPointsZ)
         yArr_Quadrant = np.linspace(yMin,yMax, numPointsXY)
         xArr_Quadrant = -yArr_Quadrant.copy()
@@ -1219,11 +1224,16 @@ class HalbachLensSim(LensIdeal):
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         return data3D
 
+    def get_Num_Lens_Slices(self)-> int:
+        numSlices=round(self.Lm / self.individualMagnetLength)
+        assert numSlices>0
+        return numSlices
+
     def make_Field_Data(self,useSymmetry: bool,useStandardMagnetErrors: bool, enforceGoodField: bool=True)\
             ->tuple[np.ndarray,np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength=self.effectiveLength if useSymmetry else self.Lm
-        numSlices=None if not useStandardMagnetErrors else round(self.Lm / self.individualMagnetLength)
+        numSlices=None if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
         lens = _HalbachLensFieldGenerator(self.rpLayers,self.magnetWidths,lensLength,
                 applyMethodOfMoments=True,useStandardMagErrors=useStandardMagnetErrors,numSlices=numSlices)
         xArr_Quadrant, yArr_Quadrant, zArr=self.make_Grid_Coord_Arrays(useSymmetry)
@@ -1521,10 +1531,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
     def find_Ideal_Offset(self)->float:
-        """use newton's method to find where the minimum seperation between atomic beam path and lens is equal to the
-         specified beam diameter for INJECTED beam. This requires modeling high field seekers. Particle is traced
-         backwards from the output of the combiner to the input. Can possibly error out from modeling magnet or
-         assembly error"""
+        """use newton's method to find where the vertical translation of the combiner wher the minimum seperation
+        between atomic beam path and lens is equal to the specified beam diameter for INJECTED beam. This requires
+        modeling high field seekers. Particle is traced backwards from the output of the combiner to the input.
+        Can possibly error out from modeling magnet or assembly error"""
 
         fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
