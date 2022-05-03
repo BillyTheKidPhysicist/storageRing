@@ -137,6 +137,10 @@ def _full_Test():
         TEST_Lattice_Configuration(testNum, fullTest=True)
         print('Success')
 def run_Tests(parallelTesting=False,fullTest=False):
+    """Keep in mind that due to the fact that a seed is used with scipy differential evolution, do not expect
+    repeatable results with different machines or random number generator systems. This will only affect some of the
+    lattice configurations"""
+
     def wrap(name):
         return TEST_Lattice_Configuration(name,fullTest=fullTest,parallel=not parallelTesting)
     testNameList = ['1', '2', '3', '4', '5', '6']

@@ -25,9 +25,11 @@ def fast_pNew(p,F,F_n,h):
     return p+.5*(F+F_n)*h
 
 
+#todo: why not work
 
-@numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
-                                                     ,numba.float64[:,:],numba.float64[:,:]))
+# @numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
+#                                                      ,numba.float64[:,:],numba.float64[:,:]))
+@numba.njit()
 def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
     #don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
     q=q.copy()

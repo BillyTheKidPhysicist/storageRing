@@ -1,6 +1,6 @@
 #pylint: disable= missing-module-docstring
 from math import isclose,sqrt
-from typing import Union
+from typing import Union,Optional
 import numpy as np
 from scipy.spatial.transform import Rotation
 
@@ -52,11 +52,11 @@ class Shape:
 class Line(Shape):
     """A simple line geometry"""
 
-    def __init__(self, length, constrained = False):
-        assert length > 0.0
+    def __init__(self, length: Optional[float], constrained: bool = False):
+        assert length > 0.0 if length is not None else True
         super().__init__()
-        self.length: float = length
-        self.constrained: bool = constrained
+        self.length= length
+        self.constrained = constrained
 
     def set_Length(self, length: float)-> None:
         """Set the length of the line"""
@@ -79,15 +79,19 @@ class Line(Shape):
 
     def daisy_Chain(self, geometry: Shape) -> None:
         pos_out, n_out = geometry.pos_out, geometry.n_out
-        tiltAngle = np.arctan2(n_out[1], n_out[0])
-        self.place(pos_out, tiltAngle)
+        self.pos_in=pos_out.copy()
+        self.n_in=-n_out.copy()
+        self.n_out=n_out.copy()
+        self.pos_out = self.pos_in + self.length * self.n_out
+        # tiltAngle = np.arctan2(n_out[1], n_out[0])
+        # self.place(pos_out, tiltAngle)
 
 
 class Bend(Shape):
     """A simple bend geometry, ie an arc of a circle. Angle convention is opposite of usual, ie clockwise is positive
     angles"""
 
-    def __init__(self, radius: float, bendingAngle: float):
+    def __init__(self, radius: float, bendingAngle: Optional[float]):
         assert radius > 0.0
         super().__init__()
         self.radius = radius
@@ -130,18 +134,22 @@ class Bend(Shape):
 class SlicedBend(Bend):
     """Bending geometry, but with the geometry composed of integer numbers of segments"""
 
-    def __init__(self, lengthSegment: float, numMagnets: int, radius: float):
-        assert lengthSegment > 0.0 and numMagnets > 0.0 and isinstance(numMagnets, int)
+    def __init__(self, lengthSegment: float, numMagnets: Optional[int],magnetDepth: float, radius: float):
+
+        assert lengthSegment > 0.0
+        assert (numMagnets>0 and isinstance(numMagnets, int)) if numMagnets is not None else True
+        assert 0.0<=magnetDepth<.1  and radius>10*magnetDepth#this wouldn't make sense
         self.lengthSegment = lengthSegment
         self.numMagnets = numMagnets
+        self.magnetDepth=magnetDepth
         self.radius = radius
-        self.bendingAngle = self.get_Arc_Angle()
+        self.bendingAngle = self.get_Arc_Angle() if numMagnets is not None else None
         super().__init__(radius, self.bendingAngle)
 
     def get_Unit_Cell_Angle(self) -> float:
         """Get the arc angle associate with a single unit cell. Each magnet contains two unit cells."""
 
-        return np.arctan(self.lengthSegment / (2 * self.radius)) #radians
+        return np.arctan(.5*self.lengthSegment / (self.radius-self.magnetDepth)) #radians
 
     def get_Arc_Angle(self) -> float:
         """Get arc angle (bending angle) of bender"""
@@ -161,6 +169,34 @@ class SlicedBend(Bend):
     def set_Radius(self, radius: float) -> None:
         super().set_Radius(radius)
         self.bendingAngle = self.get_Arc_Angle() #radians
+
+
+class CappedSlicedBend(SlicedBend):
+
+    def __init__(self, lengthSegment: float, numMagnets: Optional[int],#pylint: disable=too-many-arguments
+                 magnetDepth: float,lengthCap:float, radius: float):
+        super().__init__(lengthSegment,numMagnets,magnetDepth,radius)
+        self.lengthCap=lengthCap
+        self.caps: list[Line]=[Line(self.lengthCap),Line(self.lengthCap)]
+
+    def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None: #pylint: disable=arguments-differ
+        tiltAngle = np.arctan2(-n_in[1], -n_in[0]) #flip normal around
+        self.caps[0].place(pos_in,tiltAngle)
+        super().place(self.caps[0].pos_out,-1*self.caps[0].n_out)
+        self.caps[1].daisy_Chain(self)
+        self.pos_in,self.n_in=self.caps[0].pos_in,self.caps[0].n_in
+        self.pos_out,self.n_out=self.caps[1].pos_out,self.caps[1].n_out
+
+    def daisy_Chain(self, geometry: Shape) -> None:
+        self.place(geometry.pos_out,-geometry.n_out)
+
+    def get_Plot_Coords(self) -> tuple[np.ndarray, np.ndarray]:
+        x1Vals,y1Vals=self.caps[0].get_Plot_Coords()
+        x2Vals,y2Vals=super().get_Plot_Coords()
+        x3Vals,y3Vals=self.caps[1].get_Plot_Coords()
+        xVals=np.concatenate((x1Vals,x2Vals,x3Vals))
+        yVals=np.concatenate((y1Vals,y2Vals,y3Vals))
+        return xVals,yVals
 
 
 class Kink(Shape):

@@ -1,23 +1,27 @@
 #pylint: disable=missing-module-docstring
-from typing import Union
+from typing import Union,Optional
 import numpy as np
 import matplotlib.pyplot as plt
-from storageRingGeometries import Kink,Bend,SlicedBend,Line #pylint: disable=import-error
+from storageRingGeometryModules.shapes import Kink,Bend,CappedSlicedBend,Line,SlicedBend #pylint: disable=import-error
 
-shapes = Union[Kink, Bend, SlicedBend, Line]
+shapes = Union[Kink, Bend, CappedSlicedBend, Line]
 
 class StorageRingGeometry:
+    """
+    Largely a container for shapes that represent the storage ring. More exactly, these shapes represent the ideal
+    orbit of a particle through the storage ring.
+    """
 
     def __init__(self, elements: list[shapes]):
         self.elements: list[shapes]=elements
-        self.combiner: Kink=self.get_Combiner(elements)
-        self.benders: list[SlicedBend]=self.get_Benders(elements)
+        self.combiner: Optional[Kink]=self.get_Combiner(elements)
+        self.benders: list[CappedSlicedBend]=self.get_Benders(elements)
         self.numBenders: int=len(self.benders)
 
     def __iter__(self):
         return iter(self.elements)
 
-    def get_Combiner(self,elements: list[shapes])-> Kink:
+    def get_Combiner(self,elements: list[shapes])-> Optional[Kink]:
         """Get storage ring combiner. Must be one and only one"""
 
         combiner=None
@@ -25,16 +29,15 @@ class StorageRingGeometry:
             if isinstance(element,Kink):
                 assert combiner is None #should only be one combiner
                 combiner=element
-        assert combiner is not None
         return combiner
 
-    def get_Benders(self,elements: list[shapes])-> list[SlicedBend]:
+    def get_Benders(self,elements: list[shapes])-> list[CappedSlicedBend]:
         """Get bender elements in storage ring. Currently, only sliced bender is supported"""
 
         benders=[]
         for element in elements:
-            assert not type(element) is Bend #not supported
-            if isinstance(element,SlicedBend):
+            assert not type(element) is Bend or type(element) is not SlicedBend #not supported
+            if isinstance(element,CappedSlicedBend):
                 benders.append(element)
         return benders
 

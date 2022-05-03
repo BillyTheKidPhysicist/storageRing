@@ -2,7 +2,7 @@ import HalbachLensClass_Tests
 # import geneticLensClass_Tests
 import lattice_Tracing_Tests
 # import shimOptimizerOfLens_Focus_Tests
-import parallel_Gradient_Descent_Tests
+# import parallel_Gradient_Descent_Tests
 import elementPT_Tests
 import fastNumbaMethodsAndClass_Tests
 

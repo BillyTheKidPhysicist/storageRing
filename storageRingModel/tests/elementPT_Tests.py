@@ -85,10 +85,8 @@ class DriftTestHelper(ElementTestHelper):
     def __init__(self):
         self.L, self.ap = .15432, .0392
         particle0=Particle(qi=np.asarray([0.0,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-3.8]))
-        qf0 = np.array([-0.15376500000000048 ,  0.004978000000000016,
-       -0.004909867602500013])
-        pf0 = np.array([-201.                ,    5.2               ,
-         -3.8074970000000286])
+        qf0 = np.array([-0.15376500000000048 ,  0.004978000000000016,-0.004909867602500013])
+        pf0 = np.array([-201.                ,    5.2               ,-3.8074970000000286])
         super().__init__(Drift,particle0,qf0,pf0,True,False,False)
 
     def make_coordTestRules(self):
@@ -321,7 +319,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian)-1)
         @given(testStrategy)
         @settings(max_examples=100,deadline=None)
-        def foo_Field_Perturbation(index):
+        def check_Field_Perturbation(index):
             x, y, z = coordsCartesian[index]
             s,xc,yc=coordsCenter[index]
             if np.sqrt(xc**2+yc**2)>elPerfect.ap or not 0.0<s<Ls:
@@ -343,7 +341,6 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             assert iscloseAll(deltaF_el,deltaF_Direct,abstol=1e-6)
             deltaV_El=elDeviation.magnetic_Potential(qEl)-elPerfect.magnetic_Potential(qEl)
             assert isclose(deltaV_El,deltaV_Direct,abs_tol=1e-6)
-        foo_Field_Perturbation()
 
 
 class CombinerIdealTestHelper(ElementTestHelper):

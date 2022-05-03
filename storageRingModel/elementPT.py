@@ -809,13 +809,16 @@ class HalbachBenderSimSegmented(BenderIdeal):
         kArr = np.asarray(kList)
         a, b, c = np.polyfit(rArr, kArr, 2)
         self.K_Func=lambda r: a * r ** 2 + b * r + c
+        #todo: I should use the mean k value
         self.outputOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
             r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
+        self.outputOffset=self.outputOffsetFunc(self.rb)
+        self.ro=self.outputOffset+self.rb
 
     def build_Post_Constrained(self)->None:
         self.ap=self.compute_Aperture()
         assert self.rb-self.rp-self.yokeWidth>0.0
-        self.ucAng = np.arctan(self.Lseg / (2 * (self.rb - self.rp - self.yokeWidth)))
+        self.ucAng = np.arctan(.5*self.Lseg / (self.rb - self.rp - self.yokeWidth))
         #500um works very well, but 1mm may be acceptable
         self.ang = 2 * self.numMagnets * self.ucAng
         assert self.ang<2*np.pi*3/4
@@ -826,7 +829,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.K=self.K_Func(self.rb)
         self.build_Fast_Field_Helper()
-        self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
+        self.ro=self.rb+self.outputOffset
+        self.L=self.ang*self.rb
+        self.Lo=self.ang*self.ro+2*self.Lcap
 
     def build_Fast_Field_Helper(self)->None:
         """compute field values and build fast numba helper"""
@@ -855,17 +860,17 @@ class HalbachBenderSimSegmented(BenderIdeal):
         gridCoords=np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1,3)
         return gridCoords
 
-    def fill_rOffset_And_Dependent_Params(self,rOffset:float)->None:
-        #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
-        #the entire element
-        self.outputOffset=rOffset
-        self.ro=self.rb+self.outputOffset
-        self.L=self.ang*self.rb
-        self.Lo=self.ang*self.ro+2*self.Lcap
+    # def fill_rOffset_And_Dependent_Params(self,rOffset:float)->None:
+    #     #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
+    #     #the entire element
+    #     self.outputOffset=rOffset
+    #     self.ro=self.rb+self.outputOffset
+    #     self.L=self.ang*self.rb
+    #     self.Lo=self.ang*self.ro+2*self.Lcap
 
-    def update_rOffset_Fact(self,rOffsetFact:float)->None:
-        self.rOffsetFact=rOffsetFact
-        self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
+    # def update_rOffset_Fact(self,rOffsetFact:float)->None:
+    #     self.rOffsetFact=rOffsetFact
+    #     self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
 
     def convert_Center_To_Cartesian_Coords(self,s: float, xc: float, yc: float)-> tuple[float,float,float]:
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""

@@ -4,8 +4,8 @@ import copy
 from typing import Union
 import numpy as np
 from scipy.optimize import differential_evolution
-from storageRingGeometry import StorageRingGeometry #pylint: disable= import-error
-from storageRingGeometries import Line,norm_2D #pylint: disable= import-error
+from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry #pylint: disable= import-error
+from storageRingGeometryModules.shapes import Line,Bend,norm_2D #pylint: disable= import-error
 
 realNumber = Union[float, int]
 floatTuple=tuple[float,...]
@@ -17,7 +17,7 @@ lst_arr_tple = Union[list, np.ndarray, tuple]
 
 
 
-class RingConstraintSolver:
+class StorageRingGeometryConstraintsSolver:
     """
     Class to take a storage ring geometry and find a configuration of bending parameters and tunable lenses (not
     all lenses are assumed to be tunable, only user indicated lenses) that results in a valid closed storage ring
@@ -27,11 +27,15 @@ class RingConstraintSolver:
         """
         :param storageRing: storage ring to solve, which is already roughly closed. A copy is made to
                 prevent modifiying original
-        :param radiusTarget: Target bending radius of each bending segment
+        :param radiusTarget: Target bending radius of all bending segments. This is approximate because the
+            constraints may not allow an exact value, and because this is actually the radius of the bending orbit
         """
+
         self.storageRing = copy.deepcopy(storageRing)
         self.targetRadius = radiusTarget
         self.tunedLenses = self.get_Tuned_Lenses()
+
+        assert all(type(shape) is not Bend for shape in self.storageRing) #not yet supported
 
     def get_Tuned_Lenses(self) -> tuple[Line]:
         """Get lenses(Line objects) that have been marked to have their length tunable to satisfy geometry"""
@@ -124,7 +128,8 @@ class RingConstraintSolver:
         benderParams, _ = self.shape_And_Round_Params(params)
         numMagnetsList = [numMagnets for _, numMagnets in benderParams]
         assert all(isinstance(num, int) for num in numMagnetsList)
-        cost = sum([abs(a - b) for a, b in itertools.combinations(numMagnetsList, 2)])
+        weight=1 #different numbers of magnets isn't so bad
+        cost = weight*sum([abs(a - b) for a, b in itertools.combinations(numMagnetsList, 2)])
         return cost
 
     def get_Radius_Cost(self, params: floatTuple) -> float:
@@ -132,7 +137,8 @@ class RingConstraintSolver:
 
         benderParams, _ = self.shape_And_Round_Params(params)
         radiusList = [radius for radius, _ in benderParams]
-        cost = sum([abs(radius - self.targetRadius) for radius in radiusList])
+        weight = 10
+        cost = weight*sum([abs(radius - self.targetRadius) for radius in radiusList])
         return cost
 
     def get_Bounds(self) -> tuple[tuple[float, float], ...]:
@@ -169,6 +175,12 @@ class RingConstraintSolver:
         assert _cost >= 0.0
         return _cost
 
+    def assert_Radius_Tolerance(self, params: floatTuple,tolerance: float ) -> None:
+        """Assert that each radius remains within a specified value of target radius after constraining"""
+
+        benderParams, _ = self.shape_And_Round_Params(params)
+        assert all(abs(radius-self.targetRadius)<tolerance for radius, _ in benderParams)
+
     def solve(self) -> realNumberTuple:
         """
         Find parameters that give a valid storage ring configuration. This will deform self.storageRing from its original
@@ -176,12 +188,24 @@ class RingConstraintSolver:
 
         :return: parametes as (param_i,...) where i is each parameter
         """
+
         assert self.storageRing.combiner is not None
         bounds = self.get_Bounds()
-        np.random.seed(42)
-        sol = differential_evolution(self.cost, bounds)
-        print(sol)
-        solutionParams = self.round_Integer_Params(sol.x)
+        maxTries=5
+        i=0
+        while True:
+            try:
+                seed=42+i #seed must change for each try
+                sol = differential_evolution(self.cost, bounds,seed=seed)
+                solutionParams = self.round_Integer_Params(sol.x)
+                closedCostTol = 1e-12
+                assert self.closed_Ring_Cost(solutionParams) < closedCostTol
+                self.assert_Radius_Tolerance(solutionParams, 1e-2)
+                break
+            except:
+                i+=1
+            if i==maxTries:
+                raise Exception("could not find valid solution")
         return solutionParams
 
     def make_Valid_Storage_Ring(self)-> StorageRingGeometry:
@@ -190,8 +214,7 @@ class RingConstraintSolver:
 
         :return: a valid storage ring. A copy of self.storage ring, which was a copy of the original.
         """
+
         solutionParams=self.solve()
         self.update_Ring(solutionParams)
-        closedCostTol = 1e-12
-        assert self.closed_Ring_Cost(solutionParams) < closedCostTol
         return copy.deepcopy(self.storageRing)
