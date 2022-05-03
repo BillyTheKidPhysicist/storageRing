@@ -273,8 +273,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.2334706803126083e-01, 1.8186480695766232e+00,8.8931014512116978e-04])
-        pf0 = np.array([ 158.70159991898365 , -123.2610808053195  ,    4.918740792027409])
+        qf0 = np.array([6.2332908352219552e-01, 1.8186927614167345e+00,8.3619790950782778e-04])
+        pf0 = np.array([ 158.34680779196788 , -123.71942813335137 ,    4.882616277761719])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -537,8 +537,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf,qf0,absTol)==False or iscloseAll(pf,pf0,absTol)==False:
-                # print(repr(qf), repr(pf))
-                # print(repr(qf0), repr(pf0))
+                print(repr(qf), repr(pf))
+                print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self,qEl):
@@ -560,14 +560,14 @@ class ElementTestRunner:
 
 
 def run_Tests(parallel=False):
-    funcsToRun=[DriftTestHelper().run_Tests,
-    LensIdealTestHelper().run_Tests,
-    BenderIdealTestHelper().run_Tests,
-    CombinerIdealTestHelper().run_Tests,
-    CombinerHalbachTestHelper().run_Tests,
-    HexapoleLensSimTestHelper().run_Tests,
-    HexapoleSegmentedBenderTestHelper().run_Tests]
-    def run_Func(func):
-        func()
+    testersToRun=[DriftTestHelper,
+    LensIdealTestHelper,
+    BenderIdealTestHelper,
+    CombinerIdealTestHelper,
+    CombinerHalbachTestHelper,
+    HexapoleLensSimTestHelper,
+    HexapoleSegmentedBenderTestHelper]
+    def run_Tester(tester):
+        tester().run_Tests()
     processes=-1 if parallel==True else 1
-    tool_Parallel_Process(run_Func,funcsToRun,processes=processes)
+    tool_Parallel_Process(run_Tester,testersToRun,processes=processes)

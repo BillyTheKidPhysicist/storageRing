@@ -1,5 +1,5 @@
 from typing import Union
-
+from helperTools import *
 from storageRingGeometryModules.shapes import Line,Kink,CappedSlicedBend,Bend
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry
 from storageRingGeometryModules.storageRingGeometrySolver import StorageRingGeometryConstraintsSolver
@@ -136,6 +136,17 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
     element.ROut = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     element.RIn = np.asarray([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
 
+def _is_Particle_Tracer_Lattice_Valid(PTL)-> bool:
+    """Check that the lattice is closed. """
+
+    elPTL_First,elPTL_Last=PTL.elList[0],PTL.elList[-1]
+
+    if not iscloseAll(elPTL_First.nb,-1*elPTL_Last.ne,1e-12): #normal vector must be same
+        return False
+    if not iscloseAll(elPTL_First.r1,elPTL_Last.r2,1e-12):
+        return False
+    return True
+
 def build_Particle_Tracer_Lattice(PTL,constrain: bool):
     """
     Build up a ParticleTracerLattice (PTL) in place. Apply constraints if indicated. To build the lattice, elements are
@@ -158,3 +169,6 @@ def build_Particle_Tracer_Lattice(PTL,constrain: bool):
         elif type(el_Geom) in (CappedSlicedBend,Bend):
             _build_Lattice_Bending_Element(el_PTL, el_Geom)
         else: raise ValueError
+
+    if PTL.latticeType=='storageRing' and constrain:
+        assert _is_Particle_Tracer_Lattice_Valid(PTL)

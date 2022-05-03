@@ -11,6 +11,7 @@ from helperTools import arr_Product,iscloseAll,make_Odd
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import SIMULATION_MAGNETON
+import scipy.optimize as spo
 
 
 #todo: this needs a good scrubbing and refactoring
@@ -62,6 +63,7 @@ class Element:
         # y=0
         # combiner: theta=0 has the outlet at the origin and pointing to the west, with the inlet some distance to the right
         # and pointing in the NE direction
+        #todo: r1,r2,ne,nb are not consistent. They describe either orbit coordinates, or physical element coordinates
         self.PTL = PTL  # particle tracer lattice object. Used for various constants
         self.nb: Optional[np.ndarray] = None  # normal vector to beginning (clockwise sense) of element.
         self.ne: Optional[np.ndarray] = None  # normal vector to end (clockwise sense) of element
@@ -792,33 +794,52 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.fieldFact=BpFact
 
     def build_Pre_Constraint(self)->None:
-        def find_K(rb:float):
-            ucAngTemp=np.arctan(self.Lseg/(2*(rb-self.rp-self.yokeWidth))) #value very near final value, good
-            #approximation
-            lens = _HalbachBenderFieldGenerator(self.rp, rb, ucAngTemp,self.Lm, numLenses=5,applyMethodOfMoments=True)
-            xArr = np.linspace(-self.rp/3, self.rp/3) + rb
-            coords = np.asarray(np.meshgrid(xArr, 0, 0)).T.reshape(-1, 3)
-            FArr = SIMULATION_MAGNETON*lens.BNorm_Gradient(coords)[:, 0]
-            xArr -= rb
-            slope, _ = np.polyfit(xArr, FArr, 1)  # fit to a line y=m*x+b, and only use the m component
-            return slope
-        rArr=np.linspace(self.rb*.95,self.rb*1.05,num=10)
-        kList = []
-        for rb in rArr:
-            kList.append(find_K(rb))
-        kArr = np.asarray(kList)
-        a, b, c = np.polyfit(rArr, kArr, 2)
-        self.K_Func=lambda r: a * r ** 2 + b * r + c
-        #todo: I should use the mean k value
-        self.outputOffsetFunc = lambda r:  self.rOffsetFact*(sqrt(
-            r ** 2 / 16 + self.PTL.v0Nominal ** 2 / (2 * self.K_Func(r))) - r / 4)  # this accounts for energy loss
-        self.outputOffset=self.outputOffsetFunc(self.rb)
+
+        self.outputOffset=self.find_Optimal_Radial_Offset()*self.rOffsetFact
         self.ro=self.outputOffset+self.rb
 
+    def find_Optimal_Radial_Offset(self)->float:
+        """Find the radial offset that accounts for the centrifugal force moving the particles deeper into the
+        potential well"""
+
+        m = 1 #in simulation units mass is 1kg
+        ucAngApprox = self.get_Unit_Cell_Angle()
+        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, numLenses=5,
+                                            applyMethodOfMoments=True)
+        thetaArr = np.linspace(-ucAngApprox, ucAngApprox, 100)
+        yArr = np.zeros(len(thetaArr))
+        def offset_Error(rOffset):
+            assert abs(rOffset) < self.rp
+            xArr = (self.rb + rOffset) * np.cos(thetaArr)
+            zArr = (self.rb + rOffset) * np.sin(thetaArr)
+            coords = np.column_stack((xArr, yArr, zArr))
+            F = lens.BNorm_Gradient(coords) * SIMULATION_MAGNETON
+            Fr = np.linalg.norm(F[:, [0, 2]], axis=1)
+            FrMean = np.mean(Fr)
+            FCen = m * self.PTL.v0Nominal ** 2 / (self.rb + rOffset)
+            return (FCen - FrMean) ** 2
+
+        rOffsetMax=.9*self.rp
+        bounds = [(0.0, rOffsetMax)]
+        sol = spo.minimize(offset_Error, np.array([self.rp / 2.0]), bounds=bounds, method='Nelder-Mead',
+                           options={'xatol': 1e-6})
+        rOffsetOptimal = sol.x[0]
+        if isclose(rOffsetOptimal,rOffsetMax,abs_tol=1e-6):
+            raise Exception("The bending bore radius is too large to accomodate a reasonable solution")
+        return rOffsetOptimal
+
+    def get_Unit_Cell_Angle(self)-> float:
+        """Get the angle that a single unit cell spans. Each magnet is composed of two unit cells because of symmetry.
+        The unit cell includes half of the magnet and half the gap between the two"""
+
+        ucAng = np.arctan(.5 * self.Lseg / (self.rb - self.rp - self.yokeWidth))
+        return ucAng
+
     def build_Post_Constrained(self)->None:
+
         self.ap=self.compute_Aperture()
         assert self.rb-self.rp-self.yokeWidth>0.0
-        self.ucAng = np.arctan(.5*self.Lseg / (self.rb - self.rp - self.yokeWidth))
+        self.ucAng =self.get_Unit_Cell_Angle()
         #500um works very well, but 1mm may be acceptable
         self.ang = 2 * self.numMagnets * self.ucAng
         assert self.ang<2*np.pi*3/4
@@ -827,7 +848,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
-        self.K=self.K_Func(self.rb)
         self.build_Fast_Field_Helper()
         self.ro=self.rb+self.outputOffset
         self.L=self.ang*self.rb
