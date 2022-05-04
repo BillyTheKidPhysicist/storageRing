@@ -273,8 +273,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.2332908352219552e-01, 1.8186927614167345e+00,8.3619790950782778e-04])
-        pf0 = np.array([ 158.34680779196788 , -123.71942813335137 ,    4.882616277761719])
+        qf0 = np.array([6.2695251285739795e-01, 1.8272622472485351e+00,1.1237515480347793e-03])
+        pf0 = np.array([ 158.80273725127762 , -123.09054758342403 ,    4.564750672448094])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):

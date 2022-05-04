@@ -147,7 +147,7 @@ def _is_Particle_Tracer_Lattice_Valid(PTL)-> bool:
         return False
     return True
 
-def build_Particle_Tracer_Lattice(PTL,constrain: bool):
+def build_Particle_Tracer_Lattice(PTL,constrain: bool)-> None:
     """
     Build up a ParticleTracerLattice (PTL) in place. Apply constraints if indicated. To build the lattice, elements are
     iterated through build one at a time based on a StorageRingGeometry object that is used to represent and solve the
@@ -157,8 +157,10 @@ def build_Particle_Tracer_Lattice(PTL,constrain: bool):
         injector type lattice, or a ring type. If constraints are applied, the ring type lattice must be built to be
         closed
     :param constrain: Wether to solve for constraints (ie, must be closed if a ring lattice)
-    :return:
+    :return: None
     """
+
+    #todo: There's an inconsistency in how r1/r2/ne/nb is handled with the storage ring
 
     storageRingGeometry=_build_Storage_Ring_Geometry_From_PTL(PTL,constrain)
     for i,(el_PTL,el_Geom) in enumerate(zip(PTL.elList,storageRingGeometry)):

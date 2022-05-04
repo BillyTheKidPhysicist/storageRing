@@ -449,12 +449,13 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     #a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     #symmetric field
 
-    def __init__(self,rp:float,rb: float,UCAngle: float,Lm: float,numLenses: int=3,
-                 M: float=M_Default,positiveAngleMagnetsOnly: bool=False,applyMethodOfMoments=False,lensSlices: int=1,
-                 useMagnetError: bool=False):
+    def __init__(self, rp:float, rb: float, UCAngle: float, Lm: float, numLenses: int=3,
+                 M: float=M_Default, positiveAngleMagnetsOnly: bool=False, applyMethodOfMoments=False,
+                 useMagnetError: bool=False, useHalfCapEnd: tuple=None):
         #todo: by default I think it should be positive angles only
         super().__init__()
-        assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm))
+        assert all(isinstance(value, Number) for value in (rp,rb,UCAngle,Lm)) and isinstance(numLenses,int)
+        self.useHalfCapEnd=(False,False) if useHalfCapEnd is None else useHalfCapEnd
         self.rp: float=rp #radius of bore of magnet, ie to the pole
         self.rb: float=rb #bending radius
         self.UCAngle: float=UCAngle #unit cell angle of a HALF single magnet, ie HALF the bending angle of a single magnet. It
@@ -470,7 +471,6 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         self.lensList: list[HalbachLens]=[] #list to hold lenses
         self.lensAnglesArr: np.ndarray=self.make_Lens_Angle_Array()
         self.applyMethodsOfMoments=applyMethodOfMoments
-        self.slices=lensSlices
         self.useStandardMagnetErrors=useMagnetError
         self._build()
 
@@ -484,13 +484,28 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         angleArr=angleArr-angleArr.min() if self.positiveAngleMagnetsOnly else angleArr
         return angleArr
 
-    def _build(self)->None:
-        for angle in self.lensAnglesArr:
-            singleLensMethodOfMoment=True if self.applyMethodsOfMoments else True
-            lens=HalbachLens(self.rp,self.magnetWidth,self.Lm,M=self.M,position=(self.rb,0.0,0.0),
-                             numSlices=self.slices,useStandardMagErrors=self.useStandardMagnetErrors,
-                             applyMethodOfMoments=singleLensMethodOfMoment)
+    def lens_Length_And_Angle_Iter(self)->iter:
+        """Create an iterable for length of lenses and their angles. This handles the case of using only a half length
+        lens at the beginning and/or end of the bender"""
 
+        angleArr=self.lensAnglesArr.copy()
+        assert len(angleArr)>1
+        lengthMagnetList=[self.Lm]*self.numLenses
+        angleSep=(angleArr[1]-angleArr[0])
+        # the first lens (clockwise sense in xz plane) is a half length lens
+        lengthMagnetList[0]=lengthMagnetList[0]/2 if self.useHalfCapEnd[0] else lengthMagnetList[0]
+        angleArr[0]=angleArr[0]+angleSep*.25 if self.useHalfCapEnd[0] else angleArr[0]
+        # the last lens (clockwise sense in xz plane) is a half length lens
+        lengthMagnetList[-1]=lengthMagnetList[-1]/2 if self.useHalfCapEnd[1] else lengthMagnetList[-1]
+        angleArr[-1]=angleArr[-1]-angleSep*.25 if self.useHalfCapEnd[1] else angleArr[-1]
+
+        return zip(lengthMagnetList,angleArr)
+
+    def _build(self)->None:
+        for Lm,angle in self.lens_Length_And_Angle_Iter():
+            lens=HalbachLens(self.rp,self.magnetWidth,Lm,M=self.M,position=(self.rb,0.0,0.0),
+                             useStandardMagErrors=self.useStandardMagnetErrors,
+                             applyMethodOfMoments=False)
             R=Rotation.from_rotvec([0.0,-angle,0.0])
             lens.rotate(R,anchor=0)
             #my angle convention is unfortunately opposite what it should be here. positive theta
@@ -562,7 +577,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             thetaArrCoords[thetaArrCoords<angleSymmetryCutoff-2*np.pi]+=2*np.pi #if an angle is larger than 3.14,
             # arctan2 doesn't know this, and confines angles between -pi to pi. so I assume the bender starts at 0, then
             #change the values
-        numLensBorder=7 #number of lenses boarding region for field computationg. Must be enough for valid approx
+        numLensBorder=5 #number of lenses boarding region for field computationg. Must be enough for valid approx
         lensBorderAngleSep=2*self.UCAngle*numLensBorder+1e-6
         splitFactor=3 #roughly number of lenses (minus number of lenses bordering) per split
 

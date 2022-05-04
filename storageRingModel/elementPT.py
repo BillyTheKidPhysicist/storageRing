@@ -1,5 +1,4 @@
 import warnings
-import itertools
 from math import sqrt,isclose
 from typing import Optional,Union
 import pandas as pd
@@ -591,7 +590,7 @@ class CombinerIdeal(Element):
             F[2] = 0.0  # exclude z component, ideally zero
             a = F
             q_n = q + p * h + .5 * a * h ** 2
-            if q_n[0] > limit:  # if overshot, go back and walk up to the edge assuming no force
+            if not 0<=q_n[0]<=limit:  # if overshot, go back and walk up to the edge assuming no force
                 dr = limit - q[0]
                 dt = dr / p[0]
                 q = q + p * dt
@@ -748,7 +747,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.ucAng: Optional[float] = None
         self.rOffsetFact=rOffsetFact #factor to times the theoretic optimal bending radius by
         self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
-        self.Lcap=self.Lm/2+self.fringeFracOuter*self.rp
+        self.Lcap=self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.segmented: bool=True
         self.RIn_Ang: Optional[np.ndarray]=None
@@ -803,7 +802,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         potential well"""
 
         m = 1 #in simulation units mass is 1kg
-        ucAngApprox = self.get_Unit_Cell_Angle()
+        ucAngApprox = self.get_Unit_Cell_Angle() #this will be different if the bore radius changes
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, numLenses=5,
                                             applyMethodOfMoments=True)
         thetaArr = np.linspace(-ucAngApprox, ucAngApprox, 100)
@@ -823,7 +822,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         bounds = [(0.0, rOffsetMax)]
         sol = spo.minimize(offset_Error, np.array([self.rp / 2.0]), bounds=bounds, method='Nelder-Mead',
                            options={'xatol': 1e-6})
-        rOffsetOptimal = sol.x[0]
+        adjustmentFact=1.07 #turns out a small increase is necesary for the optimal value
+        rOffsetOptimal = adjustmentFact*sol.x[0]
         if isclose(rOffsetOptimal,rOffsetMax,abs_tol=1e-6):
             raise Exception("The bending bore radius is too large to accomodate a reasonable solution")
         return rOffsetOptimal
@@ -937,9 +937,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Perturbation_Data(self)-> tuple[np.ndarray,...]:
         coordsCenter,coordsCartesian=self.make_Perturbation_Data_Coords()
         lensMisaligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True)
+                numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True,useHalfCapEnd=(True,True))
         lensAligned=_HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-           numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False)
+           numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False,useHalfCapEnd=(True,True))
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices=rCenterArr<self.rp
         valsMisaligned=np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned,coordsCartesian,validIndices))
@@ -960,7 +960,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=np.sqrt((fieldCoords[:,0]-self.rb)**2+fieldCoords[:,1]**2)<self.rp
         lens=_HalbachBenderFieldGenerator(self.rp,self.rb,self.ucAng,self.Lm,
-                            numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
+            numLenses=self.numModelLenses,positiveAngleMagnetsOnly=True,applyMethodOfMoments=True,
+                                          useHalfCapEnd=(True,False))
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def is_Valid_Internal_Fringe(self,coord0:np.ndarray)->bool:
@@ -1442,17 +1443,18 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
+
         yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
         yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
         yMin=-TINY_OFFSET if not self.useStandardMagErrors else -yMax
         xMin=-(self.rp - TINY_OFFSET)
         xMax=TINY_OFFSET if not self.useStandardMagErrors else -xMin
-        numY=self.numGridPointsXY if not self.useStandardMagErrors else self.numGridPointsXY*2-1 #minus 1 ensures
-        #same grid spacing!!
+        numY=self.numGridPointsXY if not self.useStandardMagErrors else make_Odd(round(.9*(self.numGridPointsXY*2-1)))
+        #minus 1 ensures same grid spacing!!
         numX=make_Odd(round(self.numGridPointsXY*self.rp/yMax))
-        numX=numX if not self.useStandardMagErrors else 2*numX-1
-        numZ=self.numGridPointsZ if not self.useStandardMagErrors else self.numGridPointsZ*2-1
+        numX=numX if not self.useStandardMagErrors else make_Odd(round(.9*(2*numX-1)))
+        numZ=self.numGridPointsZ if not self.useStandardMagErrors else make_Odd(round(1*(self.numGridPointsZ*2-1)))
         zMax=self.compute_Valid_zMax(La,ang,accomodateJitter)
         zMin=-TINY_OFFSET if not self.useStandardMagErrors else -zMax
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
