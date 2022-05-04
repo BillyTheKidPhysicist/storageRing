@@ -243,7 +243,7 @@ class SegmentedBenderHalbachHelper:
         BVec_Exact[nanIndices] = np.nan
         BVec_Approx[nanIndices] = np.nan
         error = 1e2 * np.abs((BVec_Exact - BVec_Approx) / BVec_Exact)
-        percentErrorMax = .01
+        percentErrorMax = .015
         assert np.nanmax(error) < percentErrorMax
 
     def test1(self):

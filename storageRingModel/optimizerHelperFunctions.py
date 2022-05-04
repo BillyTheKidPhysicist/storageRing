@@ -90,7 +90,7 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
     return PTL_Injector
 
 def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultiplier=1.0,
-                                       standardMagnetErrors:bool =False, combinerSeed: int=None):
+                                       standardMagnetErrors:bool =False):
     # rpBend=1e-2
     XInjector=(0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
        0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834)
@@ -98,7 +98,7 @@ def generate_Ring_And_Injector_Lattice(X,tuning,jitterAmp=0.0,fieldDensityMultip
     loadBeamDiam, L1, L2, L3=XInjector
 
     rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens=X
-    combinerSeed = None if standardMagnetErrors==False else combinerSeed
+    combinerSeed = None if not standardMagnetErrors else np.random.random_integers(0,1_000_000)
     PTL_Ring=generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombiner, rpCombiner,loadBeamDiam,
                                    tuning,jitterAmp=jitterAmp,fieldDensityMultiplier=fieldDensityMultiplier,
                                    standardMagnetErrors=standardMagnetErrors,combinerSeed=combinerSeed)
