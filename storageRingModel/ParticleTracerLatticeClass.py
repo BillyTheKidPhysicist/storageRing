@@ -12,7 +12,7 @@ import numpy.linalg as npl
 from joblib import Parallel,delayed
 from elementPT import *
 from storageRingConstraintSolver import build_Particle_Tracer_Lattice
-
+from constants import DEFAULT_ATOM_SPEED
 #todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 #people, I need to change that. This was before my cleaner code approach
 
@@ -66,7 +66,7 @@ class SimpleLocalMinimizer:
 
 class ParticleTracerLattice:
 
-    def __init__(self,v0Nominal: float,latticeType: str='storageRing',
+    def __init__(self,v0Nominal: float= DEFAULT_ATOM_SPEED,latticeType: str='storageRing',
                  jitterAmp: float=0.0, fieldDensityMultiplier:float =1.0, standardMagnetErrors: bool =False):
         assert fieldDensityMultiplier>0.0
         if latticeType!='storageRing' and latticeType!='injector':
@@ -105,7 +105,7 @@ class ParticleTracerLattice:
         assert rp<rb/2.0 #geometry argument, and common mistake
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
-        PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector')
+        PTL_Ring=ParticleTracerLattice(latticeType='injector')
         PTL_Ring.add_Drift(.05)
         PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rp,numMagnetsHalfBend,rb)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)

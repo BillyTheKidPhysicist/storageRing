@@ -99,7 +99,7 @@ class DriftTestHelper(ElementTestHelper):
         self.test_Drift()
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL=ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL=ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(self.L,self.ap)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
@@ -191,7 +191,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         return floatx,floatyz,floatyz
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL = ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL = ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Halbach_Lens_Sim(self.rp, self.L)
         PTL.end_Lattice(constrain=False, surpressWarning=True, enforceClosedLattice=False)
         return PTL
@@ -217,7 +217,7 @@ class LensIdealTestHelper(ElementTestHelper):
         self.theory_Test()
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL=ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL=ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Lens_Ideal(self.L,self.Bp,self.rp)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
@@ -256,7 +256,7 @@ class BenderIdealTestHelper(ElementTestHelper):
         return (floatr,floatphi,floatz)
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL=ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL=ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(5e-3)
         PTL.add_Bender_Ideal(self.ang,self.Bp,self.rb,self.rp)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
@@ -284,7 +284,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         return floatr,floatphi,floatz
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL=ParticleTracerLattice(200.0)
+        PTL=ParticleTracerLattice(v0Nominal=200.0)
         PTL.add_Drift(5e-3)
         PTL.add_Halbach_Bender_Sim_Segmented(self.Lm,self.rp,self.numMagnets,self.rb)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
@@ -360,7 +360,7 @@ class CombinerIdealTestHelper(ElementTestHelper):
         return floatx,floaty,floatz
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL=ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL=ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(5e-3)
         PTL.add_Combiner_Ideal(Lm=self.Lm,ap=self.ap)
         PTL.end_Lattice(constrain=False, surpressWarning=True, enforceClosedLattice=False)
@@ -384,7 +384,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         return floatx,floatyz,floatyz
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
-        PTL = ParticleTracerLattice(200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
+        PTL = ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(5e-3)
         PTL.add_Combiner_Sim_Lens(self.Lm,self.rp,apFrac=.8)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)

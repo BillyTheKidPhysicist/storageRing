@@ -113,8 +113,11 @@ class HalbachLenstestHelper:
         self.test5()
         self.test6()
         self.test7()
+        self.test8()
+        
     def hexapole_Fit(self,r,B0):
         return B0*(r/self.rp)**2
+
     def test1(self):
         #test that concentric layers work as expected
         lensAB = HalbachLens((self.rp,self.rp+self.magnetWidth), (self.magnetWidth, self.magnetWidth*1.5),self.length )
@@ -133,6 +136,7 @@ class HalbachLenstestHelper:
         mean1_0,mean2_0=0.089077017634823, 0.089077017634823
         assert within_Tol(RMS1_0,RMS1) and within_Tol(RMS2_0,RMS2)
         assert within_Tol(mean1,mean1_0) and within_Tol(mean2,mean2_0)
+
     def test2(self):
         #test that the lens is well fit to a parabolic potential
         magnetWidth1,magnetWidth2=.0254,.0254*1.5
@@ -147,6 +151,7 @@ class HalbachLenstestHelper:
         residuals=1e2*np.abs(np.sum(BNormVals-self.hexapole_Fit(rArr,*params)))/np.sum(BNormVals)
         residuals0=0.03770965561603838
         assert within_Tol(residuals,residuals0)
+
     def test3(self):
         #test that standard magnet tolerances changes values
         np.random.seed(42) #for repeatable results
@@ -162,6 +167,7 @@ class HalbachLenstestHelper:
         assert within_Tol(BNormsVals_STD,BNormsVals_STD_Error) #assert magnet errors cause same field value
         # changes with same seed
         np.random.seed(int(time.time()))
+
     def test4(self):
         #test that the a single layer lens has the same field as a single layer
         lens=HalbachLens(self.rp,self.magnetWidth,self.length)
@@ -171,6 +177,7 @@ class HalbachLenstestHelper:
         BNormsValsLayer_STD = np.std(layer.BNorm(testCoords))
         BNormsValsLens_STD = np.std(lens.BNorm(testCoords))
         assert within_Tol(BNormsValsLens_STD,BNormsValsLayer_STD)
+
     def test5(self):
         #test that slices of the lens results in same field values without magnetostatic method of moments, and the
         #length and coordinates work
@@ -184,6 +191,7 @@ class HalbachLenstestHelper:
         testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
         BValsSingle,BValsSliced=lensSingle.BNorm(testCoords),lensSliced.BNorm(testCoords)
         assert iscloseAll(BValsSingle,BValsSliced,numericTol)
+
     def test6(self):
         #test that magnet errors change field values
         lensPerfect = HalbachLens(self.rp, self.magnetWidth, self.length)
@@ -192,12 +200,26 @@ class HalbachLenstestHelper:
         np.random.seed(42)
         lensErrorSliced = HalbachLens(self.rp, self.magnetWidth, self.length,useStandardMagErrors=True,numSlices=10)
         self.test_All_Three_Are_Different(lensPerfect,lensError,lensErrorSliced)
+
     def test7(self):
         #test that magnetostatic method of moments (MOM) changes field values
         lensNaive=HalbachLens(self.rp, self.magnetWidth, self.length)
         lensMOM=HalbachLens(self.rp, self.magnetWidth, self.length,applyMethodOfMoments=True)
         lensMOMSliced=HalbachLens(self.rp, self.magnetWidth, self.length,applyMethodOfMoments=True,numSlices=10)
         self.test_All_Three_Are_Different(lensNaive,lensMOM,lensMOMSliced)
+
+    def test8(self):
+        """For systems with many magnets and/or many coordinates I split up the coords into smaller chunks to prevent
+        memory overflow"""
+
+        lens = HalbachLens(.05, .025, .1, numSlices=10)
+        xArr = np.linspace(.01, .01, 10)
+        coords = arr_Product(xArr, xArr, xArr)
+        BVals_Unsplit = lens.BNorm_Gradient(coords)
+        lens._getB_Wrapper = lambda x: HalbachLens._getB_Wrapper(lens, x, sizeMax=5)
+        BVals_Split = lens.BNorm_Gradient(coords)
+        assert iscloseAll(BVals_Split, BVals_Unsplit, 0.0)  # should be exactly the same
+
     def test_All_Three_Are_Different(self,lens1,lens2,lens3):
         xArr = np.linspace(-self.rp * .5, self.rp * .5)
         coords = np.asarray(list(itertools.product(xArr, xArr, [0])))

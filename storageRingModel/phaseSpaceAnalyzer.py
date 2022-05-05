@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 
 def make_Test_Swarm_And_Lattice(numParticles=100,totalTime=.1)->(Swarm,ParticleTracerLattice):
-    PTL=ParticleTracerLattice(200.0)
+    PTL=ParticleTracerLattice(v0Nominal=200.0)
     PTL.add_Lens_Ideal(.4,1.0,.025)
     PTL.add_Drift(.1)
     PTL.add_Lens_Ideal(.4,1.0,.025)

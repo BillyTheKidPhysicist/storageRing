@@ -156,7 +156,7 @@ class StorageRingGeometryConstraintsSolver:
         bounds = [(self.targetRadius * .95, self.targetRadius * 1.05), (numMagnetsApprox * .9, numMagnetsApprox * 1.1)]
         bounds = bounds * self.storageRing.numBenders
         for _ in self.tunedLenses:
-            bounds.append((.1, 2.0))  # big overshoot
+            bounds.append((.1, 5.0))  # big overshoot
         bounds = tuple(bounds)  # i want this to be immutable
         return bounds
 
@@ -196,7 +196,7 @@ class StorageRingGeometryConstraintsSolver:
         while True:
             try:
                 seed=42+i #seed must change for each try, but this is repeatable
-                sol = differential_evolution(self.cost, bounds,seed=seed)
+                sol = differential_evolution(self.cost, bounds,seed=seed,polish=False)
                 solutionParams = self.round_Integer_Params(sol.x)
                 closedCostTol = 1e-12
                 assert self.closed_Ring_Cost(solutionParams) < closedCostTol

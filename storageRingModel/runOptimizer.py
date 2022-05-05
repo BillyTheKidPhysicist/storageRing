@@ -17,10 +17,9 @@ def survival_Optimize(bounds: list,tuning: Optional[str],workers: int,magnetErro
             print('assert during evaluation on args: ',repr(args))
         return cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
-    import skopt
-    vals=skopt.sampler.Sobol().generate(bounds,1000)
-    tool_Parallel_Process(wrapper,vals)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
+    # vals=skopt.sampler.Sobol().generate(bounds,1000)
+    # tool_Parallel_Process(wrapper,vals)
     # args0 = np.array([0.014691009213257358, 0.0297440095905699, 0.011880244167712408, 0.011336008446642887, 0.32066412285553747])
     # wrapper(args)
 

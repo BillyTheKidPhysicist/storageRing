@@ -7,12 +7,14 @@ import numpy as np
 from numpy.linalg import norm
 import numba #type ignore
 from scipy.spatial.transform import Rotation
-from magpylib.magnet import Box as _Box
+from magpylib.magnet import Cuboid as _Cuboid
+import magpylib
 from magpylib import Collection
 from typing import Union,Optional
 from demag_functions import apply_demag
 import copy
 from helperTools import *
+from magpylib._src.fields.field_wrap_BH_level2 import getBH_level2
 
 M_Default=1.018E6 #default magnetization value, SI. Magnetization for N48 grade
 
@@ -129,23 +131,22 @@ class billyHalbachCollectionWrapper(Collection):
     SI_MagnetizationToMagpy: float = 1/magpyMagnetization_ToSI
     meterTo_mm=1e3 #magpy takes distance in mm
     def __init__(self,*sources):
-        super().__init__(sources)
+        super().__init__(*sources)
 
     def rotate(self, rot, anchor=None, start=-1, increment=False):
         if anchor is None:
             raise NotImplementedError #not sure how to best deal with rotating collection about itself
         super().rotate(rot, anchor=0.0)
 
-    def move(self,displacement: list_tuple_arr, start=-1, increment=False):
+    def move_Meters(self,displacement: list_tuple_arr, start=-1, increment=False): #todo: for some reason I need to name this differently :(
         displacement=[entry*self.meterTo_mm for entry in displacement]
         super().move(displacement)
 
-    def _getB_Wrapper(self, evalCoords_mm: np.ndarray)-> np.ndarray:
+    def _getB_Wrapper(self, evalCoords_mm: np.ndarray,sizeMax: float = 500_000)-> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
         applied to sources when ram usage would be too hight"""
-        sourcesAll = self.sources
-        size = len(evalCoords_mm) * len(self)
-        sizeMax = 500_000
+        sourcesAll = self.sources_all
+        size = len(evalCoords_mm) * len(self.sources_all)
         splits = min([int(size / sizeMax), len(sourcesAll)])
         splits = 1 if splits < 1 else splits
         splitSize = math.ceil(len(sourcesAll) / splits)
@@ -157,10 +158,8 @@ class billyHalbachCollectionWrapper(Collection):
             if len(sources) == 0:
                 break
             counter += len(sources)
-            self.sources = sources
-            BVec += self.getB(evalCoords_mm)
+            BVec+=getBH_level2(sources,evalCoords_mm,sumup=True,squeeze=True,pixel_agg=None,field="B")
         BVec=BVec[0] if len(BVec)==1 else BVec
-        self.sources = sourcesAll
         assert counter == len(sourcesAll)
         return BVec
 
@@ -245,8 +244,8 @@ class billyHalbachCollectionWrapper(Collection):
         apply_demag(self)
 
 
-class Box(_Box):
-    def __init__(self,mur: float=1.0,*args,**kwargs):
+class Cuboid(_Cuboid):
+    def __init__(self,mur: float=1.0,*args,**kwargs): #todo: change default to 1.05
         super().__init__(*args,**kwargs)
         self.mur=mur
         self.magnetization0=self.magnetization.copy()
@@ -276,8 +275,8 @@ class Layer(billyHalbachCollectionWrapper):
         self.M_AngleShift: np.ndarray=self.make_Arr_If_None_Else_Copy(M_AngleShift)
         self.rp: tuple = (rp,)*self.numMagnetsInLayer
         self.mur=mur #relative permeability
-        self.position=position
-        self.orientation=orientation #orientation about body frame
+        self.positionToSet=position
+        self.orientationToSet=orientation #orientation about body frame #todo: this "to set" stuff is pretty wonky
         self.magnetWidth: float = magnetWidth
         self.length: float = length
         self.applyMethodOfMoments=applyMethodOfMoments
@@ -300,13 +299,13 @@ class Layer(billyHalbachCollectionWrapper):
         positionArr=self.make_Cuboid_Positions_Magpy()
         orientationList=self.make_Cuboid_Orientation_Magpy()
         for M,dim,pos,orientation in zip(magnetizationArr,dimensionArr,positionArr,orientationList):
-            box =Box(magnetization=M, dimension=dim,
+            box =Cuboid(magnetization=M, dimension=dim,
                      position=pos, orientation=orientation,mur=self.mur)
             self.add(box)
 
-        if self.orientation is not None:
-            self.rotate(self.orientation,anchor=0.0)
-        self.move(self.position)
+        if self.orientationToSet is not None:
+            self.rotate(self.orientationToSet,anchor=0.0)
+        self.move_Meters(self.positionToSet)
         if self.applyMethodOfMoments==True:
             self.method_Of_Moments()
 
@@ -377,8 +376,8 @@ class HalbachLens(billyHalbachCollectionWrapper):
         assert isinstance(orientation, (type(None), Rotation)) == True
         assert isinstance(rp,(float,tuple)) and isinstance(magnetWidth,(float,tuple))
         position=(0.0,0.0,0.0) if position is None else position
-        self.position = position
-        self.orientation = orientation  # orientation about body frame
+        self.positionToSet = position
+        self.orientationToSet = orientation  # orientation about body frame
         self.rp: tuple=rp if isinstance(rp,tuple) else (rp,)
         self.magnetWidth: tuple = magnetWidth if isinstance(magnetWidth,tuple) else (magnetWidth,)
         self.length: float = length
@@ -406,11 +405,9 @@ class HalbachLens(billyHalbachCollectionWrapper):
                             M_NormShiftRelative=magNormVariation,mur=self.mur)
                 self.add(layer)
                 self.layerList.append(layer)
-
-        if self.orientation is not None:
-            self.rotate(self.orientation, anchor=0.0)
-        self.move(self.position)
-
+        if self.orientationToSet is not None:
+            self.rotate(self.orientationToSet, anchor=0.0)
+        self.move_Meters(self.positionToSet)
         if self.applyMethodOfMoments == True:
             self.method_Of_Moments()
 
@@ -594,9 +591,9 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             validCoordIndices=self.get_Valid_SubCoord_Indices(thetaArrCoords,lensSplitIndex1,lensSplitIndex2,
                                                               thetaLower,thetaUpper)
             if sum(validCoordIndices)>0:
-                collection = billyHalbachCollectionWrapper(benderLensesSubSection)
+                for lens in benderLensesSubSection:
+                    BVec[validCoordIndices]+=lens.B_Vec(evalCoords[validCoordIndices])
                 indicesEvaluated+=validCoordIndices
-                BVec[validCoordIndices]+=collection.B_Vec(evalCoords[validCoordIndices])
         assert np.all(indicesEvaluated==1) #check that every coord index was used once and only once
         return BVec
 

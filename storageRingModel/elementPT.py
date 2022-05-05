@@ -755,7 +755,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.M_ang: Optional[np.ndarray]=None
         self.numPointsBoreAp: int=make_Odd(round(25*self.PTL.fieldDensityMultiplier)) #This many points should span the
         # bore ap for good field sampling
-        self.longitudinalCoordSpacing: float = .8*self.PTL.fieldDensityMultiplier*self.rp/10.0 #Spacing through unit
+        self.longitudinalCoordSpacing: float = (.8*self.rp/10.0)/self.PTL.fieldDensityMultiplier #Spacing through unit
         # cell. .8 was carefully chosen
         self.numModelLenses: int=7 #number of lenses in halbach model to represent repeating system. Testing has shown
         #this to be optimal
