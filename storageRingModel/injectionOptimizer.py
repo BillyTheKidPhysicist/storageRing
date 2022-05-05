@@ -1,19 +1,22 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-import time
 from asyncDE import solve_Async
 from typing import Union,Optional
 import numpy as np
+import warnings
+from constants import DEFAULT_ATOM_SPEED
+warnings.filterwarnings('ignore')
 from storageRingOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
 
 
-V0=210
+
 def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
     BpLens = .7
-    injectorLensPhase = np.sqrt((2 * 800.0 / V0 ** 2) * BpLens / rpInjectorMagnet ** 2) * L_InjectorMagnet
+    injectorLensPhase = np.sqrt((2 * 800.0 / DEFAULT_ATOM_SPEED** 2) * BpLens / rpInjectorMagnet ** 2) \
+                        * L_InjectorMagnet
     if np.pi < injectorLensPhase or injectorLensPhase < np.pi / 10:
         # print('bad lens phase')
         return False
@@ -32,7 +35,7 @@ def generate_Injector_Lattice_Double_Lens(X) -> Optional[ParticleTracerLattice]:
         return None
     if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
-    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector')
+    PTL_Injector = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
     PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
     PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
@@ -51,7 +54,7 @@ def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
     lastGap = 5e-2
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
-    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing')
+    PTL_Ring=ParticleTracerLattice(DEFAULT_ATOM_SPEED,latticeType='storageRing')
     PTL_Ring.add_Drift(.5,ap=rpLensLast) #models the size of the lengs
     PTL_Ring.add_Drift(lastGap)
     PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
@@ -117,10 +120,10 @@ class Injection_Model(LatticeOptimizer):
         L0=self.latticeInjector.elList[-2].L #value before tuning
         cost0=self.floor_Plan_Cost()
         self.latticeInjector.elList[-2].set_Length(L0+self.tunabilityLength) #move lens away from combiner
-        self.latticeInjector.build_Lattice()
+        self.latticeInjector.build_Lattice(False)
         costClose = self.floor_Plan_Cost()
         self.latticeInjector.elList[-2].set_Length(L0-self.tunabilityLength) #move lens towards combiner
-        self.latticeInjector.build_Lattice()
+        self.latticeInjector.build_Lattice(False)
         costFar = self.floor_Plan_Cost()
         self.latticeInjector.elList[-2].set_Length(L0) #reset
         return max([cost0,costClose,costFar])
@@ -159,23 +162,17 @@ class Injection_Model(LatticeOptimizer):
         #punishing for ring lens blocking path through injector to combiner
         return area
 
+maximumCost=2.0
 
 def injector_Cost(X: Union[np.ndarray,list,tuple]):
-    maximumCost=2.0
     L_Injector_TotalMax = 2.0
-    try:
-        PTL_I=generate_Injector_Lattice_Double_Lens(X)
-    except:
-        print('exception',repr(X))
-        return maximumCost
+    PTL_I=generate_Injector_Lattice_Double_Lens(X)
+
     if PTL_I is None:
         return maximumCost
     if PTL_I.totalLength>L_Injector_TotalMax:
         return maximumCost
-    try:
-        PTL_R=generate_Ring_Surrogate_Lattice(X)
-    except:
-        return maximumCost
+    PTL_R=generate_Ring_Surrogate_Lattice(X)
     if PTL_R is None:
         return maximumCost
     assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
@@ -189,50 +186,25 @@ def main():
     def wrapper(X: Union[np.ndarray,list,tuple]):
         try:
             return injector_Cost(X)
-        except:
-            np.set_printoptions(precision=100)
-            print('failed with params',repr(np.asarray(X)))
-            raise Exception()
+        except Exception as e:
+            if str(e) == "Invalid combiner configuration": #this is the only expect exception
+                return maximumCost #allowed error
+            else:
+                np.set_printoptions(precision=100)
+                raise Exception("Unhandled exception on arguments: ",repr(np.asarray(X)))
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    # bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
-    # (.05,.5),(.05,.3)]
-    # for _ in range(3):
-    #     print(solve_Async(wrapper, bounds, 15 * len(bounds), surrogateMethodProb=0.05, tol=.03, disp=True,workers=8))
-    X0=np.array([0.20585844, 0.03      , 0.10421198, 0.02284784, 0.21853755,
-       0.04      , 0.01701195, 0.1733694 , 0.30854762, 0.22761157])
-    injector_Cost(X0)
-
+    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
+    (.05,.5),(.05,.3)]
+    for _ in range(3):
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), tol=.03, disp=True,workers=10))
+    # X0=np.array([0.1906563793040836  , 0.01                , 0.2218410018755692  ,
+    #    0.010637457655795489, 0.23474614154569443 , 0.006537948797064993,
+    #    0.005               , 0.319856088569777   , 0.2234291382946802  ,
+    #    0.3                 ])
+    # wrapper(X0)
+#
 if __name__=="__main__":
     main()
 
-
-'''
----population member---- 
-DNA: array([0.12524277, 0.02191994, 0.16189484, 0.02631402, 0.16314783,
-       0.03999999, 0.01706859, 0.0605528 , 0.27198268, 0.2054394 ])
-cost: 0.10423455810539292
-finished with total evals:  11732
----population member---- 
-DNA: array([0.06567916, 0.01414217, 0.16048129, 0.0251745 , 0.15970735,
-       0.03985693, 0.01875451, 0.05      , 0.26854486, 0.2264674 ])
-cost: 0.09930996157904261
-'''
-
-
-"""
----population member---- 
-DNA: array([0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
-       0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834])
-cost: 0.14064186273851484
-
-------ITERATIONS:  4200
-POPULATION VARIABILITY: [0.10151815 0.06409042 0.09856872 0.15354714 0.11433127 0.0416822
- 0.15623459 0.13163136 0.30097587 0.14214971]
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.20585844, 0.03      , 0.10421198, 0.02284784, 0.21853755,
-       0.04      , 0.01701195, 0.1733694 , 0.30854762, 0.22761157])
-cost: 0.15890535569991435
-"""

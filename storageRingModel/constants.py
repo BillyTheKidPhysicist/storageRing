@@ -17,3 +17,5 @@ BOLTZMANN_CONSTANT: float=1.38064852e-23 #Boltzman constant, SI
 MAGNETIC_PERMEABILITY: float=1.25663706212*1e-6
 GRAVITATIONAL_ACCELERATION: float=9.8
 SIMULATION_MAGNETON=BHOR_MAGNETON/MASS_LITHIUM_7
+VACUUM_TUBE_THICKNESS: float=.05*.0254 #minimum weldable thickness of a vacuum tube, m
+DEFAULT_ATOM_SPEED: float=210.0 #default speed of atoms, m/s

@@ -9,7 +9,7 @@ import fastNumbaMethodsAndClass
 from helperTools import arr_Product,iscloseAll,make_Odd
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from constants import SIMULATION_MAGNETON
+from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS
 import scipy.optimize as spo
 
 
@@ -777,15 +777,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_Aperture(self)->float:
         #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        vacuumTubeThickness=1e-3
-        radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lseg/2)**2)
-        apMaxGeom=self.rb-radiusCorner-vacuumTubeThickness #max aperture without clipping magnet
+        radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lm/2)**2)
+        apMaxGeom=self.rb-radiusCorner-VACUUM_TUBE_THICKNESS #max aperture without clipping magnet
         safetyFactor=.95
         apMaxGoodField=safetyFactor*self.numPointsBoreAp*self.rp/(self.numPointsBoreAp+np.sqrt(2))  #max aperture
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a smallsafety factor
         apMax=min([apMaxGeom,apMaxGoodField])
-        assert apMax/self.rp>.8 #Not confident results work outside ap~rp
         return apMax
 
     def set_BpFact(self,BpFact:float):
@@ -822,8 +820,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         bounds = [(0.0, rOffsetMax)]
         sol = spo.minimize(offset_Error, np.array([self.rp / 2.0]), bounds=bounds, method='Nelder-Mead',
                            options={'xatol': 1e-6})
-        adjustmentFact=1.07 #turns out a small increase is necesary for the optimal value
-        rOffsetOptimal = adjustmentFact*sol.x[0]
+        rOffsetOptimal = sol.x[0]
         if isclose(rOffsetOptimal,rOffsetMax,abs_tol=1e-6):
             raise Exception("The bending bore radius is too large to accomodate a reasonable solution")
         return rOffsetOptimal
@@ -926,8 +923,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         numXc =numYc
 
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
-        xcArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numXc) #radial deviation along major radius
-        ycArr = np.linspace(-self.rp+TINY_OFFSET, self.rp-TINY_OFFSET, numYc) #deviation in vertical from center of
+        xcArr = np.linspace(-self.ap-TINY_OFFSET, self.ap+TINY_OFFSET, numXc) #radial deviation along major radius
+        ycArr = np.linspace(-self.ap-TINY_OFFSET, self.ap+TINY_OFFSET, numYc) #deviation in vertical from center of
         # bender, along y in cartesian
         assert not is_Even(len(sArr)) and not is_Even(len(xcArr)) and not is_Even(len(ycArr))
         coordsCenter = arr_Product(sArr, xcArr, ycArr)
@@ -1566,7 +1563,10 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
         yInitial=self.ap/10.0
-        inputAngle,_,_,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial,ap=self.ap)
+        try:
+            inputAngle,_,_,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial,ap=self.ap)
+        except:
+            raise Exception("Invalid combiner configuration")
         assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
         gradientInitial=(seperationInitial-self.ap)/(yInitial-0.0)
         y=yInitial

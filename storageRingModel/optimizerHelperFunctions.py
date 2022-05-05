@@ -1,11 +1,12 @@
 import time
 import numpy as np
+from constants import DEFAULT_ATOM_SPEED
 from typing import Optional
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 SMALL_NUMBER=1E-9
 # XInjector=[1.10677162, 1.00084144, 0.11480408, 0.02832031]
-V0=210
+
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     assert len(XLattice)==5,"must be lattice paramters"
     sol=Solution()
@@ -30,15 +31,14 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
     Lm=.0254/2.0
     lastGap=5e-2
     fringeFrac=1.5
+    rb=1.0 #bending radius
     if L_Lens-2*rpLens*fringeFrac<rpLens/2 or L_Lens-2*rpLensFirst*fringeFrac<rpLensFirst/2 or \
             L_Lens-2*rpLensLast*fringeFrac<rpLensLast/2:
         # minimum fringe length must be respected
         return None
-    PTL_Ring=ParticleTracerLattice(V0,latticeType='storageRing',jitterAmp=jitterAmp,fieldDensityMultiplier
-                    =fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors)
-    rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,1.0,Lm)
-    if rOffsetFact is None:
-        return None
+    PTL_Ring=ParticleTracerLattice(DEFAULT_ATOM_SPEED,latticeType='storageRing',jitterAmp=jitterAmp,
+                            fieldDensityMultiplier=fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors)
+    # rOffsetFact=PTL_Ring.find_Optimal_Offset_Factor(rpBend,rb,Lm)
     if tuning=='spacing':
         PTL_Ring.add_Drift(tunableDriftGap/2)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
@@ -54,9 +54,9 @@ def generate_Ring_Lattice(rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens, LmCombine
         PTL_Ring.add_Drift(tunableDriftGap/2)
         PTL_Ring.add_Halbach_Lens_Sim(rpLens,L_Lens)
         PTL_Ring.add_Drift(tunableDriftGap/2)
-    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
+    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,rb)
     PTL_Ring.add_Halbach_Lens_Sim(rpLens,None,constrain=True)
-    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,1.0,rOffsetFact=rOffsetFact)
+    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rpBend,None,rb)
     PTL_Ring.end_Lattice(enforceClosedLattice=True,constrain=True)  # 17.8 % of time here
     return PTL_Ring
 
@@ -75,7 +75,7 @@ def generate_Injector_Lattice_Double_Lens(X: tuple,jitterAmp: float =0.0,fieldDe
         return None
     if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
         return None
-    PTL_Injector = ParticleTracerLattice(V0, latticeType='injector',jitterAmp=jitterAmp,
+    PTL_Injector = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector',jitterAmp=jitterAmp,
                     fieldDensityMultiplier=fieldDensityMultiplier,standardMagnetErrors=standardMagnetErrors)
     PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
     PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
@@ -131,7 +131,7 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
 def solve_For_Lattice_Params(X,tuning,magnetErrors):
     assert tuning in (None,'field','spacing')
     PTL_Ring, PTL_Injector=generate_Ring_And_Injector_Lattice(X,tuning,standardMagnetErrors=magnetErrors)
-    if PTL_Ring is None or PTL_Injector is None:
+    if None in (PTL_Ring,PTL_Injector):
         sol = invalid_Solution(X)
     else:
         sol=solution_From_Lattice(PTL_Ring,PTL_Injector,tuning)

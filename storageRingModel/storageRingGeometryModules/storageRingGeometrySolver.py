@@ -191,11 +191,11 @@ class StorageRingGeometryConstraintsSolver:
 
         assert self.storageRing.combiner is not None
         bounds = self.get_Bounds()
-        maxTries=5
+        maxTries=20
         i=0
         while True:
             try:
-                seed=42+i #seed must change for each try
+                seed=42+i #seed must change for each try, but this is repeatable
                 sol = differential_evolution(self.cost, bounds,seed=seed)
                 solutionParams = self.round_Integer_Params(sol.x)
                 closedCostTol = 1e-12

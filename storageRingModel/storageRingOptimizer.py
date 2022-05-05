@@ -128,7 +128,7 @@ class LatticeOptimizer:
             area += element.intersection(injectorLensShapely).area * converTo_mm
         return area
 
-    def show_Floor_Plan(self,X: list_array_tuple)-> None:
+    def show_Floor_Plan(self,X: Optional[list_array_tuple])-> None:
         self.update_Ring_And_Injector(X)
         shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan()
         for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
@@ -224,7 +224,7 @@ class LatticeOptimizer:
                 stable = True
         return stable
 
-    def update_Ring_And_Injector(self,X: list_array_tuple):
+    def update_Ring_And_Injector(self,X: Optional[list_array_tuple]):
         if X is None:
             pass
         elif self.whichKnobs=='all':

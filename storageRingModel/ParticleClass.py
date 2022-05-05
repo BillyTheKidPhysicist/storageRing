@@ -1,7 +1,7 @@
 from elementPT import Element
 import matplotlib.pyplot as plt
 import warnings
-import time
+from constants import DEFAULT_ATOM_SPEED
 import numpy.linalg as npl
 import numpy as np
 import copy
@@ -18,7 +18,7 @@ class Particle:
         if qi is None:
             qi=np.zeros(3)
         if pi is None:
-            pi=np.asarray([-210.0, 0.0, 0.0])
+            pi=np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0])
         assert len(qi)==3 and len(pi)==3 and 0.0<=probability<=1.0
         self.qi=qi.copy()#initial position, lab frame, meters
         self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
@@ -236,7 +236,7 @@ class Swarm:
         #qi: spatial coordinates
         #pi: momentum coordinates
         if pi is None:
-            pi=np.asarray([-210.0,0.0,0.0])
+            pi=np.asarray([-DEFAULT_ATOM_SPEED,0.0,0.0])
         if qi is None:
             qi = np.asarray([-1e-10, 0.0, 0.0])
         self.particles.append(Particle(qi, pi))

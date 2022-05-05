@@ -48,7 +48,7 @@ def tool_Parallel_Process(
     poolIter = zip(argsIter, seedArr)
     processes = mp.cpu_count() if processes == -1 else processes
     if processes > 1:
-        with mp.Pool(processes) as pool:
+        with mp.Pool(processes,maxtasksperchild=10) as pool:
             results = pool.starmap(wrapper, poolIter)
     elif processes == 1:
         results = [func(arg, *extraArgs_Constant, **extraKeyWordArgs_Constant) for arg in argsIter]

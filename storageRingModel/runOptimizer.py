@@ -1,25 +1,29 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from helperTools import *
-from profilehooks import profile
 from asyncDE import solve_Async
 from optimizerHelperFunctions import solve_For_Lattice_Params
-from parallel_Gradient_Descent import global_Gradient_Descent,gradient_Descent
+
 def survival_Optimize(bounds: list,tuning: Optional[str],workers: int,magnetErrors: bool):
     def wrapper(args):
+        cost=np.inf
         try:
             sol=solve_For_Lattice_Params(args,tuning,magnetErrors)
+            cost=sol.cost
             if sol.fluxMultiplication>10:
                 print(sol)
         except:
             np.set_printoptions(precision=100)
             print('assert during evaluation on args: ',repr(args))
-            assert False
-        return sol.cost
+        return cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
     # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
-    args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
-    wrapper(args0)
+    import skopt
+    vals=skopt.sampler.Sobol().generate(bounds,1000)
+    tool_Parallel_Process(wrapper,vals)
+    # args0 = np.array([0.014691009213257358, 0.0297440095905699, 0.011880244167712408, 0.011336008446642887, 0.32066412285553747])
+    # wrapper(args)
+
 def stability_And_Survival_Optimize(bounds,tuning,workers):
     def get_Individual_Costs(args):
         try:
@@ -49,8 +53,9 @@ def stability_And_Survival_Optimize(bounds,tuning,workers):
         # print(repr(args0),nominalCost,variability)
         return nominalCost+variability
     # solve_Async(wrapper, bounds, 15*len(bounds), timeOut_Seconds=100000, workers=workers)
-    args0 = np.array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
-    wrapper(args0)
+    # args0 = np.array([0.014691009213257358, 0.0297440095905699, 0.011880244167712408, 0.011336008446642887, 0.32066412285553747])
+    # wrapper(args0)
+
 def main():
     bounds = [
         (.005, .03),  # rpLens
@@ -63,23 +68,12 @@ def main():
         # (.075,.2), #LmCombiner
         # (.02,.05)  #rpCombiner
     ]
-    stability_And_Survival_Optimize(bounds,None,8)
-    # survival_Optimize(bounds,None,8,False)
+    # stability_And_Survival_Optimize(bounds,None,8)
+    survival_Optimize(bounds,None,10,False)
 if __name__=='__main__':
     main()
 
 
-
-"""----------Solution-----------  
-
-ideal case
- 
-------ITERATIONS:  4350
-POPULATION VARIABILITY: [0.03897526 0.02361456 0.0131504  0.00323601 0.02216822]
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.02072277, 0.03239042, 0.01302925, 0.008     , 0.3932113 ])
-cost: 0.5838620992518562"""
 
 
 

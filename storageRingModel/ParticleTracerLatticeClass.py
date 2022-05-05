@@ -4,6 +4,7 @@ from typing import Union,Generator,Iterable
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 import numpy as np
+import scipy.optimize as spo
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 import scipy.interpolate as spi
@@ -99,18 +100,18 @@ class ParticleTracerLattice:
     def find_Optimal_Offset_Factor(self,rp: float,rb: float,Lm: float,parallel: bool=False)-> float:
         #How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
         #imperfect segmented bender it needs to be optimized.
+        raise NotImplementedError #this doesn't do much with my updated approach, and needs to be reframed in terms
+        #of shifting the particle over to improve performance. It's also bloated. ALso, it's not accurate
         assert rp<rb/2.0 #geometry argument, and common mistake
         numMagnetsHalfBend=int(np.pi*rb/Lm)
         #todo: this should be self I think
         PTL_Ring=ParticleTracerLattice(self.v0Nominal,latticeType='injector')
         PTL_Ring.add_Drift(.05)
-        PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rp,numMagnetsHalfBend,rb,rOffsetFact=1.0)
+        PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm,rp,numMagnetsHalfBend,rb)
         PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False)
-        def errorFunc(outputOffsetFact):
+        def errorFunc(offset):
             h=5e-6
-            PTL_Ring.elList[1].update_rOffset_Fact(outputOffsetFact)
-            PTL_Ring.build_Lattice()
-            particle=Particle()
+            particle=Particle(qi=np.array([-1e-10,offset,0.0]),pi=np.array([-self.v0Nominal,0.0,0.0]))
             particleTracer=ParticleTracer(PTL_Ring)
             particle=particleTracer.trace(particle,h,1.0,fastMode=False)
             qoArr=particle.qoArr
@@ -120,7 +121,8 @@ class ParticleTracerLattice:
                 error=np.std(1e6*particle.qoArr[:,1])
                 return error
             else: return np.nan
-        outputOffsetFactArr=np.asarray([.8,.9,.933,.966,1.0,1.033,1.066,1.1,1.2])
+        outputOffsetFactArr=np.linspace(-3e-3,3e-3,100)
+
         if parallel==True: njobs=-1
         else: njobs=1
         errorArr=np.asarray(Parallel(n_jobs=njobs)(delayed(errorFunc)(outputOffset) for outputOffset in outputOffsetFactArr))
@@ -321,6 +323,14 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
+    def build_Lattice(self,constrain: bool):
+
+        build_Particle_Tracer_Lattice(self, constrain)
+        self.make_Geometry()
+        self.totalLength = 0
+        for el in self.elList:  # total length of particle's orbit in an element
+            self.totalLength += el.Lo
+
     def end_Lattice(self,constrain: bool=False,enforceClosedLattice: bool=True,buildLattice: bool=True,
                     surpressWarning: bool=False)-> None:
         #todo: reimplement keyword args
@@ -341,11 +351,7 @@ class ParticleTracerLattice:
         self.catch_Errors(constrain,buildLattice)
 
         if buildLattice==True:
-            build_Particle_Tracer_Lattice(self,constrain)
-            self.make_Geometry()
-            self.totalLength=0
-            for el in self.elList: #total length of particle's orbit in an element
-                self.totalLength+=el.Lo
+            self.build_Lattice(constrain)
 
     def make_Geometry(self)-> None:
         #todo: refactor this whole thing
