@@ -47,6 +47,8 @@ def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
 
 class ParticleTracer:
 
+    minTimeStepsPerElement: int = 2 #if an element is shorter than this, throw an error
+
     def __init__(self,lattice):
         #lattice: ParticleTracerLattice object typically
         self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
@@ -58,7 +60,6 @@ class ParticleTracer:
 
         self.T=None #total time elapsed
         self.h=None #step size
-        self.minTimeStepsPerElement=3
         self.energyCorrection =None
 
         self.elHasChanged=False # to record if the particle has changed to another element in the previous step

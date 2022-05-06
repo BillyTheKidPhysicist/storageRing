@@ -178,8 +178,8 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,apFrac: float =.9)\
-            -> None:
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,apFrac: float =.9,
+                              seed: int =None)-> None:
         """
         Add halbach hexapole lens combiner element.
 
@@ -193,14 +193,18 @@ class ParticleTracerLattice:
         :param layers: Number of concentric layers of magnets
         :return: None
         """
-        el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,self.latticeType,self.standardMagnetErrors,apFrac)
+
+        if seed is not None:
+            np.random.seed(seed)
+        ap=apFrac*rp
+        el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,ap,self.latticeType,self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner=el
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: float,apFrac:Optional[float]=.9,constrain: bool=False,
+    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
                 magnetWidth: float=None,
                              )-> None:
         """
@@ -234,7 +238,7 @@ class ParticleTracerLattice:
     #     el.index = len(self.elList) #where the element is in the lattice
     #     self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Lens_Ideal(self,L: float,Bp: float,rp: float,ap: float=None,constrain: bool=False)-> None:
+    def add_Lens_Ideal(self,L: float,Bp: float,rp: float,constrain: bool=False,apFrac: float=.9)-> None:
         """
         Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
 
@@ -246,12 +250,8 @@ class ParticleTracerLattice:
         :param bumpOffset:
         :return:
         """
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
+
+        ap=apFrac*rp
         el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -267,6 +267,7 @@ class ParticleTracerLattice:
         :param ap: Aperture of drift region, m
         :return:
         """
+
         el=Drift(self,L,ap)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -282,7 +283,7 @@ class ParticleTracerLattice:
         self.benderIndices.append(el.index)
         self.elList.append(el)
 
-    def add_Bender_Ideal(self,ang: float,Bp: float,rb: float,rp: float,ap: float=None)-> None:
+    def add_Bender_Ideal(self,ang: float,Bp: float,rb: float,rp: float,apFrac: float=.9)-> None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
         #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -290,13 +291,7 @@ class ParticleTracerLattice:
         #Bp: field strength at pole face of lens, T
         #rp: bore radius of element, m
         #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius, unitless
-        assert rb>rp*10
-        apFrac=.9 #apeture fraction
-        if ap is None:#set the apeture as fraction of bore radius to account for tube thickness
-            ap=apFrac*rp
-        else:
-            if ap > rp:
-                raise Exception('Apeture cant be bigger than bore radius')
+        ap=rp*apFrac
         el=BenderIdeal(self, ang, Bp, rp, rb, ap) #create a bender element object
         el.index = len(self.elList) #where the element is in the lattice
         self.benderIndices.append(el.index)

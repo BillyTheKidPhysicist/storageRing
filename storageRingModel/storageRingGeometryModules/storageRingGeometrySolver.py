@@ -34,6 +34,7 @@ class StorageRingGeometryConstraintsSolver:
         self.storageRing = copy.deepcopy(storageRing)
         self.targetRadius = radiusTarget
         self.tunedLenses = self.get_Tuned_Lenses()
+        self.isSameLengthTuneLenses=True
 
         assert all(type(shape) is not Bend for shape in self.storageRing) #not yet supported
 
@@ -104,14 +105,18 @@ class StorageRingGeometryConstraintsSolver:
         """Update bender and lens parameters with params in storage ring geometry"""
 
         benderParams, lensParams = self.shape_And_Round_Params(params)
-        assert len(benderParams) == self.storageRing.numBenders and len(lensParams) == len(self.tunedLenses)
+        assert len(benderParams) == self.storageRing.numBenders
         for bender, singleBenderParams in zip(self.storageRing.benders, benderParams):
             radius, numMagnets = singleBenderParams
             bender.set_Number_Magnets(numMagnets)
             bender.set_Radius(radius)
 
-        for lens, length in zip(self.tunedLenses, lensParams):
-            lens.set_Length(length)
+        if self.isSameLengthTuneLenses:
+            assert len(lensParams)==1
+            for lens in self.tunedLenses:
+                lens.set_Length(lensParams[0])
+        else:
+            raise NotImplementedError
         self.storageRing.build()
 
     def closed_Ring_Cost(self, params: realNumberTuple) -> float:
@@ -155,8 +160,11 @@ class StorageRingGeometryConstraintsSolver:
         numMagnetsApprox = round(anglePerBenderApprox / unitCellAngleApprox)
         bounds = [(self.targetRadius * .95, self.targetRadius * 1.05), (numMagnetsApprox * .9, numMagnetsApprox * 1.1)]
         bounds = bounds * self.storageRing.numBenders
-        for _ in self.tunedLenses:
-            bounds.append((.1, 5.0))  # big overshoot
+        if self.isSameLengthTuneLenses:
+            if len(self.tunedLenses)>=1:
+                bounds.append((.1, 5.0))  # big overshoot
+        else:
+            raise NotImplementedError
         bounds = tuple(bounds)  # i want this to be immutable
         return bounds
 

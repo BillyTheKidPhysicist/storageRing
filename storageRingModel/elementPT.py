@@ -39,6 +39,25 @@ def is_Even(x: int)-> bool:
     assert type(x) is int and x>0
     return True if x%2==0 else False
 
+class ElementDimensionError(Exception):
+    """Some dimension of an element is causing an unphysical configuration. Rather general error"""
+    pass
+
+class ElementTooShortError(Exception):
+    """An element is too short. Because space is required for fringe fields this can result in negative material
+    lengths, or nullify my approximation that fields drop to 1% when the element ends."""
+    pass
+
+class CombinerIterExceededError(Exception):
+    """When solving for the geometry of the combiner, Newton's method is used to set the offset. Throw this if
+    iterations are exceeded"""
+    pass
+
+class CombinerDimensionError(Exception):
+    """Not all configurations of combiner parameters are valid. For one thing, the beam needs to fit into the
+    combiner."""
+    pass
+
 class Element:
     """
     Base class for other elements. Contains universal attributes and methods.
@@ -348,7 +367,6 @@ class LensIdeal(Element):
         :param Bp: Magnetic field at the pole face, T.
         :param rp: Bore radius, m. Distance from center of magnet to the magnetic material
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
-        :param fillParams: Wether to carry out filling the element parameters. dubious
         """
         # fillParams is used to avoid filling the parameters in inherited classes
         super().__init__(PTL,build=False,L=L)
@@ -453,7 +471,7 @@ class BenderIdeal(Element):
 
     def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
         if all(arg is not None for arg in [ap,rb,ang]):
-            assert ap<rp<rb/2.0 and 0.0<ang<2*np.pi
+            assert ap<=rp<rb/2.0 and 0.0<ang<2*np.pi
         super().__init__(PTL, ang=ang, build=False)
         self.Bp:float  = Bp
         self.rp:float = rp
@@ -668,6 +686,7 @@ class CombinerSim(CombinerIdeal):
         # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         # doubling dimensions halves the gradient
         assert mode in ('injector','storageRing')
+        assert sizeScale>0 and isinstance(combinerFileName,str)
         Lm = .187
         apL = .015
         apR = .025
@@ -734,8 +753,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
     #3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
     #enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedImage3.png
 
-    def __init__(self, PTL,Lm:float,rp:float,numMagnets: int,rb:float,extraSpace:float,rOffsetFact:float,
+    fringeFracOuter: float = 1.5  # multiple of bore radius to accomodate fringe field
+
+    def __init__(self, PTL,Lm:float,rp:float,numMagnets: Optional[int],rb:float,extraSpace:float,rOffsetFact:float,
                  useStandardMagErrors: bool):
+        assert all(val>0 for val in (Lm,rp,rb,rOffsetFact))
+        assert extraSpace>=0
+        assert rb>rp/10 #this would be very dubious
         super().__init__(PTL, None, None, rp, rb, None, build=False)
         self.rb=rb
         self.space=extraSpace
@@ -746,7 +770,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.yokeWidth = self.magnetWidth
         self.ucAng: Optional[float] = None
         self.rOffsetFact=rOffsetFact #factor to times the theoretic optimal bending radius by
-        self.fringeFracOuter=1.5 #multiple of bore radius to accomodate fringe field
         self.Lcap=self.fringeFracOuter*self.rp
         self.numMagnets = numMagnets
         self.segmented: bool=True
@@ -1057,12 +1080,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
 class HalbachLensSim(LensIdeal):
 
-    def __init__(self,PTL, rpLayers:tuple,L: float,apFrac: Optional[float],
+    fringeFracOuter: float = 1.5
+
+    def __init__(self,PTL, rpLayers:tuple,L: Optional[float],apFrac: Optional[float],
         magnetWidths: Optional[tuple],useStandardMagErrors: bool, build: bool=True):
+        assert all(rp>0 for rp in rpLayers)
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         #to accomdate the new rp such as force values and positions
         self.magnetWidths=self.set_Magnet_Widths(rpLayers,magnetWidths)
-        self.fringeFracOuter: float=1.5
         self.fringeFracInnerMin=4.0 #if the total hard edge magnet length is longer than this value * rp, then it can
         #can safely be modeled as a magnet "cap" with a 2D model of the interior
         #----num points depends on a few paremters to be the same as when I determined the optimal values
@@ -1159,7 +1184,9 @@ class HalbachLensSim(LensIdeal):
         """Compute dependent geometric values"""
 
         self.Lm=self.L-2*self.fringeFracOuter*max(self.rpLayers)  #hard edge length of magnet
-        assert self.Lm>0.0
+        if self.Lm<.5*self.rp: #If less than zero, unphysical. If less than .5rp, this can screw up my assumption
+            # about fringe fields
+            raise ElementTooShortError
         self.individualMagnetLength=min([(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm]) #this may get rounded
         #up later to satisfy that the total length is Lm
         self.Lo=self.L
@@ -1349,18 +1376,20 @@ class HalbachLensSim(LensIdeal):
 
 class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
-    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int, mode:str, useStandardMagErrors: bool,
-                 apFrac: float, build:bool=True):
+    outerFringeFrac: float=1.5
+
+    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int,ap: float, mode:str, useStandardMagErrors: bool,
+         build:bool=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
         #layers: Number of concentric layers
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         assert  mode in ('storageRing','injector')
-        assert 0.0<apFrac<=1.0
+        assert all(val>0 for val in (Lm,rp,loadBeamDiam,layers,ap))
+        assert ap<rp
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
 
-        self.outerFringeFrac: float = 1.5
         #----num points depends on a few paremters to be the same as when I determined the optimal values
         assert self.maxCombinerAng ==.2 and self.outerFringeFrac==1.5, "May need to change " \
                                                                        "numgrid points if this changes"
@@ -1373,7 +1402,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.Lm = Lm
         self.rp = rp
         self.layers=layers
-        self.ap=apFrac*self.rp
+        self.ap=ap
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
         self.fieldFact: float=-1.0 if mode=='injector' else 1.0
@@ -1560,13 +1589,15 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         modeling high field seekers. Particle is traced backwards from the output of the combiner to the input.
         Can possibly error out from modeling magnet or assembly error"""
 
+        if self.loadBeamDiam/2>self.rp*.9: #beam doens't fit in combiner
+            raise CombinerDimensionError
         fieldFact0=self.fieldFact
         self.update_Field_Fact(-1.0)
         yInitial=self.ap/10.0
         try:
             inputAngle,_,_,seperationInitial =self.compute_Input_Angle_And_Offset(yInitial,ap=self.ap)
         except:
-            raise Exception("Invalid combiner configuration")
+            raise CombinerDimensionError
         assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
         gradientInitial=(seperationInitial-self.ap)/(yInitial-0.0)
         y=yInitial
@@ -1577,13 +1608,15 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         targetSep=self.loadBeamDiam/2
         while not isclose(seperation,targetSep,abs_tol=tolAbsolute):
             deltaX=-.8*(seperation-targetSep)/gradient # I like to use a little damping
+            deltaX=-y/2 if y+deltaX<0 else deltaX #restrict deltax to allow value
             y=y+deltaX
             inputAngle,_,_,seperationNew = self.compute_Input_Angle_And_Offset(y,ap=self.ap)
             assert inputAngle<0 #loading beam enters from y<0, if positive then this is circulating beam
             gradient=(seperationNew-seperation)/deltaX
             seperation=seperationNew
             i+=1
-            assert i<iterMax
+            if i>iterMax:
+                raise CombinerIterExceededError
         assert 0.0<y<self.ap
         self.update_Field_Fact(fieldFact0)
         return y

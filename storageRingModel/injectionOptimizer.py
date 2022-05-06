@@ -5,11 +5,12 @@ from typing import Union,Optional
 import numpy as np
 import warnings
 from constants import DEFAULT_ATOM_SPEED
-warnings.filterwarnings('ignore')
 from storageRingOptimizer import LatticeOptimizer
-from ParticleTracerLatticeClass import ParticleTracerLattice
+from ParticleTracerLatticeClass import ParticleTracerLattice,ElementDimensionError,ElementTooShortError,\
+    CombinerDimensionError
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
+from latticeModels import make_Injector_Version_1,make_Ring_Surrogate_Version_1,InjectorGeometryError
 
 
 
@@ -22,46 +23,8 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return False
     else:
         return True
-def generate_Injector_Lattice_Double_Lens(X) -> Optional[ParticleTracerLattice]:
-    L_InjectorMagnet1, rpInjectorMagnet1,L_InjectorMagnet2, rpInjectorMagnet2, \
-    LmCombiner, rpCombiner,loadBeamDiam,L1,L2,L3=X
-    fringeFrac = 1.5
-    LMagnet1 = L_InjectorMagnet1 - 2 * fringeFrac * rpInjectorMagnet1
-    LMagnet2 = L_InjectorMagnet2 - 2 * fringeFrac * rpInjectorMagnet2
-    aspect1,aspect2=LMagnet1/rpInjectorMagnet1,LMagnet2/rpInjectorMagnet2
-    if aspect1<1.0 or aspect2<1.0: #horrible fringe field performance
-        return None
-    if LMagnet1 < rpInjectorMagnet1/2 or LMagnet2 < rpInjectorMagnet2/2:  # minimum fringe length must be respected.
-        return None
-    if loadBeamDiam>rpCombiner: #silly if load beam doens't fit in half of magnet
-        return None
-    PTL_Injector = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
-    PTL_Injector.add_Drift(L1, ap=rpInjectorMagnet1)
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
-    PTL_Injector.add_Drift(L2, ap=max([rpInjectorMagnet1,rpInjectorMagnet2]))
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
-    PTL_Injector.add_Drift(L3, ap=rpInjectorMagnet2)
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
-    PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
-    assert PTL_Injector.elList[1].fringeFracOuter==fringeFrac and PTL_Injector.elList[3].fringeFracOuter==fringeFrac
-    return PTL_Injector
 
 
-def generate_Ring_Surrogate_Lattice(X)->ParticleTracerLattice:
-    jeremyGap=5e-2
-    rpLensLast=.02
-    rplensFirst=.02
-    lastGap = 5e-2
-    L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
-    LmCombiner, rpCombiner, loadBeamDiam, L1, L2, L3 = X
-    PTL_Ring=ParticleTracerLattice(DEFAULT_ATOM_SPEED,latticeType='storageRing')
-    PTL_Ring.add_Drift(.5,ap=rpLensLast) #models the size of the lengs
-    PTL_Ring.add_Drift(lastGap)
-    PTL_Ring.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
-    PTL_Ring.add_Drift(jeremyGap)
-    PTL_Ring.add_Halbach_Lens_Sim(rplensFirst, .2)
-    PTL_Ring.end_Lattice(enforceClosedLattice=False,constrain=False,surpressWarning=True)  # 17.8 % of time here
-    return PTL_Ring
 
 class Injection_Model(LatticeOptimizer):
 
@@ -163,16 +126,15 @@ class Injection_Model(LatticeOptimizer):
         return area
 
 maximumCost=2.0
+surrogateParams={'rpLens1':.01,'rpLens2':.025,'L_Lens':.3}
+L_Injector_TotalMax = 2.0
 
-def injector_Cost(X: Union[np.ndarray,list,tuple]):
-    L_Injector_TotalMax = 2.0
-    PTL_I=generate_Injector_Lattice_Double_Lens(X)
 
-    if PTL_I is None:
-        return maximumCost
+def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
+    PTL_I=make_Injector_Version_1(paramsInjector)
     if PTL_I.totalLength>L_Injector_TotalMax:
         return maximumCost
-    PTL_R=generate_Ring_Surrogate_Lattice(X)
+    PTL_R=make_Ring_Surrogate_Version_1(paramsInjector,surrogateParams)
     if PTL_R is None:
         return maximumCost
     assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
@@ -186,43 +148,29 @@ def main():
     def wrapper(X: Union[np.ndarray,list,tuple]):
         try:
             return injector_Cost(X)
-        except Exception as e:
-            if str(e) == "Invalid combiner configuration": #this is the only expect exception
-                return maximumCost #allowed error
-            else:
-                np.set_printoptions(precision=100)
-                raise Exception("Unhandled exception on arguments: ",repr(np.asarray(X)))
-
+        except (ElementDimensionError,InjectorGeometryError,ElementTooShortError,CombinerDimensionError):
+            return maximumCost
+        except:
+            np.set_printoptions(precision=100)
+            print('unhandled exception on args: ',repr(X))
+            raise Exception
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
     bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
     (.05,.5),(.05,.3)]
     for _ in range(3):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), tol=.03, disp=True,workers=10))
-    # X0=np.array([0.1906563793040836  , 0.01                , 0.2218410018755692  ,
-    #    0.010637457655795489, 0.23474614154569443 , 0.006537948797064993,
-    #    0.005               , 0.319856088569777   , 0.2234291382946802  ,
-    #    0.3                 ])
-    # wrapper(X0)
-#
+        print(solve_Async(wrapper, bounds, 15 * len(bounds), tol=.03, disp=True,workers=8))
+    # X0=np.array([0.25060918, 0.02310519, 0.09129291, 0.01658076, 0.18996305,
+    #    0.03871766, 0.0239747 , 0.05      , 0.40325806, 0.15953472])
+    # print(wrapper(X0))
 if __name__=="__main__":
     main()
 
 
 """
+BEST MEMBER BELOW
 ---population member---- 
-DNA: array([0.22235936, 0.01104483, 0.18877274, 0.02336684, 0.20498992,
-       0.04      , 0.01591784, 0.05      , 0.09548635, 0.24060799])
-cost: 0.17547836862049845
-
----population member---- 
-DNA: array([0.20383302, 0.03      , 0.11812703, 0.02153462, 0.19984917,
-       0.04      , 0.01688818, 0.05057791, 0.17657728, 0.24033583])
-cost: 0.13581140846409256
-
-
----population member---- 
-DNA: array([0.17726131, 0.02712811, 0.09672166, 0.02090085, 0.19711164,
-       0.04      , 0.01875824, 0.15136994, 0.21733529, 0.24845243])
-cost: 0.14345103162486927
+DNA: array([0.25060918, 0.02310519, 0.09129291, 0.01658076, 0.18996305,
+       0.03871766, 0.0239747 , 0.05      , 0.40325806, 0.15953472])
+cost: 0.10791484489389803
 """
