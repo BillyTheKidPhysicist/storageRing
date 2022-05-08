@@ -1,16 +1,17 @@
+import itertools
 import os
-os.environ['OPENBLAS_NUM_THREADS']='1'
 from asyncDE import solve_Async
 from typing import Union,Optional
 import numpy as np
 import warnings
 from constants import DEFAULT_ATOM_SPEED
 from storageRingOptimizer import LatticeOptimizer
-from ParticleTracerLatticeClass import ParticleTracerLattice,ElementDimensionError,ElementTooShortError,\
-    CombinerDimensionError
+from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
 from latticeModels import make_Injector_Version_1,make_Ring_Surrogate_Version_1,InjectorGeometryError
+from latticeModels_Constants import constants_Version1,lockedDict
+import dill
 
 
 
@@ -126,9 +127,9 @@ class Injection_Model(LatticeOptimizer):
         return area
 
 maximumCost=2.0
-surrogateParams={'rpLens1':.01,'rpLens2':.025,'L_Lens':.3}
-L_Injector_TotalMax = 2.0
 
+L_Injector_TotalMax = 2.0
+surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.3})
 
 def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
     PTL_I=make_Injector_Version_1(paramsInjector)
@@ -143,34 +144,46 @@ def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
     assert 0.0<=cost<=maximumCost
     return cost
 
+def wrapper(X: Union[np.ndarray,list,tuple]):
+    try:
+        return injector_Cost(X)
+    except (ElementDimensionError,InjectorGeometryError,ElementTooShortError,CombinerDimensionError):
+        return maximumCost
+    except:
+        np.set_printoptions(precision=100)
+        print('unhandled exception on args: ',repr(X))
+        raise Exception
 
 def main():
-    def wrapper(X: Union[np.ndarray,list,tuple]):
-        try:
-            return injector_Cost(X)
-        except (ElementDimensionError,InjectorGeometryError,ElementTooShortError,CombinerDimensionError):
-            return maximumCost
-        except:
-            np.set_printoptions(precision=100)
-            print('unhandled exception on args: ',repr(X))
-            raise Exception
+
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
     bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
     (.05,.5),(.05,.3)]
-    for _ in range(3):
-        print(solve_Async(wrapper, bounds, 15 * len(bounds), tol=.03, disp=True,workers=8))
-    # X0=np.array([0.25060918, 0.02310519, 0.09129291, 0.01658076, 0.18996305,
-    #    0.03871766, 0.0239747 , 0.05      , 0.40325806, 0.15953472])
+
+    def optimize(aperture):
+        constants_Version1["OP_MagAp"] = aperture
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=False, workers=9)
+        _results=( member.DNA,member.cost)
+        print('results for ',aperture)
+        print(_results)
+        return _results
+
+    configs=[constants_Version1["OP_MagAp"],
+             constants_Version1["OP_MagAp"]+.005,
+             constants_Version1["OP_MagAp"]+.01,
+             constants_Version1["OP_MagAp"]+.015,
+             constants_Version1["OP_MagAp"]+.02]
+    results=[optimize(config) for config in configs]
+    print(results)
+
+    with open('injectorResults2','wb') as file:
+        dill.dump(results,file)
+
+    # X0=np.array([0.17679389, 0.02566142, 0.11946231, 0.02123231, 0.15981431,
+    #    0.03244162, 0.01197227, 0.05      , 0.23929145, 0.2273491 ])
     # print(wrapper(X0))
 if __name__=="__main__":
     main()
 
 
-"""
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.25060918, 0.02310519, 0.09129291, 0.01658076, 0.18996305,
-       0.03871766, 0.0239747 , 0.05      , 0.40325806, 0.15953472])
-cost: 0.10791484489389803
-"""

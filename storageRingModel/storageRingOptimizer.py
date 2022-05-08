@@ -169,11 +169,11 @@ class LatticeOptimizer:
         return swarmTraced
     
     def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced: Swarm, 
-                                                            copyParticles: bool=False)-> Swarm:
+                                                            copyParticles: bool=False,clipNextAp: bool=True)-> Swarm:
         #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
         #are now clipping the combiner and any that would clip the next element
         #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
-        apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap
+        apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap if clipNextAp else np.inf
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
             if particle.qf is not None:

@@ -43,6 +43,34 @@ def add_Drift_If_Needed(PTL: ParticleTracerLattice,minSpace: float,elBeforeName:
 def add_Bend_Adjacent_Gap(PTL: ParticleTracerLattice,rpLens: float,gapMin: float,rpBend: float)-> None:
     add_Drift_If_Needed(PTL,gapMin,'lens','bender',rpLens,rpBend)
 
+def add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts: dict):
+    # ------gap 1--------  bender-> lens
+    # there is none here because of strong adjacent pumping
+
+    # --------lens 1---------
+
+    PTL.add_Halbach_Lens_Sim(rpLens1, L_Lens)
+
+    # --------gap 2-------- lens-> combiner
+
+    add_Drift_If_Needed(PTL, consts["gap2Min"], 'lens', 'combiner', rpLens1, rpCombiner)
+
+    # -------combiner-------
+
+    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
+
+    # ------gap 3--------- combiner-> lens
+    # there must be a drift here to account for the optical pumping aperture limit
+    gap3ExtraSpace = consts["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
+                                              + el_Fringe_Space('lens', rpLens2))
+    PTL.add_Drift(clip_If_Below_Min_Time_Step_Gap(gap3ExtraSpace), ap=consts["OP_MagAp"])
+
+    # -------lens 2-------
+    PTL.add_Halbach_Lens_Sim(rpLens2, L_Lens)
+
+    # ---------gap 4----- lens-> bender
+
+    add_Bend_Adjacent_Gap(PTL, rpLens2, consts["lensToBendGap"], rpBend)
 
 def make_Ring_And_Injector_Version1(params: lst_arr_tple)-> tuple[ParticleTracerLattice, ParticleTracerLattice]:
 
@@ -73,34 +101,9 @@ def make_Ring_Version_1(params: lst_arr_tple)-> ParticleTracerLattice:
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    #------gap 1--------  bender-> lens
+    #------starting at gap 1 through lenses and gaps and combiner to gap4
 
-    #there is none here because of strong adjacent pumping
-
-    #--------lens 1---------
-
-    PTL.add_Halbach_Lens_Sim(rpLens1, L_Lens)
-
-    #--------gap 2-------- lens-> combiner
-
-    add_Drift_If_Needed(PTL,consts["gap2Min"],'lens','combiner',rpLens1,rpCombiner)
-    
-    #-------combiner-------
-
-    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
-
-    #------gap 3--------- combiner-> lens
-    #there must be a drift here to account for the optical pumping aperture limit
-    gap3ExtraSpace=consts["OP_MagWidth"]-(el_Fringe_Space('combiner',rpCombiner)
-                                          +el_Fringe_Space('lens',rpLens2))
-    PTL.add_Drift(clip_If_Below_Min_Time_Step_Gap(gap3ExtraSpace),ap=consts["OP_MagAp"])
-
-    #-------lens 2-------
-    PTL.add_Halbach_Lens_Sim(rpLens2, L_Lens)
-
-    #---------gap 4----- lens-> bender
-
-    add_Bend_Adjacent_Gap(PTL,rpLens2,consts["lensToBendGap"],rpBend)
+    add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts)
 
     #-------bender 1------
     PTL.add_Halbach_Bender_Sim_Segmented(consts['Lm'], rpBend, None, consts['rbTarget'])
@@ -118,7 +121,7 @@ def make_Ring_Version_1(params: lst_arr_tple)-> ParticleTracerLattice:
     # ---------lens 4-------
     PTL.add_Halbach_Lens_Sim(rpLens3_4, None, constrain=True)
 
-    #------gap 6------
+    #------gap 7------
 
     add_Bend_Adjacent_Gap(PTL, rpLens3_4, consts["observationGap"], rpBend)
 
@@ -164,6 +167,7 @@ def make_Ring_Surrogate_Version_1(injectionParams,surrogateParamsDict: dict):
     LmCombiner, rpCombiner, loadBeamDiam, gap1, gap2, gap3 = injectionParams
 
     consts = constants_Version1
+    rpBend=1.0
 
     rpLens1=surrogateParamsDict['rpLens1']
     rpLens2=surrogateParamsDict['rpLens2']
@@ -172,28 +176,7 @@ def make_Ring_Surrogate_Version_1(injectionParams,surrogateParamsDict: dict):
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    # ------gap 1--------  bender-> lens
-
-    # there is none here because of strong adjacent pumping
-
-    # --------lens 1---------
-
-    PTL.add_Halbach_Lens_Sim(rpLens1, L_Lens)
-
-    # --------gap 2-------- lens-> combiner
-    add_Drift_If_Needed(PTL, consts["gap2Min"], 'lens', 'combiner', rpLens1, rpCombiner)
-
-    # -------combiner-------
-
-    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
-
-    #------gap 3--------- combiner-> lens
-    #there must be a drift here to account for the optical pumping aperture limit
-    gap3ExtraSpace=consts["OP_MagWidth"]-(el_Fringe_Space('combiner',rpCombiner)+el_Fringe_Space('lens',rpLens2))
-    PTL.add_Drift(clip_If_Below_Min_Time_Step_Gap(gap3ExtraSpace),ap=consts["OP_MagAp"])
-
-    # -------lens 2-------
-    PTL.add_Halbach_Lens_Sim(rpLens2, L_Lens)
+    add_First_Racetrack(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend, consts)
 
     PTL.end_Lattice( constrain=False)
     return PTL
