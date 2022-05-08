@@ -16,8 +16,9 @@ class lockedDict(dict):
 constants_Version1=lockedDict({
     "Lm": .0254 / 2.0, #length of individual magnets in bender
     "gap2Min": 3.5*.0254, #from lens to combiner
-    "OP_MagWidth": .05+.02, #account for fringe fields
+    "OP_MagWidth": .05+.02, #account for fringe fields with .02
     "OP_MagAp":.012/2.0,
+    "OP_PumpingRegionLength":.01, #distance for effective optical pumping
     "bendingApMax":.01, #maximum from 1.33 flange limit. I rounded up
     "lensToBendGap":2*.0254, #same at each joint. Vacuum tube limited
     "observationGap": 2*.0254, #gap required for observing atoms

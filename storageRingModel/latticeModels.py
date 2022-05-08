@@ -59,11 +59,16 @@ def add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBea
 
     PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
 
-    # ------gap 3--------- combiner-> lens
-    # there must be a drift here to account for the optical pumping aperture limit
-    gap3ExtraSpace = consts["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
+    # ------gap 3--------- combiner-> lens, Optical Pumping (OP) region
+    # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
+    #as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
+    #without it being a new drift region
+    OP_Gap = consts["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
                                               + el_Fringe_Space('lens', rpLens2))
-    PTL.add_Drift(clip_If_Below_Min_Time_Step_Gap(gap3ExtraSpace), ap=consts["OP_MagAp"])
+    OP_Gap=clip_If_Below_Min_Time_Step_Gap(OP_Gap)
+    OP_Gap=OP_Gap if OP_Gap>consts["OP_PumpingRegionLength"] else \
+                                consts["OP_PumpingRegionLength"]
+    PTL.add_Drift(OP_Gap, ap=consts["OP_MagAp"])
 
     # -------lens 2-------
     PTL.add_Halbach_Lens_Sim(rpLens2, L_Lens)

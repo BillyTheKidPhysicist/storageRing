@@ -372,7 +372,7 @@ class LensIdeal(Element):
         super().__init__(PTL,build=False,L=L)
         self.Bp = Bp
         self.rp = rp
-        self.ap = ap  # size of apeture radially
+        self.ap = rp if ap is None else ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
         self.K=None
         if build:
@@ -470,12 +470,10 @@ class BenderIdeal(Element):
         """
 
     def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
-        if all(arg is not None for arg in [ap,rb,ang]):
-            assert ap<=rp<rb/2.0 and 0.0<ang<2*np.pi
         super().__init__(PTL, ang=ang, build=False)
         self.Bp:float  = Bp
         self.rp:float = rp
-        self.ap:float = ap
+        self.ap:float = self.rp if ap is None else ap
         self.rb:float = rb
         self.K:Optional[float] = None
         self.shape:str = 'BEND'
@@ -755,8 +753,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     fringeFracOuter: float = 1.5  # multiple of bore radius to accomodate fringe field
 
-    def __init__(self, PTL,Lm:float,rp:float,numMagnets: Optional[int],rb:float,extraSpace:float,rOffsetFact:float,
-                 useStandardMagErrors: bool):
+    def __init__(self, PTL,Lm:float,rp:float,numMagnets: Optional[int],rb:float,ap:Optional[float],extraSpace:float,
+                 rOffsetFact:float,useStandardMagErrors: bool):
         assert all(val>0 for val in (Lm,rp,rb,rOffsetFact))
         assert extraSpace>=0
         assert rb>rp/10 #this would be very dubious
@@ -765,6 +763,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.space=extraSpace
         self.Lm=Lm
         self.rp=rp
+        self.ap=ap
         self.Lseg: float = self.Lm + self.space * 2
         self.magnetWidth = rp * np.tan(2 * np.pi / 24) * 2
         self.yokeWidth = self.magnetWidth
@@ -797,7 +796,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         else:
             self.build_Pre_Constraint()
 
-    def compute_Aperture(self)->float:
+    def compute_Maximum_Aperture(self)->float:
         #beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         #use simple geoemtry of the bending radius that touches the top inside corner of a segment
         radiusCorner=np.sqrt((self.rb-self.rp)**2+(self.Lm/2)**2)
@@ -805,7 +804,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         safetyFactor=.95
         apMaxGoodField=safetyFactor*self.numPointsBoreAp*self.rp/(self.numPointsBoreAp+np.sqrt(2))  #max aperture
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
-        # several reasons (using int, and non equal grid in xy), so I include a smallsafety factor
+        # several reasons (using int, and non equal grid in xy), so I include a small safety factor
         apMax=min([apMaxGeom,apMaxGoodField])
         return apMax
 
@@ -856,8 +855,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return ucAng
 
     def build_Post_Constrained(self)->None:
-
-        self.ap=self.compute_Aperture()
+        
+        self.ap=self.ap if self.ap is not None else self.compute_Maximum_Aperture()
+        assert self.ap<=self.compute_Maximum_Aperture()
         assert self.rb-self.rp-self.yokeWidth>0.0
         self.ucAng =self.get_Unit_Cell_Angle()
         #500um works very well, but 1mm may be acceptable
@@ -1082,7 +1082,7 @@ class HalbachLensSim(LensIdeal):
 
     fringeFracOuter: float = 1.5
 
-    def __init__(self,PTL, rpLayers:tuple,L: Optional[float],apFrac: Optional[float],
+    def __init__(self,PTL, rpLayers:tuple,L: Optional[float],ap: Optional[float],
         magnetWidths: Optional[tuple],useStandardMagErrors: bool, build: bool=True):
         assert all(rp>0 for rp in rpLayers)
         #if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
@@ -1097,7 +1097,7 @@ class HalbachLensSim(LensIdeal):
         self.numGridPointsZ = make_Odd(round(21 * PTL.fieldDensityMultiplier))
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
         self.apMaxGoodField=self.calculate_Maximum_Good_Field_Aperture(rp)
-        ap=self.apMaxGoodField if apFrac is None else apFrac*rp
+        ap=self.apMaxGoodField-TINY_OFFSET if ap is None else ap
         assert ap<=self.apMaxGoodField
         assert ap>5*rp/self.numGridPointsXY #ap shouldn't be too small. Value below may be dubiuos from interpolation
         super().__init__(PTL, L, None, rp, ap, build=False)
@@ -1378,16 +1378,15 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
 
     outerFringeFrac: float=1.5
 
-    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int,ap: float, mode:str, useStandardMagErrors: bool,
-         build:bool=True):
+    def __init__(self, PTL, Lm:float, rp:float, loadBeamDiam:float,layers:int,ap: Optional[float], mode:str,
+                 useStandardMagErrors: bool,build:bool=True):
         #PTL: object of ParticleTracerLatticeClass
         #Lm: hardedge length of magnet.
         #loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
         #layers: Number of concentric layers
         #mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         assert  mode in ('storageRing','injector')
-        assert all(val>0 for val in (Lm,rp,loadBeamDiam,layers,ap))
-        assert ap<rp
+        assert all(val>0 for val in (Lm,rp,loadBeamDiam,layers))
         CombinerIdeal.__init__(self,PTL,Lm,None,None,None,None,None,mode,1.0,build=False)
 
         #----num points depends on a few paremters to be the same as when I determined the optimal values
@@ -1470,7 +1469,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
-        yMax = self.ap + (La + self.ap * np.sin(abs(ang))) * np.sin(abs(ang))
+        yMax = self.rp + (La + self.rp * np.sin(abs(ang))) * np.sin(abs(ang))
         yMax=np.clip(yMax,self.rp,np.inf)
         yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
         yMin=-TINY_OFFSET if not self.useStandardMagErrors else -yMax
@@ -1495,7 +1494,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         chosen such that the first z point above the lens is just barely above it, and vacuum tube is configured to
         respect that. See fastNumbaMethodsAndClasses.CombinerHalbachLensSimFieldHelper_Numba.is_Coord_Inside_Vacuum"""
         firstValidPointSpacing=1e-6
-        maxLength = (self.Lb + (La + self.ap * np.sin(abs(ang))) * np.cos(abs(ang)))
+        maxLength = (self.Lb + (La + self.rp * np.sin(abs(ang))) * np.cos(abs(ang)))
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location. See how force is computed
         zMax=maxLength-symmetryPlaneX #subtle. The interpolation must extend to long enough to account for the
         #combiner not being symmetric, but the interpolation field being symmetric. See how force symmetry is handled
@@ -1512,6 +1511,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         xArr,yArr,zArr = self.make_Grid_Coords_Arrays(La,ang,accomodateJitter)
         self.apMaxGoodField = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
+        self.ap=self.apMaxGoodField-TINY_OFFSET if self.ap is None else self.ap
         assert self.ap < self.apMaxGoodField
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
         BNormGrad, BNorm = np.zeros((len(volumeCoords), 3)) * np.nan, np.zeros(len(volumeCoords)) * np.nan
@@ -1526,7 +1526,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
     def compute_Input_Orbit_Characteristics(self)->tuple:
         """compute characteristics of the input orbit. This applies for injected beam, or recirculating beam"""
 
-        LaMax = (self.ap + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
+        LaMax = (self.rp + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                                                 np.cos(self.maxCombinerAng) ** 2 / np.sin(self.maxCombinerAng))
         fieldData=self.make_Field_Data(LaMax,self.maxCombinerAng,False)
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb,

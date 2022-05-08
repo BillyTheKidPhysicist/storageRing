@@ -178,7 +178,7 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,apFrac: float =.9,
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,ap: float =None,
                               seed: int =None)-> None:
         """
         Add halbach hexapole lens combiner element.
@@ -196,7 +196,6 @@ class ParticleTracerLattice:
 
         if seed is not None:
             np.random.seed(seed)
-        ap=apFrac*rp
         el = CombinerHalbachLensSim(self,Lm,rp,loadBeamDiam,layers,ap,self.latticeType,self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         assert self.combiner is None  # there can be only one!
@@ -204,15 +203,14 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],apFrac:Optional[float]=.9,constrain: bool=False,
-                magnetWidth: float=None,
-                             )-> None:
+    def add_Halbach_Lens_Sim(self,rp: Union[float,tuple],L: Optional[float],ap:Optional[float]=None,
+                             constrain: bool=False,magnetWidth: float=None)-> None:
         """
         Add simulated halbach sextupole element to lattice.
 
         :param rp: Bore radius, m
         :param L: Length of element, m. This includes fringe fields, actual magnet length will be smaller
-        :param apFrac: Size of aperture as fraction of bore radius
+        :param ap: Size of aperture
         :param constrain: Wether element is being used as part of a constraint. If so, fields construction will be
         deferred
         :param magnetWidth: Width of both side cuboid magnets in polar plane of lens, m. Magnets length is L minus
@@ -221,7 +219,7 @@ class ParticleTracerLattice:
         """
         rpLayers=rp if isinstance(rp,tuple) else (rp,)
         magnetWidth=(magnetWidth,) if isinstance(magnetWidth,float) else magnetWidth
-        el=HalbachLensSim(self, rpLayers,L,apFrac,magnetWidth, self.standardMagnetErrors)
+        el=HalbachLensSim(self, rpLayers,L,ap,magnetWidth, self.standardMagnetErrors)
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
         if constrain==True: self.set_Constrained_Linear_Element(el)
@@ -238,20 +236,19 @@ class ParticleTracerLattice:
     #     el.index = len(self.elList) #where the element is in the lattice
     #     self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Lens_Ideal(self,L: float,Bp: float,rp: float,constrain: bool=False,apFrac: float=.9)-> None:
+    def add_Lens_Ideal(self,L: float,Bp: float,rp: float,constrain: bool=False,ap: float=None)-> None:
         """
         Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
 
         :param L: Length of element, m. Lens hard edge length is this as well
         :param Bp: Field at bore/pole radius of lens
         :param rp: Bore/pole radius of lens
-        :param ap:
+        :param ap: aperture of vacuum tube in magnet
         :param constrain:
         :param bumpOffset:
         :return:
         """
 
-        ap=apFrac*rp
         el=LensIdeal(self, L, Bp, rp, ap) #create a lens element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
@@ -273,17 +270,17 @@ class ParticleTracerLattice:
         self.elList.append(el) #add element to the list holding lattice elements in order
 
     def add_Halbach_Bender_Sim_Segmented(self,Lm: float,rp: float,numMagnets: Optional[int],rb: float,
-                                         extraSpace: float=0.0,rOffsetFact: float=1.0)->None:
+                                         extraSpace: float=0.0,rOffsetFact: float=1.0,ap: float=None)->None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #Lcap: Length of element on the end/input of bender
         #outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         #modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,extraSpace,rOffsetFact,self.standardMagnetErrors)
+        el = HalbachBenderSimSegmented(self, Lm,rp,numMagnets,rb,ap,extraSpace,rOffsetFact,self.standardMagnetErrors)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
 
-    def add_Bender_Ideal(self,ang: float,Bp: float,rb: float,rp: float,apFrac: float=.9)-> None:
+    def add_Bender_Ideal(self,ang: float,Bp: float,rb: float,rp: float,ap: float=None)-> None:
         #Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         #ang: Bending angle of bender, radians
         #rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -291,7 +288,7 @@ class ParticleTracerLattice:
         #Bp: field strength at pole face of lens, T
         #rp: bore radius of element, m
         #ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius, unitless
-        ap=rp*apFrac
+
         el=BenderIdeal(self, ang, Bp, rp, rb, ap) #create a bender element object
         el.index = len(self.elList) #where the element is in the lattice
         self.benderIndices.append(el.index)

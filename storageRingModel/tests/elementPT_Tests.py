@@ -192,7 +192,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
 
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
         PTL = ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
-        PTL.add_Halbach_Lens_Sim(self.rp, self.L)
+        PTL.add_Halbach_Lens_Sim(self.rp, self.L,ap=.9*self.rp)
         PTL.end_Lattice(constrain=False, surpressWarning=True, enforceClosedLattice=False)
         return PTL
 
@@ -303,8 +303,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         numMagnets=20
         PTL=PTL_Dummy()
         np.random.seed(42)
-        elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, True)
-        elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, 1e-3, 1.0, False)
+        elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb,None, 1e-3, 1.0, True)
+        elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb,None, 1e-3, 1.0, False)
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         np.random.seed(42)
@@ -373,8 +373,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.2069017180107142   , -0.005645918307301063 ,0.0038662287776495517])
-        pf0=np.array([-200.37613625317655 ,  -13.477494327817205,   10.273175593186906])
+        qf0=np.array([-0.2068900292327156  , -0.005641841676577974,0.00386611213936313 ])
+        pf0=np.array([-200.41108416757243 ,  -12.975066691134593,   10.238350303998391])
         super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
 
     def make_coordTestRules(self):
@@ -386,7 +386,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
         PTL = ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(5e-3)
-        PTL.add_Combiner_Sim_Lens(self.Lm,self.rp,apFrac=.8)
+        PTL.add_Combiner_Sim_Lens(self.Lm,self.rp,ap=None)
         PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
         return PTL
 

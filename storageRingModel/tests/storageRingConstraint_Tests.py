@@ -44,10 +44,10 @@ def test_Storage_Ring_Constraint_2():
     Lm, rp = .05, .01
     PTL = ParticleTracerLattice(fieldDensityMultiplier=.5)
     PTL.add_Drift(.5)
-    PTL.add_Combiner_Sim_Lens(.1, .02, apFrac=.75)
+    PTL.add_Combiner_Sim_Lens(.1, .02, ap=.75*rp)
     PTL.add_Drift(.5)
     PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, None, rb)
-    PTL.add_Halbach_Lens_Sim(.015, None, constrain=True, apFrac=.75)
+    PTL.add_Halbach_Lens_Sim(.015, None, constrain=True, ap=.75*rp)
     PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, None, rb)
     PTL.end_Lattice(constrain=True)
     totalBendAngle = PTL.elList[1].ang + PTL.elList[3].ang + PTL.elList[5].ang

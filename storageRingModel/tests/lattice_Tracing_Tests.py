@@ -39,12 +39,14 @@ def TEST_Lattice_Tracing(PTL,testSwarm,TESTDataFileName,fastMode,accelerated,par
     #the nature of digitla computing, the same algorithm done in a different way can give slightly different answers
     #in the last few digits on different computers
     for i in range(len(tracedSwarm.particles)):
-        if tracedSwarm.particles[i].T!=0.0:
+        if tracedSwarm.particles[i].T!=0.0: #some particle get clipped right away, so don't check them
             qf=tracedSwarm.particles[i].qf
             qTest=testData[i,:3]
             pf=tracedSwarm.particles[i].pf
             pTest=testData[i,3:6]
             revs=tracedSwarm.particles[i].revolutions
+            assert not np.any(np.isnan(qf)) and not np.any(np.isnan(pf)) #This should never be nan for a traced particle
+            #though for saved data it will nan for particles that clipped right away. But they wont enter this loop
             revsTest=testData[i,6]
             EFinalTest=testData[i,7]
             condition=(np.all(np.abs(qf-qTest)<eps) and np.all(np.abs(pf-pTest)<eps) and np.abs(revs-revsTest)<eps)
