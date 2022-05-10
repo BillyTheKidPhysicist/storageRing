@@ -31,6 +31,6 @@ constants_Version1=lockedDict({
     "sourceToLens1_Inject_Gap":.05, #gap between source and first lens. Shouldn't have first lens on top of source
     "lens1ToLens2_Inject_Gap":5.9*.0254, #pumps and valve
     "lens1ToLens2_Valve_Ap":.75*.0254,   #aperture (ID/2) for valve #2 3/4
-    "lens1ToLens2_Valve_Length":2*.0254,
+    "lens1ToLens2_Valve_Length":3.25*.0254, #includes flanges and screws
     "lens1ToLens2_Inject_Valve_OD": flange_OD['2-3/4'] #outside diameter of valve
 })

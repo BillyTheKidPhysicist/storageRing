@@ -92,11 +92,11 @@ class SwarmTracer:
         #temperature: The temperature of the atoms, kelvin. Decides thermal velocity spread
 
         assert 0.0<captureDiam<=.1 and 0.0<collectorOutputAngle<=.2 and 0.0<gammaSpace<=.01\
-               and 0.0<temperature<=.1 and probabilityMin>=0.0#reasonable values
+               and probabilityMin>=0.0#reasonable values
 
         pTransMax=self.lattice.v0Nominal*np.tan(collectorOutputAngle) #transverse velocity dominates thermal velocity,
         #ie, geometric heating
-        sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
+        # sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
         #longitudinal velocity only because geometric dominates thermal in transverse dimension
         pLongitudinalMin=-1e-3
         pLongitudinalMax=1e-3

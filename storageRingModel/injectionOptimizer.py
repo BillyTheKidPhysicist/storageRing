@@ -50,13 +50,8 @@ class Injection_Model(LatticeOptimizer):
         return cost
 
     def injected_Swarm_Cost(self)-> float:
-        fastMode=True
-        swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), self.h, 1.0, parallel=False,
-            fastMode=fastMode, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
-        swarmEnd = self.move_Particles_From_Injector_Combiner_End_To_Origin(swarmInjectorTraced, copyParticles=False)
-        swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1,fastMode=fastMode)
+
+        swarmRingTraced=self.inject_And_Trace_Swarm(None,False,False)
         numParticlesInitial=self.swarmInjectorInitial.num_Particles(weighted=True)
         numParticlesFinal=swarmRingTraced.num_Particles(weighted=True,unClippedOnly=True)
         swarmCost=(numParticlesInitial-numParticlesFinal)/numParticlesInitial
@@ -141,16 +136,15 @@ class Injection_Model(LatticeOptimizer):
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             self.swarmInjectorInitial.quick_Copy(), 2e-6, 1.0, parallel=False,
             fastMode=fastMode, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
-        swarmEnd = self.move_Particles_From_Injector_Combiner_End_To_Origin(swarmInjectorTraced,
+        swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                             copyParticles=True,onlyUnclipped=False)
-        swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,2e-6,1,fastMode=fastMode)
 
         for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
             color='r' if particleRing.clipped else 'g'
             if particleInj.qArr is not None and len(particleInj.qArr)>1:
-                qRingArr=np.array([self.convert_Injector_Coord_To_Ring_Frame(q) for q in particleInj.qArr])
+                qRingArr=np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in particleInj.qArr])
                 plt.plot(qRingArr[:,0],qRingArr[:,1],c=color,alpha=.3)
                 if particleInj.clipped: #if clipped in injector, plot last location
                     plt.scatter(qRingArr[-1,0],qRingArr[-1,1],marker='x',zorder=100,c=color)
@@ -166,16 +160,28 @@ maximumCost=2.0
 L_Injector_TotalMax = 2.0
 surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.5})
 
-def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
-    PTL_I=make_Injector_Version_1(paramsInjector)
-    if PTL_I.totalLength>L_Injector_TotalMax:
-        return maximumCost
-    PTL_R=make_Ring_Surrogate_Version_1(paramsInjector,surrogateParams)
+def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
+
+    PTL_I = make_Injector_Version_1(paramsInjector)
+    if PTL_I.totalLength > L_Injector_TotalMax:
+        return None
+    PTL_R = make_Ring_Surrogate_Version_1(paramsInjector, surrogateParams)
     if PTL_R is None:
-        return maximumCost
-    assert PTL_I.combiner.outputOffset==PTL_R.combiner.outputOffset
-    model=Injection_Model(PTL_R,PTL_I)
-    cost=model.cost()
+        return None
+    assert PTL_I.combiner.outputOffset == PTL_R.combiner.outputOffset
+    return Injection_Model(PTL_R, PTL_I)
+
+def plot_Results(paramsInjector: Union[np.ndarray,list,tuple]):
+    model=get_Model(paramsInjector)
+    assert model is not None
+    model.show_Floor_Plan_And_Trajectories()
+
+def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
+    model=get_Model(paramsInjector)
+    if model is None:
+        cost= maximumCost
+    else:
+        cost=model.cost()
     assert 0.0<=cost<=maximumCost
     return cost
 
@@ -201,45 +207,31 @@ def main():
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.001,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.002,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.004]
-    # deltaOPAp=[constants_Version1["OP_MagAp"],
-    #            constants_Version1["OP_MagAp"]+.001,
-    #            constants_Version1["OP_MagAp"]+.002,
-    #            constants_Version1["OP_MagAp"]+.004]
+    deltaOPAp=[constants_Version1["OP_MagAp"]+.001,
+               constants_Version1["OP_MagAp"]+.002,
+               constants_Version1["OP_MagAp"]+.004]
+    for val in deltaOPAp:
+        constants_Version1["OP_MagAp"]=val
+        print('OP is:', constants_Version1["OP_MagAp"])
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
 
-    #
-    #
-    #
-    # for _ in range(3):
-    #     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
-    #     print(member.DNA, member.cost)
-
-    X0=np.array([0.3       , 0.03      , 0.29610018, 0.0119179 , 0.1838093 ,
-       0.03845377, 0.0130857 , 0.27998204, 0.45111831, 0.08009889])
-    print(wrapper(X0))
+    # X0=np.array([0.13174364, 0.02236963, 0.1178371 , 0.02164691, 0.21088243,
+    #        0.0399293 , 0.01874468, 0.18923352, 0.30638525, 0.18568672])
+    # print(wrapper(X0))
+    # plot_Results(X0)
 if __name__=="__main__":
     main()
 
 """
 
-
- BEST MEMBER BELOW
+with op as is
 ---population member---- 
-DNA: array([0.29088071, 0.02645018, 0.24901717, 0.02470027, 0.15714022,
-       0.04      , 0.01491993, 0.35098667, 0.22986842, 0.2684908 ])
-cost: 0.29012723528821527
+DNA: array([0.13174364, 0.02236963, 0.1178371 , 0.02164691, 0.21088243,
+       0.0399293 , 0.01874468, 0.18923352, 0.30638525, 0.18568672])
+cost: 0.31669191399494917
+finished with total evals:  11594
 
 
----population member---- 
-DNA: array([0.29390206, 0.02634514, 0.27490015, 0.02700695, 0.15667666,
-       0.03956025, 0.01542462, 0.33072091, 0.24101027, 0.3       ])
-cost: 0.28270904333730534
-
-
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.29509052, 0.02626593, 0.29127314, 0.02814894, 0.16666863,
-       0.03926284, 0.01619822, 0.33503927, 0.23289526, 0.2913201 ])
-cost: 0.28639844796818503
 
 
 

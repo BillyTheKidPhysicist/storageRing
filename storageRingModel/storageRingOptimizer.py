@@ -76,10 +76,9 @@ class LatticeOptimizer:
         self.maxEvals=300 #for scipy differntial evolution. Shouldn't be more than this
         self.spotCaptureDiam = 1e-2
         self.collectorAngleMax = .06
-        self.temperature = 1e-3
+        self.temperature = None #temperature effects are ignored as they are much smaller than lens output stuff
         self.gamma_Space=3.5e-3
-        fractionalMarginOfError = 1.25
-        self.minElementLength = fractionalMarginOfError * self.particleTracerRing.minTimeStepsPerElement * \
+        self.minElementLength = 1.1 * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
         self.tuningBounds = None
         self.numParticlesFullSwarm=1000
@@ -96,20 +95,29 @@ class LatticeOptimizer:
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
 
-    def convert_Injector_Coord_To_Ring_Frame(self,X: np.ndarray)-> np.ndarray:
+    def convert_Pos_Injector_Frame_To_Ring_Frame(self,qLabInject: np.ndarray)-> np.ndarray:
         """
-        Convert particle in injector in to ring frame.
+        Convert particle position in injector lab frame into ring lab frame.
 
-        :param X: particle coords in injector frame. 3D position vector
-        :return: 2D position vector in ring frame. 3D position vector
+        :param qLabInject: particle coords in injector lab frame. 3D position vector
+        :return: 3D position vector
+        """
+        # a nice trick
+        qLabRing=self.latticeInjector.combiner.transform_Lab_Coords_Into_Element_Frame(qLabInject)
+        qLabRing=self.latticeRing.combiner.transform_Element_Coords_Into_Lab_Frame(qLabRing)
+        return qLabRing
+
+    def convert_Moment_Injector_Frame_To_Ring_Frame(self,pLabInject: np.ndarray)-> np.ndarray:
+        """
+        Convert particle momentum in injector lab frame into ring lab frame.
+
+        :param pLabInject: particle momentum in injector lab frame. 3D position vector
+        :return: 3D momentum vector
         """
 
-        R=self.latticeRing.combiner.ROut@self.latticeInjector.combiner.RIn
-        X = X.copy()
-        X[:2] += -self.latticeInjector.combiner.r2[:2]
-        X[:2] = R @ X[:2]
-        X[:2] += self.latticeRing.combiner.r2[:2]
-        return X
+        pLabRing = self.latticeInjector.combiner.transform_Lab_Frame_Vector_Into_Element_Frame(pLabInject)
+        pLabRing=self.latticeRing.combiner.transform_Element_Frame_Vector_Into_Lab_Frame(pLabRing)
+        return pLabRing
 
     def make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(self,particle: Particle) -> Optional[LineString]:
         """
@@ -125,7 +133,7 @@ class LatticeOptimizer:
             return None
         qList = []
         for q, p in particle.elPhaseSpaceLog:
-            qRingFrame_xy = self.convert_Injector_Coord_To_Ring_Frame(q)[:2]
+            qRingFrame_xy = self.convert_Pos_Injector_Frame_To_Ring_Frame(q)[:2]
             qList.append(qRingFrame_xy)
         line = LineString(qList)
         return line
@@ -213,47 +221,42 @@ class LatticeOptimizer:
         if returnFullResults: return swarmCost,floorPlanCost,swarmTraced
         else: return cost
         
-    def inject_And_Trace_Swarm(self,X: list_array_tuple,useSurrogate: bool,energyCorrection: bool)-> Swarm:
+    def inject_And_Trace_Swarm(self,X: Optional[list_array_tuple],useSurrogate: bool,energyCorrection: bool)-> Swarm:
 
         self.update_Ring_And_Injector(X)
-        swarmInitial = self.trace_And_Project_Injector_Swarm_To_Ring_Combiner_End(useSurrogate)
+        swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring(useSurrogate)
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
                                     fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
         return swarmTraced
     
-    def move_Particles_From_Injector_Combiner_End_To_Origin(self, swarmInjectorTraced: Swarm,
+    def transform_Swarm_From_Injector_Frame_To_Ring_Frame(self, swarmInjectorTraced: Swarm,
                                                 copyParticles: bool=False,onlyUnclipped: bool=True)-> Swarm:
-        #identify particles that survived to combiner end, walk them right up to the end, exclude any particles that
-        #are now clipping the combiner and any that would clip the next element
-        #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
-        
+        #identify particles that survived to combiner end and move them assuming the combiner's output (r2)
+        #was moved to the origin
+
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
             clipped=particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
             if not onlyUnclipped or not clipped:
-                outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
-                qf = particle.qf - outputCenter
-                qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
-                pf = particle.pf.copy()
-                pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
-                qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
+                qfRing=self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
+                pfRing=self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
+
                 particleOrigin=particle.copy() if copyParticles else particle
-                particleOrigin.qi,particleOrigin.pi = qf,pf
+                particleOrigin.qi,particleOrigin.pi = qfRing,pfRing
                 particleOrigin.reset()
                 particleOrigin.clipped=clipped
                 swarmSurvived.add(particleOrigin)
         return swarmSurvived
 
-    def trace_And_Project_Injector_Swarm_To_Ring_Combiner_End(self, useSurrogate: bool) -> Swarm:
+    def trace_Through_Injector_And_Transform_To_Ring(self, useSurrogate: bool) -> Swarm:
         if useSurrogate==True:
             swarm=self.swarmInjectorInitial_Surrogate
         else:
             swarm=self.swarmInjectorInitial
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True)
-        swarmEnd = self.move_Survived_Particles_From_Injector_Combiner_To_Origin(swarmInjectorTraced, copyParticles=False)
-        swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
-        return swarmEnd
+        swarmRingInitial=self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,copyParticles=True)
+        return swarmRingInitial
 
     def is_Stable(self, X: list_array_tuple,minRevsToTest=5.0)-> bool:
         self.update_Ring_And_Injector(X)
