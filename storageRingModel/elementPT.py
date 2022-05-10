@@ -1407,6 +1407,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.ap=ap
         self.loadBeamDiam=loadBeamDiam
         self.PTL = PTL
+        self.magnetWidths=None
         self.fieldFact: float=-1.0 if mode=='injector' else 1.0
         self.space: Optional[float]=None
         self.extraFieldLength: float=0.0
@@ -1432,6 +1433,7 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
             rpList.append(self.rp + sum(magnetWidthList))
             nextMagnetWidth = (self.rp + sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
             magnetWidthList.append(nextMagnetWidth)
+        self.magnetWidths=tuple(magnetWidthList)
         self.space = max(rpList) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section

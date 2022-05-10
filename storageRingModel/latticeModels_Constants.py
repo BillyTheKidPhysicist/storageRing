@@ -21,7 +21,7 @@ flange_OD=lockedDict({
 constants_Version1=lockedDict({
     "Lm": .0254 / 2.0, #length of individual magnets in bender
     "gap2Min": 3.5*.0254, #from lens to combiner
-    "OP_MagWidth": .07+.04, #account for fringe fields with .02
+    "OP_MagWidth": .065+2*.035, #account for fringe fields with .02
     "OP_MagAp":.022/2.0,
     "OP_PumpingRegionLength":.01, #distance for effective optical pumping
     "bendingApMax":.01, #maximum from 1.33 flange limit. I rounded up

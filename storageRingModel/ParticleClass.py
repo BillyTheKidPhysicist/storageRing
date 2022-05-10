@@ -316,9 +316,16 @@ class Swarm:
             swarmNew.particles.append(particleNew)
         return swarmNew
 
-    def num_Particles(self,weighted: bool=False)->float:
-        if weighted==False: return 1.0*len(self.particles)
-        else: return sum([particle.probability for particle in self.particles])
+    def num_Particles(self,weighted: bool=False,unClippedOnly: bool=False)->float:
+
+        if weighted and unClippedOnly:
+            return sum([(not p.clipped)*p.probability for p in self.particles])
+        elif weighted and not unClippedOnly:
+            return sum([p.probability for p in self.particles])
+        elif not weighted and unClippedOnly:
+            return sum([not p.clipped for p in self.particles])
+        else:
+            return len(self.particles)
 
     def num_Revs(self,weighted: bool=False)->int :
         if weighted==False:

@@ -19,3 +19,5 @@ GRAVITATIONAL_ACCELERATION: float=9.8
 SIMULATION_MAGNETON=BHOR_MAGNETON/MASS_LITHIUM_7
 VACUUM_TUBE_THICKNESS: float=.05*.0254 #minimum weldable thickness of a vacuum tube, m
 DEFAULT_ATOM_SPEED: float=210.0 #default speed of atoms, m/s
+
+COST_PER_CUBIC_INCH_PERM_MAGNET: float= 26.19#USD. Per KJ magnetics: https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0

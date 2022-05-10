@@ -5,13 +5,14 @@ from asyncDE import solve_Async
 from typing import Union,Optional
 import numpy as np
 import warnings
-from constants import DEFAULT_ATOM_SPEED
+from constants import DEFAULT_ATOM_SPEED,COST_PER_CUBIC_INCH_PERM_MAGNET
 from storageRingOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
 from latticeModels import make_Injector_Version_1,make_Ring_Surrogate_Version_1,InjectorGeometryError
 from latticeModels_Constants import constants_Version1,lockedDict
+from scipy.special import expit
 import dill
 
 
@@ -26,6 +27,7 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
     else:
         return True
 
+CUBIC_METER_TO_INCH=61023.7
 
 
 class Injection_Model(LatticeOptimizer):
@@ -43,7 +45,8 @@ class Injection_Model(LatticeOptimizer):
         assert 0.0<=swarmCost<=1.0
         floorPlanCost=self.floor_Plan_Cost_With_Tunability()
         assert 0.0<=floorPlanCost<=1.0
-        cost=np.sqrt(floorPlanCost**2+swarmCost**2)
+        priceCost=self.get_Rough_Material_Cost()
+        cost=np.sqrt(floorPlanCost**2+swarmCost**2+priceCost**2)
         return cost
 
     def injected_Swarm_Cost(self)-> float:
@@ -55,8 +58,10 @@ class Injection_Model(LatticeOptimizer):
         # print(swarmEnd.num_Particles(weighted=True))
         swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1,fastMode=fastMode)
-        swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) -
-            swarmRingTraced.num_Particles(weighted=True))/ self.swarmInjectorInitial.num_Particles(weighted=True)
+        numParticlesInitial=self.swarmInjectorInitial.num_Particles(weighted=True)
+        numParticlesFinal=swarmRingTraced.num_Particles(weighted=True,unClippedOnly=True)
+        swarmCost=(numParticlesInitial-numParticlesFinal)/numParticlesInitial
+
         return swarmCost
 
     def get_Drift_After_Second_Lens(self)-> elementPT.Drift:
@@ -79,6 +84,19 @@ class Injection_Model(LatticeOptimizer):
         driftAfterLens.set_Length(L0) #reset
         self.latticeInjector.build_Lattice(False)
         return max(cost)
+
+    def get_Rough_Material_Cost(self)-> float:
+        """Get a value proportional to the cost of magnetic materials. This is proportional to the volume of
+        magnetic material. Sigmoid is used to scale"""
+
+        volume=0.0 #volume of magnetic material in cubic inches
+        for el in itertools.chain(self.latticeRing.elList,self.latticeInjector):
+            if type(el) in (elementPT.CombinerHalbachLensSim,elementPT.HalbachLensSim):
+                volume+=CUBIC_METER_TO_INCH*np.sum(el.Lm*np.array(el.magnetWidths)**2)
+        price_USD=volume*COST_PER_CUBIC_INCH_PERM_MAGNET
+        price_USD_Scale=5_000.0
+        cost=2*(expit(price_USD/price_USD_Scale)-.5)
+        return cost
 
     def floor_Plan_Cost(self)-> float:
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
@@ -148,13 +166,13 @@ def main():
 
 
 
-    # for _ in range(1):
-    #     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
-    #     print(member.DNA, member.cost)
+    for _ in range(1):
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
+        print(member.DNA, member.cost)
 
-    X0=np.array([0.29784632, 0.02633112, 0.24822711, 0.02495677, 0.14805594,
-       0.03944398, 0.01564161, 0.32696537, 0.22914697, 0.3       ])
-    print(wrapper(X0))
+    # X0=np.array([0.3       , 0.03      , 0.142369  , 0.02148764, 0.25      ,
+    #    0.04      , 0.03      , 0.21738463, 0.5       , 0.3       ])
+    # print(wrapper(X0))
 if __name__=="__main__":
     main()
 
