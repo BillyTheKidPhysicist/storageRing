@@ -104,9 +104,10 @@ class LatticeOptimizer:
         :return: 2D position vector in ring frame. 3D position vector
         """
 
+        R=self.latticeRing.combiner.ROut@self.latticeInjector.combiner.RIn
         X = X.copy()
         X[:2] += -self.latticeInjector.combiner.r2[:2]
-        X[:2] = self.latticeInjector.combiner.RIn @ self.latticeInjector.combiner.RIn @ X[:2]
+        X[:2] = R @ X[:2]
         X[:2] += self.latticeRing.combiner.r2[:2]
         return X
 
@@ -145,23 +146,25 @@ class LatticeOptimizer:
         assert len(self.latticeRing.elList) == 5 and type(lens) is HalbachLensSim #if ring surrogate changes
         return line.intersects(lens.SO_Outer)
         
-    def get_Injector_Shapely_Objects_In_Lab_Frame(self)-> list[Polygon]:
+    def get_Injector_Shapely_Objects_In_Lab_Frame(self, which: str)-> list[Polygon]:
+        assert which in ('interior','exterior')
         shapelyObjectLabFrameList = []
         rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
         r2Injector = self.latticeInjector.combiner.r2
         r2Ring = self.latticeRing.combiner.r2
         for el in self.latticeInjector:
-            SO = copy.copy(el.SO_Outer)
+            SO = copy.copy(el.SO_Outer if which =='exterior' else el.SO)
             SO = translate(SO, xoff=-r2Injector[0], yoff=-r2Injector[1])
             SO = rotate(SO, rotationAngle, use_radians=True, origin=(0, 0))
             SO = translate(SO, xoff=r2Ring[0], yoff=r2Ring[1])
             shapelyObjectLabFrameList.append(SO)
         return shapelyObjectLabFrameList
 
-    def generate_Shapely_Object_List_Of_Floor_Plan(self)-> list[Polygon]:
+    def generate_Shapely_Object_List_Of_Floor_Plan(self,which: str)-> list[Polygon]:
+        assert which in ('exterior','interior')
         shapelyObjectList = []
-        shapelyObjectList.extend([el.SO_Outer for el in self.latticeRing])
-        shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame())
+        shapelyObjectList.extend([el.SO_Outer if which=='exterior' else el.SO for el in self.latticeRing])
+        shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame(which))
         return shapelyObjectList
 
     def floor_Plan_OverLap_mm(self)-> float:
@@ -179,7 +182,7 @@ class LatticeOptimizer:
 
     def show_Floor_Plan(self,X: Optional[list_array_tuple])-> None:
         self.update_Ring_And_Injector(X)
-        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan()
+        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan('exterior')
         for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
         plt.gca().set_aspect('equal')
         plt.xlabel('meters')
@@ -218,15 +221,16 @@ class LatticeOptimizer:
                                     fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
         return swarmTraced
     
-    def move_Survived_Particles_From_Injector_Combiner_To_Origin(self, swarmInjectorTraced: Swarm,
-                                                            copyParticles: bool=False)-> Swarm:
+    def move_Particles_From_Injector_Combiner_End_To_Origin(self, swarmInjectorTraced: Swarm,
+                                                copyParticles: bool=False,onlyUnclipped: bool=True)-> Swarm:
         #identify particles that survived to combiner end, walk them right up to the end, exclude any particles that
         #are now clipping the combiner and any that would clip the next element
         #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
         
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
-            if not particle.clipped and not self.does_Injector_Particle_Clip_On_Ring(particle):
+            clipped=particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
+            if not onlyUnclipped or not clipped:
                 outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
                 qf = particle.qf - outputCenter
                 qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
@@ -236,6 +240,7 @@ class LatticeOptimizer:
                 particleOrigin=particle.copy() if copyParticles else particle
                 particleOrigin.qi,particleOrigin.pi = qf,pf
                 particleOrigin.reset()
+                particleOrigin.clipped=clipped
                 swarmSurvived.add(particleOrigin)
         return swarmSurvived
 

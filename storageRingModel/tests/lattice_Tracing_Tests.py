@@ -144,7 +144,6 @@ def run_Tests(parallelTesting=False,fullTest=False):
     lattice configurations"""
 
     def wrap(name):
-        print(name)
         return TEST_Lattice_Configuration(name,fullTest=fullTest,parallel=not parallelTesting)
     testNameList = ['1', '2', '3', '4', '5', '6']
     if parallelTesting==False:

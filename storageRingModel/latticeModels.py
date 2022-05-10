@@ -174,7 +174,7 @@ def make_Injector_Version_1(injectorParams)-> ParticleTracerLattice:
     if gap2<0: #this is approximately true. I am ignoring that there is space in the fringe fields
         raise InjectorGeometryError
     PTL.add_Drift(gap2,ap=rpInjectorMagnet1)
-    PTL.add_Drift(gapValve, ap=consts["lens1ToLens2_Inject_Ap"],
+    PTL.add_Drift(gapValve, ap=consts["lens1ToLens2_Valve_Ap"],
                   outerHalfWidth=consts["lens1ToLens2_Inject_Valve_OD"]/2)
 
     #---------------------

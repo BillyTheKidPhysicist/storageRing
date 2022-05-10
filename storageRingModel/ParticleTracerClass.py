@@ -139,6 +139,7 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        assert not (logPhaseSpaceCoords and accelerated)
         if tau_Collision is not None and tau_Collision<=0.0:
             raise Exception('Collision time must be None or nonzero positive number')
         self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
@@ -359,17 +360,17 @@ class ParticleTracer:
         self.forceLast=F_n #record the force to be recycled
         self.elHasChanged=False
 
-    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_n: np.ndarray,qEl: np.ndarray,pEl: np.ndarray)\
+    def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self,qEl_Next: np.ndarray,qEl: np.ndarray,pEl: np.ndarray)\
             -> None:
-        #qEl_n: coordinates that are outside the current element and possibley in the next
+        #qEl_Next: coordinates that are outside the current element and possibley in the next
         #qEl: coordinates right before this method was called, should still be in the element
-        #pEl: momentum for both qEl_n and qEl
-        qEl_Scooted=qEl_n+TINY_TIME_STEP*pEl #the particle might land right on an edge, scoot it along
+        #pEl: momentum for both qEl_Next and qEl
+
         if self.accelerated:
             if self.energyCorrection:
                 pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
             nextEl = self.get_Next_Element()
-            q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Scooted,pEl,nextEl)
+            q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Next,pEl,nextEl)
             if not nextEl.is_Coord_Inside(q_nextEl):
                 self.particle.clipped=True
             else:
@@ -383,7 +384,7 @@ class ParticleTracer:
                 self.pEl=p_nextEl
                 self.elHasChanged = True
         else:
-            el=self.which_Element(qEl_Scooted)
+            el=self.which_Element(qEl_Next)
             if el is None: #if outside the lattice
                 self.particle.clipped = True
             elif el is not self.currentEl: #element has changed
@@ -391,7 +392,7 @@ class ParticleTracer:
                     pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
-                qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Scooted) #use the old  element for transform
+                qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Next) #use the old  element for transform
                 pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl) #use the old  element for transform
                 if self.logPhaseSpaceCoords:
                     self.particle.elPhaseSpaceLog.append((qElLab.copy(),pElLab.copy()))
