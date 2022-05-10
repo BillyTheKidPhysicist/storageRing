@@ -16,17 +16,21 @@ class InjectorGeometryError(Exception):
 
 lst_arr_tple = Union[list, np.ndarray, tuple]
 
+h: float = 1e-5  # timestep, s. Assumed to be no larger than this
+minTimeStepGap = h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
+
 
 def el_Fringe_Space(elementName: str, rp: float)-> float:
     assert rp>0
+    if elementName =='none':
+        return 0.0
     fringeFracs={"combiner":elementPT.CombinerHalbachLensSim.outerFringeFrac,
                  "lens":elementPT.HalbachLensSim.fringeFracOuter,
                  "bender":elementPT.HalbachBenderSimSegmented.fringeFracOuter}
     return fringeFracs[elementName]*rp
 
 def clip_If_Below_Min_Time_Step_Gap(length: float)-> float:
-    h = 1e-5  # timestep, s. Assumed to be no larger than this
-    minTimeStepGap=h*DEFAULT_ATOM_SPEED*ParticleTracer.minTimeStepsPerElement
+
     if length< minTimeStepGap:
         return minTimeStepGap
     else:
@@ -139,33 +143,51 @@ def make_Ring_Version_1(params: lst_arr_tple)-> ParticleTracerLattice:
     return PTL
 
 def make_Injector_Version_1(injectorParams)-> ParticleTracerLattice:
+    
 
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, gap1, gap2, gap3 = injectorParams
     consts = constants_Version1
-
-    if gap2+el_Fringe_Space('lens',rpInjectorMagnet1)+el_Fringe_Space('lens',rpInjectorMagnet2)<\
-            consts["lens1ToLens2_Inject_Gap"]:
+    
+    gap2-=el_Fringe_Space('lens',rpInjectorMagnet1)+el_Fringe_Space('lens',rpInjectorMagnet2)
+    gap1-=el_Fringe_Space('lens',rpInjectorMagnet1)
+    if gap2<consts["lens1ToLens2_Inject_Gap"]:
+        raise InjectorGeometryError
+    if gap1<consts["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
 
 
-    PTL_Injector = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
+    PTL = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
 
-    PTL_Injector.add_Drift(gap1, ap=rpInjectorMagnet1)
+    #-----gap between source and first lens-----
+    
+    add_Drift_If_Needed(PTL,gap1,'none','lens',np.inf,rpInjectorMagnet1) #hacky
 
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
+    #---- first lens------
 
-    PTL_Injector.add_Drift(gap2, ap=consts["lens1ToLens2_Inject_Ap"])
+    PTL.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
 
-    PTL_Injector.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
+    #-----gap with valve--------------
 
-    PTL_Injector.add_Drift(gap3, ap=rpInjectorMagnet2)
+    gapValve=consts["lens1ToLens2_Valve_Length"]
+    gap2=gap2-gapValve
+    if gap2<0: #this is approximately true. I am ignoring that there is space in the fringe fields
+        raise InjectorGeometryError
+    PTL.add_Drift(gap2,ap=rpInjectorMagnet1)
+    PTL.add_Drift(gapValve, ap=consts["lens1ToLens2_Inject_Ap"],
+                  outerHalfWidth=consts["lens1ToLens2_Inject_Valve_OD"]/2)
 
-    PTL_Injector.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
+    #---------------------
 
-    PTL_Injector.end_Lattice(constrain=False, enforceClosedLattice=False)
+    PTL.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
 
-    return PTL_Injector
+    PTL.add_Drift(gap3, ap=rpInjectorMagnet2)
+
+    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner,loadBeamDiam=loadBeamDiam,layers=1)
+
+    PTL.end_Lattice(constrain=False, enforceClosedLattice=False)
+
+    return PTL
 
 def make_Ring_Surrogate_Version_1(injectionParams,surrogateParamsDict: dict):
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \

@@ -136,7 +136,7 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
     element.ROut = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     element.RIn = np.asarray([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
 
-def _is_Particle_Tracer_Lattice_Valid(PTL)-> bool:
+def is_Particle_Tracer_Lattice_Closed(PTL)-> bool:
     """Check that the lattice is closed. """
 
     elPTL_First,elPTL_Last=PTL.elList[0],PTL.elList[-1]
@@ -161,7 +161,7 @@ def build_Particle_Tracer_Lattice(PTL,constrain: bool)-> None:
     """
 
     #todo: There's an inconsistency in how r1/r2/ne/nb is handled with the storage ring
-
+    assert not (constrain and PTL.latticeType=='injector')
     storageRingGeometry=_build_Storage_Ring_Geometry_From_PTL(PTL,constrain)
     for i,(el_PTL,el_Geom) in enumerate(zip(PTL.elList,storageRingGeometry)):
         if type(el_Geom) is Line:
@@ -173,4 +173,4 @@ def build_Particle_Tracer_Lattice(PTL,constrain: bool)-> None:
         else: raise ValueError
 
     if PTL.latticeType=='storageRing' and constrain:
-        assert _is_Particle_Tracer_Lattice_Valid(PTL)
+        assert is_Particle_Tracer_Lattice_Closed(PTL)

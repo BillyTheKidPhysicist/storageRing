@@ -11,7 +11,7 @@ import scipy.interpolate as spi
 import numpy.linalg as npl
 from joblib import Parallel,delayed
 from elementPT import *
-from storageRingConstraintSolver import build_Particle_Tracer_Lattice
+from storageRingConstraintSolver import build_Particle_Tracer_Lattice,is_Particle_Tracer_Lattice_Closed
 from constants import DEFAULT_ATOM_SPEED
 #todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 #people, I need to change that. This was before my cleaner code approach
@@ -19,49 +19,6 @@ from constants import DEFAULT_ATOM_SPEED
 #todo: refactor!
 
 benderTypes=Union[elementPT.BenderIdeal,elementPT.HalbachBenderSimSegmented]
-
-class SimpleLocalMinimizer:
-    #for solving the implicit geometry problem. I found that the scipy solvers left something to be desired because
-    #they operated under theh assumption that it is either local or global minimized. I want to from a starting point
-    #find the minimum in a system that has no global minimum, but is rather more like a lumpy mattress. I would prefer
-    #to have used a vanilla newton methods or gradient descent, but from scipy I was not able to select the appropriate
-    #step size. Assumes the cost function goes to zero.
-
-    def __init__(self,function):
-        self.function=function
-
-    def gradient(self,q0: np.ndarray, dq: float)-> np.ndarray:
-        #find gradeint of the function
-        x, y = q0
-        dfx = (self.function(np.asarray([x + dq, y]))- self.function(np.asarray([x - dq, y]))) / (2*dq)
-        dfy = (self.function(np.asarray([x, y + dq]))- self.function(np.asarray([x, y - dq]))) / (2*dq)
-        return np.asarray([dfx, dfy])
-
-    def estimate_Step_Size_Gradient(self,q0: np.ndarray, fracReduction: float, eps: float=1e-10)-> np.ndarray:
-        #simple method that uses the gradient to make a tiny step in the direction of reduction of the cost function,
-        #then uses that information to figure out how big the step should be to get to zero. Basically newton's method
-        #without matrix inversion, and assuming that the cost function goes to zero.
-        funcVal0 = self.function(q0)
-        grad = self.gradient(q0, eps)
-        grad = grad / npl.norm(grad)
-        dqEps = -grad * eps  # tiny step size
-        funcValNew = self.function(q0 - dqEps)  # look backwareds for the slope
-        dFracFuncVal = -(funcValNew - funcVal0) / funcVal0
-        dq = dqEps * fracReduction / np.abs(dFracFuncVal)
-        return dq
-
-    def solve(self,X0: np.ndarray,tol: float=1e-10,maxIter: int=100)-> tuple:
-        X = X0.copy()
-        error = self.function(X0)
-        i = 0
-        while (error > tol):
-            dq = self.estimate_Step_Size_Gradient(X, .5)
-            X = X + dq
-            error = self.function(X)
-            i += 1
-            if i > maxIter:
-                break
-        return X,error
 
 
 class ParticleTracerLattice:
@@ -91,6 +48,8 @@ class ParticleTracerLattice:
         self.combiner: Optional[elementPT.Element]=None #combiner element object
         self.linearElementsToConstraint: list[elementPT.HalbachLensSim]=[] #elements whos length will be changed when the
         # lattice is constrained to satisfy geometry. Must be inside bending region
+
+        self.isClosed=None #is the lattice closed, ie end and beginning are smoothly connected?
 
         self.elList: list=[] #to hold all the lattice elements
 
@@ -256,7 +215,7 @@ class ParticleTracerLattice:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
 
-    def add_Drift(self,L: float,ap: float=.03)-> None:
+    def add_Drift(self,L: float,ap: float=.03, outerHalfWidth: float= None)-> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -265,7 +224,7 @@ class ParticleTracerLattice:
         :return:
         """
 
-        el=Drift(self,L,ap)#create a drift element object
+        el=Drift(self,L,ap,outerHalfWidth)#create a drift element object
         el.index = len(self.elList) #where the element is in the lattice
         self.elList.append(el) #add element to the list holding lattice elements in order
 
@@ -318,6 +277,8 @@ class ParticleTracerLattice:
     def build_Lattice(self,constrain: bool):
 
         build_Particle_Tracer_Lattice(self, constrain)
+        self.isClosed= is_Particle_Tracer_Lattice_Closed(self) #lattice may not have been constrained, but could
+                #still be closed
         self.make_Geometry()
         self.totalLength = 0
         for el in self.elList:  # total length of particle's orbit in an element
@@ -478,7 +439,7 @@ class ParticleTracerLattice:
 
     def show_Lattice(self,particleCoords=None,particle=None,swarm=None, showRelativeSurvival=True,showTraceLines=False,
                      showMarkers=True,traceLineAlpha=1.0,trueAspectRatio=True,extraObjects=None,finalCoords=True,
-                     saveTitle=None,dpi=150,defaultMarkerSize=1000):
+                     saveTitle=None,dpi=150,defaultMarkerSize=1000, plotElementExterior: bool = False):
         #plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         #or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         #revolutions, then the x marker is not shown
@@ -521,7 +482,8 @@ class ParticleTracerLattice:
                     plt.plot(particle.qArr[:,0],particle.qArr[:,1],c=color,alpha=traceLineAlpha)
 
         for el in self.elList:
-            plt.plot(*el.SO.exterior.xy,c='black')
+            shapelyObject=el.SO if not plotElementExterior else el.SO_Outer
+            plt.plot(*shapelyObject.exterior.xy,c='black')
         if particleCoords is not None: #plot from the provided particle coordinate
             if len(particleCoords)==3: #if the 3d value is provided trim it to 2D
                 particleCoords=particleCoords[:2]

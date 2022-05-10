@@ -307,6 +307,7 @@ class Element:
         xArr=np.unique(data[:,0])
         yArr=np.unique(data[:,1])
         zArr=np.unique(data[:,2])
+        assert all(not np.any(np.isnan(arr)) for arr in (xArr,yArr,zArr))
 
         numx=xArr.shape[0]
         numy=yArr.shape[0]
@@ -423,7 +424,7 @@ class Drift(LensIdeal):
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
 
-    def __init__(self, PTL, L:float, ap:float,build=True):
+    def __init__(self, PTL, L:float, ap:float,outerHalfWidth: float,build=True):
         """
         :param PTL: Instance of ParticleTracerLatticeClass
         :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
@@ -431,6 +432,8 @@ class Drift(LensIdeal):
         """
         super().__init__(PTL, L, 0, np.inf, ap,build=False) #set Bp to zero and bore radius to infinite
         self.fastFieldHelper=self.init_fastFieldHelper([L,ap])
+        self.outerHalfWidth=ap+VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
+        assert self.outerHalfWidth>=ap+VACUUM_TUBE_THICKNESS
         if build:
             self.build()
 
@@ -1482,10 +1485,14 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         numZ=self.numGridPointsZ if not self.useStandardMagErrors else make_Odd(round(1*(self.numGridPointsZ*2-1)))
         zMax=self.compute_Valid_zMax(La,ang,accomodateJitter)
         zMin=-TINY_OFFSET if not self.useStandardMagErrors else -zMax
+
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
         zArr = np.linspace(zMin, zMax, numZ) #this becomes x in element frame
         assert not is_Even(len(xArr_Quadrant)) and not is_Even(len(yArr_Quadrant)) and not is_Even(len(zArr))
+        assert not np.any(np.isnan(xArr_Quadrant))
+        assert not np.any(np.isnan(yArr_Quadrant))
+        assert not np.any(np.isnan(zArr))
         return xArr_Quadrant,yArr_Quadrant,zArr
 
     def compute_Valid_zMax(self,La:float,ang:float, accomodateJitter: bool)->float:
@@ -1500,6 +1507,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         #combiner not being symmetric, but the interpolation field being symmetric. See how force symmetry is handled
         zMax=zMax+self.extraFieldLength if not accomodateJitter else zMax
         pointSpacing=zMax/(self.numGridPointsZ-1)
+        if pointSpacing>self.Lm/2:
+            raise CombinerDimensionError
         lastPointInLensIndex=int((self.Lm/2)/pointSpacing) #last point in magnetic material
         distToJustOutsideLens=firstValidPointSpacing+self.Lm/2-lastPointInLensIndex*pointSpacing #just outside material
         extraSpacePerPoint=distToJustOutsideLens/lastPointInLensIndex

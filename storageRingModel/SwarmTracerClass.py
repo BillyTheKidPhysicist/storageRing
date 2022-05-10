@@ -49,12 +49,13 @@ class SwarmTracer:
     def initialize_Stablity_Testing_Swarm(self,qMax: float)-> Swarm:
         smallOffset=-1e-10 #this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
-        swarmTest.add_Particle(qi=np.asarray([smallOffset,0.0,0.0]))
-        swarmTest.add_Particle(qi=np.asarray([smallOffset, qMax/2, qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([smallOffset, -qMax/2, qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([smallOffset, qMax/2, -qMax/2]))
-        swarmTest.add_Particle(qi=np.asarray([smallOffset, -qMax/2, -qMax/2]))
+        swarmTest.add_New_Particle(qi=np.asarray([smallOffset,0.0,0.0]))
+        swarmTest.add_New_Particle(qi=np.asarray([smallOffset, qMax/2, qMax/2]))
+        swarmTest.add_New_Particle(qi=np.asarray([smallOffset, -qMax/2, qMax/2]))
+        swarmTest.add_New_Particle(qi=np.asarray([smallOffset, qMax/2, -qMax/2]))
+        swarmTest.add_New_Particle(qi=np.asarray([smallOffset, -qMax/2, -qMax/2]))
         return swarmTest
+
     def initialize_HyperCube_Swarm_In_Phase_Space(self, qMax: np.ndarray, pMax: np.ndarray, numGridEdge: int,
                                                   upperSymmetry: bool=False)-> Swarm:
         # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
@@ -74,9 +75,9 @@ class SwarmTracer:
                 if qi[2] < 0:
                     pass
                 else:
-                    swarm.add_Particle(qi, pi)
+                    swarm.add_New_Particle(qi, pi)
             else:
-                swarm.add_Particle(qi, pi)
+                swarm.add_New_Particle(qi, pi)
         return swarm
     def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam: float,collectorOutputAngle: float,
                                     numParticles: float,gammaSpace: float=3.5e-3,temperature: float=.003,
@@ -187,12 +188,12 @@ class SwarmTracer:
             if circular==True:
                 y,z,py,pz=Xi[[0,1,3,4]]
                 if np.sqrt(y**2+z**2)<qTransMax and np.sqrt(py**2+pz**2)<pTransMax:
-                    swarm.add_Particle(qi=q, pi=p)
+                    swarm.add_New_Particle(qi=q, pi=p)
                     particleCount+=1
                 if particleCount==numParticles:
                     break
             else:
-                swarm.add_Particle(qi=q,pi=p)
+                swarm.add_New_Particle(qi=q,pi=p)
         if sameSeed==True or type(sameSeed)==int:
             np.random.seed(reSeedVal)  # re randomize
         return swarm
@@ -215,7 +216,7 @@ class SwarmTracer:
         thetaArr=np.linspace(0.0,2*np.pi,num+1)[:-1]
         swarm=Swarm()
         for theta in thetaArr:
-            swarm.add_Particle(pi=np.asarray([-self.lattice.v0Nominal,pr*np.cos(theta),pr*np.sin(theta)]))
+            swarm.add_New_Particle(pi=np.asarray([-self.lattice.v0Nominal,pr*np.cos(theta),pr*np.sin(theta)]))
         return swarm
 
     def initalize_PseudoRandom_Swarm_At_Combiner_Output(self,qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=False,
@@ -284,14 +285,16 @@ class SwarmTracer:
 
     def trace_Swarm_Through_Lattice(self, swarm: Swarm, h: float, T: float, parallel: bool=False, fastMode: bool=True,
                                     copySwarm: bool=True, accelerated: bool=False,stepsBetweenLogging: int=1,
-                                    energyCorrection: bool=False,tau_Collision: Optional[float]=None)-> Swarm:
+                                    energyCorrection: bool=False,tau_Collision: Optional[float]=None,
+                                    logPhaseSpaceCoords:bool=False)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
         else:
             swarmNew = swarm
         def trace_Particle(particle):
             particleNew = self.particleTracer.trace(particle, h, T, fastMode=fastMode, accelerated=accelerated,
-            stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection,tau_Collision=tau_Collision)
+            stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection,tau_Collision=tau_Collision,
+                                                    logPhaseSpaceCoords=logPhaseSpaceCoords)
             return particleNew
         if parallel=='superfast':
             #use trick of accessing only the important class variabels and passing those through. about 30%

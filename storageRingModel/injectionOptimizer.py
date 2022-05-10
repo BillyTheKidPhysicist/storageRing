@@ -1,5 +1,6 @@
 import itertools
 import os
+import elementPT
 from asyncDE import solve_Async
 from typing import Union,Optional
 import numpy as np
@@ -32,6 +33,8 @@ class Injection_Model(LatticeOptimizer):
     def __init__(self, latticeRing, latticeInjector,tunabilityLength: float=2e-2):
         super().__init__(latticeRing,latticeInjector)
         self.tunabilityLength=tunabilityLength
+        self.injectorLensIndices=[i for i,el in enumerate(self.latticeInjector) if type(el) is HalbachLensSim]
+        assert len(self.injectorLensIndices)==2 # i expect this to be two
 
     def cost(self)-> float:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
@@ -46,51 +49,36 @@ class Injection_Model(LatticeOptimizer):
     def injected_Swarm_Cost(self)-> float:
         fastMode=True
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy()
-            , self.h, 1.0, parallel=False,
-            fastMode=fastMode, copySwarm=False,
-            accelerated=True)
-        # self.latticeInjector.show_Lattice(swarm=swarmInjectorTraced,showTraceLines=True,trueAspectRatio=False,traceLineAlpha=.25)
-        swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
+            self.swarmInjectorInitial.quick_Copy(), self.h, 1.0, parallel=False,
+            fastMode=fastMode, copySwarm=False, accelerated=True,logPhaseSpaceCoords=True)
+        swarmEnd = self.move_Survived_Particles_From_Injector_Combiner_To_Origin(swarmInjectorTraced, copyParticles=False)
         # print(swarmEnd.num_Particles(weighted=True))
         swarmRingInitial = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
-
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1.0,fastMode=fastMode)
-        # self.latticeRing.show_Lattice(swarm=swarmRingTraced,finalCoords=False, showTraceLines=True,
-        #                               trueAspectRatio=False)
-
-        #only count particle survived if they make it to the end of the last element of the ring surrogate. I do some
-        #lazy trick here with the width of the end of the last element and the range that a particle could be in that
-        #width and have made it to the end
-        ne=self.latticeRing.elList[-1].ne
-        endAngle=abs(ne[1]/ne[0])
-        xMax=self.latticeRing.elList[-1].r2[0]
-        numSurvivedWeighted=0.0
-        for particle in swarmRingTraced:
-            if (particle.qf is None) ==False:
-                xFinal=particle.qf[0]
-                slantWidth=endAngle*self.latticeRing.elList[-1].ap
-                survived=abs(xFinal-xMax)<slantWidth+2*self.h*np.linalg.norm(particle.pf)
-                numSurvivedWeighted+=particle.probability if survived==True else 0.0
-        # print(numSurvivedWeighted)
-        swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) - numSurvivedWeighted) \
-                                / self.swarmInjectorInitial.num_Particles(weighted=True)
-        # self.show_Floor_Plan()
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,1,fastMode=fastMode)
+        swarmCost = (self.swarmInjectorInitial.num_Particles(weighted=True) -
+            swarmRingTraced.num_Particles(weighted=True))/ self.swarmInjectorInitial.num_Particles(weighted=True)
         return swarmCost
+
+    def get_Drift_After_Second_Lens(self)-> elementPT.Drift:
+
+        drift=self.latticeInjector.elList[self.injectorLensIndices[-1]+1]
+        assert type(drift) is elementPT.Drift
+        return drift
 
     def floor_Plan_Cost_With_Tunability(self)-> float:
         """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
         Return the largest value of the three"""
-        L0=self.latticeInjector.elList[-2].L #value before tuning
-        cost0=self.floor_Plan_Cost()
-        self.latticeInjector.elList[-2].set_Length(L0+self.tunabilityLength) #move lens away from combiner
+
+        driftAfterLens=self.get_Drift_After_Second_Lens()
+        L0=driftAfterLens.L #value before tuning
+        cost=[self.floor_Plan_Cost()]
+        for separation in (-self.tunabilityLength,self.tunabilityLength):
+            driftAfterLens.set_Length(L0+separation) #move lens away from combiner
+            self.latticeInjector.build_Lattice(False)
+            cost.append(self.floor_Plan_Cost())
+        driftAfterLens.set_Length(L0) #reset
         self.latticeInjector.build_Lattice(False)
-        costClose = self.floor_Plan_Cost()
-        self.latticeInjector.elList[-2].set_Length(L0-self.tunabilityLength) #move lens towards combiner
-        self.latticeInjector.build_Lattice(False)
-        costFar = self.floor_Plan_Cost()
-        self.latticeInjector.elList[-2].set_Length(L0) #reset
-        return max([cost0,costClose,costFar])
+        return max(cost)
 
     def floor_Plan_Cost(self)-> float:
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
@@ -109,27 +97,24 @@ class Injection_Model(LatticeOptimizer):
         plt.show()
 
     def floor_Plan_OverLap_mm(self):
-        """Not a great approach. Overlap is measured for the last lens of the injector and each element in the ring.
-        A crude model of the ring blocking the injector is achieved by using a less weight ovelap of injector
-        drift element right before combiner and ring lens"""
+        """Find the area overlap between the element before the second injector lens, and the first lens in the ring
+        surrogate"""
+
+        firstLensRing=self.latticeRing.elList[0]
+        assert type(firstLensRing) is HalbachLensSim
+        firstLensRingShapely=firstLensRing.SO_Outer
         injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        injectorOverlapLensIndex=-3
-        injectorLensShapely = injectorShapelyObjects[injectorOverlapLensIndex]
-        injectorLastDrift=injectorShapelyObjects[4]
-        assert isinstance(self.latticeInjector.elList[injectorOverlapLensIndex],HalbachLensSim)
-        ringShapelyObjects = [el.SO_Outer for el in self.latticeRing.elList]
-        area = 0
-        converTo_mm=(1e3)**2
-        for element in ringShapelyObjects:
-            area += element.intersection(injectorLensShapely).area*converTo_mm
-        area += injectorLastDrift.intersection(ringShapelyObjects[0]).area * converTo_mm / 10 #crude method of
-        #punishing for ring lens blocking path through injector to combiner
+        converTo_mm = 1e3 ** 2
+        area=0.0
+        for i in range(self.injectorLensIndices[-1]+1): #don't forget to add 1
+            area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * converTo_mm
         return area
+
 
 maximumCost=2.0
 
 L_Injector_TotalMax = 2.0
-surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.3})
+surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.5})
 
 def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
     PTL_I=make_Injector_Version_1(paramsInjector)
@@ -144,7 +129,7 @@ def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
     assert 0.0<=cost<=maximumCost
     return cost
 
-def wrapper(X: Union[np.ndarray,list,tuple]):
+def wrapper(X: Union[np.ndarray,list,tuple])-> float:
     try:
         return injector_Cost(X)
     except (ElementDimensionError,InjectorGeometryError,ElementTooShortError,CombinerDimensionError):
@@ -161,29 +146,27 @@ def main():
     bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
     (.05,.5),(.05,.3)]
 
-    def optimize(aperture):
-        constants_Version1["OP_MagAp"] = aperture
-        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=False, workers=9)
-        _results=( member.DNA,member.cost)
-        print('results for ',aperture)
-        print(_results)
-        return _results
 
-    configs=[constants_Version1["OP_MagAp"],
-             constants_Version1["OP_MagAp"]+.005,
-             constants_Version1["OP_MagAp"]+.01,
-             constants_Version1["OP_MagAp"]+.015,
-             constants_Version1["OP_MagAp"]+.02]
-    results=[optimize(config) for config in configs]
-    print(results)
 
-    with open('injectorResults2','wb') as file:
-        dill.dump(results,file)
+    # for _ in range(1):
+    #     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
+    #     print(member.DNA, member.cost)
 
-    # X0=np.array([0.17679389, 0.02566142, 0.11946231, 0.02123231, 0.15981431,
-    #    0.03244162, 0.01197227, 0.05      , 0.23929145, 0.2273491 ])
-    # print(wrapper(X0))
+    X0=np.array([0.29784632, 0.02633112, 0.24822711, 0.02495677, 0.14805594,
+       0.03944398, 0.01564161, 0.32696537, 0.22914697, 0.3       ])
+    print(wrapper(X0))
 if __name__=="__main__":
     main()
 
+"""
 
+
+---population member---- 
+DNA: array([0.29784632, 0.02633112, 0.24822711, 0.02495677, 0.14805594,
+       0.03944398, 0.01564161, 0.32696537, 0.22914697, 0.3       ])
+cost: 0.22292088281208783
+finished with total evals:  19620
+
+
+
+"""

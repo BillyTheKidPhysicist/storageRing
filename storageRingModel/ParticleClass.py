@@ -58,6 +58,7 @@ class Particle:
         self.elDeltaEDict={} # dictionary to hold energy changes that occur traveling through an element. Entries are
         #element index and list of energy changes for each pass
         self.probability=probability #used for swarm behaviour based on probability
+        self.elPhaseSpaceLog=[] #to log the phase space coords at the beginning of each element. Lab frame
         self.totalLatticeLength=None
 
     def reset(self)-> None:
@@ -231,7 +232,7 @@ class Swarm:
     def __init__(self):
         self.particles: list[Particle] = [] #list of particles in swarm
 
-    def add_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None)->None:
+    def add_New_Particle(self, qi:Optional[np.ndarray]=None,pi:Union[np.ndarray]=None)->None:
         #add an additional particle to phase space
         #qi: spatial coordinates
         #pi: momentum coordinates
@@ -240,6 +241,9 @@ class Swarm:
         if qi is None:
             qi = np.asarray([-1e-10, 0.0, 0.0])
         self.particles.append(Particle(qi, pi))
+    
+    def add(self,particle:Particle):
+        self.particles.append(particle)
 
     def vectorize(self,onlyUnclipped: bool=False)->tuple[np.ndarray,np.ndarray]:
         #return position and momentum vectors for the particle swarm

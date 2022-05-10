@@ -16,7 +16,7 @@ import multiprocess as mp
 from collections.abc import Iterable
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from typing import Union,Optional
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon,LineString
 list_array_tuple=Union[np.ndarray,tuple,list]
 
 class Solution:
@@ -95,6 +95,55 @@ class LatticeOptimizer:
             probabilityMin=.05)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
+
+    def convert_Injector_Coord_To_Ring_Frame(self,X: np.ndarray)-> np.ndarray:
+        """
+        Convert particle in injector in to ring frame.
+
+        :param X: particle coords in injector frame. 3D position vector
+        :return: 2D position vector in ring frame. 3D position vector
+        """
+
+        X = X.copy()
+        X[:2] += -self.latticeInjector.combiner.r2[:2]
+        X[:2] = self.latticeInjector.combiner.RIn @ self.latticeInjector.combiner.RIn @ X[:2]
+        X[:2] += self.latticeRing.combiner.r2[:2]
+        return X
+
+    def make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(self,particle: Particle) -> Optional[LineString]:
+        """
+        Make a shapely line object from an injector particle. If the injector particle was clipped right away
+        (starting outside the vacuum for example), None is returned
+
+        :param particle: particle that was traced through injector
+        :return: None if the particle has no logged coords, or a shapely line object in ring frame
+        """
+
+        assert particle.traced
+        if len(particle.elPhaseSpaceLog) == 0:
+            return None
+        qList = []
+        for q, p in particle.elPhaseSpaceLog:
+            qRingFrame_xy = self.convert_Injector_Coord_To_Ring_Frame(q)[:2]
+            qList.append(qRingFrame_xy)
+        line = LineString(qList)
+        return line
+
+    def does_Injector_Particle_Clip_On_Ring(self,particle: Particle)-> bool:
+        """
+        Test if particle clipped the ring. Only certain elements are considered, as of writing this only the first lens
+        in the ring surrogate
+
+        :param particle: particle that was traced through injector
+        :return: True if particle clipped ring, False if it didn't
+        """
+
+        line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
+        if line is None: #particle was clipped immediately, but in the injector not in the ring
+            return False
+        lens = self.latticeRing.elList[0]
+        assert len(self.latticeRing.elList) == 5 and type(lens) is HalbachLensSim #if ring surrogate changes
+        return line.intersects(lens.SO_Outer)
         
     def get_Injector_Shapely_Objects_In_Lab_Frame(self)-> list[Polygon]:
         shapelyObjectLabFrameList = []
@@ -162,51 +211,42 @@ class LatticeOptimizer:
         else: return cost
         
     def inject_And_Trace_Swarm(self,X: list_array_tuple,useSurrogate: bool,energyCorrection: bool)-> Swarm:
+
         self.update_Ring_And_Injector(X)
-        swarmInitial = self.trace_And_Project_Injector_Swarm_To_Combiner_End(useSurrogate)
+        swarmInitial = self.trace_And_Project_Injector_Swarm_To_Ring_Combiner_End(useSurrogate)
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
                                     fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
         return swarmTraced
     
-    def move_Survived_Particles_In_Injector_Swarm_To_Origin(self, swarmInjectorTraced: Swarm, 
-                                                            copyParticles: bool=False,clipNextAp: bool=True)-> Swarm:
-        #fidentify particles that survived to combiner end, walk them right up to the end, exclude any particles that
+    def move_Survived_Particles_From_Injector_Combiner_To_Origin(self, swarmInjectorTraced: Swarm,
+                                                            copyParticles: bool=False)-> Swarm:
+        #identify particles that survived to combiner end, walk them right up to the end, exclude any particles that
         #are now clipping the combiner and any that would clip the next element
         #NOTE: The particles offset is taken from the origin of the orbit output of the combiner, not the 0,0 output
-        apNextElement = self.latticeRing.elList[self.latticeRing.combinerIndex + 1].ap if clipNextAp else np.inf
+        
         swarmSurvived = Swarm()
         for particle in swarmInjectorTraced:
-            if particle.qf is not None:
+            if not particle.clipped and not self.does_Injector_Particle_Clip_On_Ring(particle):
                 outputCenter=self.latticeInjector.combiner.r2+self.swarmTracerInjector.combiner_Output_Offset_Shift()
                 qf = particle.qf - outputCenter
                 qf[:2] = self.latticeInjector.combiner.RIn @ qf[:2]
-                if qf[0] <= self.h * self.latticeRing.v0Nominal:  # if the particle is within a timestep of the end,
-                    # assume it's at the end
-                    pf = particle.pf.copy()
-                    pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
-                    qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
-                    qf[0]=0.0 #no rounding error
-                    clipsNextElement=np.sqrt(qf[1] ** 2 + qf[2] ** 2) > apNextElement
-                    if clipsNextElement==False:  # test that particle survives through next aperture
-                        if copyParticles == False:
-                            particleEnd = particle
-                        else:
-                            particleEnd = particle.copy()
-                        particleEnd.qi = qf
-                        particleEnd.pi = pf
-                        particleEnd.reset()
-                        swarmSurvived.particles.append(particleEnd)
+                pf = particle.pf.copy()
+                pf[:2] = self.latticeInjector.combiner.RIn @ particle.pf[:2]
+                qf = qf + pf * np.abs(qf[0] / pf[0]) #walk particle up to the end of the combiner
+                particleOrigin=particle.copy() if copyParticles else particle
+                particleOrigin.qi,particleOrigin.pi = qf,pf
+                particleOrigin.reset()
+                swarmSurvived.add(particleOrigin)
         return swarmSurvived
 
-    def trace_And_Project_Injector_Swarm_To_Combiner_End(self,useSurrogate: bool) -> Swarm:
+    def trace_And_Project_Injector_Swarm_To_Ring_Combiner_End(self, useSurrogate: bool) -> Swarm:
         if useSurrogate==True:
             swarm=self.swarmInjectorInitial_Surrogate
         else:
             swarm=self.swarmInjectorInitial
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            swarm.quick_Copy()
-            , self.h, 1.0, fastMode=True, copySwarm=False, accelerated=True)
-        swarmEnd = self.move_Survived_Particles_In_Injector_Swarm_To_Origin(swarmInjectorTraced, copyParticles=False)
+            swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True)
+        swarmEnd = self.move_Survived_Particles_From_Injector_Combiner_To_Origin(swarmInjectorTraced, copyParticles=False)
         swarmEnd = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmEnd, copySwarm=False,scoot=True)
         return swarmEnd
 
@@ -239,6 +279,7 @@ class LatticeOptimizer:
         
     def update_Injector_Lattice(self, X: list_array_tuple):
         # modify lengths of drift regions in injector
+        raise NotImplementedError
         assert len(X)==2
         assert X[0]>0.0 and X[1]>0.0
         self.latticeInjector.elList[self.injectTuneElIndices[0]].set_Length(X[0])
@@ -258,6 +299,7 @@ class LatticeOptimizer:
             el.fieldFact = arg
 
     def update_Ring_Spacing(self, X: list_array_tuple)-> None:
+        raise NotImplementedError
         for elCenter, spaceFracElBefore in zip(self.tunedElementList, X):
             self.move_Element_Longitudinally(elCenter,spaceFracElBefore)
         self.latticeRing.build_Lattice()

@@ -49,11 +49,13 @@ class ParticleTracer:
 
     minTimeStepsPerElement: int = 2 #if an element is shorter than this, throw an error
 
-    def __init__(self,lattice):
+    def __init__(self,PTL):
         #lattice: ParticleTracerLattice object typically
-        self.latticeElementList = lattice.elList  # list containing the elements in the lattice in order from first to last (order added)
-        self.totalLatticeLength=lattice.totalLength
-
+        self.elList = PTL.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.totalLatticeLength=PTL.totalLength
+        
+        self.PTL=PTL
+        
         self.tau_Collision=np.inf #collision time constant
         self.T_CollisionLast=0.0 # time since last collision
         self.accelerated=None
@@ -80,6 +82,8 @@ class ParticleTracer:
         self.logTracker=None
         self.stepsBetweenLogging=None
 
+        self.logPhaseSpaceCoords=False #wether to log lab frame phase space coords at element inputs
+
     def transform_To_Next_Element(self,q: np.ndarray,p: np.ndarray,nextEll: elementPT.Element)\
             ->tuple[np.ndarray,np.ndarray]:
         el1=self.currentEl
@@ -104,7 +108,7 @@ class ParticleTracer:
         if self.particle.clipped is not None:
             self.particle.clipped=False
         LMin=npl.norm(self.particle.pi)*self.h*self.minTimeStepsPerElement
-        for el in self.latticeElementList:
+        for el in self.elList:
             if el.Lo<=LMin: #have at least a few steps in each element
                 raise Exception('element too short for time steps size')
         self.currentEl = self.which_Element_Lab_Coords(self.particle.qi)
@@ -114,6 +118,8 @@ class ParticleTracer:
         if self.currentEl is None:
             self.particle.clipped=True
         else:
+            if self.logPhaseSpaceCoords:
+                self.particle.elPhaseSpaceLog.append((self.particle.qi.copy(),self.particle.pi.copy()))
             self.particle.clipped=False
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.qi)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
@@ -122,7 +128,8 @@ class ParticleTracer:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
 
     def trace(self,particle: Optional[Particle],h: float,T0: float,fastMode: bool=False,accelerated: bool=False,
-              energyCorrection: bool=False,stepsBetweenLogging: int=1, tau_Collision: bool=None)-> Particle:
+              energyCorrection: bool=False,stepsBetweenLogging: int=1, tau_Collision: bool=None,
+              logPhaseSpaceCoords:bool=False)-> Particle:
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
         # not very efficient.
@@ -137,6 +144,7 @@ class ParticleTracer:
         self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
         self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
+        self.logPhaseSpaceCoords=logPhaseSpaceCoords
         if particle is None:
             particle=Particle()
         if particle.traced:
@@ -156,35 +164,64 @@ class ParticleTracer:
             return particle
         self.time_Step_Loop()
         self.forceLast=None #reset last force to zero
-        # self.particle._q = self.currentEl.transform_Element_Coords_Into_Lab_Frame(self.qEl)
-        # self.particle.p = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(self.pEl)
-        # self.particle.currentEl=self.currentEl
-
         self.particle.finished(self.currentEl,self.qEl,self.pEl,totalLatticeLength=self.totalLatticeLength)
+
+        if self.logPhaseSpaceCoords:
+            self.particle.elPhaseSpaceLog.append((self.particle.qf,self.particle.pf))
+
+
         return self.particle
+
+    def did_Particle_Survive_To_End(self):
+        """
+        Check if a particle survived to the end of a lattice. This is only intended for lattices that aren't closed.
+        This isn't straight forward because the particle tracing stops when the particle is outside the lattice, then
+        the previous position is the final position. Thus, it takes a little extra logic to find out wether a particle
+        actually survived to the end in an unclosed lattice
+
+        :return: wether particle has survived to end or not
+        """
+
+        assert not self.PTL.isClosed
+        elLast = self.elList[-1]
+        # qEl = elLast.transform_Lab_Coords_Into_Element_Frame(self.qEl)
+        # pEl = elLast.transform_Lab_Frame_Vector_Into_Element_Frame(self.pEl)
+        if isinstance(elLast, elementPT.LensIdeal):
+            timeStepToEnd = (elLast.L - self.qEl[0]) / self.pEl[0]
+        elif isinstance(elLast, elementPT.CombinerIdeal):
+            timeStepToEnd = self.qEl[0] / -self.pEl[0]
+        else:
+            print('not implemented, falling back to previous behaviour')
+            return self.particle.clipped
+
+        if not 0 <= timeStepToEnd <= self.h:
+            clipped = True
+        else:
+            qElEnd = self.qEl + .99 * timeStepToEnd * self.pEl
+            clipped = not elLast.is_Coord_Inside(qElEnd)
+        return clipped
 
     def time_Step_Loop(self)-> None:
         while True:
             if self.T >= self.T0: #if out of time
                 self.particle.clipped = False
                 break
-            if False:#isinstance(self.currentEl,elementPT.Drift):
-                self.handle_Drift_Region()
-                if self.particle.clipped:
-                    break
+            if self.fastMode is False or self.currentEl.fastFieldHelper is None: #either recording data at each step
+                #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
+                self.time_Step_Verlet()
+                if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
+                    self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+                self.logTracker+=1
             else:
-                if self.fastMode is False or self.currentEl.fastFieldHelper is None: #either recording data at each step
-                    #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
-                    self.time_Step_Verlet()
-                    if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
-                        self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
-                    self.logTracker+=1
-                else:
-                    self.multi_Step_Verlet()
-                if self.particle.clipped:
-                    break
-                self.T+=self.h
-                self.particle.T=self.T
+                self.multi_Step_Verlet()
+            if self.particle.clipped:
+                break
+            self.T+=self.h
+            self.particle.T=self.T
+
+        if not self.PTL.isClosed:
+            if self.currentEl is self.elList[-1] and self.particle.clipped: #only bother if particle is in last element
+                self.particle.clipped=self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self)-> None:
         results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,
@@ -356,6 +393,8 @@ class ParticleTracer:
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Scooted) #use the old  element for transform
                 pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl) #use the old  element for transform
+                if self.logPhaseSpaceCoords:
+                    self.particle.elPhaseSpaceLog.append((qElLab.copy(),pElLab.copy()))
                 self.currentEl=nextEl
                 self.particle.currentEl=nextEl
                 self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
@@ -389,16 +428,16 @@ class ParticleTracer:
             return deltaP
 
     def which_Element_Lab_Coords(self,qLab: np.ndarray)-> Optional[elementPT.Element]:
-        for el in self.latticeElementList:
+        for el in self.elList:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab)):
                 return el
         return None
 
     def get_Next_Element(self)-> elementPT.Element:
-        if self.currentEl.index+1>=len(self.latticeElementList):
-            nextEl=self.latticeElementList[0]
+        if self.currentEl.index+1>=len(self.elList):
+            nextEl=self.elList[0]
         else:
-            nextEl=self.latticeElementList[self.currentEl.index+1]
+            nextEl=self.elList[self.currentEl.index+1]
         return nextEl
 
     def which_Element(self,qEl: np.ndarray)-> Optional[elementPT.Element]:
@@ -410,7 +449,7 @@ class ParticleTracer:
             return nextEl
         else:
             #now instead look everywhere, except the next element we already checked
-            for el in self.latticeElementList:
+            for el in self.elList:
                 if el is not nextEl: #don't waste rechecking current element or next element
                     if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab)):
                         return el
