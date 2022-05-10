@@ -83,7 +83,7 @@ class DriftTestHelper(ElementTestHelper):
 
     def __init__(self):
         self.L, self.ap = .15432, .0392
-        particle0=Particle(qi=np.asarray([0.0,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-3.8]))
+        particle0=Particle(qi=np.asarray([-1e-14,1e-3,-2e-3]),pi=np.asarray([-201.0,5.2,-3.8]))
         qf0 = np.array([-0.15376500000000048 ,  0.004978000000000016,-0.004909867602500013])
         pf0 = np.array([-201.                ,    5.2               ,-3.8074970000000286])
         super().__init__(Drift,particle0,qf0,pf0,True,False,False)
@@ -116,7 +116,7 @@ class DriftTestHelper(ElementTestHelper):
         slopey = .25 * self.ap / deltaX
         yi = self.ap / 4.0
         yf = deltaX * slopey + yi
-        particle = Particle(qi=np.asarray([0.0, yi, zi]), pi=np.asarray([vx, slopey * vx, slopez_initial * vx]))
+        particle = Particle(qi=np.asarray([-1e-14, yi, zi]), pi=np.asarray([vx, slopey * vx, slopez_initial * vx]))
         particleTraced = particleTracer.trace(particle, h, 1.0, fastMode=True)
         qfTrace, pfTrace = particleTraced.qf, particleTraced.pf
         slopeyTrace, slopezTrace = pfTrace[1] / pfTrace[0], pfTrace[2] / pfTrace[0]
@@ -226,7 +226,7 @@ class LensIdealTestHelper(ElementTestHelper):
         tol=1e-2 #test to 1% accuracy
         #does the particle behave as theory predicts? It should be very close because it's ideal
         particleTracer=ParticleTracer(self.PTL)
-        particle=Particle(qi=np.asarray([0.0,self.rp/2.0,0.]))
+        particle=Particle(qi=np.asarray([-1e-14,self.rp/2.0,0.]))
         particle=particleTracer.trace(particle,1e-6,1.0)
         yi,yf,pyf=particle.qi[1],particle.qf[1],particle.pf[1]
         yRMS,pyRMS=np.std(particle.qArr[:,1]),np.std(particle.pArr[:,1])

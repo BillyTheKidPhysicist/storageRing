@@ -132,13 +132,13 @@ class Injection_Model(LatticeOptimizer):
         self.show_Floor_Plan(deferPltShow=True,trueAspect=False,color='grey')
         self.show_Floor_Plan(which='interior',deferPltShow=True,trueAspect=False,linestyle=':')
         self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:200]
-        fastMode=False
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             self.swarmInjectorInitial.quick_Copy(), 2e-6, 1.0, parallel=False,
-            fastMode=fastMode, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
+            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                             copyParticles=True,onlyUnclipped=False)
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,2e-6,1,fastMode=fastMode)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,2e-6,1,fastMode=False,
+                                                                         parallel=False)
 
         for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
@@ -207,7 +207,8 @@ def main():
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.001,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.002,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.004]
-    deltaOPAp=[constants_Version1["OP_MagAp"]+.001,
+    deltaOPAp=[constants_Version1["OP_MagAp"],
+                constants_Version1["OP_MagAp"]+.001,
                constants_Version1["OP_MagAp"]+.002,
                constants_Version1["OP_MagAp"]+.004]
     for val in deltaOPAp:

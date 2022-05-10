@@ -79,6 +79,29 @@ class SwarmTracer:
             else:
                 swarm.add_New_Particle(qi, pi)
         return swarm
+
+    def initialize_Simulated_Collector_Focus_Swarm(self,numParticles: int)-> Swarm:
+        """
+        Initialize swarm particles with phase space coordinates from a simulation of the focus of the collector.
+
+
+        :param numParticles: Number of particles to add to swarm from data file
+        :return: swarm of particles
+        """
+
+        particleData = np.loadtxt("particleInitialConditions.txt")
+        assert len(particleData) >= numParticles and particleData.shape[1]==6 and len(particleData.shape)==2
+        qArr, pArr = particleData[:numParticles, :3], particleData[:numParticles, 3:]
+        swarm = Swarm()
+        for qi, pi, in zip(qArr, pArr):
+            assert np.all(np.abs(qi) < 1) and np.all(np.abs(pi) < 1000)  # avoid possible unit conversion error
+            assert -250 < pi[0] < -150
+            assert qi[0]<=0.0
+            if qi[0]==0.0:
+                qi[0]-=1e-10
+            swarm.add_New_Particle(qi=qi, pi=pi)
+        return swarm
+
     def initialize_Observed_Collector_Swarm_Probability_Weighted(self,captureDiam: float,collectorOutputAngle: float,
                                     numParticles: float,gammaSpace: float=3.5e-3,temperature: float=.003,
                                     sameSeed: bool=False,upperSymmetry: bool=False,probabilityMin: float=0.01)-> Swarm:
