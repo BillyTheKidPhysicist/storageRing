@@ -43,8 +43,6 @@ class ParticleTracerLattice:
         self.fieldDensityMultiplier=fieldDensityMultiplier
         self.standardMagnetErrors=standardMagnetErrors
 
-        self.bender1: Optional[benderTypes]=None #bender element object
-        self.bender2: Optional[benderTypes]=None #bender element object
         self.combiner: Optional[elementPT.Element]=None #combiner element object
         self.linearElementsToConstraint: list[elementPT.HalbachLensSim]=[] #elements whos length will be changed when the
         # lattice is constrained to satisfy geometry. Must be inside bending region
@@ -284,26 +282,10 @@ class ParticleTracerLattice:
         for el in self.elList:  # total length of particle's orbit in an element
             self.totalLength += el.Lo
 
-    def end_Lattice(self,constrain: bool=False,enforceClosedLattice: bool=True,buildLattice: bool=True,
-                    surpressWarning: bool=False)-> None:
-        #todo: reimplement keyword args
-        #REALLY NEED TO CLEAN UP ERROR CATCHING
-        #document which parameters mean what when using constrain!
-        #THIS ALL NEEDS TO MAKE MORE SENSE
-        #call various functions to construct the lattice geometry, the shapely objects for visualization and finding particle
-        # positions, catch errors, enforce constraints and fill parameter(s)
-        # constrain: wether to constrain the lattice by varying parameters. typically to accomodate the presence of the
-        #combiner magnet
-        # enfroceClosedLattice: Wether to throw an error when the lattice end point does not coincide with beginning point
-        #track potential. Wether to have enable the element function that returns magnetic pontential at a given point.
-        #there is a cost to keeping this enabled because of pickling time
-        #latticeType: Wether lattice is 'storageRing' type or 'injector' type.
-        if len(self.benderIndices) ==2:
-            self.bender1=self.elList[self.benderIndices[0]]   #save to use later
-            self.bender2=self.elList[self.benderIndices[1]] #save to use later
-        self.catch_Errors(constrain,buildLattice)
+    def end_Lattice(self,constrain: bool=False,buildLattice: bool=True)-> None:
 
-        if buildLattice==True:
+        self.catch_Errors(constrain)
+        if buildLattice:
             self.build_Lattice(constrain)
 
     def make_Geometry(self)-> None:
@@ -384,33 +366,31 @@ class ParticleTracerLattice:
             el.SO=Polygon(pointsInner)
             el.SO_Outer=Polygon(pointsOuter)
 
-    def catch_Errors(self,constrain: bool,builLattice: bool)-> None:
+    def catch_Errors(self,constrain: bool)-> None:
         #catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         #kinds. This class is not meant to have tons of error handling, so user must be cautious
-        if self.elList[0].shape=='BEND': #first element can't be a bending element
+        if isinstance(self.elList[0],BenderIdeal): #first element can't be a bending element
             raise Exception('FIRST ELEMENT CANT BE A BENDER')
-        if self.elList[0].shape in ('COMBINER_SQUARE','COMBINER_CIRCULAR'): #first element can't be a combiner element
+        if isinstance(self.elList[0],CombinerIdeal): #first element can't be a combiner element
             raise Exception('FIRST ELEMENT CANT BE A COMBINER')
-        if len(self.benderIndices)==2: #if there are two benders they must be the same. There could be more benders, but
-            #that is not dealth with here
-            if type(self.bender1)!=type(self.bender2):
-                raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
-        if constrain==True:
+        if len(self.benderIndices)>=2: #if there are two benders they must be the same.
+            bender1=self.elList[self.benderIndices[0]]
+            for i in self.benderIndices:
+                if not type(bender1) is type(self.elList[i]):
+                    raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
+        if constrain:
             if self.latticeType!='storageRing':
                 raise Exception('Constrained lattice must be storage ring type')
-            if type(self.bender1)!=type(self.bender2): #for continuous benders
-                raise Exception('BENDERS BOTH MUST BE SAME TYPE')
-            if len(self.benderIndices) != 2:
-                raise Exception('THERE MUST BE TWO BENDERS')
-            if self.combiner is not None:
-                if self.combinerIndex>self.benderIndices[0]:
-                    raise Exception('COMBINER MUST BE BEFORE FIRST BENDER')
-
-            if self.bender1.segmented==True:
-                if (self.bender1.Lseg != self.bender2.Lseg) or (self.bender1.yokeWidth != self.bender2.yokeWidth):
+            if not len(self.benderIndices) >= 2:
+                raise Exception('THERE MUST BE AT LEAST TWO BENDERS')
+            for i in self.benderIndices:
+                bender1,benderi = self.elList[self.benderIndices[0]],self.elList[i]
+                if not type(bender1) is type(benderi):
+                    raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
+                if not bender1.Lseg==benderi.Lseg or bender1.yokeWidth != benderi.yokeWidth:
                     raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
-            if self.bender1.segmented != self.bender2.segmented:
-                raise Exception('BENDER MUST BOTH BE SEGMENTED OR BOTH NOT')
+            if self.combiner is None:
+                raise Exception('COMBINER MUST BE PRESENT')
 
     def get_Element_Before_And_After(self,elCenter: elementPT.Element)-> tuple[Element,Element]:
         if (elCenter.index==len(self.elList)-1 or elCenter.index==0) and self.latticeType=='injector':

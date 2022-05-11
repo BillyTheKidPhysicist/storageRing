@@ -1,10 +1,8 @@
-import time
+from typing import  Union
 import numpy as np
 from constants import DEFAULT_ATOM_SPEED
 import elementPT
-from typing import Optional, Union
-from storageRingOptimizer import LatticeOptimizer, Solution
-from latticeModels_Constants import constants_Version1
+from latticeModels_Constants import constantsV1,constantsV3, injectorParamsOptimal_Version1
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
 
@@ -21,42 +19,75 @@ lst_arr_tple = Union[list, np.ndarray, tuple]
 
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 minTimeStepGap = h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
+InjectorModel=RingModel=ParticleTracerLattice
 
 
-def el_Fringe_Space(elementName: str, rp: float) -> float:
-    assert rp > 0
+def el_Fringe_Space(elementName: str, elementBoreRadius: float) -> float:
+    """Return the gap between hard edge of element (magnetic material) and end of element model. This gap exists
+    to allow the field values to fall to negligeable amounts"""
+
+    assert elementBoreRadius > 0
     if elementName == 'none':
         return 0.0
     fringeFracs = {"combiner": elementPT.CombinerHalbachLensSim.outerFringeFrac,
                    "lens": elementPT.HalbachLensSim.fringeFracOuter,
                    "bender": elementPT.HalbachBenderSimSegmented.fringeFracOuter}
-    return fringeFracs[elementName] * rp
+    return fringeFracs[elementName] * elementBoreRadius
 
-
-def clip_If_Below_Min_Time_Step_Gap(length: float) -> float:
-    if length < minTimeStepGap:
+def round_Up_If_Below_Min_Time_Step_Gap(proposedLength: float) -> float:
+    """Elements have a minimum length dictated by ParticleTracerClass for time stepping considerations. A  reasonable 
+    value for the time stepping is assumed. If wrong, an error will be thrown in ParticleTracerClass"""
+    
+    if proposedLength < minTimeStepGap:
         return minTimeStepGap
     else:
-        return length
+        return proposedLength
 
-
-def add_Drift_If_Needed(PTL: ParticleTracerLattice, minSpace: float, elBeforeName: str,
+def add_Drift_If_Needed(PTL: ParticleTracerLattice, gapLength: float, elBeforeName: str,
                         elAfterName: str, elBefore_rp: float, elAfter_rp: float, ap: float = None) -> None:
-    assert minSpace >= 0 and elAfter_rp > 0 and elBefore_rp > 0
-    extraSpace = minSpace - (el_Fringe_Space(elBeforeName, elBefore_rp) + el_Fringe_Space(elAfterName, elAfter_rp))
+    """Sometimes the fringe field gap is enough to accomodate the minimum desired separation between elements. 
+    Otherwise a gap needs to be added. The drift will have a minimum length, so the total gap may be larger in some 
+    cases"""
+    
+    assert gapLength >= 0 and elAfter_rp > 0 and elBefore_rp > 0
+    extraSpace = gapLength - (el_Fringe_Space(elBeforeName, elBefore_rp) + el_Fringe_Space(elAfterName, elAfter_rp))
     if extraSpace > 0:
         ap = min([elBefore_rp, elAfter_rp]) if ap is None else ap
-        PTL.add_Drift(clip_If_Below_Min_Time_Step_Gap(extraSpace), ap=ap)
+        PTL.add_Drift(round_Up_If_Below_Min_Time_Step_Gap(extraSpace), ap=ap)
 
+def add_Bend_Version_1(PTL: ParticleTracerLattice,rpBend: float)-> None:
+    """Single bender element"""
+    
+    PTL.add_Halbach_Bender_Sim_Segmented(constantsV1['Lm'], rpBend, None, constantsV1['rbTarget'])
 
-def add_Bend_Adjacent_Gap(PTL: ParticleTracerLattice, rpLens: float, gapMin: float, rpBend: float) -> None:
-    add_Drift_If_Needed(PTL, gapMin, 'lens', 'bender', rpLens, rpBend)
+def add_Bend_Version_3(PTL: ParticleTracerLattice,rpBend: float)-> None:
+    """Two bender elements possibly separated by a drift region for pumping between end/beginning of benders. If fringe
+    field region is long enough, no drift region is add"""
+    
+    PTL.add_Halbach_Bender_Sim_Segmented(constantsV3['Lm'], rpBend, None, constantsV3['rbTarget'])
+    add_Drift_If_Needed(PTL,constantsV3['bendApexGap'],'bender','bender',rpBend,rpBend)
+    PTL.add_Halbach_Bender_Sim_Segmented(constantsV3['Lm'], rpBend, None, constantsV3['rbTarget'])
 
+def add_Bender(PTL: ParticleTracerLattice,rpBend: float,whichVersion: str)-> None:
+    """Add bender section to storage ring. Racetrack design requires two "benders", though each bender may actually be
+    composed of more than 1 bender element and/or other elements"""
+    
+    assert whichVersion in ('1','3')
+    if whichVersion=='1': #single bender element
+        add_Bend_Version_1(PTL,rpBend)
+    elif whichVersion=='2':#two bender elements, possibly a drift element
+        raise NotImplementedError
+    else:
+        add_Bend_Version_3(PTL,rpBend)
 
-def add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend):
-    consts = constants_Version1
+def add_First_Racetrack_Straight_Version1(PTL, raceTrackParams: tuple[float,...])-> None:
+    """Starting from a bender output at 0,0 and going in -x direction to a bender input is the first "straight" section.
+     Not actually straight because of combiner. Two lenses and a combiner, with supporting drift regions if
+     neccesary for gap spacing"""
+    
+    rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend=raceTrackParams
     # ------gap 1--------  bender-> lens
-    # there is none here because of strong adjacent pumping
+    # there is none here because of strong adjacent vacuum pumping
 
     # --------lens 1---------
 
@@ -64,7 +95,7 @@ def add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCo
 
     # --------gap 2-------- lens-> combiner
 
-    add_Drift_If_Needed(PTL, consts["gap2Min"], 'lens', 'combiner', rpLens1, rpCombiner)
+    add_Drift_If_Needed(PTL, constantsV1["gap2Min"], 'lens', 'combiner', rpLens1, rpCombiner)
 
     # -------combiner-------
 
@@ -74,147 +105,191 @@ def add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCo
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
     # as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
     # without it being a new drift region
-    OP_Gap = consts["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
+    OP_Gap = constantsV1["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
                                       + el_Fringe_Space('lens', rpLens2))
-    OP_Gap = clip_If_Below_Min_Time_Step_Gap(OP_Gap)
-    OP_Gap = OP_Gap if OP_Gap > consts["OP_PumpingRegionLength"] else \
-        consts["OP_PumpingRegionLength"]
-    PTL.add_Drift(OP_Gap, ap=consts["OP_MagAp"])
+    OP_Gap = round_Up_If_Below_Min_Time_Step_Gap(OP_Gap)
+    OP_Gap = OP_Gap if OP_Gap > constantsV1["OP_PumpingRegionLength"] else \
+        constantsV1["OP_PumpingRegionLength"]
+    PTL.add_Drift(OP_Gap, ap=constantsV1["OP_MagAp"])
 
     # -------lens 2-------
     PTL.add_Halbach_Lens_Sim(rpLens2, L_Lens)
 
     # ---------gap 4----- lens-> bender
+    add_Drift_If_Needed(PTL, constantsV1["lensToBendGap"], 'lens', 'bender', rpLens2, rpBend)
 
-    add_Bend_Adjacent_Gap(PTL, rpLens2, consts["lensToBendGap"], rpBend)
-
-def add_Second_Racetrack_Version_2(PTL,rpLens3_4,rpBend):
-    consts = constants_Version1
+def add_Second_Racetrack_Straight_Version_1(PTL: ParticleTracerLattice,rpLens3_4: float,rpBend: float)-> None:
+    """Going from output of bender in +x direction to input of next bender. Two lenses with supporting drift regions if
+     neccesary for gap spacing"""
 
     # ---------gap 5-----  bender->lens
 
-    add_Bend_Adjacent_Gap(PTL, rpLens3_4, consts["lensToBendGap"], rpBend)
+    add_Drift_If_Needed(PTL, constantsV1["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
 
     # -------lens 3-----------
     PTL.add_Halbach_Lens_Sim(rpLens3_4, None, constrain=True)
 
     # ---------gap 6------ lens -> lens
-    add_Drift_If_Needed(PTL, consts["observationGap"], 'lens', 'lens', rpLens3_4, rpLens3_4)
+    add_Drift_If_Needed(PTL, constantsV1["observationGap"], 'lens', 'lens', rpLens3_4, rpLens3_4)
 
     # ---------lens 4-------
     PTL.add_Halbach_Lens_Sim(rpLens3_4, None, constrain=True)
 
     # ------gap 7------ lens-> bender
 
-    add_Bend_Adjacent_Gap(PTL, rpLens3_4, consts["observationGap"], rpBend)
+    add_Drift_If_Needed(PTL, constantsV1["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
 
+def make_Ring(variableParams: lst_arr_tple, whichVersion: str) -> RingModel:
+    """Make ParticleTraceLattice object that represents storage ring. This does not include the injector components.
+    Several versions available
 
-def make_Ring_And_Injector_Version1(params: lst_arr_tple) -> tuple[ParticleTracerLattice, ParticleTracerLattice]:
+    Version 1: in clockwise order starting at 0,0 and going in -x direction elements are [lens, combiner, lens, bender,
+    lens,lens,bender] with drift regions as neccesary to fill in gaps for pumping and obsercation
 
-    assert all(val>0 for val in params)
-    injectorParams = (.29374941, 0.01467768, 0.22837003, 0.0291507, 0.19208822,
-                      0.04, 0.01462034, 0.08151122, 0.27099428, 0.26718875)
-    L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
-    loadBeamDiam, gap1, gap2, gap3 = injectorParams
+    Version 3: Same as Version 1, but instead with the bending sections split into to bending elements so pumping
+    can be applied at apex
+    """
 
-    rpLens3_4, rpLens2, rpLens1, rpBend, L_Lens = params
-
-    ringParams = [rpLens3_4, rpLens2, rpLens1, rpBend, L_Lens, LmCombiner, rpCombiner,
-                  loadBeamDiam]
-
-    PTL_Ring = make_Ring_Version_1(ringParams)
-    PTL_Injector = make_Injector_Version_1(injectorParams)
-    assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
-    return PTL_Ring, PTL_Injector
-
-
-def make_Ring_Version_1(params: lst_arr_tple) -> ParticleTracerLattice:
-    assert all(val > 0 for val in params)
-    rpLens3_4, rpLens1, rpLens2, rpBend, L_Lens, LmCombiner, rpCombiner, loadBeamDiam = params
-    consts = constants_Version1
+    assert whichVersion in ('1','3')
+    assert all(val > 0 for val in variableParams)
+    rpLens3_4, rpLens1, rpLens2, rpBend, L_Lens, LmCombiner, rpCombiner, loadBeamDiam = variableParams
+    raceTrackParams=rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
-    add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend)
+    add_First_Racetrack_Straight_Version1(PTL, raceTrackParams)
 
     # -------bender 1------
-    PTL.add_Halbach_Bender_Sim_Segmented(consts['Lm'], rpBend, None, consts['rbTarget'])
+    add_Bender(PTL,rpBend,whichVersion)
 
-    #-----starting at gap 5r through gap 7r-----
+    # -----starting at gap 5r through gap 7r-----
 
-    add_Second_Racetrack_Version_2(PTL,rpLens3_4,rpBend)
+    add_Second_Racetrack_Straight_Version_1(PTL, rpLens3_4, rpBend)
 
     # ------bender 2--------
-    PTL.add_Halbach_Bender_Sim_Segmented(consts['Lm'], rpBend, None, consts['rbTarget'])
+    add_Bender(PTL,rpBend,whichVersion)
 
     # ----done---
-    PTL.end_Lattice(enforceClosedLattice=True, constrain=True)
+    PTL.end_Lattice(constrain=True)
 
     return PTL
 
+def make_Injector_Version_Any(injectorParams: dict) -> InjectorModel:
+    """Make ParticleTraceLattice object that represents injector. Injector is a double lens design. """
 
-def make_Injector_Version_1(injectorParams) -> ParticleTracerLattice:
-    assert all(val > 0 for val in injectorParams)
-    L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
-    LmCombiner, rpCombiner, loadBeamDiam, gap1, gap2, gap3 = injectorParams
-    consts = constants_Version1
+    gap1=injectorParams["gap1"]
+    gap2=injectorParams["gap2"]
+    gap3=injectorParams["gap3"]
 
-    gap2 -= el_Fringe_Space('lens', rpInjectorMagnet1) + el_Fringe_Space('lens', rpInjectorMagnet2)
-    gap1 -= el_Fringe_Space('lens', rpInjectorMagnet1)
-    if gap2 < consts["lens1ToLens2_Inject_Gap"]:
+    gap1 -= el_Fringe_Space('lens', injectorParams["rp1"])
+    gap2 -= el_Fringe_Space('lens', injectorParams["rp1"]) + el_Fringe_Space('lens', injectorParams["rp2"])
+    if gap2 < constantsV1["lens1ToLens2_Inject_Gap"]:
         raise InjectorGeometryError
-    if gap1 < consts["sourceToLens1_Inject_Gap"]:
+    if gap1 < constantsV1["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
 
     PTL = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
 
     # -----gap between source and first lens-----
 
-    add_Drift_If_Needed(PTL, gap1, 'none', 'lens', np.inf, rpInjectorMagnet1)  # hacky
+    add_Drift_If_Needed(PTL, gap1, 'none', 'lens', np.inf, injectorParams["rp1"])  # hacky
 
     # ---- first lens------
 
-    PTL.add_Halbach_Lens_Sim(rpInjectorMagnet1, L_InjectorMagnet1)
+    PTL.add_Halbach_Lens_Sim(injectorParams["rp1"], injectorParams["L1"])
 
     # -----gap with valve--------------
 
-    gapValve = consts["lens1ToLens2_Valve_Length"]
+    gapValve = constantsV1["lens1ToLens2_Valve_Length"]
     gap2 = gap2 - gapValve
     if gap2 < 0:  # this is approximately true. I am ignoring that there is space in the fringe fields
         raise InjectorGeometryError
-    PTL.add_Drift(gap2, ap=rpInjectorMagnet1)
-    PTL.add_Drift(gapValve, ap=consts["lens1ToLens2_Valve_Ap"],
-                  outerHalfWidth=consts["lens1ToLens2_Inject_Valve_OD"] / 2)
+    PTL.add_Drift(gap2, ap=injectorParams["rp1"])
+    PTL.add_Drift(gapValve, ap=constantsV1["lens1ToLens2_Valve_Ap"],
+                  outerHalfWidth=constantsV1["lens1ToLens2_Inject_Valve_OD"] / 2)
 
     # ---------------------
 
-    PTL.add_Halbach_Lens_Sim(rpInjectorMagnet2, L_InjectorMagnet2)
+    PTL.add_Halbach_Lens_Sim(injectorParams["rp2"], injectorParams["L2"])
 
-    PTL.add_Drift(gap3, ap=rpInjectorMagnet2)
+    PTL.add_Drift(gap3, ap=injectorParams["rp2"])
 
-    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
+    PTL.add_Combiner_Sim_Lens(injectorParams["LmCombiner"],
+                              injectorParams["rpCombiner"],
+                              loadBeamDiam=injectorParams["loadBeamDiam"], layers=1)
 
-    PTL.end_Lattice(constrain=False, enforceClosedLattice=False)
+    PTL.end_Lattice(constrain=False)
 
     return PTL
 
+def make_Ring_Surrogate_Version_1(injectorParams: tuple[float,...], surrogateParamsDict: dict)-> RingModel:
+    """Surrogate model of storage to aid in realism of independent injector optimizing. Benders are exluded. Model
+    serves to represent geometric constraints between injector and ring, and to test that if particle that travel
+    into combiner can make it to the next element. Since injector is optimized independent of ring, the parameters
+    for the ring surrogate are typically educated guesses"""
 
-def make_Ring_Surrogate_Version_1(injectorParams, surrogateParamsDict: dict):
     assert all(val > 0 for val in injectorParams)
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, gap1, gap2, gap3 = injectorParams
 
-    rpBend = 1.0
-
+    rpBend = constantsV1["rbTarget"]
     rpLens1 = surrogateParamsDict['rpLens1']
     rpLens2 = surrogateParamsDict['rpLens2']
     L_Lens = surrogateParamsDict['L_Lens']
+    raceTrackParams = rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend)
+    add_First_Racetrack_Straight_Version1(PTL, raceTrackParams)
 
     PTL.end_Lattice(constrain=False)
     return PTL
+
+def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str) -> tuple[RingModel, InjectorModel]:
+    """Make ParticleTracerLattice models of ring and injector system. Combiner must be the same, though in low
+    field seeking configuration for ring, and high field seeking for injector"""
+
+    assert whichVersion in ('1','3')
+    assert all(val > 0 for val in variableParams)
+
+    rpLens3_4, rpLens2, rpLens1, rpBend, L_Lens = variableParams
+
+    ringParams = (rpLens3_4, rpLens2, rpLens1, rpBend, L_Lens, injectorParamsOptimal_Version1["LmCombiner"],
+                  injectorParamsOptimal_Version1["rpCombiner"],
+                  injectorParamsOptimal_Version1["loadBeamDiam"])
+
+    PTL_Ring = make_Ring(ringParams,whichVersion)
+    PTL_Injector = make_Injector_Version_Any(injectorParamsOptimal_Version1)
+    assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
+    assert PTL_Injector.combiner.ang < 0 <PTL_Ring.combiner.ang
+    return PTL_Ring, PTL_Injector
+
+def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple) -> tuple[RingModel, InjectorModel]:
+    """
+    Make ParticleTraceLattice objects that represents storage ring and injector systems
+
+    Version 1: in clockwise order starting at 0,0 and going in -x direction elements are [lens, combiner, lens, bender,
+    lens,lens,bender] with drift regions as neccesary to fill in gaps for pumping and obsercation
+
+    :param variableParams: Non constant parameters of the ring/injector system.
+    :return: Ring and injector model
+    """
+
+    version='1'
+    return _make_Ring_And_Injector(variableParams,version)
+
+def make_Ring_And_Injector_Version3(variableParams: lst_arr_tple) -> tuple[RingModel, InjectorModel]:
+    """
+    Make ParticleTraceLattice objects that represents storage ring and injector systems
+
+    Version 3: Same as Version 1, but instead with the bending sections split into to bending elements so pumping
+    can be applied at apex
+
+    :param variableParams: Non constant parameters of the ring/injector system.
+    :return: Ring and injector model
+    """
+
+    version='3'
+    return _make_Ring_And_Injector(variableParams,version)

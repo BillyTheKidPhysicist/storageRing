@@ -2,7 +2,8 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 from helperTools import *
 from asyncDE import solve_Async
-from latticeModels_Constants import constants_Version1
+from constants import VACUUM_TUBE_THICKNESS
+from latticeModels_Constants import constantsV1
 from injectionOptimizer import surrogateParams
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -76,7 +77,7 @@ def main():
         (.005, .03),  # rpLens3_4
         (.005, surrogateParams['rpLens1']),  # rpLens1
         (.005, .03),  # rplens2
-        (.005, constants_Version1["bendingApMax"]*1.1),  # rpBend
+        (.005, constantsV1["bendingApMax"]+VACUUM_TUBE_THICKNESS),  # rp
         (.1, .4)  # L_Lens
     ]
     # stability_And_Survival_Optimize(bounds,None,8)

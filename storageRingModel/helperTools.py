@@ -107,7 +107,9 @@ def iscloseAll(a: np.ndarray,b: np.ndarray,abstol: float)->bool:
 def within_Tol(a: realNumType,b: realNumType,tol: realNumType=1e-12):
     return math.isclose(a,b,abs_tol=tol,rel_tol=0.0)
 
-def inch_To_Meter(inches: float)-> float:
+def inch_To_Meter(inches: Union[float,int])-> float:
+    """Convert freedom units to commie units XD"""
+
     return .0254*inches
 
 def arr_Product(*args):

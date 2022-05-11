@@ -74,7 +74,7 @@ def generate_Lattice(configuration):
         PTL.add_Lens_Ideal(1.0,1.0,.01)
         PTL.add_Halbach_Lens_Sim(.01,1.0)
         PTL.add_Drift(.1)
-        PTL.end_Lattice(constrain=False,surpressWarning=True,enforceClosedLattice=False)
+        PTL.end_Lattice(constrain=False)
     elif configuration in ('2','5'):
         PTL=ParticleTracerLattice(v0Nominal=200.0,latticeType='injector')
         PTL.add_Drift(.25)
@@ -104,7 +104,7 @@ def generate_Lattice(configuration):
         PTL.add_Halbach_Bender_Sim_Segmented(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)
         PTL.add_Halbach_Bender_Sim_Segmented(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
-        PTL.end_Lattice(enforceClosedLattice=True,constrain=True)
+        PTL.end_Lattice(constrain=True)
         PTL.elList[0].update_Field_Fact(.3)
         PTL.elList[2].update_Field_Fact(.3)
     else:

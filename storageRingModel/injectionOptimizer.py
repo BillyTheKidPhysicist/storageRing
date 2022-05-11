@@ -10,8 +10,8 @@ from storageRingOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
-from latticeModels import make_Injector_Version_1,make_Ring_Surrogate_Version_1,InjectorGeometryError
-from latticeModels_Constants import constants_Version1,lockedDict
+from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_Version_1,InjectorGeometryError
+from latticeModels_Constants import constantsV1,lockedDict
 from scipy.special import expit as sigmoid
 import dill
 
@@ -100,7 +100,7 @@ surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.5})
 
 def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
 
-    PTL_I = make_Injector_Version_1(paramsInjector)
+    PTL_I = make_Injector_Version_Any(paramsInjector)
     if PTL_I.totalLength > L_Injector_TotalMax:
         return None
     PTL_R = make_Ring_Surrogate_Version_1(paramsInjector, surrogateParams)
