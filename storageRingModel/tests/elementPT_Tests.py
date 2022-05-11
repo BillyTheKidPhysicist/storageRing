@@ -300,8 +300,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         This also implictely tests the accuracy of the unit cell model becuase the force is calculated assuming the
         bender"""
 
-        numMagnets=20
-        PTL=PTL_Dummy()
+        numMagnets=15
+        PTL=PTL_Dummy(fieldDensityMultiplier=.75)
         np.random.seed(42)
         elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb,None, 1e-3, 1.0, True)
         elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb,None, 1e-3, 1.0, False)
@@ -310,18 +310,18 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         np.random.seed(42)
         lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,
                                            numLenses=numMagnets, applyMethodOfMoments=False,
-                                           positiveAngleMagnetsOnly=True, useMagnetError=False)
+                                        positiveAngleMagnetsOnly=True, useMagnetError=False,useHalfCapEnd=(True,True))
         np.random.seed(42)
         lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,
                                               numLenses=numMagnets, applyMethodOfMoments=False,
-                                              positiveAngleMagnetsOnly=True, useMagnetError=True)
+                                         positiveAngleMagnetsOnly=True, useMagnetError=True,useHalfCapEnd=(True,True))
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian)-1)
         @given(testStrategy)
         @settings(max_examples=100,deadline=None)
         def check_Field_Perturbation(index):
             x, y, z = coordsCartesian[index]
             s,xc,yc=coordsCenter[index]
-            if np.sqrt(xc**2+yc**2)>elPerfect.ap or not 0.0<s<Ls:
+            if np.sqrt(xc**2+yc**2)>elPerfect.ap*.9 or not 0.0<s<Ls:
                 return
             qEl = np.asarray([x, y, z])
             [Bgradx, Bgrady, Bgradz], B0 = lensIdeal.BNorm_Gradient(qEl, returnNorm=True,useApprox=True)
@@ -340,6 +340,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             assert iscloseAll(deltaF_el,deltaF_Direct,abstol=1e-6)
             deltaV_El=elDeviation.magnetic_Potential(qEl)-elPerfect.magnetic_Potential(qEl)
             assert isclose(deltaV_El,deltaV_Direct,abs_tol=1e-6)
+        check_Field_Perturbation()
 
 
 class CombinerIdealTestHelper(ElementTestHelper):

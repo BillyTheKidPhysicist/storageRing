@@ -944,8 +944,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         value"""
 
         Ls = 2 * self.Lcap + self.ang * self.rb
-        numS = make_Odd(round(5*(self.numMagnets+2))) #about 4 points in each magnet and cap. This was measured carefully
-        numYc=35
+        numS = make_Odd(round(5*(self.numMagnets+2))) #carefully measured
+        numYc=make_Odd(round(35*self.PTL.fieldDensityMultiplier))
         numXc =numYc
 
         sArr = np.linspace(-TINY_OFFSET, Ls+TINY_OFFSET, numS) #distance through bender along center
@@ -960,9 +960,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Perturbation_Data(self)-> tuple[np.ndarray,...]:
         coordsCenter,coordsCartesian=self.make_Perturbation_Data_Coords()
         lensMisaligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True,useHalfCapEnd=(True,True))
+                numLenses=self.numMagnets,positiveAngleMagnetsOnly=True, useMagnetError=True,useHalfCapEnd=(True,True),
+                                                      applyMethodOfMoments=False)
         lensAligned=_HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-           numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False,useHalfCapEnd=(True,True))
+           numLenses=self.numMagnets,positiveAngleMagnetsOnly=True,useMagnetError=False,useHalfCapEnd=(True,True),
+                                                 applyMethodOfMoments=False)
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices=rCenterArr<self.rp
         valsMisaligned=np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned,coordsCartesian,validIndices))

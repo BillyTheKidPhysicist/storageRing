@@ -47,7 +47,7 @@ def add_Drift_If_Needed(PTL: ParticleTracerLattice,minSpace: float,elBeforeName:
 def add_Bend_Adjacent_Gap(PTL: ParticleTracerLattice,rpLens: float,gapMin: float,rpBend: float)-> None:
     add_Drift_If_Needed(PTL,gapMin,'lens','bender',rpLens,rpBend)
 
-def add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts: dict):
+def add_First_Racetrack_Version1(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts: dict):
     # ------gap 1--------  bender-> lens
     # there is none here because of strong adjacent pumping
 
@@ -83,8 +83,8 @@ def add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBea
 
 def make_Ring_And_Injector_Version1(params: lst_arr_tple)-> tuple[ParticleTracerLattice, ParticleTracerLattice]:
 
-    injectorParams=(0.14625806, 0.02415056, 0.121357  , 0.02123799, 0.19139004,
-       0.04      , 0.01525237, 0.05      , 0.19573719, 0.22186834)
+    injectorParams=(.29374941, 0.01467768, 0.22837003, 0.0291507 , 0.19208822,
+       0.04      , 0.01462034, 0.08151122, 0.27099428, 0.26718875)
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner, \
     loadBeamDiam, gap1, gap2, gap3=injectorParams
 
@@ -112,7 +112,7 @@ def make_Ring_Version_1(params: lst_arr_tple)-> ParticleTracerLattice:
 
     #------starting at gap 1 through lenses and gaps and combiner to gap4
 
-    add_First_Racetrack(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts)
+    add_First_Racetrack_Version1(PTL,rpLens1,rpLens2,L_Lens,rpCombiner,LmCombiner,loadBeamDiam,rpBend,consts)
 
     #-------bender 1------
     PTL.add_Halbach_Bender_Sim_Segmented(consts['Lm'], rpBend, None, consts['rbTarget'])
@@ -203,7 +203,7 @@ def make_Ring_Surrogate_Version_1(injectionParams,surrogateParamsDict: dict):
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    add_First_Racetrack(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend, consts)
+    add_First_Racetrack_Version1(PTL, rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend, consts)
 
     PTL.end_Lattice( constrain=False)
     return PTL

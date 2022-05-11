@@ -6,6 +6,7 @@ import parallel_Gradient_Descent_Tests
 import elementPT_Tests
 import fastNumbaMethodsAndClass_Tests
 from storageRingConstraint_Tests import  test_Storage_Ring_Constraint_1,test_Storage_Ring_Constraint_2
+from optimizerTester import test_Optimizer
 
 #todo: these wrapper functions are useless
 

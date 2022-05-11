@@ -8,8 +8,9 @@ from helperTools import *
 from typing import Union
 import skopt
 import elementPT
-import optimizerHelperFunctions
 from SwarmTracerClass import SwarmTracer
+from latticeModels import make_Ring_And_Injector_Version1
+from runOptimizer import solution_From_Lattice
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
 
@@ -23,7 +24,7 @@ class StabilityAnalyzer:
                  machineTolerance: float=250e-6):
         """
         Analyze stability of ring and injector system. Elements are perturbed by random amplitudes by sampling from
-        a gaussian. Heavy lifiting is done in optimizerHelperFunctions.py
+        a gaussian
 
         :param paramsOptimal: Optimal parameters of a lattice solution.
         :param alignmentTol: Maximum displacement from ideal trajectory perpindicular to vacuum tube in one direction.
@@ -39,7 +40,7 @@ class StabilityAnalyzer:
                                 fieldDensityMul: float,combinerSeed: int=None)\
                                 -> tuple[ParticleTracerLattice,ParticleTracerLattice,np.ndarray]:
         params=self.apply_Machining_Errors(self.paramsOptimal) if useMachineError==True else self.paramsOptimal
-        PTL_Ring,PTL_Injector= optimizerHelperFunctions.generate_Ring_And_Injector_Lattice(params,None,
+        PTL_Ring,PTL_Injector= make_Ring_And_Injector_Version1(params,None,
                 jitterAmp=self.alignmentTol,fieldDensityMultiplier=fieldDensityMul,
                 standardMagnetErrors=useMagnetErrors,combinerSeed=combinerSeed)
         if misalign:
@@ -91,7 +92,7 @@ class StabilityAnalyzer:
                                       misalign: bool,combinerSeed: int=None):
         PTL_Ring, PTL_Injector,params = self.generate_Ring_And_Injector_Lattice(useMagnetErrors, useMachineError,
                                                                 misalign,fieldDensityMul,combinerSeed=combinerSeed)
-        sol=optimizerHelperFunctions.solution_From_Lattice(PTL_Ring,PTL_Injector,None)
+        sol=solution_From_Lattice(PTL_Ring,PTL_Injector,None)
         sol.params=params
         return sol
 

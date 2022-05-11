@@ -35,7 +35,6 @@ class Injection_Model(LatticeOptimizer):
     def __init__(self, latticeRing, latticeInjector,tunabilityLength: float=2e-2):
         super().__init__(latticeRing,latticeInjector)
         self.tunabilityLength=tunabilityLength
-        self.injectorLensIndices=[i for i,el in enumerate(self.latticeInjector) if type(el) is HalbachLensSim]
         assert len(self.injectorLensIndices)==2 # i expect this to be two
 
     def cost(self)-> float:
@@ -58,7 +57,7 @@ class Injection_Model(LatticeOptimizer):
 
         return swarmCost
 
-    def get_Drift_After_Second_Lens(self)-> elementPT.Drift:
+    def get_Drift_After_Second_Lens_Injector(self)-> elementPT.Drift:
 
         drift=self.latticeInjector.elList[self.injectorLensIndices[-1]+1]
         assert type(drift) is elementPT.Drift
@@ -68,13 +67,13 @@ class Injection_Model(LatticeOptimizer):
         """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
         Return the largest value of the three"""
 
-        driftAfterLens=self.get_Drift_After_Second_Lens()
+        driftAfterLens=self.get_Drift_After_Second_Lens_Injector()
         L0=driftAfterLens.L #value before tuning
-        cost=[self.floor_Plan_Cost()]
+        cost=[self.floor_Plan_Cost(None)]
         for separation in (-self.tunabilityLength,self.tunabilityLength):
             driftAfterLens.set_Length(L0+separation) #move lens away from combiner
             self.latticeInjector.build_Lattice(False)
-            cost.append(self.floor_Plan_Cost())
+            cost.append(self.floor_Plan_Cost(None))
         driftAfterLens.set_Length(L0) #reset
         self.latticeInjector.build_Lattice(False)
         return max(cost)
@@ -92,67 +91,6 @@ class Injection_Model(LatticeOptimizer):
         cost=2*(sigmoid(price_USD/price_USD_Scale)-.5)
         return cost
 
-    def floor_Plan_Cost(self)-> float:
-        overlap=self.floor_Plan_OverLap_mm() #units of mm^2
-        factor = 300 #units of mm^2
-        cost = 2 / (1 + np.exp(-overlap / factor)) - 1
-        assert 0.0<=cost<=1.0
-        return cost
-
-    def show_Floor_Plan(self, which: str= 'exterior',deferPltShow=False,trueAspect=True, linestyle: str='-',
-                        color: str='black')-> None:
-
-        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan(which)
-        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c=color,linestyle=linestyle)
-        plt.xlabel('meters')
-        plt.ylabel('meters')
-        plt.grid()
-        if trueAspect:
-            plt.gca().set_aspect('equal')
-        if not deferPltShow:
-            plt.show()
-
-    def floor_Plan_OverLap_mm(self)-> float:
-        """Find the area overlap between the element before the second injector lens, and the first lens in the ring
-        surrogate"""
-
-        firstLensRing=self.latticeRing.elList[0]
-        assert type(firstLensRing) is HalbachLensSim
-        firstLensRingShapely=firstLensRing.SO_Outer
-        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
-        converTo_mm = 1e3 ** 2
-        area=0.0
-        for i in range(self.injectorLensIndices[-1]+1): #don't forget to add 1
-            area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * converTo_mm
-        return area
-
-    def show_Floor_Plan_And_Trajectories(self)-> None:
-        """Tracer particles through the lattices, and plot the results. Interior and exterior of element is shown"""
-
-        self.show_Floor_Plan(deferPltShow=True,trueAspect=False,color='grey')
-        self.show_Floor_Plan(which='interior',deferPltShow=True,trueAspect=False,linestyle=':')
-        self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:200]
-        swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), 2e-6, 1.0, parallel=False,
-            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
-        swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                            copyParticles=True,onlyUnclipped=False)
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,2e-6,1,fastMode=False,
-                                                                         parallel=False)
-
-        for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
-            assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
-            color='r' if particleRing.clipped else 'g'
-            if particleInj.qArr is not None and len(particleInj.qArr)>1:
-                qRingArr=np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in particleInj.qArr])
-                plt.plot(qRingArr[:,0],qRingArr[:,1],c=color,alpha=.3)
-                if particleInj.clipped: #if clipped in injector, plot last location
-                    plt.scatter(qRingArr[-1,0],qRingArr[-1,1],marker='x',zorder=100,c=color)
-            if particleRing.qArr is not None and len(particleRing.qArr)>1:
-                plt.plot(particleRing.qArr[:, 0], particleRing.qArr[:, 1], c=color,alpha=.3)
-                if not particleInj.clipped: #if not clipped in injector plot last ring location
-                    plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1],marker='x',zorder=100,c=color)
-        plt.show()
 
 
 maximumCost=2.0
@@ -171,10 +109,10 @@ def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection
     assert PTL_I.combiner.outputOffset == PTL_R.combiner.outputOffset
     return Injection_Model(PTL_R, PTL_I)
 
-def plot_Results(paramsInjector: Union[np.ndarray,list,tuple]):
+def plot_Results(paramsInjector: Union[np.ndarray,list,tuple], trueAspectRatio=False):
     model=get_Model(paramsInjector)
     assert model is not None
-    model.show_Floor_Plan_And_Trajectories()
+    model.show_Floor_Plan_And_Trajectories(None,trueAspectRatio)
 
 def injector_Cost(paramsInjector: Union[np.ndarray,list,tuple]):
     model=get_Model(paramsInjector)
@@ -207,30 +145,51 @@ def main():
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.001,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.002,
     #          constants_Version1["lens1ToLens2_Valve_Ap"]+.004]
-    deltaOPAp=[constants_Version1["OP_MagAp"],
-                constants_Version1["OP_MagAp"]+.001,
-               constants_Version1["OP_MagAp"]+.002,
-               constants_Version1["OP_MagAp"]+.004]
-    for val in deltaOPAp:
-        constants_Version1["OP_MagAp"]=val
-        print('OP is:', constants_Version1["OP_MagAp"])
-        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
+    # deltaOPAp=[constants_Version1["OP_MagAp"]-.001]#,
+                # constants_Version1["OP_MagAp"]+.001,
+               # constants_Version1["OP_MagAp"]+.002,
+               # constants_Version1["OP_MagAp"]+.004]
+    # for val in deltaOPAp:
+    #     constants_Version1["OP_MagAp"]=val
+    #     print('OP is:', constants_Version1["OP_MagAp"])
+    #     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
 
-    # X0=np.array([0.13174364, 0.02236963, 0.1178371 , 0.02164691, 0.21088243,
-    #        0.0399293 , 0.01874468, 0.18923352, 0.30638525, 0.18568672])
-    # print(wrapper(X0))
-    # plot_Results(X0)
+    #
+    X0=np.array([0.29374941, 0.01467768, 0.22837003, 0.0291507 , 0.19208822,
+       0.04      , 0.01462034, 0.08151122, 0.27099428, 0.26718875])
+    print(wrapper(X0))
+    plot_Results(X0)
 if __name__=="__main__":
     main()
 
 """
 
-with op as is
+with op = 2.0 cm
+
+BEST MEMBER BELOW
 ---population member---- 
-DNA: array([0.13174364, 0.02236963, 0.1178371 , 0.02164691, 0.21088243,
-       0.0399293 , 0.01874468, 0.18923352, 0.30638525, 0.18568672])
-cost: 0.31669191399494917
-finished with total evals:  11594
+DNA: array([0.15388971, 0.03      , 0.13261248, 0.02266874, 0.20860142,
+       0.04      , 0.01729315, 0.14818731, 0.28535098, 0.20815677])
+cost: 0.33858069480205766
+
+
+with op =2.2 cm (default)
+
+---population member---- 
+DNA: array([0.29374941, 0.01467768, 0.22837003, 0.0291507 , 0.19208822,
+       0.04      , 0.01462034, 0.08151122, 0.27099428, 0.26718875])
+cost: 0.25502537159259564
+finished with total evals:  10252
+
+
+op =2.4 cm
+
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.11286314, 0.03      , 0.22316751, 0.03      , 0.18818945,
+       0.04      , 0.0159573 , 0.11879764, 0.26109759, 0.29286133])
+cost: 0.23677264350310473
+
 
 
 

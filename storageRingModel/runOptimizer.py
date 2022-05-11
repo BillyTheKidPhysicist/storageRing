@@ -9,6 +9,10 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version1,RingGeometryError,InjectorGeometryError
 
+def plot_Results(params):
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version1(params)
+    optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
+    optimizer.show_Floor_Plan_And_Trajectories(None,True)
 
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     sol=Solution()
@@ -53,22 +57,18 @@ def solve_For_Lattice_Params(params):
 
 def survival_Optimize(bounds: list,workers: int):
     def wrapper(params):
-        try:
-            sol=solve_For_Lattice_Params(params)
-            cost=sol.cost
-            if sol.fluxMultiplication>10:
-                print(sol)
-        except:
-            np.set_printoptions(precision=100)
-            print('unhandled exception on args: ',repr(params))
-            cost=np.inf
+        sol=solve_For_Lattice_Params(params)
+        if sol.fluxMultiplication>10:
+            print(sol)
+        cost=sol.cost
         return cost
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100000,disp=True,workers=workers)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=workers)
+    # import skopt
     # vals=skopt.sampler.Sobol().generate(bounds,1000)
     # tool_Parallel_Process(wrapper,vals)
-    # args0 = np.array([0.014691009213257358, 0.0297440095905699, 0.011880244167712408, 0.011336008446642887, 0.32066412285553747])
-    # wrapper(args)
+    # args0 = np.array([0.014846121196499758, 0.008527188069799775, 0.028582148991554705, 0.009992301601476166, 0.3548199717821702])
+    # wrapper(args0)
 
 
 def main():
@@ -81,6 +81,8 @@ def main():
     ]
     # stability_And_Survival_Optimize(bounds,None,8)
     survival_Optimize(bounds,10)
+
+    # plot_Results([0.014846121196499758, 0.008527188069799775, 0.028582148991554705, 0.009992301601476166, 0.3548199717821702])
 if __name__=='__main__':
     main()
 
