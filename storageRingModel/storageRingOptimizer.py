@@ -53,6 +53,7 @@ class LatticeOptimizer:
         assert latticeRing.latticeType=='storageRing' and latticeInjector.latticeType=='injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
+        self.injectorLensIndices = [i for i, el in enumerate(self.latticeInjector) if type(el) is HalbachLensSim]
         self.particleTracerRing = ParticleTracer(latticeRing)
         self.particleTracerInjector = ParticleTracer(latticeInjector)
         self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
@@ -65,8 +66,7 @@ class LatticeOptimizer:
         # point in 5d phase space (y,z,px,py,pz). Linear interpolation is done between points
         self.tunedElementList = None
         self.tuningChoice = None  # what type of tuning will occur
-        self.useLatticeUpperSymmetry = False  # exploit the fact that the lattice has symmetry in the z axis to use half
-        # the number of particles. Symmetry is broken if including gravity
+
         self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
         # generation with the same number, 42
         self.sameSeedForSearch = True  # wether to use the same seed, 42, for the search process
@@ -74,10 +74,6 @@ class LatticeOptimizer:
         self.optimalPopSize=5 #for scipy differential solver. This was carefully chosen
         self.tolerance=.03 #for scipy differential evolution. This is the maximum accuravy roughly speaking
         self.maxEvals=300 #for scipy differntial evolution. Shouldn't be more than this
-        self.spotCaptureDiam = 1e-2
-        self.collectorAngleMax = .06
-        self.temperature = None #temperature effects are ignored as they are much smaller than lens output stuff
-        self.gamma_Space=3.5e-3
         self.minElementLength = 1.1 * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
         self.tuningBounds = None
@@ -88,10 +84,8 @@ class LatticeOptimizer:
         self.generate_Swarms()
 
     def generate_Swarms(self)-> None:
-        self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Observed_Collector_Swarm_Probability_Weighted(
-            self.spotCaptureDiam, self.collectorAngleMax, self.numParticlesFullSwarm, temperature=self.temperature,
-            sameSeed=self.sameSeedForSwarm, upperSymmetry=self.useLatticeUpperSymmetry,gammaSpace=self.gamma_Space,
-            probabilityMin=.05)
+        self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(
+            self.numParticlesFullSwarm)
         self.swarmInjectorInitial_Surrogate=Swarm()
         self.swarmInjectorInitial_Surrogate.particles=self.swarmInjectorInitial.particles[:self.numParticlesSurrogate]
 
@@ -150,9 +144,22 @@ class LatticeOptimizer:
         line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
         if line is None: #particle was clipped immediately, but in the injector not in the ring
             return False
-        lens = self.latticeRing.elList[0]
-        assert len(self.latticeRing.elList) == 5 and type(lens) is HalbachLensSim #if ring surrogate changes
+        lens = self.get_Lens_Before_Combiner_Ring()
+        assert type(lens) is HalbachLensSim
         return line.intersects(lens.SO_Outer)
+
+    def get_Lens_Before_Combiner_Ring(self)-> HalbachLensSim:
+        """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
+
+        lens=None
+        for i,el in enumerate(self.latticeRing.elList):
+            if type(el) is HalbachLensSim:
+                assert lens is None #should only be one lens before combiner
+                lens=el
+            if i==self.latticeRing.combiner.index:
+                break
+        assert lens is not None #there must a lens
+        return lens
         
     def get_Injector_Shapely_Objects_In_Lab_Frame(self, which: str)-> list[Polygon]:
         assert which in ('interior','exterior')
@@ -176,26 +183,58 @@ class LatticeOptimizer:
         return shapelyObjectList
 
     def floor_Plan_OverLap_mm(self)-> float:
-        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame()
-        assert len(injectorShapelyObjects)==6
-        overlapElIndex = 3
-        injectorLensShapely = injectorShapelyObjects[overlapElIndex]
-        assert isinstance(self.latticeInjector.elList[overlapElIndex], HalbachLensSim)
-        ringShapelyObjects = [el.SO_Outer for el in self.latticeRing]
-        area = 0
-        converTo_mm = (1e3) ** 2
-        for element in ringShapelyObjects:
-            area += element.intersection(injectorLensShapely).area * converTo_mm
+        """Find the area overlap between the element before the second injector lens, and the first lens in the ring
+        """
+
+        firstLensRing=self.get_Lens_Before_Combiner_Ring()
+        assert type(firstLensRing) is HalbachLensSim
+        firstLensRingShapely=firstLensRing.SO_Outer
+        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
+        convertAreaTo_mm = 1e3 ** 2
+        area=0.0
+        for i in range(self.injectorLensIndices[-1]+1): #don't forget to add 1
+            area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * convertAreaTo_mm
         return area
 
-    def show_Floor_Plan(self,X: Optional[list_array_tuple])-> None:
+    def show_Floor_Plan(self, X: Optional[list_array_tuple],which: str= 'exterior',deferPltShow=False,trueAspect=True,
+                        linestyle: str='-', color: str='black')-> None:
         self.update_Ring_And_Injector(X)
-        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan('exterior')
-        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c='black')
-        plt.gca().set_aspect('equal')
+        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan(which)
+        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy,c=color,linestyle=linestyle)
         plt.xlabel('meters')
         plt.ylabel('meters')
         plt.grid()
+        if trueAspect:
+            plt.gca().set_aspect('equal')
+        if not deferPltShow:
+            plt.show()
+
+    def show_Floor_Plan_And_Trajectories(self,X: Optional[list_array_tuple] ,trueAspectRatio: bool)-> None:
+        """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
+
+        self.show_Floor_Plan(X,deferPltShow=True,trueAspect=trueAspectRatio,color='grey')
+        self.show_Floor_Plan(X,which='interior',deferPltShow=True,trueAspect=trueAspectRatio,linestyle=':')
+        self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:100]
+        swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
+            self.swarmInjectorInitial.quick_Copy(), 1e-5, .5, parallel=False,
+            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
+        swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
+                                                                            copyParticles=True,onlyUnclipped=False)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,.5,fastMode=False,
+                                                                         parallel=False)
+
+        for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
+            assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
+            color='r' if particleRing.clipped else 'g'
+            if particleInj.qArr is not None and len(particleInj.qArr)>1:
+                qRingArr=np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in particleInj.qArr])
+                plt.plot(qRingArr[:,0],qRingArr[:,1],c=color,alpha=.3)
+                if particleInj.clipped: #if clipped in injector, plot last location
+                    plt.scatter(qRingArr[-1,0],qRingArr[-1,1],marker='x',zorder=100,c=color)
+            if particleRing.qArr is not None and len(particleRing.qArr)>1:
+                plt.plot(particleRing.qArr[:, 0], particleRing.qArr[:, 1], c=color,alpha=.3)
+                if not particleInj.clipped: #if not clipped in injector plot last ring location
+                    plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1],marker='x',zorder=100,c=color)
         plt.show()
 
     def mode_Match_Cost(self, X: Optional[list_array_tuple],useSurrogate: bool,energyCorrection: bool,
@@ -303,6 +342,7 @@ class LatticeOptimizer:
         else: raise ValueError
 
     def update_Ring_Field_Values(self, X: list_array_tuple)-> None:
+        raise NotImplementedError
         for el, arg in zip(self.tunedElementList, X):
             el.fieldFact = arg
 
@@ -352,7 +392,7 @@ class LatticeOptimizer:
         maxFluxMult=self.T * self.latticeRing.v0Nominal / minLatticeLength #the aboslute max
         return maxFluxMult
     
-    def floor_Plan_Cost(self,X: list_array_tuple)-> float:
+    def floor_Plan_Cost(self,X: Optional[list_array_tuple])-> float:
         self.update_Ring_And_Injector(X)
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
         factor = 300 #units of mm^2

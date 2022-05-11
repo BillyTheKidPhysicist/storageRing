@@ -111,6 +111,9 @@ class ParticleTracer:
         for el in self.elList:
             if el.Lo<=LMin: #have at least a few steps in each element
                 raise Exception('element too short for time steps size')
+        if self.particle.qi[0]==0.0:
+            raise Exception("a particle appears to be starting with x=0 exactly. This can cause unpredictable "
+                            "behaviour")
         self.currentEl = self.which_Element_Lab_Coords(self.particle.qi)
         self.particle.currentEl=self.currentEl
         self.particle.dataLogging= not self.fastMode #if using fast mode, there will NOT be logging
@@ -210,8 +213,9 @@ class ParticleTracer:
             if self.fastMode is False or self.currentEl.fastFieldHelper is None: #either recording data at each step
                 #or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                 self.time_Step_Verlet()
-                if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0: #if false, take time to log parameters
-                    self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
+                if self.fastMode is False and self.logTracker%self.stepsBetweenLogging==0:
+                    if not self.particle.clipped: #nothing to update if particle clipped
+                        self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
                 self.logTracker+=1
             else:
                 self.multi_Step_Verlet()
