@@ -9,6 +9,15 @@ class lockedDict(dict):
         else:
             super().__setitem__(key,item)
 
+    def pop(self,*args):
+        raise Exception("entries cannot be removed from dictionary")
+
+    def clear(self):
+        raise Exception("dictionary cannot be cleared")
+
+    def __delete__(self, instance):
+        raise Exception("dictionary cannot be deleted except by garbage collector")
+
 #flange outside diameters in mm
 flange_OD=lockedDict({
     '1-1/3': 34e-3,
