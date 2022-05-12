@@ -61,9 +61,9 @@ def vec_interp3D(xLoc,yLoc,zLoc,xCoords,yCoords,zCoords,vecX,vecY,vecZ):
     min_x,max_x=xCoords[0],xCoords[-1]
     min_y,max_y=yCoords[0],yCoords[-1]
     min_z,max_z=zCoords[0],zCoords[-1]
-    delta_x=(max_x-min_x)/(xCoords.shape[0]-1)
-    delta_y=(max_y-min_y)/(yCoords.shape[0]-1)
-    delta_z=(max_z-min_z)/(zCoords.shape[0]-1)
+    delta_x=(max_x-min_x)/(len(xCoords)-1)
+    delta_y=(max_y-min_y)/(len(yCoords)-1)
+    delta_z=(max_z-min_z)/(len(zCoords)-1)
     x=(xLoc-min_x)/delta_x
     y=(yLoc-min_y)/delta_y
     z=(zLoc-min_z)/delta_z
@@ -489,7 +489,7 @@ class LensHalbachFieldHelper_Numba:
          Perturbation force is messed up force minus perfect force."""
 
         Fx,Fy,Fz= self._force(x,y,z)
-        if self.useFieldPerturbations==True:
+        if self.useFieldPerturbations:
             deltaFx,deltaFy,deltaFz=self._force_Field_Perturbations(x,y,z) #extra force from design imperfections
             Fx, Fy, Fz=Fx+deltaFx,Fy+deltaFy,Fz+deltaFz
         return Fx,Fy,Fz

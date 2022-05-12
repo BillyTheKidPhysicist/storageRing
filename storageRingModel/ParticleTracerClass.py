@@ -31,10 +31,7 @@ def fast_pNew(p,F,F_n,h):
     return p+.5*(F+F_n)*h
 
 
-#todo: why not work
 
-# @numba.njit(numba.types.UniTuple(numba.float64[:],2)(numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:]
-#                                                      ,numba.float64[:,:],numba.float64[:,:]))
 @numba.njit()
 def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
     #don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
@@ -375,7 +372,7 @@ class ParticleTracer:
 
         if self.accelerated:
             if self.energyCorrection:
-                pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
+                pEl[:]+=self.momentum_Correction_At_Bounday(self.E0,qEl, pEl, self.currentEl.fastFieldHelper, 'leaving')
             if self.logPhaseSpaceCoords:
                 qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Next)  # use the old  element for transform
                 pElLab = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)  # use the old  element for transform
@@ -386,8 +383,8 @@ class ParticleTracer:
                 self.particle.clipped=True
             else:
                 if self.energyCorrection:
-                    p_nextEl[:] +=self.momentum_Correction_At_Bounday(q_nextEl, p_nextEl,
-                                                                              nextEl, 'entering')
+                    p_nextEl[:] +=self.momentum_Correction_At_Bounday(self.E0,q_nextEl, p_nextEl,
+                                                                              nextEl.fastFieldHelper, 'entering')
                 self.particle.cumulativeLength+=self.currentEl.Lo  # add the previous orbit length
                 self.currentEl=nextEl
                 self.particle.currentEl=nextEl
@@ -400,7 +397,7 @@ class ParticleTracer:
                 self.particle.clipped = True
             elif el is not self.currentEl: #element has changed
                 if self.energyCorrection:
-                    pEl[:] += self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
+                    pEl[:] += self.momentum_Correction_At_Bounday(self.E0,qEl, pEl, self.currentEl.fastFieldHelper, 'leaving')
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Next) #use the old  element for transform
@@ -414,29 +411,32 @@ class ParticleTracer:
                 # element
                 self.elHasChanged = True
                 if self.energyCorrection:
-                    self.pEl[:]+=self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
+                    self.pEl[:]+=self.momentum_Correction_At_Bounday(self.E0,self.qEl,self.pEl,nextEl.fastFieldHelper,'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
                                 'interpolation extends into the magnetic material. Particle is also possibly frozen '
                                 'because of broken logic that returns it to the same location.')
 
-    def momentum_Correction_At_Bounday(self,qEl: np.ndarray,pEl: np.ndarray,el: elementPT.Element,direction: str):
+    @staticmethod
+    @numba.njit()
+    def momentum_Correction_At_Bounday(E0,qEl: np.ndarray,pEl: np.ndarray,fastFieldHelper,direction: str)-> \
+            tuple[float,float,float]:
         #a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
         assert direction in ('entering','leaving')
-        F = el.force(qEl)
-        FNorm = norm_3D(F)
+        Fx,Fy,Fz=fastFieldHelper.force(qEl[0],qEl[1],qEl[2])
+        FNorm = np.sqrt(Fx**2+Fy**2+Fz**2)
         if FNorm< 1e-6: #force is too small, and may cause a division error
-            return np.zeros(3)
+            return 0.0,0.0,0.0
         else:
             if direction == 'leaving': #go from zero to non zero potential instantly
                 ENew = dot_Prod_3D(pEl,pEl) / 2.0  # ideally, no magnetic field right at border
-                deltaE = self.E0 - ENew  # need to lose energy to maintain E0 when the potential turns off
+                deltaE = E0 - ENew  # need to lose energy to maintain E0 when the potential turns off
             else: #go from zero to non zero potentially instantly
-                deltaE = -el.magnetic_Potential(qEl)  # need to lose this energy
-            F_unit = F / FNorm
-            deltaPNorm = deltaE / dot_Prod_3D(F_unit, pEl)
-            deltaP = deltaPNorm * F_unit
-            return deltaP
+                deltaE = -np.array(fastFieldHelper.magnetic_Potential(qEl[0],qEl[1],qEl[2]))  # need to lose this energy
+            Fx_unit,Fy_unit,Fz_unit = Fx / FNorm,Fy / FNorm,Fz / FNorm
+            deltaPNorm = deltaE / (Fx_unit*pEl[0]+Fy_unit*pEl[1]+Fz_unit*pEl[2])
+            deltaPx,deltaPy,deltaPz = deltaPNorm * Fx_unit,deltaPNorm * Fy_unit,deltaPNorm * Fz_unit
+            return deltaPx,deltaPy,deltaPz
 
     def which_Element_Lab_Coords(self,qLab: np.ndarray)-> Optional[elementPT.Element]:
         for el in self.elList:
