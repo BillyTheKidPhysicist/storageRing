@@ -16,7 +16,7 @@ class Particle:
 
     def __init__(self,qi: Optional[np.ndarray]=None,pi: Optional[np.ndarray]=None,probability:float =1.0):
         if qi is None:
-            qi=np.zeros(3)
+            qi=np.array([1e-10,0,0])
         if pi is None:
             pi=np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0])
         assert len(qi)==3 and len(pi)==3 and 0.0<=probability<=1.0

@@ -1010,7 +1010,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords=self.make_Grid_Coords(xMin,xMax,zMin,zMax)
         validIndices=[self.is_Valid_Internal_Fringe(coord) for coord in fieldCoords]
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,applyMethodOfMoments=True)
+                                numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,applyMethodOfMoments=True,
+                                            useHalfCapEnd=(True,False))
         return self.compute_Valid_Field_Data(lens,fieldCoords,validIndices)
 
     def generate_Segment_Field_Data(self)->tuple[np.ndarray,...]:

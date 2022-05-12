@@ -216,12 +216,12 @@ class LatticeOptimizer:
         self.show_Floor_Plan(X,which='interior',deferPltShow=True,trueAspect=trueAspectRatio,linestyle=':')
         self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:100]
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), 1e-5, .5, parallel=False,
-            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True)
+            self.swarmInjectorInitial.quick_Copy(), 1e-5, 1, parallel=False,
+            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True,energyCorrection=True)
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                            copyParticles=True,onlyUnclipped=False)
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,.5,fastMode=False,
-                                                                         parallel=False)
+                                                            copyParticles=True,onlyUnclipped=False)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False,
+                                                                         parallel=False,energyCorrection=True)
 
         for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense

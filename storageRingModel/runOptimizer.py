@@ -78,11 +78,12 @@ def main():
         (.005, surrogateParams['rpLens1']),  # rpLens1
         (.005, .03),  # rplens2
         (.005, constantsV1["bendingApMax"]+VACUUM_TUBE_THICKNESS),  # rp
-        (.1, .4)  # L_Lens
+        (.1, .4),  # L_Lens1
+        (.1, .4)  # L_Lens2
     ]
     # stability_And_Survival_Optimize(bounds,None,8)
     survival_Optimize(bounds,10)
-
+    # print(bounds)
     # plot_Results([0.014846121196499758, 0.008527188069799775, 0.028582148991554705, 0.009992301601476166, 0.3548199717821702])
 if __name__=='__main__':
     main()

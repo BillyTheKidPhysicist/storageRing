@@ -272,8 +272,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb=1.02324
         self.ang=self.numMagnets*self.Lm/self.rb
         particle0=Particle(qi=np.asarray([-.01,1e-3,-2e-3]),pi=np.asarray([-201.0,1.0,-.5]))
-        qf0 = np.array([6.2725608062667604e-01, 1.8270221569898277e+00,1.1769975335643556e-03])
-        pf0 = np.array([ 159.33655611175072 , -122.28076734138395 ,    4.535124132136746])
+        qf0 = np.array([6.2741721073688994e-01, 1.8271263884343085e+00,1.2264783539487748e-03])
+        pf0 = np.array([ 159.51941155704313 , -122.21312727101619 ,    4.557126606780754])
         super().__init__(HalbachBenderSimSegmented,particle0,qf0,pf0,False,False,False)
 
     def make_coordTestRules(self):
@@ -537,8 +537,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf,qf0,absTol)==False or iscloseAll(pf,pf0,absTol)==False:
-                # print(repr(qf), repr(pf))
-                # print(repr(qf0), repr(pf0))
+                print(repr(qf), repr(pf))
+                print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self,qEl):
