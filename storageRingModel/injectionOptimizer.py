@@ -11,7 +11,7 @@ from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortErro
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_Version_1,InjectorGeometryError
-from latticeModels_Constants import constantsV1,lockedDict
+from latticeModels_Parameters import constantsV1,lockedDict,injectorRingConstraintsV1
 from scipy.special import expit as sigmoid
 import dill
 
@@ -96,7 +96,7 @@ class Injection_Model(LatticeOptimizer):
 maximumCost=2.0
 
 L_Injector_TotalMax = 2.0
-surrogateParams=lockedDict({'rpLens1':.01,'rpLens2':.025,'L_Lens':.5})
+surrogateParams=lockedDict({'rpLens1':injectorRingConstraintsV1['rp1LensMax'],'rpLens2':.025,'L_Lens':.5})
 
 def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
 
