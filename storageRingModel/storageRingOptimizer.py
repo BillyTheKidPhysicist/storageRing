@@ -293,7 +293,7 @@ class LatticeOptimizer:
         else:
             swarm=self.swarmInjectorInitial
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True)
+            swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True,accelerated=True)
         swarmRingInitial=self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,copyParticles=True)
         return swarmRingInitial
 

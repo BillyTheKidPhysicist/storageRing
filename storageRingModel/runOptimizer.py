@@ -56,17 +56,21 @@ def solve_For_Lattice_Params(params:tuple)-> Solution:
         raise Exception("unhandled exception on params: ",repr(params))
     return sol
 
-def main():
-    bounds = optimizerBounds_V1
+def wrapper(params):
+    sol=solve_For_Lattice_Params(params)
+    if sol.fluxMultiplication>10:
+        print(sol)
+    cost=sol.cost
+    return cost
 
-    def wrapper(params):
-        sol=solve_For_Lattice_Params(params)
-        if sol.fluxMultiplication>10:
-            print(sol)
-        cost=sol.cost
-        return cost
+def main():
+    bounds = list(optimizerBounds_V1.values())
+    from scipy.optimize import differential_evolution
+
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
+    initialVal=[(np.array([0.022369977918651595, 0.009784214403524836, 0.02 ,0.005086834489496259, 0.29055546870887966
+                              , 0.22307991005655434 ]),None)]
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,initialVals=initialVal)
     # import skopt
     # vals=skopt.sampler.Sobol().generate(bounds,1000)
     # tool_Parallel_Process(wrapper,vals)
