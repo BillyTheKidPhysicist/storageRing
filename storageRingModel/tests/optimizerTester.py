@@ -30,10 +30,10 @@ def test_Optimizer():
     model.swarmInjectorInitial.particles=model.swarmInjectorInitial.particles[:500]
     swarmInjectorTraced = model.swarmTracerInjector.trace_Swarm_Through_Lattice(
                 model.swarmInjectorInitial.quick_Copy(), 1e-5, 1.0,
-                fastMode=False, copySwarm=False,logPhaseSpaceCoords=True)
+                fastMode=False, copySwarm=False,logPhaseSpaceCoords=True,accelerated=True)
     swarmRingInitial = model.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                               copyParticles=True,onlyUnclipped=False)
-    swarmRingTraced=model.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False)
+    swarmRingTraced=model.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False,accelerated=True)
 
     lensSO=model.get_Lens_Before_Combiner_Ring().SO_Outer
     for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):

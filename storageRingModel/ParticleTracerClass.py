@@ -1,7 +1,7 @@
 import warnings
 import math
 from typing import Optional
-from math import isnan
+from math import isnan,sqrt
 import numba
 import numpy.linalg as npl
 import numpy as np
@@ -13,7 +13,13 @@ from constants import GRAVITATIONAL_ACCELERATION
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 #TODO: Why does the tracked time differe between fastMode=True and fastMode=False
+@numba.njit()
+def norm_3D(vec):
+    return sqrt(vec[0]**2+vec[1]**2+vec[2]**2)
 
+@numba.njit()
+def dot_Prod_3D(veca,vecb):
+    return veca[0]*vecb[0]+veca[1]*vecb[1]+veca[2]*vecb[2]
 
 TINY_TIME_STEP=1e-9 #nanosecond time step to move particle from one element to another
 @numba.njit(numba.float64[:](numba.float64[:],numba.float64[:],numba.float64[:],numba.float64))
@@ -53,9 +59,9 @@ class ParticleTracer:
         #lattice: ParticleTracerLattice object typically
         self.elList = PTL.elList  # list containing the elements in the lattice in order from first to last (order added)
         self.totalLatticeLength=PTL.totalLength
-        
+
         self.PTL=PTL
-        
+
         self.tau_Collision=np.inf #collision time constant
         self.T_CollisionLast=0.0 # time since last collision
         self.accelerated=None
@@ -107,7 +113,7 @@ class ParticleTracer:
         self.T=0.0
         if self.particle.clipped is not None:
             self.particle.clipped=False
-        LMin=npl.norm(self.particle.pi)*self.h*self.minTimeStepsPerElement
+        LMin=norm_3D(self.particle.pi)*self.h*self.minTimeStepsPerElement
         for el in self.elList:
             if el.Lo<=LMin: #have at least a few steps in each element
                 raise Exception('element too short for time steps size')
@@ -142,7 +148,6 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
-        assert not (logPhaseSpaceCoords and accelerated)
         if tau_Collision is not None and tau_Collision<=0.0:
             raise Exception('Collision time must be None or nonzero positive number')
         self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
@@ -229,11 +234,11 @@ class ParticleTracer:
                 self.particle.clipped=self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self)-> None:
-        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,
-                                        self.currentEl.fastFieldHelper)
-        qEl_n,self.qEl,self.pEl,self.T,particleOutside=results
+        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fastFieldHelper)
+        qEl_n,self.qEl[:],self.pEl[:],self.T,particleOutside=results
+        qEl_n=np.array(qEl_n)
         self.particle.T=self.T
-        if particleOutside is True:
+        if particleOutside:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
 
     @staticmethod
@@ -246,14 +251,14 @@ class ParticleTracer:
         px, py, pz = pEln
         Fx, Fy, Fz = force(x,y,z)
         Fz=Fz-GRAVITATIONAL_ACCELERATION #simulated mass is 1kg always
-        if math.isnan(Fx) == True or T >= T0:
+        if math.isnan(Fx)or T >= T0:
             particleOutside = True
+            qEln,pEln=(x,y,z),(px,py,pz)
             return qEln, qEln, pEln, T, particleOutside
         particleOutside = False
         while True:
             if T >= T0:
-                pEl = np.asarray([px, py, pz])
-                qEl = np.asarray([x, y, z])
+                pEl,qEl = (px, py, pz),(x, y, z)
                 return qEl, qEl, pEl, T, particleOutside
             x =x+px * h + .5 * Fx * h ** 2
             y =y+py * h + .5 * Fy * h ** 2
@@ -262,13 +267,11 @@ class ParticleTracer:
             Fx_n, Fy_n, Fz_n = force(x,y,z)
             Fz_n=Fz_n-GRAVITATIONAL_ACCELERATION #simulated mass is 1kg always
 
-            if math.isnan(Fx_n) == True:
-                qEl = np.asarray([x, y, z])
-                pEl = np.asarray([px, py, pz])
+            if math.isnan(Fx_n):
                 xo = x - (px * h + .5 * Fx * h ** 2)
                 yo = y - (py * h + .5 * Fy * h ** 2)
                 zo = z - (pz * h + .5 * Fz * h ** 2)
-                qEl_o = np.asarray([xo, yo, zo])
+                pEl, qEl,qEl_o = (px, py, pz), (x, y, z),(xo, yo, zo)
                 particleOutside = True
                 return qEl, qEl_o, pEl, T, particleOutside
             px =px+.5 * (Fx_n + Fx) * h
@@ -373,13 +376,17 @@ class ParticleTracer:
         if self.accelerated:
             if self.energyCorrection:
                 pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
+            if self.logPhaseSpaceCoords:
+                qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Next)  # use the old  element for transform
+                pElLab = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)  # use the old  element for transform
+                self.particle.elPhaseSpaceLog.append((qElLab, pElLab))
             nextEl = self.get_Next_Element()
             q_nextEl,p_nextEl=self.transform_To_Next_Element(qEl_Next,pEl,nextEl)
             if not nextEl.is_Coord_Inside(q_nextEl):
                 self.particle.clipped=True
             else:
                 if self.energyCorrection:
-                    p_nextEl = p_nextEl + self.momentum_Correction_At_Bounday(q_nextEl, p_nextEl,
+                    p_nextEl[:] +=self.momentum_Correction_At_Bounday(q_nextEl, p_nextEl,
                                                                               nextEl, 'entering')
                 self.particle.cumulativeLength+=self.currentEl.Lo  # add the previous orbit length
                 self.currentEl=nextEl
@@ -393,13 +400,13 @@ class ParticleTracer:
                 self.particle.clipped = True
             elif el is not self.currentEl: #element has changed
                 if self.energyCorrection:
-                    pEl = pEl + self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
+                    pEl[:] += self.momentum_Correction_At_Bounday(qEl, pEl, self.currentEl, 'leaving')
                 nextEl=el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 qElLab=self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl_Next) #use the old  element for transform
                 pElLab=self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl) #use the old  element for transform
                 if self.logPhaseSpaceCoords:
-                    self.particle.elPhaseSpaceLog.append((qElLab.copy(),pElLab.copy()))
+                    self.particle.elPhaseSpaceLog.append((qElLab,pElLab))
                 self.currentEl=nextEl
                 self.particle.currentEl=nextEl
                 self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(qElLab)  # at the beginning of the next element
@@ -407,28 +414,27 @@ class ParticleTracer:
                 # element
                 self.elHasChanged = True
                 if self.energyCorrection:
-                    self.pEl=self.pEl+self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
+                    self.pEl[:]+=self.momentum_Correction_At_Bounday(self.qEl,self.pEl,nextEl,'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
                                 'interpolation extends into the magnetic material. Particle is also possibly frozen '
                                 'because of broken logic that returns it to the same location.')
 
-    def momentum_Correction_At_Bounday(self,qEl: np.ndarray,pEl: np.ndarray,el: elementPT.Element,direction: str)\
-            -> np.ndarray:
+    def momentum_Correction_At_Bounday(self,qEl: np.ndarray,pEl: np.ndarray,el: elementPT.Element,direction: str):
         #a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
         assert direction in ('entering','leaving')
         F = el.force(qEl)
-        FNorm = np.linalg.norm(F)
+        FNorm = norm_3D(F)
         if FNorm< 1e-6: #force is too small, and may cause a division error
             return np.zeros(3)
         else:
             if direction == 'leaving': #go from zero to non zero potential instantly
-                ENew = np.sum(pEl ** 2) / 2.0  # ideally, no magnetic field right at border
+                ENew = dot_Prod_3D(pEl,pEl) / 2.0  # ideally, no magnetic field right at border
                 deltaE = self.E0 - ENew  # need to lose energy to maintain E0 when the potential turns off
             else: #go from zero to non zero potentially instantly
                 deltaE = -el.magnetic_Potential(qEl)  # need to lose this energy
-            F_unit = F / np.linalg.norm(F)
-            deltaPNorm = deltaE / np.dot(F_unit, pEl)
+            F_unit = F / FNorm
+            deltaPNorm = deltaE / dot_Prod_3D(F_unit, pEl)
             deltaP = deltaPNorm * F_unit
             return deltaP
 
