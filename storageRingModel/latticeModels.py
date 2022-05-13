@@ -258,21 +258,25 @@ def make_Ring_Surrogate_Version_1(injectorParams: tuple[float,...], surrogatePar
     into combiner can make it to the next element. Since injector is optimized independent of ring, the parameters
     for the ring surrogate are typically educated guesses"""
 
-    raise NotImplementedError #need to fix
 
-    assert all(val > 0 for val in injectorParams)
     L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, \
     LmCombiner, rpCombiner, loadBeamDiam, gap1, gap2, gap3 = injectorParams
 
-    rpBend = constantsV1["rbTarget"]
     rpLens1 = surrogateParamsDict['rpLens1']
     rpLens2 = surrogateParamsDict['rpLens2']
     L_Lens = surrogateParamsDict['L_Lens']
-    raceTrackParams = rpLens1, rpLens2, L_Lens, rpCombiner, LmCombiner, loadBeamDiam, rpBend
+
+    raceTrackParams = lockedDict({'rpCombiner':rpCombiner,
+                       'LmCombiner':LmCombiner,
+                       'loadBeamDiam':loadBeamDiam,
+                       'rpLens1':rpLens1,
+                       'L_Lens1':L_Lens,
+                       'rpLens2':rpLens2,
+                       'L_Lens2':L_Lens})
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    add_First_Racetrack_Straight_Any(PTL, raceTrackParams)
+    add_First_RaceTrack_Straight_Version1(PTL, raceTrackParams)
 
     PTL.end_Lattice(constrain=False)
     return PTL

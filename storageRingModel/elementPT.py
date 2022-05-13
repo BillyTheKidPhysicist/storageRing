@@ -9,7 +9,7 @@ import fastNumbaMethodsAndClass
 from helperTools import arr_Product,iscloseAll,make_Odd
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS
+from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS,ELEMENT_PLOT_COLORS,MIN_MAGNET_MOUNT_THICKNESS
 import scipy.optimize as spo
 
 
@@ -69,7 +69,7 @@ class Element:
     and construct itself, which is not always trivial.
     """
 
-    def __init__(self, PTL,ang: float=0.0,build: bool=True,L=None):
+    def __init__(self, PTL,plotColor: str,ang: float=0.0,build: bool=True,L=None):
         # self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -97,6 +97,7 @@ class Element:
         self.outerHalfWidth: Optional[float]=None #outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
+        self.plotColor=plotColor
         self.L: Optional[float]=L
         self.Lm: Optional[float]=None #hard edge length of magnet
         self.index: Optional[int]=None
@@ -370,7 +371,7 @@ class LensIdeal(Element):
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
         # fillParams is used to avoid filling the parameters in inherited classes
-        super().__init__(PTL,build=False,L=L)
+        super().__init__(PTL,ELEMENT_PLOT_COLORS['lens'],build=False,L=L)
         self.Bp = Bp
         self.rp = rp
         self.ap = rp if ap is None else ap  # size of apeture radially
@@ -431,6 +432,7 @@ class Drift(LensIdeal):
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
         super().__init__(PTL, L, 0, np.inf, ap,build=False) #set Bp to zero and bore radius to infinite
+        self.plotColor = ELEMENT_PLOT_COLORS['drift']
         self.fastFieldHelper=self.init_fastFieldHelper([L,ap])
         self.outerHalfWidth=ap+VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth>=ap+VACUUM_TUBE_THICKNESS
@@ -473,7 +475,7 @@ class BenderIdeal(Element):
         """
 
     def __init__(self, PTL, ang:float, Bp:float, rp:float, rb:float, ap:float, build=True):
-        super().__init__(PTL, ang=ang, build=False)
+        super().__init__(PTL,ELEMENT_PLOT_COLORS['bender'], ang=ang, build=False)
         self.Bp:float  = Bp
         self.rp:float = rp
         self.ap:float = self.rp if ap is None else ap
@@ -541,7 +543,7 @@ class CombinerIdeal(Element):
 
     def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float,apR: float,apZ: float, mode: str,
                  sizeScale: float,build: bool=True):
-        Element.__init__(self,PTL, build=False)
+        Element.__init__(self,PTL,ELEMENT_PLOT_COLORS['combiner'], build=False)
         assert mode in ('injector', 'storageRing')
         self.fieldFact=-1.0 if mode=='injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
@@ -875,6 +877,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.ro=self.rb+self.outputOffset
         self.L=self.ang*self.rb
         self.Lo=self.ang*self.ro+2*self.Lcap
+        self.outerHalfWidth = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
     def build_Fast_Field_Helper(self)->None:
         """compute field values and build fast numba helper"""
@@ -1463,6 +1466,8 @@ class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
                                             self.Lb,self.Lm, self.space,self.ap, self.ang,self.fieldFact,
                                                 self.extraFieldLength,not self.useStandardMagErrors])
+
+        self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile

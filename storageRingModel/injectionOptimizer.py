@@ -11,7 +11,7 @@ from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortErro
 from elementPT import HalbachLensSim
 import matplotlib.pyplot as plt
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_Version_1,InjectorGeometryError
-from latticeModels_Parameters import constantsV1,lockedDict,injectorRingConstraintsV1
+from latticeModels_Parameters import constantsV1,lockedDict,injectorRingConstraintsV1,injectorParamsOptimalAny
 from scipy.special import expit as sigmoid
 import dill
 
@@ -99,8 +99,11 @@ L_Injector_TotalMax = 2.0
 surrogateParams=lockedDict({'rpLens1':injectorRingConstraintsV1['rp1LensMax'],'rpLens2':.025,'L_Lens':.5})
 
 def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
-
-    PTL_I = make_Injector_Version_Any(paramsInjector)
+    paramsInjectorDict={}
+    for key,val in  zip(injectorParamsOptimalAny.keys(),paramsInjector):
+        paramsInjectorDict[key]=val
+    paramsInjectorDict=lockedDict(paramsInjectorDict)
+    PTL_I = make_Injector_Version_Any(paramsInjectorDict)
     if PTL_I.totalLength > L_Injector_TotalMax:
         return None
     PTL_R = make_Ring_Surrogate_Version_1(paramsInjector, surrogateParams)
@@ -140,25 +143,16 @@ def main():
     bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
     (.05,.5),(.05,.3)]
 
+    X0 = np.array([0.29374941, 0.01467768, 0.22837003, 0.0291507, 0.19208822,
+                   0.04, 0.01462034, 0.08151122, 0.27099428, 0.26718875])
+    initialVals=[(X0,None)]
 
-    # valveAp=[constants_Version1["lens1ToLens2_Valve_Ap"],
-    #          constants_Version1["lens1ToLens2_Valve_Ap"]+.001,
-    #          constants_Version1["lens1ToLens2_Valve_Ap"]+.002,
-    #          constants_Version1["lens1ToLens2_Valve_Ap"]+.004]
-    # deltaOPAp=[constants_Version1["OP_MagAp"]-.001]#,
-                # constants_Version1["OP_MagAp"]+.001,
-               # constants_Version1["OP_MagAp"]+.002,
-               # constants_Version1["OP_MagAp"]+.004]
-    # for val in deltaOPAp:
-    #     constants_Version1["OP_MagAp"]=val
-    #     print('OP is:', constants_Version1["OP_MagAp"])
-    #     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True, workers=9)
+
+    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True,initialVals=initialVals)
 
     #
-    X0=np.array([0.29374941, 0.01467768, 0.22837003, 0.0291507 , 0.19208822,
-       0.04      , 0.01462034, 0.08151122, 0.27099428, 0.26718875])
     print(wrapper(X0))
-    # plot_Results(X0)
+    plot_Results(X0)
 if __name__=="__main__":
     main()
 
