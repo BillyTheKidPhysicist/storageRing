@@ -8,8 +8,8 @@ from injectionOptimizer import surrogateParams
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
-from latticeModels import make_Ring_And_Injector_Version1,RingGeometryError,InjectorGeometryError
-from latticeModels_Parameters import optimizerBounds_V1
+from latticeModels import make_Ring_And_Injector_Version1,make_Ring_And_Injector_Version2,RingGeometryError,InjectorGeometryError
+from latticeModels_Parameters import optimizerBounds_V1,optimizerBounds_V2
 
 def plot_Results(params):
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version1(params)
@@ -43,7 +43,7 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
 
 def solve_For_Lattice_Params(params:tuple)-> Solution:
     try:
-        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version1(params)
+        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version2(params)
         sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
         sol.params=params
     except RingGeometryError:
@@ -64,13 +64,11 @@ def wrapper(params):
     return cost
 
 def main():
-    bounds = list(optimizerBounds_V1.values())
+    bounds = list(optimizerBounds_V2.values())
     from scipy.optimize import differential_evolution
 
     #rpLens,rpLensFirst,rpLensLast,rpBend,L_Lens
-    initialVal=[(np.array([0.022369977918651595, 0.009784214403524836, 0.02 ,0.005086834489496259, 0.29055546870887966
-                              , 0.22307991005655434 ]),None)]
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,initialVals=initialVal)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
     # import skopt
     # vals=skopt.sampler.Sobol().generate(bounds,1000)
     # tool_Parallel_Process(wrapper,vals)

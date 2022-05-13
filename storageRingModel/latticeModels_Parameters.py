@@ -44,7 +44,7 @@ class lockedDict(dict):
         self._reset_Use_Counter()
 
 #optimal injector parameters
-injectorParamsOptimalV1: lockedDict = lockedDict({
+injectorParamsOptimalAny: lockedDict = lockedDict({
                                 "L1":.29374941, #length of first lens
                                 "rp1":0.01467768, #bore radius of first lens
                                 "L2":0.22837003, #length of first lens
@@ -111,4 +111,18 @@ optimizerBounds_V1: lockedDict = lockedDict({
     'rpBend':(.005, constantsV1["bendingApMax"] + VACUUM_TUBE_THICKNESS),
     'L_Lens1':(.1, .4),
     'L_Lens2':(.1, .4)
+})
+
+#version 2 bounds
+optimizerBounds_V2: lockedDict = lockedDict({
+    'rpLens3_4':(.005, .03),
+    'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']*2),
+    'rpLens2':(.005, injectorRingConstraintsV1['rp1LensMax']*1.1),
+    'rpLens3':(.01, .04),
+    'rpLens4':(.01, .04),
+    'rpBend':(.005, constantsV1["bendingApMax"] + VACUUM_TUBE_THICKNESS),
+    'L_Lens1':(.1, .4),
+    'L_Lens2':(.1, .4),
+    'L_Lens3':(.1, .4),
+    'L_Lens4':(.1, .4)
 })

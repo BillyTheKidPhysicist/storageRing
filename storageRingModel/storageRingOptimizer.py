@@ -38,11 +38,8 @@ class Solution:
     def __str__(self):  # method that gets called when you do print(Solution())
         string = '----------Solution-----------   \n'
         string += 'parameters: ' + repr(self.params) + '\n'
-        # string+='stable configuration:'+str(self.stable)+'\n'
-        # string += 'bump params: ' + str(self.bumpParams) + '\n'
         string+='cost: '+str(self.cost)+'\n'
         string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
-        string += 'scipy message: '+ str(self.scipyMessage)+'\n'
         string += '----------------------------'
         return string
 
@@ -144,22 +141,21 @@ class LatticeOptimizer:
         line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
         if line is None: #particle was clipped immediately, but in the injector not in the ring
             return False
-        lens = self.get_Lens_Before_Combiner_Ring()
-        assert type(lens) is HalbachLensSim
-        return line.intersects(lens.SO_Outer)
+        lensesBeforeCombiner = self.get_Lenses_Before_Combiner_Ring()
+        assert all(type(lens) is HalbachLensSim for lens in lensesBeforeCombiner)
+        return any(line.intersects(lens.SO_Outer) for lens in lensesBeforeCombiner)
 
-    def get_Lens_Before_Combiner_Ring(self)-> HalbachLensSim:
+    def get_Lenses_Before_Combiner_Ring(self)-> tuple[HalbachLensSim,...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
 
-        lens=None
+        lenses=[]
         for i,el in enumerate(self.latticeRing.elList):
             if type(el) is HalbachLensSim:
-                assert lens is None #should only be one lens before combiner
-                lens=el
+                lenses.append(el)
             if i==self.latticeRing.combiner.index:
                 break
-        assert lens is not None #there must a lens
-        return lens
+        assert len(lenses)>0
+        return tuple(lenses)
         
     def get_Injector_Shapely_Objects_In_Lab_Frame(self, which: str)-> list[Polygon]:
         assert which in ('interior','exterior')
@@ -183,17 +179,19 @@ class LatticeOptimizer:
         return shapelyObjectList
 
     def floor_Plan_OverLap_mm(self)-> float:
-        """Find the area overlap between the element before the second injector lens, and the first lens in the ring
+        """Find the area overlap between the element before the second injector lens, and the lenses between combiner
+        input and adjacent bender output
         """
 
-        firstLensRing=self.get_Lens_Before_Combiner_Ring()
-        assert type(firstLensRing) is HalbachLensSim
-        firstLensRingShapely=firstLensRing.SO_Outer
-        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
+        lensesBeforeCombiner=self.get_Lenses_Before_Combiner_Ring()
+        assert all(type(lens) is HalbachLensSim for lens in lensesBeforeCombiner)
         convertAreaTo_mm = 1e3 ** 2
-        area=0.0
-        for i in range(self.injectorLensIndices[-1]+1): #don't forget to add 1
-            area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * convertAreaTo_mm
+        area = 0.0
+        for lens in lensesBeforeCombiner:
+            firstLensRingShapely=lens.SO_Outer
+            injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
+            for i in range(self.injectorLensIndices[-1]+1): #don't forget to add 1
+                area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * convertAreaTo_mm
         return area
 
     def show_Floor_Plan(self, X: Optional[list_array_tuple],which: str= 'exterior',deferPltShow=False,trueAspect=True,
@@ -216,12 +214,12 @@ class LatticeOptimizer:
         self.show_Floor_Plan(X,which='interior',deferPltShow=True,trueAspect=trueAspectRatio,linestyle=':')
         self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:100]
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), self.h, 1, parallel=False,
+            self.swarmInjectorInitial.quick_Copy(), 1e-5, 1, parallel=False,
             fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True,energyCorrection=True)
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                             copyParticles=True,onlyUnclipped=False)
-        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,self.h,5,fastMode=False,
-                                                                         parallel=False,energyCorrection=True)
+        swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False,
+                                                    parallel=False,energyCorrection=True,stepsBetweenLogging=4)
 
         for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense

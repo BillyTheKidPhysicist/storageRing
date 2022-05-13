@@ -35,14 +35,15 @@ def test_Optimizer():
                                                                               copyParticles=True,onlyUnclipped=False)
     swarmRingTraced=model.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False,accelerated=True)
 
-    lensSO=model.get_Lens_Before_Combiner_Ring().SO_Outer
+    lenses=model.get_Lenses_Before_Combiner_Ring()
     for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
         assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
 
         if particleInj.qArr is not None and len(particleInj.qArr)>1:
             qInj_RingFrame=np.array([model.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in particleInj.qArr])
             line=LineString(qInj_RingFrame[:,:2])
-            assert lensSO.intersects(line) == model.does_Injector_Particle_Clip_On_Ring(particleInj) #test that the
+            assert any(lens.SO_Outer.intersects(line) for lens in lenses) == \
+                   model.does_Injector_Particle_Clip_On_Ring(particleInj) #test that the
             #method of looking for particle clipping with shapely and without logging agrees with this more
             #straightforward method
 
