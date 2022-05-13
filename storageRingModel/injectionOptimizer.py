@@ -8,10 +8,8 @@ import warnings
 from constants import DEFAULT_ATOM_SPEED,COST_PER_CUBIC_INCH_PERM_MAGNET
 from storageRingOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
-from elementPT import HalbachLensSim
-import matplotlib.pyplot as plt
-from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_Version_1,InjectorGeometryError
-from latticeModels_Parameters import constantsV1,lockedDict,injectorRingConstraintsV1,injectorParamsOptimalAny
+from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_For_Injection_Version_1,InjectorGeometryError
+from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny
 from scipy.special import expit as sigmoid
 import dill
 
@@ -100,13 +98,13 @@ surrogateParams=lockedDict({'rpLens1':injectorRingConstraintsV1['rp1LensMax'],'r
 
 def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
     paramsInjectorDict={}
-    for key,val in  zip(injectorParamsOptimalAny.keys(),paramsInjector):
+    for key,val in  zip(injectorParamsBoundsAny.keys(),paramsInjector):
         paramsInjectorDict[key]=val
     paramsInjectorDict=lockedDict(paramsInjectorDict)
     PTL_I = make_Injector_Version_Any(paramsInjectorDict)
     if PTL_I.totalLength > L_Injector_TotalMax:
         return None
-    PTL_R = make_Ring_Surrogate_Version_1(paramsInjector, surrogateParams)
+    PTL_R = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams)
     if PTL_R is None:
         return None
     assert PTL_I.combiner.outputOffset == PTL_R.combiner.outputOffset
@@ -139,54 +137,41 @@ def wrapper(X: Union[np.ndarray,list,tuple])-> float:
 def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
-    # # loadBeamDiam, L1, L2, L3
-    bounds = [(.05, .3), (.01, .03),(.05, .3), (.01, .03), (.02, .25), (.005, .04),(5e-3,30e-3),(.05,.5),
-    (.05,.5),(.05,.3)]
+    # loadBeamDiam, L1, L2, L3
+    bounds = [vals for vals in injectorParamsBoundsAny.values()]
 
-    X0 = np.array([0.29374941, 0.01467768, 0.22837003, 0.0291507, 0.19208822,
-                   0.04, 0.01462034, 0.08151122, 0.27099428, 0.26718875])
-    initialVals=[(X0,None)]
-
-
-    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True,initialVals=initialVals)
-
+    for _ in range(3):
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
+        print(repr(member.DNA),member.cost)
     #
-    print(wrapper(X0))
-    plot_Results(X0)
+    # from latticeModels_Parameters import injectorParamsOptimalAny
+    # X0=np.array([0.10049725042352656 , 0.01                , 0.23705861693141206 ,
+    #    0.028519741201464555, 0.25                , 0.04                ,
+    #    0.009163253685091657, 0.07608320475107998 , 0.3                 ,
+    #    0.23048782966964318 ])
+    # print(wrapper(X0))
+    # plot_Results(X0)
 if __name__=="__main__":
     main()
 
+
 """
+finished with total evals:  4859
+array([0.14594592081998312 , 0.028800950957952504, 0.1538512998987364  ,
+       0.02487578688773267 , 0.25                , 0.03897640362553732 ,
+       0.007423530258284747, 0.19931722036910796 , 0.29246235217634403 ,
+       0.17889654441708114 ]) 0.573154229279458
+       
+finished with total evals:  5129
+array([0.08251423568600101 , 0.019731015668225795, 0.18816905729758865 ,
+       0.027608082260531668, 0.25                , 0.04                ,
+       0.008632660123890558, 0.15507124987889837 , 0.27219342741741254 ,
+       0.24922526271441278 ]) 0.5692792220703192
 
-with op = 2.0 cm
-
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.15388971, 0.03      , 0.13261248, 0.02266874, 0.20860142,
-       0.04      , 0.01729315, 0.14818731, 0.28535098, 0.20815677])
-cost: 0.33858069480205766
-
-
-with op =2.2 cm (default)
-
----population member---- 
-DNA: array([0.29374941, 0.01467768, 0.22837003, 0.0291507 , 0.19208822,
-       0.04      , 0.01462034, 0.08151122, 0.27099428, 0.26718875])
-cost: 0.25502537159259564
-finished with total evals:  10252
-
-
-op =2.4 cm
-
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.11286314, 0.03      , 0.22316751, 0.03      , 0.18818945,
-       0.04      , 0.0159573 , 0.11879764, 0.26109759, 0.29286133])
-cost: 0.23677264350310473
-
-
-
-
-
+finished with total evals:  7972
+array([0.10049725042352656 , 0.01                , 0.23705861693141206 ,
+       0.028519741201464555, 0.25                , 0.04                ,
+       0.009163253685091657, 0.07608320475107998 , 0.3                 ,
+       0.23048782966964318 ]) 0.5416627572363332
 
 """

@@ -45,16 +45,29 @@ class lockedDict(dict):
 
 #optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
-                                "L1":.29374941, #length of first lens
-                                "rp1":0.01467768, #bore radius of first lens
-                                "L2":0.22837003, #length of first lens
-                                "rp2":0.0291507, #bore radius of first lens
-                                "LmCombiner":0.19208822, #hard edge length of combiner
+                                "L1":.3, #length of first lens
+                                "rp1":0.014660451475860564, #bore radius of first lens
+                                "L2":0.23263360079943857, #length of first lens
+                                "rp2":0.02945437679562223, #bore radius of first lens
+                                "LmCombiner":0.20387567675569854, #hard edge length of combiner
                                 "rpCombiner":0.04, #bore radius of combiner
-                                "loadBeamDiam":0.01462034, #assumed diameter of incoming beam
-                                "gap1":0.08151122, #separation between source and first lens
-                                "gap2":0.27099428, #separation between two lenses
-                                "gap3":0.26718875 ##separation between final lens and input to combnier
+                                "loadBeamDiam":0.018954642268148157, #assumed diameter of incoming beam
+                                "gap1":0.09230745796073361, #separation between source and first lens
+                                "gap2":0.2500798536997399, #separation between two lenses
+                                "gap3":0.23704855328925434 ##separation between final lens and input to combiner
+})
+
+injectorParamsBoundsAny:lockedDict=lockedDict({
+    "L1": (.05,.3),  # length of first lens
+    "rp1": (.01,.03),  # bore radius of first lens
+    "L2": (.05,.3),  # length of first lens
+    "rp2": (.01,.03),  # bore radius of first lens
+    "LmCombiner": (.02, .25),  # hard edge length of combiner
+    "rpCombiner": (.005, .04),  # bore radius of combiner
+    "loadBeamDiam": (5e-3,30e-3),  # assumed diameter of incoming beam
+    "gap1": (.05,.3),  # separation between source and first lens
+    "gap2": (.05,.3),  # separation between two lenses
+    "gap3": (.05,.3)  ##separation between final lens and input to combnier
 })
 
 injectorRingConstraintsV1: lockedDict=lockedDict({
@@ -71,11 +84,12 @@ flange_OD: lockedDict=lockedDict({
 
 
 #constraints and parameters of version 1 storage ring/injector
-_constants_Version1={
+_constants_Version1_2={
     "Lm": .0254 / 2.0, #length of individual magnets in bender
     "gap2Min": inch_To_Meter(3.5), #from lens to combiner
     "OP_MagWidth": .065+2*.035, #account for fringe fields with .02
-    "OP_MagAp":.022/2.0,
+    "OP_MagAp_Injection":.022/2.0,
+    "OP_MagAp_Circulating":.03/2.0,
     "OP_PumpingRegionLength":.01, #distance for effective optical pumping
     "bendingApMax":.01, #maximum from 1.33 flange limit (ID/2). I rounded up
     "lensToBendGap":inch_To_Meter(2), #same at each joint. Vacuum tube limited
@@ -87,12 +101,12 @@ _constants_Version1={
     "lens1ToLens2_Valve_Length":inch_To_Meter(3.25), #includes flanges and screws
     "lens1ToLens2_Inject_Valve_OD": flange_OD['2-3/4'] #outside diameter of valve
 }
-constantsV1: lockedDict=lockedDict(_constants_Version1)
+constantsV1_2: lockedDict=lockedDict(_constants_Version1_2)
 
 
 
 
-_constants_Version3=copy.deepcopy(_constants_Version1)
+_constants_Version3=copy.deepcopy(_constants_Version1_2)
 _constants_Version3['bendApexGap']=inch_To_Meter(1)
 constantsV3: lockedDict=lockedDict(_constants_Version3)
 
@@ -104,23 +118,25 @@ constantsV3: lockedDict=lockedDict(_constants_Version3)
 # correspond to variables
 
 #version 1 bounds
+#simple model with [lens,combiner,lens,bender,lens,lens,bender]
 optimizerBounds_V1: lockedDict = lockedDict({
     'rpLens3_4':(.005, .03),
     'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens2':(.01, .04),
-    'rpBend':(.005, constantsV1["bendingApMax"] + VACUUM_TUBE_THICKNESS),
+    'rpBend':(.005, constantsV1_2["bendingApMax"] + VACUUM_TUBE_THICKNESS),
     'L_Lens1':(.1, .4),
     'L_Lens2':(.1, .4)
 })
 
 #version 2 bounds
+#more complicated model with 2 lens on either side of combiner
 optimizerBounds_V2: lockedDict = lockedDict({
     'rpLens3_4':(.005, .03),
     'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']*2),
     'rpLens2':(.005, injectorRingConstraintsV1['rp1LensMax']*1.1),
     'rpLens3':(.01, .04),
     'rpLens4':(.01, .04),
-    'rpBend':(.005, constantsV1["bendingApMax"] + VACUUM_TUBE_THICKNESS),
+    'rpBend':(.005, constantsV1_2["bendingApMax"] + VACUUM_TUBE_THICKNESS),
     'L_Lens1':(.1, .4),
     'L_Lens2':(.1, .4),
     'L_Lens3':(.1, .4),
