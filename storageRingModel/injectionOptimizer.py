@@ -11,7 +11,6 @@ from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortErro
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_For_Injection_Version_1,InjectorGeometryError
 from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny
 from scipy.special import expit as sigmoid
-import dill
 
 
 
@@ -94,9 +93,10 @@ class Injection_Model(LatticeOptimizer):
 maximumCost=2.0
 
 L_Injector_TotalMax = 2.0
-surrogateParams=lockedDict({'rpLens1':injectorRingConstraintsV1['rp1LensMax'],'rpLens2':.025,'L_Lens':.5})
+
 
 def get_Model(paramsInjector: Union[np.ndarray,list,tuple])-> Optional[Injection_Model]:
+    surrogateParams = lockedDict({'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
     paramsInjectorDict={}
     for key,val in  zip(injectorParamsBoundsAny.keys(),paramsInjector):
         paramsInjectorDict[key]=val
@@ -140,16 +140,15 @@ def main():
     # loadBeamDiam, L1, L2, L3
     bounds = [vals for vals in injectorParamsBoundsAny.values()]
 
-    for _ in range(3):
-        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
-        print(repr(member.DNA),member.cost)
+    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
+    print(repr(member.DNA),member.cost)
     #
     # from latticeModels_Parameters import injectorParamsOptimalAny
     # X0=np.array([0.10049725042352656 , 0.01                , 0.23705861693141206 ,
     #    0.028519741201464555, 0.25                , 0.04                ,
     #    0.009163253685091657, 0.07608320475107998 , 0.3                 ,
     #    0.23048782966964318 ])
-    # print(wrapper(X0))
+    # wrapper(X0)
     # plot_Results(X0)
 if __name__=="__main__":
     main()

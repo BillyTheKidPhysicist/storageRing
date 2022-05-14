@@ -15,10 +15,8 @@ class lockedDict(dict):
             self._isKeyUsed[key]=False
 
     def __setitem__(self, key, item):
-        if key not in self.keys():
-            raise Exception("this dictionary cannot have new items added")
-        else:
-            super().__setitem__(key,item)
+
+        raise Exception("this dictionary cannot have new items added")
 
     def pop(self,*args):
         raise Exception("entries cannot be removed from dictionary")
@@ -35,6 +33,12 @@ class lockedDict(dict):
         assert key in self._isKeyUsed.keys()
         self._isKeyUsed[key]=True
         return super().__getitem__(key)
+
+    def super_Special_Change_Item(self,key,item):
+
+        assert key in super().keys()
+        assert type(item) in (float, int) and item>=0.0
+        super().__setitem__(key,item)
 
     def assert_All_Entries_Accessed_And_Reset_Counter(self):
         """Check that every value in the dictionary was accesed, and reset counter"""

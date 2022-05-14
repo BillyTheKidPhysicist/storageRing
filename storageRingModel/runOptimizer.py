@@ -1,15 +1,15 @@
 import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
-
+import numpy as np
 from asyncDE import solve_Async
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
-from latticeModels import make_Ring_And_Injector_Version2,RingGeometryError,InjectorGeometryError
-from latticeModels_Parameters import optimizerBounds_V2
+from latticeModels import make_Ring_And_Injector_Version1,RingGeometryError,InjectorGeometryError
+from latticeModels_Parameters import optimizerBounds_V1
 
 def plot_Results(params):
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version2(params)
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version1(params)
     optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
     optimizer.show_Floor_Plan_And_Trajectories(None,True)
 
@@ -29,18 +29,24 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
 
     sol = Solution()
     knobParams = None
-    swarmCost, floorPlanCost,swarmTraced = optimizer.mode_Match_Cost(knobParams, False, True, rejectIllegalFloorPlan=False,
+    swarmCost, floorPlanCost,swarmTraced = optimizer.mode_Match_Cost(knobParams, False, True, floorPlanCostCutoff=.05,
                                                          rejectUnstable=False, returnFullResults=True)
-    sol.cost = swarmCost + floorPlanCost
-    sol.floorPlanCost = floorPlanCost
-    sol.swarmCost = swarmCost
-    sol.fluxMultiplication = optimizer.compute_Flux_Multiplication(swarmTraced)
+    if swarmTraced is None: #wasn't traced because of other cutoff
+        sol.floorPlanCost = floorPlanCost
+        sol.cost = 1.0 + floorPlanCost
+        sol.swarmCost = np.nan
+        sol.fluxMultiplication=np.nan
+    else:
+        sol.floorPlanCost = floorPlanCost
+        sol.swarmCost = swarmCost
+        sol.cost = swarmCost + floorPlanCost
+        sol.fluxMultiplication = optimizer.compute_Flux_Multiplication(swarmTraced)
 
     return sol
 
 def solve_For_Lattice_Params(params:tuple)-> Solution:
     try:
-        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version2(params)
+        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version1(params)
         sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
         sol.params=params
     except RingGeometryError:
@@ -61,16 +67,16 @@ def wrapper(params):
     return cost
 
 def main():
-    bounds = list(optimizerBounds_V2.values())
+    bounds = list(optimizerBounds_V1.values())
 
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
     # import skopt
     # vals=skopt.sampler.Sobol().generate(bounds,1000)
     # tool_Parallel_Process(wrapper,vals)
     # print(bounds)
-    x=[0.0228824 , 0.0190287 , 0.00883217, 0.02814639, 0.03345624,
-       0.01127   , 0.1317694 , 0.37731129, 0.18078798, 0.30192093]
-    wrapper(x)
+    # x=[0.0228824 , 0.0190287 , 0.00883217, 0.02814639, 0.03345624,
+    #    0.01127   , 0.1317694 , 0.37731129, 0.18078798, 0.30192093]
+    # wrapper(x)
     # plot_Results(x)
 if __name__=='__main__':
     main()

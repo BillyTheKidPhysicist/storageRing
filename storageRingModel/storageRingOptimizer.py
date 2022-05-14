@@ -236,15 +236,16 @@ class LatticeOptimizer:
         plt.show()
 
     def mode_Match_Cost(self, X: Optional[list_array_tuple],useSurrogate: bool,energyCorrection: bool,
-                rejectUnstable: bool=True,rejectIllegalFloorPlan: bool=True,
-                returnFullResults: bool=False)-> Union[float,tuple[Optional[float],Optional[float],Optional[Swarm]]]:
+                rejectUnstable: bool=True, returnFullResults: bool=False,floorPlanCostCutoff: float=np.inf)-> \
+            Union[float,tuple[Optional[float],Optional[float],Optional[Swarm]]]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
+        assert floorPlanCostCutoff>=0
         swarmCost,floorPlanCost,swarmTraced=None,None,None
         if X is not None:
             for val, bounds in zip(X, self.tuningBounds):
                 assert bounds[0] <= val <= bounds[1]
-        if rejectIllegalFloorPlan==True and self.floor_Plan_Cost(X)>0.0:
+        if self.floor_Plan_Cost(X)>floorPlanCostCutoff:
             floorPlanCost=self.floor_Plan_Cost(X)
             cost= 1.0+floorPlanCost
         elif rejectUnstable==True and self.is_Stable(X) == False:
