@@ -6,7 +6,7 @@ from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version1,RingGeometryError,InjectorGeometryError
-from latticeModels_Parameters import optimizerBounds_V1
+from latticeModels_Parameters import optimizerBounds_V1_3
 
 def plot_Results(params):
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version1(params)
@@ -67,19 +67,48 @@ def wrapper(params):
     return cost
 
 def main():
-    bounds = list(optimizerBounds_V1.values())
+    bounds = list(optimizerBounds_V1_3.values())
 
     solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
-    # import skopt
-    # vals=skopt.sampler.Sobol().generate(bounds,1000)
-    # tool_Parallel_Process(wrapper,vals)
-    # print(bounds)
-    # x=[0.0228824 , 0.0190287 , 0.00883217, 0.02814639, 0.03345624,
-    #    0.01127   , 0.1317694 , 0.37731129, 0.18078798, 0.30192093]
-    # wrapper(x)
+
+    # x=np.array([0.01370281, 0.01005321, 0.03225903, 0.00880389, 0.09666693,
+    #    0.40095146])
     # plot_Results(x)
 if __name__=='__main__':
     main()
+
+
+"""
+from one run, some bests:
+
+DNA: array([0.015952586890402236, 0.008921903716458061, 0.03273934110970934 ,
+       0.009897323234147217, 0.23650357816406012 , 0.3948241353273637  ])
+cost: 0.7785364192063521
+----------Solution-----------   
+
+DNA: array([0.013296327955384008, 0.009487958867167356, 0.03306096893997447 ,
+       0.00817113543659328 , 0.2495124992966306  , 0.3948241353273637  ])
+cost: 0.7774117076552659
+
+
+DNA: array([0.013227196575069485, 0.009671302007693236, 0.03318583393285798 ,
+       0.007936646065561416, 0.2556664486411267  , 0.38971531666963743 ])
+cost: 0.755503376812761
+
+
+DNA: array([0.014013686017863835, 0.01                , 0.03284383084253231 ,
+       0.008888666611775698, 0.1                 , 0.4                 ])
+cost: 0.7195150992618845
+
+"""
+
+
+"""
+best after polishing
+
+0.6501093735741955 [0.01349793835842913, 0.010332948793059262, 0.03261044879081758, 0.008788943303624595, 0.09269537518400353, 0.3954811976654152]
+
+"""
 
 
 

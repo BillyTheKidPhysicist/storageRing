@@ -1,7 +1,8 @@
 import copy
 from helperTools import inch_To_Meter
 from constants import VACUUM_TUBE_THICKNESS
-
+import numpy as np
+realNumber=(float,int,np.float64,np.int64)
 class lockedDict(dict):
 
     def __init__(self,dictionary: dict):
@@ -37,7 +38,7 @@ class lockedDict(dict):
     def super_Special_Change_Item(self,key,item):
 
         assert key in super().keys()
-        assert type(item) in (float, int) and item>=0.0
+        assert type(item) in realNumber and item>=0.0
         super().__setitem__(key,item)
 
     def assert_All_Entries_Accessed_And_Reset_Counter(self):
@@ -49,16 +50,16 @@ class lockedDict(dict):
 
 #optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
-                                "L1":.3, #length of first lens
-                                "rp1":0.014660451475860564, #bore radius of first lens
-                                "L2":0.23263360079943857, #length of first lens
-                                "rp2":0.02945437679562223, #bore radius of first lens
-                                "LmCombiner":0.20387567675569854, #hard edge length of combiner
-                                "rpCombiner":0.04, #bore radius of combiner
-                                "loadBeamDiam":0.018954642268148157, #assumed diameter of incoming beam
-                                "gap1":0.09230745796073361, #separation between source and first lens
-                                "gap2":0.2500798536997399, #separation between two lenses
-                                "gap3":0.23704855328925434 ##separation between final lens and input to combiner
+                                "L1":0.08326160110590838 , #length of first lens
+                                "rp1":0.020993060372921774, #bore radius of first lens
+                                "L2":0.16088998779932584, #length of first lens
+                                "rp2":0.024763975149604798, #bore radius of first lens
+                                "LmCombiner":0.19375652148870226, #hard edge length of combiner
+                                "rpCombiner":0.0398938436893404, #bore radius of combiner
+                                "loadBeamDiam":0.018280132203330864, #assumed diameter of incoming beam
+                                "gap1":0.16047790265328432, #separation between source and first lens
+                                "gap2":0.26596808943711425, #separation between two lenses
+                                "gap3":0.21231305487552196 ##separation between final lens and input to combiner
 })
 
 injectorParamsBoundsAny:lockedDict=lockedDict({
@@ -123,7 +124,7 @@ constantsV3: lockedDict=lockedDict(_constants_Version3)
 
 #version 1 bounds
 #simple model with [lens,combiner,lens,bender,lens,lens,bender]
-optimizerBounds_V1: lockedDict = lockedDict({
+optimizerBounds_V1_3: lockedDict = lockedDict({
     'rpLens3_4':(.005, .03),
     'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens2':(.01, .04),

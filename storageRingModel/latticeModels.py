@@ -2,7 +2,7 @@ from typing import  Union
 import numpy as np
 from constants import DEFAULT_ATOM_SPEED
 import elementPT
-from latticeModels_Parameters import constantsV1_2,constantsV3, injectorParamsOptimalAny,optimizerBounds_V1,\
+from latticeModels_Parameters import constantsV1_2,constantsV3, injectorParamsOptimalAny,optimizerBounds_V1_3,\
     optimizerBounds_V2, lockedDict
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
@@ -138,9 +138,9 @@ def add_First_Racetrack_Straight(PTL: ParticleTracerLattice, ringParams: lockedD
      neccesary for gap spacing"""
     
     #No need for gap before first lens
-    assert whichVersion in ('1','2')
+    assert whichVersion in ('1','2','3')
 
-    if whichVersion=='1':
+    if whichVersion in ('1','3'):
         add_First_RaceTrack_Straight_Version1(PTL,ringParams)
     else:
         add_First_RaceTrack_Straight_Version2(PTL, ringParams)
@@ -177,7 +177,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str) -> RingModel:
     can be applied at apex
     """
 
-    assert whichVersion in ('1','2')
+    assert whichVersion in ('1','2','3')
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
@@ -278,18 +278,17 @@ def make_ringParams_Dict(variableParams: list[float],whichVersion: str)-> locked
     """Take parameters values list and construct dictionary of variable ring parameters. For version1, all tunable
     variables (lens length, radius, etc) describe the ring only. Injector is optimized entirely independenly before"""
 
-    assert whichVersion in ('1','2')
+    assert whichVersion in ('1','2','3')
 
     ringParams={"LmCombiner":injectorParamsOptimalAny["LmCombiner"],
                 "rpCombiner":injectorParamsOptimalAny["rpCombiner"],
                 "loadBeamDiam":injectorParamsOptimalAny["loadBeamDiam"]}
     
-    if whichVersion=='1':
+    if whichVersion in ('1','3'):
         assert len(variableParams) == 6
-        for variableKey, value in zip(optimizerBounds_V1.keys(),variableParams):
+        for variableKey, value in zip(optimizerBounds_V1_3.keys(),variableParams):
             ringParams[variableKey]=value
-            
-    elif whichVersion=='2':
+    else:
         assert len(variableParams) == 10
         for variableKey, value in zip(optimizerBounds_V2.keys(),variableParams):
             ringParams[variableKey]=value
@@ -311,7 +310,7 @@ def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str) -> 
     :return:
     """
 
-    assert whichVersion in ('1','2')
+    assert whichVersion in ('1','2','3')
     assert all(val > 0 for val in variableParams)
 
     ringParams=make_ringParams_Dict(variableParams,whichVersion)

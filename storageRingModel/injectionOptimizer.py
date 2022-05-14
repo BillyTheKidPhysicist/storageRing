@@ -140,15 +140,16 @@ def main():
     # loadBeamDiam, L1, L2, L3
     bounds = [vals for vals in injectorParamsBoundsAny.values()]
 
-    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
-    print(repr(member.DNA),member.cost)
+    # member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
+    # print(repr(member.DNA),member.cost)
     #
     # from latticeModels_Parameters import injectorParamsOptimalAny
-    # X0=np.array([0.10049725042352656 , 0.01                , 0.23705861693141206 ,
-    #    0.028519741201464555, 0.25                , 0.04                ,
-    #    0.009163253685091657, 0.07608320475107998 , 0.3                 ,
-    #    0.23048782966964318 ])
-    # wrapper(X0)
+    # # X0=np.array([0.08326160110590838 , 0.020993060372921774, 0.16088998779932584 ,
+    # #        0.024763975149604798, 0.19375652148870226 , 0.0398938436893404  ,
+    # #        0.018280132203330864, 0.16047790265328432 , 0.26596808943711425 ,
+    # #        0.21231305487552196 ])
+    # X0=np.array(list(injectorParamsOptimalAny.values()))
+    # print(wrapper(X0))
     # plot_Results(X0)
 if __name__=="__main__":
     main()
