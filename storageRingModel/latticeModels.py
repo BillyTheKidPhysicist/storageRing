@@ -3,7 +3,7 @@ import numpy as np
 from constants import DEFAULT_ATOM_SPEED
 import elementPT
 from latticeModels_Parameters import constantsV1_2,constantsV3, injectorParamsOptimalAny,optimizerBounds_V1_3,\
-    optimizerBounds_V2, lockedDict
+    optimizerBounds_V2, lockedDict,atomCharacteristic
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
 
@@ -180,7 +180,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str) -> RingModel:
 
     assert whichVersion in ('1','2','3')
 
-    PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
+    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing')
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
@@ -217,7 +217,7 @@ def make_Injector_Version_Any(injectorParams: lockedDict) -> InjectorModel:
     if gap1 < constantsV1_2["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
 
-    PTL = ParticleTracerLattice(DEFAULT_ATOM_SPEED, latticeType='injector')
+    PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector')
 
     # -----gap between source and first lens-----
 

@@ -1,6 +1,6 @@
 import copy
 from helperTools import inch_To_Meter
-from constants import VACUUM_TUBE_THICKNESS
+from constants import VACUUM_TUBE_THICKNESS,DEFAULT_ATOM_SPEED
 import numpy as np
 realNumber=(float,int,np.float64,np.int64)
 class lockedDict(dict):
@@ -87,6 +87,8 @@ flange_OD: lockedDict=lockedDict({
     '4-1/2': 114e-3
 })
 
+atomCharacteristic=lockedDict({"nominalDesignSpeed":DEFAULT_ATOM_SPEED})#Elements are placed assuming this is the nominal
+# speed in the ring.
 
 #constraints and parameters of version 1 storage ring/injector
 _constants_Version1_2={

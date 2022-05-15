@@ -302,6 +302,9 @@ class Swarm:
     def __iter__(self)-> Iterable[Particle]:
         return (particle for particle in self.particles)
 
+    def __len__(self):
+        return len(self.particles)
+
     def copy(self):
         return copy.deepcopy(self)
 

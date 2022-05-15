@@ -46,7 +46,8 @@ class Solution:
 
 class LatticeOptimizer:
     
-    def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice):
+    def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
+                 numParticlesSwarm: int=1024):
         assert latticeRing.latticeType=='storageRing' and latticeInjector.latticeType=='injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -74,7 +75,7 @@ class LatticeOptimizer:
         self.minElementLength = 1.1 * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
         self.tuningBounds = None
-        self.numParticlesFullSwarm=1024
+        self.numParticlesFullSwarm=numParticlesSwarm
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None
@@ -272,19 +273,19 @@ class LatticeOptimizer:
         #identify particles that survived to combiner end and move them assuming the combiner's output (r2)
         #was moved to the origin
 
-        swarmSurvived = Swarm()
+        swarmRing = Swarm()
         for particle in swarmInjectorTraced:
             clipped=particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
             if not onlyUnclipped or not clipped:
                 qfRing=self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
                 pfRing=self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
 
-                particleOrigin=particle.copy() if copyParticles else particle
-                particleOrigin.qi,particleOrigin.pi = qfRing,pfRing
-                particleOrigin.reset()
-                particleOrigin.clipped=clipped
-                swarmSurvived.add(particleOrigin)
-        return swarmSurvived
+                particleRing=particle.copy() if copyParticles else particle
+                particleRing.qi,particleRing.pi = qfRing,pfRing
+                particleRing.reset()
+                particleRing.clipped=clipped
+                swarmRing.add(particleRing)
+        return swarmRing
 
     def trace_Through_Injector_And_Transform_To_Ring(self, useSurrogate: bool) -> Swarm:
         if useSurrogate==True:

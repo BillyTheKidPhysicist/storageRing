@@ -1,6 +1,4 @@
-import dill
 from tqdm import tqdm
-import time
 from SwarmTracerClass import SwarmTracer
 import celluloid
 import warnings
@@ -16,7 +14,6 @@ def make_Test_Swarm_And_Lattice(numParticles=128,totalTime=.1)->(Swarm,ParticleT
     PTL.add_Lens_Ideal(.4,1.0,.025)
     PTL.add_Drift(.1)
     PTL.add_Lens_Ideal(.4,1.0,.025)
-    # PTL.add_Bender_Ideal_Segmented_With_Cap(200,.01,.1,1.0,.01,1.0,.001,1e-6)
     PTL.add_Bender_Ideal(np.pi,1.0,1.0,.025)
     PTL.add_Drift(.2)
     PTL.add_Lens_Ideal(.2,1.0,.025)
@@ -31,10 +28,6 @@ def make_Test_Swarm_And_Lattice(numParticles=128,totalTime=.1)->(Swarm,ParticleT
     swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3,5.0,1e-5,numParticles)
     swarm=swarmTracer.trace_Swarm_Through_Lattice(swarm,1e-5,totalTime,fastMode=False,parallel=True,
                                                   stepsBetweenLogging=4)
-    # file=open('swarmFile','wb')
-    # dill.dump(swarm,file)
-    # file=open('swarmFile','rb')
-    # swarm=dill.load(file)
     print('swarm and lattice done')
     return swarm,PTL
 class Particle(ParticleBase):
@@ -127,11 +120,13 @@ class SwarmSnapShot:
 class PhaseSpaceAnalyzer:
     def __init__(self,swarm,lattice: ParticleTracerLattice):
         assert lattice.latticeType=='storageRing'
+        assert all(type(particle.clipped) is bool for particle in swarm)
+        assert all(particle.traced is True for particle in swarm)
         self.swarm=swarm
         self.lattice=lattice
         self.maxRevs = np.inf
     def _get_Axis_Index(self,xaxis,yaxis):
-        strinNameArr=np.asarray(['y','z','px','py','pz'])
+        strinNameArr=np.asarray(['y','z','px','py','pz','NONE'])
         assert xaxis in strinNameArr and yaxis in strinNameArr
         xAxisIndex=np.argwhere(strinNameArr==xaxis)[0][0]+1
         yAxisIndex=np.argwhere(strinNameArr==yaxis)[0][0]+1
@@ -198,7 +193,7 @@ class PhaseSpaceAnalyzer:
         animation=camera.animate()
         animation.save(str(videoTitle)+'.gif',fps=fps,dpi=dpi)
     def _check_Axis_Choice(self,xaxis,yaxis):
-        validPhaseCoords=['y','z','px','py','pz']
+        validPhaseCoords=['y','z','px','py','pz','NONE']
         assert (xaxis in validPhaseCoords) and (yaxis in validPhaseCoords)
     def _get_Axis_Labels_And_Unit_Modifiers(self,xaxis,yaxis):
         positionLabel='Position, mm'
@@ -314,7 +309,50 @@ class PhaseSpaceAnalyzer:
         if saveTitle is not None:
             plt.savefig(saveTitle,dpi=dpi)
         plt.show()
-    def plot_Acceptance(self,xaxis,yaxis,saveTitle=None,alpha=.5,dpi=150):
+
+    def plot_Acceptance_1D_Histogram(self,dimension:str,numBins:int=10,saveTitle: str=None,showInputDist: bool=True,
+                                     dpi: float=150)-> None:
+        """
+        Histogram of acceptance of storage ring starting from injector inlet versus initial values ofy,z,px,py or pz in
+        the element frame
+
+        :param dimension: The particle dimension to plot the acceptance over. y,z,px,py or pz
+        :param numBins: Number of bins spanning the range of dimension values
+        :param saveTitle: If not none, the plot is saved with this as the file name.
+        :param showInputDist: Plot the initial distribution behind the acceptance plot
+        :param dpi: dot per inch for saved plot
+        :return: None
+        """
+
+        self._check_Axis_Choice(dimension, 'NONE')
+        labelList, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(dimension, 'NONE')
+        plotIndex,_=self._get_Axis_Index(dimension,'NONE')
+        vals=np.array([np.append(particle.qi,particle.pi)[plotIndex] for particle in self.swarm])
+        fracSurvived=[]
+        numParticlesInBin=[]
+        binEdges=np.linspace(vals.min(),vals.max(),numBins)
+        for i in range(len(binEdges)-1):
+            isValidList=(vals>binEdges[i]) & (vals<binEdges[i+1])
+            binParticles=[particle for particle,isValid in zip(self.swarm.particles,isValidList) if isValid ]
+            numSurvived=sum([not particle.clipped for particle in binParticles])
+            numParticlesInBin.append(len(binParticles))
+            fracSurvived.append(numSurvived/len(binParticles) if len(binParticles)!=0 else np.nan)
+        plt.title("Particle acceptance")
+        if showInputDist:
+            numParticlesInBin=[num/max(numParticlesInBin) for num in numParticlesInBin]
+            plt.bar(binEdges[:-1],numParticlesInBin,width=binEdges[1]-binEdges[0],align='edge',color='r',
+                    label='Initial distribution')
+        plt.bar(binEdges[:-1],fracSurvived,width=binEdges[1]-binEdges[0],align='edge',label='Acceptance')
+        plt.xlabel(labelList[0])
+        plt.ylabel("Percent survival to end")
+        plt.legend()
+        plt.tight_layout()
+
+        if saveTitle is not None:
+            plt.savefig(saveTitle, dpi=dpi)
+        plt.show()
+
+    def plot_Acceptance_2D_ScatterPlot(self,xaxis,yaxis,saveTitle=None,alpha=.5,dpi=150):
         self._check_Axis_Choice(xaxis, yaxis)
         labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
         from matplotlib.patches import Patch
@@ -330,8 +368,8 @@ class PhaseSpaceAnalyzer:
             color = 'red' if particle.clipped == True else 'green'
             plt.scatter(xPlot, yPlot, c=color, alpha=alpha,edgecolors='none')
         legendList = [Patch(facecolor='green', edgecolor='green',
-                       label='survived'), Patch(facecolor='red', edgecolor='red',
-                                                label='clipped')]
+                            label='survived'), Patch(facecolor='red', edgecolor='red',
+                                                     label='clipped')]
         plt.title('Phase space survival.')
         plt.legend(handles=legendList)
         plt.xlabel(labelList[0])
