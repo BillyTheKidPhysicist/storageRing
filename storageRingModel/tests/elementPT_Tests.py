@@ -559,7 +559,7 @@ class ElementTestRunner:
             assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
 
 
-def run_Tests(parallel=False):
+def test_Elements(parallel=True):
     testersToRun=[DriftTestHelper,
     LensIdealTestHelper,
     BenderIdealTestHelper,

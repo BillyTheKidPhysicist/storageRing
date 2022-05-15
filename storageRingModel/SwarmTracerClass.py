@@ -8,7 +8,7 @@ import multiprocess as mp
 from constants import BOLTZMANN_CONSTANT,MASS_LITHIUM_7
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from typing import Union,Optional
-
+from helperTools import low_Discrepancy_Sample
 
 def lorentz_Function(x,gamma):
     #returns a value of 1.0 for x=0
@@ -189,17 +189,16 @@ class SwarmTracer:
         else:
             numParticlesfrac=1.0
         reSeedVal=np.random.get_state()[1][0]
-        if sameSeed==True:
+        if sameSeed:
             np.random.seed(42)
-        elif type(sameSeed) == int:
+        elif type(sameSeed) is int:
             np.random.seed(sameSeed)
-
         swarm = Swarm()
-        sampler=skopt.sampler.Sobol()
-        samples=np.asarray(sampler.generate(generatorBounds,int(numParticles*numParticlesfrac)))
+        sampleSeed=None if not sameSeed else sameSeed
+        samples=low_Discrepancy_Sample(generatorBounds,round(numParticles*numParticlesfrac),seed=sampleSeed)
         np.random.shuffle(samples)
 
-        if smallXOffset==True:
+        if smallXOffset:
             x0=-1e-10 #to push negative
         else:
             x0=0.0

@@ -1,6 +1,7 @@
 import itertools
 
 import numpy as np
+from scipy.stats.qmc import Sobol
 import os
 import sympy as sym
 import matplotlib.pyplot as plt
@@ -126,6 +127,24 @@ def full_Arctan(y,x):
 def make_Odd(num: int)-> int:
     assert isinstance(num,int) and num!=0 and not num<0 # i didn't verify this on negative numbers
     return num + (num + 1) % 2
+
+def low_Discrepancy_Sample(bounds: lst_tup_arr_type,num: int, seed=None)-> np.ndarray:
+    """
+    Make a low discrepancy sample (ie well spread)
+
+    :param bounds: sequence of lower and upper bounds of the sampling
+    :param num: number of samples. powers of two are best for nice sobol properties
+    :params seed: Seed for sobol sampler. None, and no seeding. See scipy docs.
+    :return:
+    """
+    sobolSeed = None if not seed else seed
+    bounds=np.array(bounds).astype(float)
+    samples = np.array(Sobol(len(bounds), scramble=True,seed=sobolSeed).random(num))
+    scaleFactors=bounds[:,1]-bounds[:,0]
+    offsets=bounds[:,0]
+    for i,sample in enumerate(samples):
+        samples[i]=sample*scaleFactors+offsets
+    return samples
 
 def test_Parallel_Process():
     tol=1e-12

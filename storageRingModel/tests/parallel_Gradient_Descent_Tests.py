@@ -29,6 +29,3 @@ def test2():
     yDifNumericC=np.asarray(yDifNumericC)
     assert np.all(np.abs(yDifNumericF-yDifAnalytic)<tolF)
     assert np.all(np.abs(yDifNumericC-yDifAnalytic)<tolC)
-def run_Tests():
-    test1()
-    test2()

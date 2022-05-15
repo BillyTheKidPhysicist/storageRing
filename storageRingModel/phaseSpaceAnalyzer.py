@@ -11,8 +11,8 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 import matplotlib.pyplot as plt
 
 
-def make_Test_Swarm_And_Lattice(numParticles=100,totalTime=.1)->(Swarm,ParticleTracerLattice):
-    PTL=ParticleTracerLattice(v0Nominal=200.0)
+def make_Test_Swarm_And_Lattice(numParticles=128,totalTime=.1)->(Swarm,ParticleTracerLattice):
+    PTL=ParticleTracerLattice(v0Nominal=210.0)
     PTL.add_Lens_Ideal(.4,1.0,.025)
     PTL.add_Drift(.1)
     PTL.add_Lens_Ideal(.4,1.0,.025)
@@ -29,7 +29,8 @@ def make_Test_Swarm_And_Lattice(numParticles=100,totalTime=.1)->(Swarm,ParticleT
 
     swarmTracer=SwarmTracer(PTL)
     swarm=swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3,5.0,1e-5,numParticles)
-    swarm=swarmTracer.trace_Swarm_Through_Lattice(swarm,5e-6,totalTime,fastMode=False,parallel=True)
+    swarm=swarmTracer.trace_Swarm_Through_Lattice(swarm,1e-5,totalTime,fastMode=False,parallel=True,
+                                                  stepsBetweenLogging=4)
     # file=open('swarmFile','wb')
     # dill.dump(swarm,file)
     # file=open('swarmFile','rb')
@@ -160,7 +161,7 @@ class PhaseSpaceAnalyzer:
         assert revolutionsMax>0
         xArr=np.arange(revolutionsMax+1)*self.lattice.totalLength+xVideoPoint
         return xArr
-    def plot_Lattice_On_Axis(self,ax,plotPointCoords=None):
+    def _plot_Lattice_On_Axis(self,ax,plotPointCoords=None):
         for el in self.lattice:
             ax.plot(*el.SO.exterior.xy,c='black')
         if plotPointCoords is not None:
@@ -191,7 +192,7 @@ class PhaseSpaceAnalyzer:
                                              c='blue',alpha=alpha,edgecolors=None,linewidths=0.0)
                 axes[swarmAxisIndex].grid()
                 xSwarmLab,ySwarmLab=self.lattice.get_Lab_Coords_From_Orbit_Distance(xOrbit)
-                self.plot_Lattice_On_Axis(axes[latticeAxisIndex],[xSwarmLab,ySwarmLab])
+                self._plot_Lattice_On_Axis(axes[latticeAxisIndex],[xSwarmLab,ySwarmLab])
                 camera.snap()
         plt.tight_layout()
         animation=camera.animate()
@@ -272,8 +273,8 @@ class PhaseSpaceAnalyzer:
             plt.plot(TArr,survivalList)
             plt.xlabel('Time,s')
             plt.ylabel('Survival, %')
-            plt.axvline(x=TRev,c='black',linestyle=':')
-            plt.text(TRev+TMax*.05,20,'Revolution \n time')
+            plt.axvline(x=TRev,c='black',linestyle=':',label='One Rev')
+            plt.legend()
             plt.show()
         else:
             axis.plot(TArr,survivalList)

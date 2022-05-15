@@ -148,7 +148,7 @@ class StorageRingGeometryConstraintsSolver:
 
         benderParams, _ = self.shape_And_Round_Params(params)
         radii=self.get_Bender_Params_Radii(benderParams)
-        weight = 10_000
+        weight = 100
         cost = weight*sum([abs(radius - self.targetRadius) for radius in radii])
         return cost
 

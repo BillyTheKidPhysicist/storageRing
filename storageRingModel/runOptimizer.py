@@ -69,13 +69,13 @@ def wrapper(params):
 def main():
     bounds = list(optimizerBounds_V1_3.values())
 
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10)
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10)
 
-    x = [0.011289371309399825, 0.01, 0.03221557023564858,
-         0.007377437528248196, 0.1, 0.4]
+    # x = [0.011289371309399825, 0.01, 0.03221557023564858,
+    #      0.007377437528248196, 0.1, 0.4]
     # x.extend(injectorParamsOptimalAny.values())
-    x = np.array(x)
-    print(wrapper(x))
+    # x = np.array(x)
+    # print(wrapper(x))
     # plot_Results(x)
 if __name__=='__main__':
     main()

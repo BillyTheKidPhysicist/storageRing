@@ -74,7 +74,7 @@ class LatticeOptimizer:
         self.minElementLength = 1.1 * self.particleTracerRing.minTimeStepsPerElement * \
                                 self.latticeRing.v0Nominal * self.h
         self.tuningBounds = None
-        self.numParticlesFullSwarm=1000
+        self.numParticlesFullSwarm=1024
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None

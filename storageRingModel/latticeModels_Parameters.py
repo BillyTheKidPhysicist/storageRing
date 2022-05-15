@@ -126,11 +126,11 @@ constantsV3: lockedDict=lockedDict(_constants_Version3)
 #simple model with [lens,combiner,lens,bender,lens,lens,bender]
 optimizerBounds_V1_3: lockedDict = lockedDict({
     'rpLens3_4':(.005, .03),
-    'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']),
+    'rpLens1':(.005, injectorRingConstraintsV1['rp1LensMax']*1.1),
     'rpLens2':(.01, .04),
     'rpBend':(.005, constantsV1_2["bendingApMax"] + VACUUM_TUBE_THICKNESS),
-    'L_Lens1':(.1, .4),
-    'L_Lens2':(.1, .4)
+    'L_Lens1':(.05, .5),
+    'L_Lens2':(.05, .5)
 })
 
 #version 2 bounds

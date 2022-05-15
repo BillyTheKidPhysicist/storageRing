@@ -52,6 +52,5 @@ class BaseFieldHelper_TestHelper:
             assert abs(full_Arctan(z,x)-full_Arctan(z0,x0))-abs(rotY)<self.tol
             assert abs(full_Arctan(Fz, Fx) - full_Arctan(Fz0, Fx0)) - abs(rotY) < self.tol
         coord_And_Force_Aligntment_Check()
-def run_Tests():
+def test():
     BaseFieldHelper_TestHelper().run_Tests()
-run_Tests()

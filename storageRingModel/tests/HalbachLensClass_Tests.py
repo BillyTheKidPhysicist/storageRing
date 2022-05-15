@@ -281,7 +281,7 @@ class SegmentedBenderHalbachHelper:
         self.test_Bender_Approx(bender)
 
 
-def run_Tests(parallel=False):
+def test(parallel=True):
     def run(func):
         func()
     funcList=[SpheretestHelper().run_tests,

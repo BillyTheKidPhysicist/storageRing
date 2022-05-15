@@ -1,26 +1,9 @@
-import HalbachLensClass_Tests
-# import geneticLensClass_Tests
-import lattice_Tracing_Tests
-# import shimOptimizerOfLens_Focus_Tests
-import parallel_Gradient_Descent_Tests
-import elementPT_Tests
-import fastNumbaMethodsAndClass_Tests
-from storageRingConstraint_Tests import  test_Storage_Ring_Constraint_1,test_Storage_Ring_Constraint_2
+from HalbachLensClass_Tests import test
+from lattice_Tracing_Tests import test_Lattices
+from parallel_Gradient_Descent_Tests import test1,test2
+from elementPT_Tests import test_Elements
+from fastNumbaMethodsAndClass_Tests import test
+from storageRingConstraint_Tests import  test_Storage_Ring_Constraints
 from optimizerTester import test_Optimizer
-
-#todo: these wrapper functions are useless
-
-def test_HalbachLensClass():
-    HalbachLensClass_Tests.run_Tests()
-# def test_GeneticLensClass():
-#     geneticLensClass_Tests.test()
-# def test_shimOptimizerOfLens_Focus():
-#     shimOptimizerOfLens_Focus_Tests.run_Tests()
-def test_Parallel_Gradient_Descent():
-    parallel_Gradient_Descent_Tests.run_Tests()
-def test_FastNumbaMethodsAndClasses():
-    fastNumbaMethodsAndClass_Tests.run_Tests()
-def test_Lattice_Tracing_Full_Integration():
-    lattice_Tracing_Tests.run_Tests(parallelTesting=True)
-def test_Elements():
-    elementPT_Tests.run_Tests(parallel=True)
+def test():
+    pass
