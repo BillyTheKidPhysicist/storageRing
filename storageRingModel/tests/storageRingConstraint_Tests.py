@@ -51,6 +51,6 @@ def test_Storage_Ring_Constraint_2():
     PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, None, rb)
     PTL.end_Lattice(constrain=True)
     totalBendAngle = PTL.elList[1].ang + PTL.elList[3].ang + PTL.elList[5].ang
-    assert isclose(totalBendAngle, 2 * np.pi, abs_tol=1e-12)
-    assert iscloseAll(PTL.elList[0].r1, PTL.elList[-1].r2, 1e-12)
-    assert iscloseAll(PTL.elList[0].nb, -PTL.elList[-1].ne, 1e-12)
+    assert isclose(totalBendAngle, 2 * np.pi, abs_tol=1e-11)
+    assert iscloseAll(PTL.elList[0].r1, PTL.elList[-1].r2, 1e-11)
+    assert iscloseAll(PTL.elList[0].nb, -PTL.elList[-1].ne, 1e-11)

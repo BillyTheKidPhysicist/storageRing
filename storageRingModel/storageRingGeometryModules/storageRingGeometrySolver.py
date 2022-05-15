@@ -14,7 +14,8 @@ realNumberTuple=tuple[Union[float, int],...]
 benderAndLensParams=tuple[ tuple[realNumberTuple,...] ,floatTuple ]
 lst_arr_tple = Union[list, np.ndarray, tuple]
 
-
+class NoValidRingConfiguration(Exception):
+    pass
 
 
 class StorageRingGeometryConstraintsSolver:
@@ -104,12 +105,17 @@ class StorageRingGeometryConstraintsSolver:
     def update_Ring(self, params: floatTuple) -> None:
         """Update bender and lens parameters with params in storage ring geometry"""
 
-        benderParams, lensParams = self.shape_And_Round_Params(params)
-        assert len(benderParams) == self.storageRing.numBenders
-        for bender, singleBenderParams in zip(self.storageRing.benders, benderParams):
-            radius, numMagnets = singleBenderParams
-            bender.set_Number_Magnets(numMagnets)
-            bender.set_Radius(radius)
+        bendingParams, lensParams = self.shape_And_Round_Params(params)
+        assert len(bendingParams) == self.storageRing.numBenders
+        for i, benderParams in enumerate(bendingParams):
+            radius, numMagnets = benderParams
+            self.storageRing.benders[i].set_Number_Magnets(numMagnets)
+            if self.storageRing.numBenders==2:
+                self.storageRing.benders[i].set_Radius(radius)
+            elif self.storageRing.numBenders==4:
+                radius=bendingParams[i//2][0] #both benders in an arc must have same bending radius
+                self.storageRing.benders[i].set_Radius(radius)
+            else: raise ValueError
 
         if self.isSameLengthTuneLenses:
             assert len(lensParams)==1
@@ -141,9 +147,9 @@ class StorageRingGeometryConstraintsSolver:
         """Cost for when bender radii differ from target radius"""
 
         benderParams, _ = self.shape_And_Round_Params(params)
-        radiusList = [radius for radius, _ in benderParams]
-        weight = 10
-        cost = weight*sum([abs(radius - self.targetRadius) for radius in radiusList])
+        radii=self.get_Bender_Params_Radii(benderParams)
+        weight = 10_000
+        cost = weight*sum([abs(radius - self.targetRadius) for radius in radii])
         return cost
 
     def get_Bounds(self) -> tuple[tuple[float, float], ...]:
@@ -172,6 +178,8 @@ class StorageRingGeometryConstraintsSolver:
         """Get cost associated with a storage ring configuration from params. Cost comes from ring not being closed from
         end not meeting beginning and/or tangents not being colinear"""
 
+        if not self.is_Within_Radius_Tolerance(params,1e-2):
+            return np.inf
         params = tuple(params)  # I want this to be immutable for safety
         # punish if ring is not closed and aligned properly
         closedCost = self.closed_Ring_Cost(params)
@@ -183,11 +191,25 @@ class StorageRingGeometryConstraintsSolver:
         assert _cost >= 0.0
         return _cost
 
-    def assert_Radius_Tolerance(self, params: floatTuple,tolerance: float ) -> None:
-        """Assert that each radius remains within a specified value of target radius after constraining"""
+    def get_Bender_Params_Radii(self,benderParams: tuple)-> list[float]:
+        """Get list of bender radius. For two or 4 benders this is a list of 2 radii. This is actually a hack because
+        the differential evolution solver is still working with 4 radius, but here I only pick two of them. I don't
+        want each bending quadrant to have it's own bending radius"""
+
+        if self.storageRing.numBenders==2:
+            radii=[radius for radius,_ in benderParams]
+        elif self.storageRing.numBenders==4:
+            radii=[benderParams[0][0],benderParams[2][0]]
+        else: raise ValueError
+        return radii
+
+    def is_Within_Radius_Tolerance(self, params: floatTuple,tolerance: float ) -> bool:
+        """Are the params within the tolerance of bending radiuses? I don't want each bending radius to be very
+        different"""
 
         benderParams, _ = self.shape_And_Round_Params(params)
-        assert all(abs(radius-self.targetRadius)<tolerance for radius, _ in benderParams)
+        radii=self.get_Bender_Params_Radii(benderParams)
+        return all(abs(radius - self.targetRadius) < tolerance for radius in radii)
 
     def solve(self) -> realNumberTuple:
         """
@@ -199,21 +221,22 @@ class StorageRingGeometryConstraintsSolver:
 
         assert self.storageRing.combiner is not None
         bounds = self.get_Bounds()
+        closedRingCost = 1e-11
         maxTries=20
         i=0
         while True:
             try:
                 seed=42+i #seed must change for each try, but this is repeatable
-                sol = differential_evolution(self.cost, bounds,seed=seed,polish=False)
+                terminationCriteria=lambda x, **kwargs:self.closed_Ring_Cost(x)<closedRingCost
+                sol = differential_evolution(self.cost, bounds,seed=seed,polish=False,maxiter=5_000,
+                                             tol=0.0,atol=0.0,callback=terminationCriteria,mutation=.5,disp=False)
                 solutionParams = self.round_Integer_Params(sol.x)
-                closedCostTol = 1e-12
-                assert self.closed_Ring_Cost(solutionParams) < closedCostTol
-                self.assert_Radius_Tolerance(solutionParams, 1e-2)
+                assert self.closed_Ring_Cost(solutionParams) < closedRingCost
                 break
             except:
                 i+=1
-            if i==maxTries:
-                raise Exception("could not find valid solution")
+                if i==maxTries:
+                    raise NoValidRingConfiguration
         return solutionParams
 
     def make_Valid_Storage_Ring(self)-> StorageRingGeometry:

@@ -5,11 +5,11 @@ from asyncDE import solve_Async
 from storageRingOptimizer import LatticeOptimizer,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
-from latticeModels import make_Ring_And_Injector_Version1,RingGeometryError,InjectorGeometryError
+from latticeModels import make_Ring_And_Injector_Version3,RingGeometryError,InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3
 
 def plot_Results(params):
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version1(params)
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
     optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
     optimizer.show_Floor_Plan_And_Trajectories(None,True)
 
@@ -46,7 +46,7 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
 
 def solve_For_Lattice_Params(params:tuple)-> Solution:
     try:
-        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version1(params)
+        PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version3(params)
         sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
         sol.params=params
     except RingGeometryError:
@@ -69,10 +69,13 @@ def wrapper(params):
 def main():
     bounds = list(optimizerBounds_V1_3.values())
 
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True)
+    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10)
 
-    # x=np.array([0.01370281, 0.01005321, 0.03225903, 0.00880389, 0.09666693,
-    #    0.40095146])
+    x = [0.011289371309399825, 0.01, 0.03221557023564858,
+         0.007377437528248196, 0.1, 0.4]
+    # x.extend(injectorParamsOptimalAny.values())
+    x = np.array(x)
+    print(wrapper(x))
     # plot_Results(x)
 if __name__=='__main__':
     main()
@@ -104,10 +107,15 @@ cost: 0.7195150992618845
 
 
 """
-best after polishing
 
-0.6501093735741955 [0.01349793835842913, 0.010332948793059262, 0.03261044879081758, 0.008788943303624595, 0.09269537518400353, 0.3954811976654152]
+version3
 
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.011289371309399825, 0.01                , 0.03221557023564858 ,
+       0.007377437528248196, 0.1                 , 0.4                 ])
+cost: 0.7267619461070828
+----------Solution-----------  
 """
 
 

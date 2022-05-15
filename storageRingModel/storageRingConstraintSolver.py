@@ -140,10 +140,10 @@ def is_Particle_Tracer_Lattice_Closed(PTL)-> bool:
     """Check that the lattice is closed. """
 
     elPTL_First,elPTL_Last=PTL.elList[0],PTL.elList[-1]
-
-    if not iscloseAll(elPTL_First.nb,-1*elPTL_Last.ne,1e-12): #normal vector must be same
+    closedTolerance=1e-11
+    if not iscloseAll(elPTL_First.nb,-1*elPTL_Last.ne,closedTolerance): #normal vector must be same
         return False
-    if not iscloseAll(elPTL_First.r1,elPTL_Last.r2,1e-12):
+    if not iscloseAll(elPTL_First.r1,elPTL_Last.r2,closedTolerance):
         return False
     return True
 

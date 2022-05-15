@@ -100,7 +100,8 @@ def add_Combiner_And_OP(PTL,rpCombiner,LmCombiner,loadBeamDiam,rpLensBefore,rpLe
         constantsV1_2["OP_PumpingRegionLength"]
     PTL.add_Drift(OP_Gap, ap=constantsV1_2["OP_MagAp_"+whichOP_Ap])
 
-def add_First_RaceTrack_Straight_Version1(PTL: ParticleTracerLattice, ringParams: lockedDict,whichOP_Ap: str="Circulating")-> None:
+def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringParams: lockedDict,
+                                            whichOP_Ap: str="Circulating")-> None:
     """Starting from a bender output at 0,0 and going in -x direction to a bender input is the first "straight" section.
     elements are [lens,combiner,lens] with gaps as needed for vacuum Not actually straight because of combiner.
      """
@@ -141,7 +142,7 @@ def add_First_Racetrack_Straight(PTL: ParticleTracerLattice, ringParams: lockedD
     assert whichVersion in ('1','2','3')
 
     if whichVersion in ('1','3'):
-        add_First_RaceTrack_Straight_Version1(PTL,ringParams)
+        add_First_RaceTrack_Straight_Version1_3(PTL,ringParams)
     else:
         add_First_RaceTrack_Straight_Version2(PTL, ringParams)
 
@@ -269,7 +270,7 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict, surr
 
     PTL = ParticleTracerLattice(v0Nominal=DEFAULT_ATOM_SPEED, latticeType='storageRing')
 
-    add_First_RaceTrack_Straight_Version1(PTL, raceTrackParams,whichOP_Ap='Injection')
+    add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams,whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()
     PTL.end_Lattice(constrain=False)
     return PTL
