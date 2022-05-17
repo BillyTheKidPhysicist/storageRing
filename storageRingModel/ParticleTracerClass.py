@@ -121,11 +121,11 @@ class ParticleTracer:
         self.particle.currentEl=self.currentEl
         self.particle.dataLogging= not self.fastMode #if using fast mode, there will NOT be logging
         self.logTracker=0
+        if self.logPhaseSpaceCoords:
+            self.particle.elPhaseSpaceLog.append((self.particle.qi.copy(),self.particle.pi.copy()))
         if self.currentEl is None:
             self.particle.clipped=True
         else:
-            if self.logPhaseSpaceCoords:
-                self.particle.elPhaseSpaceLog.append((self.particle.qi.copy(),self.particle.pi.copy()))
             self.particle.clipped=False
             self.qEl = self.currentEl.transform_Lab_Coords_Into_Element_Frame(self.particle.qi)
             self.pEl = self.currentEl.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)

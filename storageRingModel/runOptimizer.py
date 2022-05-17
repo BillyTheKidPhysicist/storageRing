@@ -45,9 +45,7 @@ def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: Particl
     return sol
 
 def solve_For_Lattice_Params(_params:tuple)-> Solution:
-    targetSpeed=_params[0]
-    atomCharacteristic.super_Special_Change_Item("nominalDesignSpeed",targetSpeed)
-    paramsForBuilding=_params[1:]
+    paramsForBuilding=_params
     try:
         PTL_Ring, PTL_Injector=make_Ring_And_Injector_Version3(paramsForBuilding)
         sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
@@ -65,16 +63,15 @@ def solve_For_Lattice_Params(_params:tuple)-> Solution:
 def wrapper(params):
     sol=solve_For_Lattice_Params(params)
     if sol.fluxMultiplication>10:
+        print('speed: ',params[0])
         print(sol)
     cost=sol.cost
     return cost
 
 def main():
     bounds = list(optimizerBounds_V1_3.values())
-    bounds=[(208,212),*bounds]
 
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=8)
-
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
     # x = [0.011289371309399825, 0.01, 0.03221557023564858,
     #      0.007377437528248196, 0.1, 0.4]
     # x.extend(injectorParamsOptimalAny.values())

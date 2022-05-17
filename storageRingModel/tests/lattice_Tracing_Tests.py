@@ -83,7 +83,7 @@ def generate_Lattice(configuration):
         if configuration=='2':
             PTL.add_Combiner_Sim()
         else:
-            PTL.add_Combiner_Sim_Lens(.1, .02)
+            PTL.add_Combiner_Sim_Lens(.1, .02,layers=2)
         PTL.add_Halbach_Lens_Sim(.01, .5)
         PTL.end_Lattice()
     elif configuration=='3':
@@ -99,7 +99,7 @@ def generate_Lattice(configuration):
         if configuration == '4':
             PTL.add_Combiner_Sim()
         else:
-            PTL.add_Combiner_Sim_Lens(.1, .02)
+            PTL.add_Combiner_Sim_Lens(.1, .02,layers=2)
         PTL.add_Halbach_Lens_Sim(.01,.5)
         PTL.add_Halbach_Bender_Sim_Segmented(.0254/2,.01,None,1.0,0.0,rOffsetFact=1.015)
         PTL.add_Halbach_Lens_Sim(.01,None,constrain=True)

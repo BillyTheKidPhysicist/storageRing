@@ -387,7 +387,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
     def make_Latice(self,magnetErrors=False,jitterAmp=0.0):
         PTL = ParticleTracerLattice(v0Nominal=200.0,standardMagnetErrors=magnetErrors,jitterAmp=jitterAmp)
         PTL.add_Drift(5e-3)
-        PTL.add_Combiner_Sim_Lens(self.Lm,self.rp,ap=None)
+        PTL.add_Combiner_Sim_Lens(self.Lm,self.rp,ap=None,layers=2)
         PTL.end_Lattice(constrain=False)
         return PTL
 

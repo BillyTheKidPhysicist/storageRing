@@ -135,8 +135,9 @@ class ParticleTracerLattice:
         self.combinerIndex=el.index
         self.elList.append(el) #add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=2,ap: float =None,
+    def add_Combiner_Sim_Lens(self,Lm: float,rp: float,loadBeamDiam: float=10e-3,layers: int=1,ap: float =None,
                               seed: int =None)-> None:
+
         """
         Add halbach hexapole lens combiner element.
 
@@ -554,7 +555,7 @@ class ParticleTracerLattice:
         for el in self.elList:
             if plotInner:
                 elPlotPoints=el.SO.exterior.xy
-                linestyle = ':' if plotInner else '-'  # dashed inner if plotting iner
+                linestyle = ':' if plotOuter else '-'  # dashed inner if plotting iner
                 plt.plot(*elPlotPoints,c=el.plotColor,linestyle=linestyle)
             if plotOuter:
                 elPlotPoints = el.SO_Outer.exterior.xy

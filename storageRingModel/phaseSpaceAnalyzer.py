@@ -311,7 +311,7 @@ class PhaseSpaceAnalyzer:
         plt.show()
 
     def plot_Acceptance_1D_Histogram(self,dimension:str,numBins:int=10,saveTitle: str=None,showInputDist: bool=True,
-                                     dpi: float=150)-> None:
+                                      weightingMethod: str ='clipped',TMax: float=None,dpi: float=150)-> None:
         """
         Histogram of acceptance of storage ring starting from injector inlet versus initial values ofy,z,px,py or pz in
         the element frame
@@ -320,9 +320,13 @@ class PhaseSpaceAnalyzer:
         :param numBins: Number of bins spanning the range of dimension values
         :param saveTitle: If not none, the plot is saved with this as the file name.
         :param showInputDist: Plot the initial distribution behind the acceptance plot
+        :param weightingMethod: Which weighting method to use to represent acceptence.
+        :param TMax: When using 'time' as the weightingMethod this is the maximum time for acceptance
         :param dpi: dot per inch for saved plot
         :return: None
         """
+
+        assert weightingMethod in ('clipped','time')
 
         self._check_Axis_Choice(dimension, 'NONE')
         labelList, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(dimension, 'NONE')
@@ -336,7 +340,12 @@ class PhaseSpaceAnalyzer:
             binParticles=[particle for particle,isValid in zip(self.swarm.particles,isValidList) if isValid ]
             numSurvived=sum([not particle.clipped for particle in binParticles])
             numParticlesInBin.append(len(binParticles))
-            fracSurvived.append(numSurvived/len(binParticles) if len(binParticles)!=0 else np.nan)
+            if weightingMethod=='clipped':
+                fracSurvived.append(numSurvived/len(binParticles) if len(binParticles)!=0 else np.nan)
+            else:
+                survivalTimes=[particle.T for particle in binParticles]
+                assert len(survivalTimes)==0 or max(survivalTimes)<=TMax
+                fracSurvived.append(np.mean(survivalTimes)/TMax if len(survivalTimes)!=0 else np.nan)
         plt.title("Particle acceptance")
         if showInputDist:
             numParticlesInBin=[num/max(numParticlesInBin) for num in numParticlesInBin]
@@ -357,9 +366,7 @@ class PhaseSpaceAnalyzer:
         labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
         from matplotlib.patches import Patch
         xPlotIndex,yPlotIndex=self._get_Axis_Index(xaxis,yaxis)
-        num=0
         for particle in self.swarm:
-            num+=1
             X = particle.qi.copy()
             assert np.abs(X[0]) < 1e-6
             X = np.append(X, particle.pi.copy())
@@ -370,7 +377,7 @@ class PhaseSpaceAnalyzer:
         legendList = [Patch(facecolor='green', edgecolor='green',
                             label='survived'), Patch(facecolor='red', edgecolor='red',
                                                      label='clipped')]
-        plt.title('Phase space survival.')
+        plt.title('Phase space acceptance')
         plt.legend(handles=legendList)
         plt.xlabel(labelList[0])
         plt.ylabel(labelList[1])
@@ -379,6 +386,34 @@ class PhaseSpaceAnalyzer:
             plt.savefig(saveTitle,dpi=dpi)
         plt.show()
 
+    def plot_Acceptance_2D_Histrogram(self,xaxis,yaxis,TMax,saveTitle=None,dpi=150):
+
+        self._check_Axis_Choice(xaxis, yaxis)
+        labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
+        xPlotIndex,yPlotIndex=self._get_Axis_Index(xaxis,yaxis)
+
+        xPlotVals, yPlotVals, weights = [], [], []
+        for particle in self.swarm:
+            X = np.append(particle.qi,particle.pi)
+            assert np.abs(X[0]) < 1e-6
+            xPlotVals.append(X[xPlotIndex]*unitModifier[0])
+            yPlotVals.append(X[yPlotIndex]*unitModifier[1])
+            assert particle.T<=TMax
+            weights.append(particle.T)
+        histogramNumParticles, _, _ = np.histogram2d(xPlotVals, yPlotVals, bins=50)
+        histogramSurvivalTimes, binsx, binsy = np.histogram2d(xPlotVals, yPlotVals, bins=50, weights=weights)
+        histogramNumParticles[histogramNumParticles == 0] = np.nan
+        histogramAcceptance = histogramSurvivalTimes / (histogramNumParticles * TMax)
+        histogramAcceptance = np.rot90(histogramAcceptance)
+        plt.title('Phase space acceptance')
+        plt.imshow(histogramAcceptance, extent=[binsx.min(), binsx.max(), binsy.min(), binsy.max()], aspect='auto')
+        plt.colorbar()
+        plt.xlabel(labelList[0])
+        plt.ylabel(labelList[1])
+        plt.tight_layout()
+        if saveTitle is not None:
+            plt.savefig(saveTitle, dpi=dpi)
+        plt.show()
 
     def plot_Standing_Envelope(self):
         raise Exception('This is broken because I am trying to use ragged arrays basically')

@@ -301,6 +301,13 @@ def make_injectorParams_Dict_Version_Any(variableParams: list[float])-> lockedDi
 
     return injectorParamsOptimalAny
 
+def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice,PTL_Ring: ParticleTracerLattice)-> None:
+    """Combiner from injector and ring must have the same shared characteristics, as well as have the expected
+    parameters"""
+
+    assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
+    assert PTL_Injector.combiner.ang < 0 <PTL_Ring.combiner.ang
+
 def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str) -> tuple[RingModel, InjectorModel]:
     """
     Make ParticleTracerLattice models of ring and injector system. Combiner must be the same, though in low
@@ -319,8 +326,7 @@ def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str) -> 
 
     PTL_Ring = make_Ring(ringParams,whichVersion)
     PTL_Injector = make_Injector_Version_Any(injectorParams)
-    assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
-    assert PTL_Injector.combiner.ang < 0 <PTL_Ring.combiner.ang
+    assert_Combiners_Are_Same(PTL_Injector,PTL_Ring)
     return PTL_Ring, PTL_Injector
 
 def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple) -> tuple[RingModel, InjectorModel]:

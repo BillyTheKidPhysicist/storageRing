@@ -139,6 +139,7 @@ class LatticeOptimizer:
         :return: True if particle clipped ring, False if it didn't
         """
 
+        assert len(particle.elPhaseSpaceLog)>0
         line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
         if line is None: #particle was clipped immediately, but in the injector not in the ring
             return False

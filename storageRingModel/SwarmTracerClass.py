@@ -16,8 +16,9 @@ def lorentz_Function(x,gamma):
 def normal(v,sigma,v0=0.0):
     return np.exp(-.5*((v-v0)/sigma)**2)
 
-
-
+realNumber=Union[float,int]
+tupleOrNum=Union[tuple[float,float],realNumber]
+realNumbers=(int,float)
 
 class SwarmTracer:
 
@@ -146,38 +147,37 @@ class SwarmTracer:
                 swarmObserved.particles.append(particle)
         return swarmObserved
 
-    def _make_PseudoRandom_Swarm_Bounds_List(self,qTBounds,pTBounds,pxBounds,upperSymmetry=False):
-        if isinstance(qTBounds,float):
+    def _make_PseudoRandom_Swarm_Bounds_List(self,qTBounds: tupleOrNum,pTBounds: tupleOrNum,pxBounds:tupleOrNum,
+                                             upperSymmetry: bool=False):
+
+        if isinstance(qTBounds,realNumbers):
             assert qTBounds>0.0
-            if upperSymmetry==False: qTBounds=[(-qTBounds,qTBounds),(-qTBounds,qTBounds)]
-            else: qTBounds=[(-qTBounds,qTBounds),(0.0,qTBounds)] #restrict to top half
-        else: assert len(qTBounds)==2 and len(qTBounds[0])==2 and len(qTBounds[1])==2
-        if isinstance(pTBounds,float):
+            yBounds=(-qTBounds,qTBounds)
+            zBounds=yBounds if upperSymmetry is False else (0.0,qTBounds)
+            qTBounds=[yBounds,zBounds]
+        if isinstance(pTBounds,realNumbers):
             assert pTBounds>0.0
             pTBounds=[(-pTBounds,pTBounds),(-pTBounds,pTBounds)]
-        else: assert len(pTBounds)==2 and len(pTBounds[0])==2 and len(pTBounds[1])==2
-        if isinstance(pxBounds,float):
+        if isinstance(pxBounds,realNumbers):
             assert pxBounds>0.0
             pxBounds=(-pxBounds-self.lattice.v0Nominal,pxBounds-self.lattice.v0Nominal)
         else:
-            assert len(pxBounds)==2
             pxBounds=(pxBounds[0]-self.lattice.v0Nominal,pxBounds[1]-self.lattice.v0Nominal)
-        generatorBounds=qTBounds.copy()
-        generatorBounds.append(pxBounds)
-        generatorBounds.extend(pTBounds)
+        generatorBounds=[*qTBounds,pxBounds,*pTBounds]
         pxMin,pxMax=generatorBounds[2]
         assert len(generatorBounds)==5 and pxMin<-self.lattice.v0Nominal<pxMax
         return generatorBounds
 
-    def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTBounds,pTBounds,pxBounds,numParticles,upperSymmetry=False,
-                                                    sameSeed=False,circular=True,smallXOffset=True):
+    def initalize_PseudoRandom_Swarm_In_Phase_Space(self,qTBounds: tupleOrNum,pTBounds:tupleOrNum,
+                                                    pxBounds:tupleOrNum,numParticles: int,upperSymmetry: bool=False,
+                                                    sameSeed: bool=False,circular: bool=True,smallXOffset: bool=True):
         #return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         #and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         #get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
         #each corner exactly and midpoints between corners if desired
         #NOTE: it's not guaranteed that there will be exactly num particles.
-        if circular==True:
-            assert isinstance(qTBounds,float) and qTBounds>0.0 and isinstance(pTBounds,float) and pTBounds>0.0
+        if circular:
+            assert all((isinstance(_bounds,realNumbers)) and _bounds>0.0 for _bounds in (qTBounds,pTBounds))
             qTransMax=qTBounds
             pTransMax=pTBounds
         generatorBounds=self._make_PseudoRandom_Swarm_Bounds_List(qTBounds,pTBounds,pxBounds,upperSymmetry=upperSymmetry)
@@ -202,13 +202,13 @@ class SwarmTracer:
             x0=-1e-10 #to push negative
         else:
             x0=0.0
-
+        samples=np.column_stack((np.ones(len(samples))*x0,samples))
         particleCount=0 #track how many particles have been added to swarm
         for Xi in samples:
-            q = np.append(x0, Xi[:2])
-            p = Xi[2:]
-            if circular==True:
-                y,z,py,pz=Xi[[0,1,3,4]]
+            q = Xi[:3]
+            p = Xi[3:]
+            if circular:
+                y,z,py,pz=Xi[[1,2,4,5]]
                 if np.sqrt(y**2+z**2)<qTransMax and np.sqrt(py**2+pz**2)<pTransMax:
                     swarm.add_New_Particle(qi=q, pi=p)
                     particleCount+=1
@@ -216,7 +216,7 @@ class SwarmTracer:
                     break
             else:
                 swarm.add_New_Particle(qi=q,pi=p)
-        if sameSeed==True or type(sameSeed)==int:
+        if sameSeed or isinstance(sameSeed,int):
             np.random.seed(reSeedVal)  # re randomize
         return swarm
 

@@ -1383,7 +1383,7 @@ class HalbachLensSim(LensIdeal):
         self.fastFieldHelper.update_Element_Perturb_Params(shiftY,shiftZ,rotY,rotZ)
 
 
-class CombinerHalbachLensSim(CombinerIdeal):#,LensIdeal): #use inheritance here
+class CombinerHalbachLensSim(CombinerIdeal):
 
     outerFringeFrac: float=1.5
 

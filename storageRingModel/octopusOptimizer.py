@@ -59,11 +59,8 @@ class Octopus:
         is present"""
 
         tentacleBounds = self.make_Tentacle_Bounds()
-        numPointsDumb=round(.5*self.numTentacles)
-        numPointsSmart=self.numTentacles-numPointsDumb
-        positionsDumb = self.random_Tentacle_Positions(tentacleBounds,numPointsDumb)
-        positionsSmart =  self.smart_Tentacle_Positions(tentacleBounds,numPointsSmart)
-        self.tentaclePositions= [*positionsDumb,*positionsSmart]
+        self.tentaclePositions=self.smart_Tentacle_Positions(tentacleBounds)
+        assert len(self.tentaclePositions)==self.numTentacles
 
     def random_Tentacle_Positions(self,bounds: np.ndarray,numPostions: int)-> np.ndarray:
         """
@@ -77,25 +74,27 @@ class Octopus:
         positions=low_Discrepancy_Sample(bounds, numPostions)
         return positions
 
-    def smart_Tentacle_Positions(self,bounds: np.ndarray,numPositions: int)-> np.ndarray:
+    def smart_Tentacle_Positions(self,bounds: np.ndarray)-> np.ndarray:
         """Intelligently determine where to put tentacles to search for food. Uses gaussian process regression. Training
         data has minimum size for accuracy for maximum size for computation time considerations"""
-        
         maxTrainingMemory=150 #computation grows as n^3, gets much slower for larger numbers
         validMemory = [(pos,cost) for pos,cost in self.memory if
                        np.all(pos >= bounds[:, 0]) and np.all(pos <= bounds[:, 1])]
-        if len(validMemory)<len(bounds):
-            return self.random_Tentacle_Positions(bounds,numPositions)
+        if len(validMemory)<2*len(bounds):
+            return self.random_Tentacle_Positions(bounds,self.numTentacles)
         if len(validMemory)>maxTrainingMemory:
             random.shuffle(validMemory)
-            validMemory=validMemory[:100]
-
+            validMemory=validMemory[:maxTrainingMemory]
         opt=skopt.Optimizer(bounds,n_initial_points=0,n_jobs=-1,acq_optimizer_kwargs={"n_restarts_optimizer":10,
-                                                                                      "n_points":50_000})
+                                                                                      "n_points":30_000})
         x=[list(pos) for pos,cost in validMemory]
         y=[cost for pos,cost in validMemory]
         opt.tell(x,y) #train model
-        positions=np.array(opt.ask(numPositions)) #get new positions to test from model
+        numExplore=round(.5*self.numTentacles)
+        numExploit=self.numTentacles-numExplore
+        positionsExploit=np.array(opt.ask(numExploit,strategy="cl_min"))
+        positionsExplore=np.array(opt.ask(numExplore,strategy="cl_max"))
+        positions=np.row_stack((positionsExplore,positionsExploit))
         return positions
         
 
@@ -147,8 +146,8 @@ class Octopus:
             self.memory.extend(list(zip(self.tentaclePositions.copy(),results)))
             self.investigate_Results(results)
             costMinList.append(self.get_Cost_Min())
-            if numSearchesCriteria is not None and len(costMinList)>numSearchesCriteria:
-                if max(costMinList[numSearchesCriteria:])-min(costMinList[numSearchesCriteria:])<searchCutoff:
+            if numSearchesCriteria is not None and len(costMinList)>numSearchesCriteria+1:
+                if max(costMinList[-numSearchesCriteria:])-min(costMinList[-numSearchesCriteria:])<searchCutoff:
                     break
         if disp:
             print('done', self.get_Cost_Min(), repr(self.octopusLocation))
