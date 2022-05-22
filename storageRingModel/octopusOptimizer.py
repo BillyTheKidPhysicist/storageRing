@@ -7,6 +7,7 @@ from typing import Callable,Optional
 import multiprocess as mp
 import numpy as np
 import skopt
+from skopt.utils import  cook_estimator
 from helperTools import low_Discrepancy_Sample
 
 class Octopus:
@@ -85,8 +86,11 @@ class Octopus:
         if len(validMemory)>maxTrainingMemory:
             random.shuffle(validMemory)
             validMemory=validMemory[:maxTrainingMemory]
-        opt=skopt.Optimizer(bounds,n_initial_points=0,n_jobs=-1,acq_optimizer_kwargs={"n_restarts_optimizer":10,
-                                                                                      "n_points":30_000})
+
+        base_estimator = cook_estimator("GP", space=bounds,noise=.005)
+        opt=skopt.Optimizer(bounds,base_estimator=base_estimator,n_initial_points=0,n_jobs=-1,
+                            acq_optimizer_kwargs={"n_restarts_optimizer":10,"n_points":30_000})
+
         x=[list(pos) for pos,cost in validMemory]
         y=[cost for pos,cost in validMemory]
         opt.tell(x,y) #train model
@@ -120,20 +124,23 @@ class Octopus:
         """Run the function being optimized at the parameter space locations of the tentacles. """
 
         if processes==-1 or processes>1:
-            numProcesses=max([self.numTentacles,3*mp.cpu_count()]) if processes==-1 else processes
+            numProcesses=min([self.numTentacles,3*mp.cpu_count()]) if processes==-1 else processes
             with mp.Pool(numProcesses) as pool: # pylint: disable=not-callable
-                results=np.array(pool.map(self.func,self.tentaclePositions))
+                results=np.array(pool.map(self.func,self.tentaclePositions,chunksize=1))
         else:
             results=np.array([self.func(pos) for pos in self.tentaclePositions])
         return results
 
     # pylint: disable=too-many-arguments
     def search_For_Food(self, costInitial: Optional[float],numSearchesCriteria:Optional[int], searchCutoff: float,
-                        processes: int, disp: bool):
+                        processes: int, disp: bool,memory: Optional[list]):
         """ Send out octopus to search for food (reduction in cost) """
 
         assert numSearchesCriteria is None or (numSearchesCriteria>0 and isinstance(numSearchesCriteria,int))
         assert searchCutoff>0.0
+        if memory is not None:
+            assert all(isinstance(x,np.ndarray) and isinstance(val,float) for x,val in memory)
+            self.memory=memory
 
         costInitial = costInitial if costInitial is not None else self.func(self.octopusLocation)
         self.memory.append((self.octopusLocation.copy(),costInitial))
@@ -155,8 +162,8 @@ class Octopus:
 
 # pylint: disable=too-many-arguments
 def octopus_Optimize(func,bounds,xi,costInitial:float=None,numSearchesCriteria:int=10,
-                     searchCutoff: float=.01,processes: int=-1,disp: bool=True,tentacleLength: float=.01)\
-        ->tuple[np.ndarray,float]:
+                     searchCutoff: float=.01,processes: int=-1,disp: bool=True,tentacleLength: float=.01,
+                     memory: list=None) ->tuple[np.ndarray,float]:
     """
     Minimize a scalar function within bounds by octopus optimization. An octopus searches for food
     (reduction in cost function) by a combinations of intelligently and blindly searching with her tentacles in her
@@ -174,9 +181,10 @@ def octopus_Optimize(func,bounds,xi,costInitial:float=None,numSearchesCriteria:i
     :param disp: Whether to display results of solver per iteration
     :param tentacleLength: The distance that each tentacle can reach. Expressed as a fraction of the separation between
         min and max of bounds for each dimension
+    :param memory: List of previous results to use for optimizer
     :return: Tuple as (optimal position in parameter, cost at optimal position)
     """
 
     octopus=Octopus(func,bounds,xi,tentacleLength)
-    posOptimal,costMin=octopus.search_For_Food(costInitial,numSearchesCriteria,searchCutoff,processes,disp)
+    posOptimal,costMin=octopus.search_For_Food(costInitial,numSearchesCriteria,searchCutoff,processes,disp,memory)
     return posOptimal,costMin

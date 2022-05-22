@@ -82,7 +82,7 @@ def tool_Make_Image_Cartesian(
         vals = np.asarray([func(*coord, *extraArgs, **extraKeyWordArgs) for coord in coords])
     image = vals.reshape(len(xGridEdges), len(yGridEdges))
     image = np.rot90(image)
-    extent = [xGridEdges.min(), xGridEdges.max(), yGridEdges.min(), yGridEdges.max()]
+    extent = [min(xGridEdges), max(xGridEdges), min(yGridEdges), max(yGridEdges)]
     return image, extent
 
 def tool_Dense_Curve(x: lst_tup_arr_type,y: lst_tup_arr_type,numPoints: int=10_000,smoothing: float=0.0) \

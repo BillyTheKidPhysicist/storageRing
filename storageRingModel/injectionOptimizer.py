@@ -9,7 +9,7 @@ from constants import DEFAULT_ATOM_SPEED,COST_PER_CUBIC_INCH_PERM_MAGNET
 from storageRingOptimizer import LatticeOptimizer
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_For_Injection_Version_1,InjectorGeometryError
-from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny
+from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny,atomCharacteristic,optimizerBounds_V1_3
 from scipy.special import expit as sigmoid
 
 
@@ -43,6 +43,7 @@ class Injection_Model(LatticeOptimizer):
         assert 0.0<=floorPlanCost<=1.0
         priceCost=self.get_Rough_Material_Cost()
         cost=np.sqrt(floorPlanCost**2+swarmCost**2+priceCost**2)
+        print(100*(1-swarmCost))
         return cost
 
     def injected_Swarm_Cost(self)-> float:
@@ -138,18 +139,18 @@ def main():
 
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
-    bounds = [vals for vals in injectorParamsBoundsAny.values()]
+    # bounds = [vals for vals in injectorParamsBoundsAny.values()]
 
     # member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
     # print(repr(member.DNA),member.cost)
     #
-    # from latticeModels_Parameters import injectorParamsOptimalAny
+    from latticeModels_Parameters import injectorParamsOptimalAny
     # # X0=np.array([0.08326160110590838 , 0.020993060372921774, 0.16088998779932584 ,
     # #        0.024763975149604798, 0.19375652148870226 , 0.0398938436893404  ,
     # #        0.018280132203330864, 0.16047790265328432 , 0.26596808943711425 ,
     # #        0.21231305487552196 ])
-    # X0=np.array(list(injectorParamsOptimalAny.values()))
-    # print(wrapper(X0))
+    X0=np.array(list(injectorParamsOptimalAny.values()))
+    print(wrapper(X0))
     # plot_Results(X0)
 if __name__=="__main__":
     main()

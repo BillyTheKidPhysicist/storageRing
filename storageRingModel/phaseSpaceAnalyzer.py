@@ -8,6 +8,7 @@ from ParticleClass import Particle as ParticleBase
 from ParticleTracerLatticeClass import ParticleTracerLattice
 import matplotlib.pyplot as plt
 
+cmap=plt.get_cmap('viridis')
 
 def make_Test_Swarm_And_Lattice(numParticles=128,totalTime=.1)->(Swarm,ParticleTracerLattice):
     PTL=ParticleTracerLattice(v0Nominal=210.0)
@@ -311,7 +312,8 @@ class PhaseSpaceAnalyzer:
         plt.show()
 
     def plot_Acceptance_1D_Histogram(self,dimension:str,numBins:int=10,saveTitle: str=None,showInputDist: bool=True,
-                                      weightingMethod: str ='clipped',TMax: float=None,dpi: float=150)-> None:
+                                      weightingMethod: str ='clipped',TMax: float=None,dpi: float=150,
+                                     cAccepted=cmap(cmap.N),cInitial=cmap(0))-> None:
         """
         Histogram of acceptance of storage ring starting from injector inlet versus initial values ofy,z,px,py or pz in
         the element frame
@@ -323,6 +325,8 @@ class PhaseSpaceAnalyzer:
         :param weightingMethod: Which weighting method to use to represent acceptence.
         :param TMax: When using 'time' as the weightingMethod this is the maximum time for acceptance
         :param dpi: dot per inch for saved plot
+        :param cAccepted: Color of accepted distribution plot
+        :param cInitial: Color of initial distribution plot
         :return: None
         """
 
@@ -349,9 +353,10 @@ class PhaseSpaceAnalyzer:
         plt.title("Particle acceptance")
         if showInputDist:
             numParticlesInBin=[num/max(numParticlesInBin) for num in numParticlesInBin]
-            plt.bar(binEdges[:-1],numParticlesInBin,width=binEdges[1]-binEdges[0],align='edge',color='r',
+            plt.bar(binEdges[:-1],numParticlesInBin,width=binEdges[1]-binEdges[0],align='edge',color=cInitial,
                     label='Initial distribution')
-        plt.bar(binEdges[:-1],fracSurvived,width=binEdges[1]-binEdges[0],align='edge',label='Acceptance')
+        plt.bar(binEdges[:-1],fracSurvived,width=binEdges[1]-binEdges[0],align='edge',label='Acceptance',
+                color=cAccepted)
         plt.xlabel(labelList[0])
         plt.ylabel("Percent survival to end")
         plt.legend()
@@ -386,7 +391,7 @@ class PhaseSpaceAnalyzer:
             plt.savefig(saveTitle,dpi=dpi)
         plt.show()
 
-    def plot_Acceptance_2D_Histrogram(self,xaxis,yaxis,TMax,saveTitle=None,dpi=150):
+    def plot_Acceptance_2D_Histrogram(self,xaxis,yaxis,TMax,saveTitle=None,dpi=150,bins=50,emptyVals=np.nan):
 
         self._check_Axis_Choice(xaxis, yaxis)
         labelList,unitModifier= self._get_Axis_Labels_And_Unit_Modifiers(xaxis,yaxis)
@@ -400,11 +405,12 @@ class PhaseSpaceAnalyzer:
             yPlotVals.append(X[yPlotIndex]*unitModifier[1])
             assert particle.T<=TMax
             weights.append(particle.T)
-        histogramNumParticles, _, _ = np.histogram2d(xPlotVals, yPlotVals, bins=50)
-        histogramSurvivalTimes, binsx, binsy = np.histogram2d(xPlotVals, yPlotVals, bins=50, weights=weights)
+        histogramNumParticles, _, _ = np.histogram2d(xPlotVals, yPlotVals, bins=bins)
+        histogramSurvivalTimes, binsx, binsy = np.histogram2d(xPlotVals, yPlotVals, bins=bins, weights=weights)
         histogramNumParticles[histogramNumParticles == 0] = np.nan
         histogramAcceptance = histogramSurvivalTimes / (histogramNumParticles * TMax)
         histogramAcceptance = np.rot90(histogramAcceptance)
+        histogramAcceptance[np.isnan(histogramAcceptance)]=emptyVals
         plt.title('Phase space acceptance')
         plt.imshow(histogramAcceptance, extent=[binsx.min(), binsx.max(), binsy.min(), binsy.max()], aspect='auto')
         plt.colorbar()

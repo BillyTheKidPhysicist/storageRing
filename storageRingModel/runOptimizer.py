@@ -63,19 +63,17 @@ def solve_For_Lattice_Params(_params:tuple)-> Solution:
 def wrapper(params):
     sol=solve_For_Lattice_Params(params)
     if sol.fluxMultiplication>10:
-        print('speed: ',params[0])
         print(sol)
     cost=sol.cost
     return cost
 
 def main():
-    bounds = list(optimizerBounds_V1_3.values())
+    bounds = np.array(list(optimizerBounds_V1_3.values()))
 
     solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
-    # x = [0.011289371309399825, 0.01, 0.03221557023564858,
-    #      0.007377437528248196, 0.1, 0.4]
-    # x.extend(injectorParamsOptimalAny.values())
-    # x = np.array(x)
+
+    # x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166,
+    #      0.51208528]
     # print(wrapper(x))
     # plot_Results(x)
 if __name__=='__main__':
