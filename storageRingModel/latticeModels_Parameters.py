@@ -99,7 +99,7 @@ _constants_Version1_2={
     "OP_MagAp_Circulating":.035/2.0,
     "OP_PumpingRegionLength":.01, #distance for effective optical pumping
     "bendingApMax":.01, #maximum from 1.33 flange limit (ID/2). I rounded up
-    "lensToBendGap":inch_To_Meter(2), #same at each joint. Vacuum tube limited
+    "lensToBendGap":inch_To_Meter(2), #same at each bend to lens joint. Vacuum tube limited
     "observationGap": inch_To_Meter(2), #gap required for observing atoms
     "rbTarget": 1.0, #target bending radius
     "sourceToLens1_Inject_Gap":.05, #gap between source and first lens. Shouldn't have first lens on top of source

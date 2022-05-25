@@ -40,17 +40,16 @@ class Particle(ParticleBase):
         self.deltaE=None
 class SwarmSnapShot:
     def __init__(self,swarm:Swarm,xSnapShot):
-        assert xSnapShot>0.0 #orbit coordinates, not real coordinates
+        assert xSnapShot>=0.0 #orbit coordinates, not real coordinates
         for particle in swarm: assert particle.dataLogging==True
-        self.swarmPhaseSpace=Swarm()
+        self.particles: list[Particle]=[]
         self._take_SnapShot(swarm,xSnapShot)
-    def __iter__(self):
-        return (particle for particle in self.swarmPhaseSpace)
+
     def _take_SnapShot(self,swarm,xSnapShot):
         for particle in swarm:
             particleSnapShot=Particle(qi=particle.qi.copy(),pi=particle.pi.copy())
             particleSnapShot.probability=particle.probability
-            if self._check_If_Particle_Made_It_To_x(particle,xSnapShot)==False:
+            if self._check_If_Particle_Can_Be_Interpolated(particle,xSnapShot)==False:
                 particleSnapShot.qo=particle.qoArr[-1].copy()
                 particleSnapShot.po=particle.pArr[-1].copy()
                 particleSnapShot.pf=particle.pf.copy()
@@ -65,16 +64,18 @@ class SwarmSnapShot:
                 particleSnapShot.qo=qo
                 particleSnapShot.po=po
                 particleSnapShot.clipped=False
-            self.swarmPhaseSpace.particles.append(particleSnapShot)
-        if self.swarmPhaseSpace.survival_Bool()==0:
+            self.particles.append(particleSnapShot)
+        if self.num_Surviving()==0:
             warnings.warn("There are no particles that survived to the snapshot position")
-    def _check_If_Particle_Made_It_To_x(self,particle,x):
+    def _check_If_Particle_Can_Be_Interpolated(self,particle,x):
         #this assumes orbit coordinates
-        if len(particle.qoArr)==0: return False #clipped immediately probably
-        elif particle.qoArr[-1,0]>x:return True
+        if len(particle.qoArr)==0: 
+            return False #clipped immediately probably
+        elif particle.qoArr[-1,0]>x>particle.qoArr[0,0]:
+            return True
         else:return False
     def num_Surviving(self):
-        num=sum([not particle.clipped for particle in self.swarmPhaseSpace])
+        num=sum([not particle.clipped for particle in self.particles])
         return num
     def _get_Phase_Space_Coords_And_Energy_SnapShot(self,particle,xSnapShot):
         qoArr=particle.qoArr #position in orbit coordinates
@@ -98,17 +99,12 @@ class SwarmSnapShot:
         return v
     def get_Surviving_Particle_PhaseSpace_Coords(self):
         #get coordinates of surviving particles
-        qoList=[]
-        poList=[]
-        for particle in self.swarmPhaseSpace:
-            if particle.clipped==False:
-                qoList.append(particle.qoArr)
-                poList.append(particle.poArr)
-        phaseSpaceCoords=np.column_stack((qoList,poList))
+        phaseSpaceCoords=[(*particle.qo,*particle.po) for particle in self.particles if not particle.clipped]
+        phaseSpaceCoords=np.array(phaseSpaceCoords)
         return phaseSpaceCoords
     def get_Particles_Energy(self,returnChangeInE=False,survivingOnly=True):
         EList=[]
-        for particle in self.swarmPhaseSpace:
+        for particle in self.particles:
             if particle.clipped==True and survivingOnly==True:
                 pass
             else:

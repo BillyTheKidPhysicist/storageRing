@@ -24,7 +24,6 @@ class Particle:
         self.pi=pi.copy()#initial momentu, lab frame, meters*kg/s, where mass=1
         self.qf=None #final position
         self.pf=None #final momentum
-        self.qoFinal=None #final orbit coordinates
         self.T=0 #time of particle in simulation
         self.traced=False #recored wether the particle has already been sent throught the particle tracer
         self.color=None #color that can be added to each particle for plotting
@@ -45,6 +44,7 @@ class Particle:
         self._pList=[] #List of momentum vectors
         self._qList=[] #List of position vector
         self._qoList=[] #List of position in orbit frame vectors
+        self._poList=[]
         self._TList=[] #kinetic energy list. Each entry contains the element index and corresponding energy
         self._VList=[] #potential energy list. Each entry contains the element index and corresponding energy
         #array versions
@@ -52,6 +52,7 @@ class Particle:
         self.p0Arr=None #array of norm of momentum.
         self.qArr=None
         self.qoArr=None
+        self.poArr=None
         self.TArr=None
         self.VArr=None
         self.EArr=None #total energy
@@ -75,21 +76,18 @@ class Particle:
         string+='revolution: '+str(self.revolutions)+' \n'
         return string
 
-    def log_Params(self,currentEl: Element,qel: np.ndarray,pel: np.ndarray)-> None:
-        #this records value like position and momentum
-        #qel: element position coordinate
-        #pel: momentum position coordinate
-        # print(qel,self.cumulativeLength)
-        q = currentEl.transform_Element_Coords_Into_Lab_Frame(qel)
-        p = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pel)
-        self._qList.append(q.copy())
-        self._pList.append(p.copy())
-        self._TList.append((currentEl.index,np.sum(p**2)/2.0))
+    def log_Params(self, currentEl: Element, qEl: np.ndarray, pEl: np.ndarray)-> None:
+        qLab = currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
+        pLab = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)
+        self._qList.append(qLab.copy())
+        self._pList.append(pLab.copy())
+        self._TList.append((currentEl.index,np.sum(pLab**2)/2.0))
         if currentEl is not None:
-            qel=currentEl.transform_Lab_Coords_Into_Element_Frame(q)
+            qEl=currentEl.transform_Lab_Coords_Into_Element_Frame(qLab)
             elIndex=currentEl.index
-            self._qoList.append(currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(q, self.cumulativeLength))
-            self._VList.append((elIndex,currentEl.magnetic_Potential(qel)))
+            self._qoList.append(currentEl.transform_Element_Coords_Into_Global_Orbit_Frame(qEl, self.cumulativeLength))
+            self._poList.append(currentEl.transform_Element_Momentum_Into_Global_Orbit_Frame(qEl,pEl))
+            self._VList.append((elIndex,currentEl.magnetic_Potential(qEl)))
 
     def get_Energy(self,currentEl: Element,qEl: np.ndarray,pEl: np.ndarray)-> float:
         V=currentEl.magnetic_Potential(qEl)
@@ -126,7 +124,7 @@ class Particle:
             cumulativeLength=self.cumulativeLength
         for i in range(qElArr.shape[0]):
             qList.append(driftEl.transform_Element_Coords_Into_Lab_Frame(qElArr[i]))
-            self._qoList.append(driftEl.transform_Lab_Coords_Into_Global_Orbit_Frame(qList[-1],cumulativeLength))
+            self._qoList.append(driftEl.transform_Element_Coords_Into_Global_Orbit_Frame(qElArr[i],cumulativeLength))
             pList.append(driftEl.transform_Element_Frame_Vector_Into_Lab_Frame(pElArr[i]))
         #now fill the lists that log parameters
         self._qList.extend(qList)
@@ -168,6 +166,8 @@ class Particle:
             self._pList = []
             self.qoArr = np.asarray(self._qoList)
             self._qoList = []
+            self.poArr=np.asarray(self._poList)
+            self._poList=[]
             if self.pArr.shape[0]!=0:
                 self.p0Arr=npl.norm(self.pArr,axis=1)
             self.fill_Energy_Array_And_Dicts()
@@ -178,8 +178,8 @@ class Particle:
             self.currentElIndex=self.currentEl.index
             if totalLatticeLength is not None:
                 self.totalLatticeLength=totalLatticeLength
-                self.qoFinal=self.currentEl.transform_Lab_Coords_Into_Global_Orbit_Frame(self.qf, self.cumulativeLength)
-                self.revolutions=self.qoFinal[0]/totalLatticeLength
+                qoFinal=self.currentEl.transform_Element_Coords_Into_Global_Orbit_Frame(qEl, self.cumulativeLength)
+                self.revolutions=qoFinal[0]/totalLatticeLength
             self.currentEl=None # to save memory
 
     def plot_Energies(self,showOnlyTotalEnergy: bool=False)-> None:

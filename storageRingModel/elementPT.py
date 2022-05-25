@@ -39,6 +39,14 @@ def is_Even(x: int)-> bool:
     assert type(x) is int and x>0
     return True if x%2==0 else False
 
+def mirror_Across_Angle(x: float,y: float,ang: float)-> tuple[float,float]:
+    """mirror_Across_Angle x and y across a line at angle "ang" that passes through the origin"""
+    m=np.tan(ang)
+    d=(x+y*m)/(1+m**2)
+    xMirror=2*d-x
+    yMirror=2*d*m-y
+    return xMirror,yMirror
+
 class ElementDimensionError(Exception):
     """Some dimension of an element is causing an unphysical configuration. Rather general error"""
     pass
@@ -199,7 +207,7 @@ class Element:
         """
         return np.asarray(self.fastFieldHelper.force(*qEl)) #will raise NotImplementedError if called
 
-    def transform_Lab_Coords_Into_Global_Orbit_Frame(self, qLab:np.ndarray, cumulativeLength:float)->np.ndarray:
+    def transform_Element_Coords_Into_Global_Orbit_Frame(self, qEl:np.ndarray, cumulativeLength:float)->np.ndarray:
         """
         Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
         observer/lab cartesian coordinates.
@@ -209,10 +217,15 @@ class Element:
         would simply be the sum of their length, float
         :return: New 3D global orbit frame position, numpy.ndarray([x,y,z])
         """
-        qEl = self.transform_Lab_Coords_Into_Element_Frame(qLab)
+
         qOrbit = self.transform_Element_Coords_Into_Local_Orbit_Frame(qEl)
         qOrbit[0] = qOrbit[0] + cumulativeLength  # longitudinal component grows
         return qOrbit
+
+    def transform_Element_Momentum_Into_Global_Orbit_Frame(self,qEl:np.ndarray, pEl: np.ndarray)->np.ndarray:
+        """wraps self.transform_Element_Momentum_Into_Local_Orbit_Frame"""
+
+        return self.transform_Element_Momentum_Into_Local_Orbit_Frame(qEl,pEl)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab:np.ndarray)->np.ndarray:
         """
@@ -253,6 +266,17 @@ class Element:
         :return: New 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
             the orbit trajectory. xo is in the xy lab plane, yo is perpdindicular Not necessarily the same as the
             distance along the center of the element.
+        """
+        raise NotImplementedError
+
+    def transform_Element_Momentum_Into_Local_Orbit_Frame(self,qEl:np.ndarray, pEl: np.ndarray)->np.ndarray:
+        """
+        Transform momentum vector in element frame in frame moving along with nominal orbit. In this frame px is the
+        momentum tangent to the orbit, py is perpindicular and horizontal, pz is vertical.
+
+        :param qEl: 3D Position vector in element frame
+        :param pEl: 3D Momentum vector in element frame
+        :return: New 3D momentum vector in orbit frame
         """
         raise NotImplementedError
 
@@ -410,14 +434,23 @@ class LensIdeal(Element):
         return qNew
 
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
-        """Overrides abstract method from Element. Element and orbit frame is identical"""
+        """Overrides abstract method from Element class. Element and orbit frame is identical in simple
+        straight elements"""
+
         return qEl.copy()
 
     def set_Length(self, L:float)->None:
         """this is used typically for setting the length after satisfying constraints"""
+
         assert L>0.0
         self.L = L
         self.Lo = self.L
+
+    def transform_Element_Momentum_Into_Local_Orbit_Frame(self,qEl:np.ndarray, pEl: np.ndarray)->np.ndarray:
+        """Overrides abstract method from Element class. Element and orbit frame is identical in simple
+        straight elements"""
+
+        return pEl.copy()
 
 
 class Drift(LensIdeal):
@@ -534,6 +567,17 @@ class BenderIdeal(Element):
         qLab[:2]=self.ROut@qLab[:2]
         qLab+=self.r0
         return qLab
+
+    def transform_Element_Momentum_Into_Local_Orbit_Frame(self,qEl:np.ndarray, pEl: np.ndarray) -> np.ndarray:
+        """Overrides abstract method from Element class. Simple cartesian to cylinderical coordinates"""
+
+        x,y,z=qEl
+        xDot,yDot,zDot=pEl
+        r=np.sqrt(x**2+y**2)
+        rDot=(x*xDot+y*yDot)/r
+        thetaDot=(x*yDot-xDot*y)/r**2
+        velocityTangent=-r*thetaDot
+        return np.array([velocityTangent,rDot,zDot]) #tanget, perpindicular horizontal, perpindicular vertical
 
 
 class CombinerIdeal(Element):
@@ -662,6 +706,11 @@ class CombinerIdeal(Element):
         qo[0] = self.Lo - qo[0]
         qo[1] = 0  # qo[1]
         return qo
+
+    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
+        """Overrides abstract method from Element class. Not supported at the moment, so returns np.nan array instead"""
+
+        return np.array([np.nan,np.nan,np.nan])
 
     def transform_Element_Coords_Into_Lab_Frame(self,qEl:np.ndarray)->np.ndarray:
         """Overrides abstract method from Element"""
@@ -1044,37 +1093,57 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataUnshaped = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
         return self.shape_Field_Data_3D(fieldDataUnshaped)
 
+    def in_Which_Section_Of_Bender(self,qEl: np.ndarray)-> str:
+        """Find which section of the bender qEl is in. options are:
+            - 'IN' refers to the westward cap. at some angle
+            - 'OUT' refers to the eastern. input is aligned with y=0
+            - 'ARC' in the bending arc between input and output caps
+        Return 'NONE' if not inside the bender"""
+
+        angle = full_Arctan(qEl)
+        if 0<=angle<=self.ang:
+            return 'ARC'
+        capNames=['IN','OUT']
+        for name in capNames:
+            xCap, yCap = mirror_Across_Angle(qEl[0], qEl[1], self.ang / 2.0) if name == 'IN' else qEl[:2]
+            if (self.rb - self.ap < xCap < self.rb + self.ap) and (0 > yCap > -self.Lcap):
+                return name
+        return 'NONE'
+
     def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl:np.ndarray)->np.ndarray:
-        # q: element coordinates (x,y,z)
-        # returns qo: the coordinates in the orbit frame (s,xo,yo)
 
-        qo = qEl.copy()
-        angle = full_Arctan(qo)#np.arctan2(qo[1], qo[0])
-        if angle < 0:  # restrict range to between 0 and 2pi
-            angle += 2 * np.pi
-
-        if angle < self.ang:  # if particle is in the bending angle section. Could still be outside though
-            phi = self.ang - angle  # angle swept out by particle in trajectory. This is zero
-            # when the particle first enters
-            qox = sqrt(qEl[0] ** 2 + qEl[1] ** 2) - self.ro
-            qo[0] = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
-            qo[1] = qox
-        else:  # if particle is outside of the bending segment angle so it could be in the caps, or elsewhere
-            if (self.rb - self.ap < qEl[0] < self.rb + self.ap) and (0 > qEl[1] > -self.Lcap):  # If inside the cap on
-                # the eastward side
-                qo[0] = self.Lcap + self.ang * self.ro + (-qEl[1])
-                qo[1] = qEl[0] - self.ro
-            else:
-                qTest = qEl.copy()
-                qTest[0] = self.RIn_Ang[0, 0] * qEl[0] + self.RIn_Ang[0, 1] * qEl[1]
-                qTest[1] = self.RIn_Ang[1, 0] * qEl[0] + self.RIn_Ang[1, 1] * qEl[1]
-                # if in the westard side cap
-                if (self.rb - self.ap < qTest[0] < self.rb + self.ap) and (self.Lcap > qTest[1] > 0):
-                    qo[0] = self.Lcap - qTest[1]
-                    qo[1] = qTest[0] - self.ro
-                else:  # if in neither then it must be outside
-                    qo[:] = np.nan
+        whichSection=self.in_Which_Section_Of_Bender(qEl)
+        if whichSection=='ARC':
+            phi = self.ang - full_Arctan(qEl)
+            xo = sqrt(qEl[0] ** 2 + qEl[1] ** 2) - self.ro
+            so = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
+        elif whichSection=='OUT':
+            so = self.Lcap + self.ang * self.ro + (-qEl[1])
+            xo = qEl[0] - self.ro
+        elif whichSection=='IN':
+            xMirror,yMirror=mirror_Across_Angle(qEl[0],qEl[1],self.ang/2.0)
+            so = self.Lcap +yMirror
+            xo = xMirror - self.ro
+        else:
+            raise ValueError
+        qo=np.array([so,xo,qEl[2]])
         return qo
+
+    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl:np.ndarray,pEl:np.ndarray)->np.ndarray:
+        """Overrides abstract method from Element class. Mildly tricky. Need to determine if the position is in
+        one of the caps or the bending segment, then handle accordingly"""
+
+        whichSection=self.in_Which_Section_Of_Bender(qEl)
+        if whichSection=='ARC':
+            return super().transform_Element_Momentum_Into_Local_Orbit_Frame(qEl,pEl)
+        elif whichSection=='OUT':
+            pso,pxo=-pEl[1],pEl[0]
+        elif whichSection=='IN':
+            pxo,pso=mirror_Across_Angle(pEl[0],pEl[1],self.ang/2.0)
+        else:
+            raise ValueError
+        pOrbit = np.array([pso,pxo,qEl[-2]])
+        return pOrbit
 
     def _get_Shapely_Object_Of_Bore(self):
         """Shapely object of bore in x,z plane with y=0. Not of vacuum tube, but of largest possible bore. For two
