@@ -102,8 +102,8 @@ class SwarmSnapShot:
         poList=[]
         for particle in self.swarmPhaseSpace:
             if particle.clipped==False:
-                qoList.append(particle.qo)
-                poList.append(particle.po)
+                qoList.append(particle.qoArr)
+                poList.append(particle.poArr)
         phaseSpaceCoords=np.column_stack((qoList,poList))
         return phaseSpaceCoords
     def get_Particles_Energy(self,returnChangeInE=False,survivingOnly=True):

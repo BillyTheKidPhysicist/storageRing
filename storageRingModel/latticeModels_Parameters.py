@@ -96,7 +96,7 @@ _constants_Version1_2={
     "gap2Min": inch_To_Meter(3.5), #from lens to combiner
     "OP_MagWidth": .065+2*.035, #account for fringe fields with .02
     "OP_MagAp_Injection":.022/2.0,
-    "OP_MagAp_Circulating":.03/2.0,
+    "OP_MagAp_Circulating":.035/2.0,
     "OP_PumpingRegionLength":.01, #distance for effective optical pumping
     "bendingApMax":.01, #maximum from 1.33 flange limit (ID/2). I rounded up
     "lensToBendGap":inch_To_Meter(2), #same at each joint. Vacuum tube limited

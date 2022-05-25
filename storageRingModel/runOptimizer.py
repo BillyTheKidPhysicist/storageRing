@@ -70,12 +70,11 @@ def wrapper(params):
 def main():
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
-    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
+    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
 
-    # x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166,
-    #      0.51208528]
+    x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166, 0.51208528]
     # print(wrapper(x))
-    # plot_Results(x)
+    plot_Results(x)
 if __name__=='__main__':
     main()
 

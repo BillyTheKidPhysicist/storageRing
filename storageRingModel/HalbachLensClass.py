@@ -272,7 +272,7 @@ class Layer(billyHalbachCollectionWrapper):
         self.phiShift: np.ndarray=self.make_Arr_If_None_Else_Copy(phiShift)
         self.M_NormShiftRelative: np.ndarray=self.make_Arr_If_None_Else_Copy(M_NormShiftRelative)
         self.dimShift: np.ndarray=self.make_Arr_If_None_Else_Copy(dimShift,numParams=3)
-        self.M_AngleShift: np.ndarray=self.make_Arr_If_None_Else_Copy(M_AngleShift)
+        self.M_AngleShift: np.ndarray=self.make_Arr_If_None_Else_Copy(M_AngleShift,numParams=2)
         self.rp: tuple = (rp,)*self.numMagnetsInLayer
         self.mur=mur #relative permeability
         self.positionToSet=position
@@ -286,6 +286,7 @@ class Layer(billyHalbachCollectionWrapper):
     def make_Arr_If_None_Else_Copy(self, variable: Optional[list_tuple_arr], numParams=1)-> np.ndarray:
         """If no misalignment is supplied, making correct shaped array of zeros, also check shape of provided array
         is correct"""
+        assert variable.shape[1]==numParams if variable is not None else True
         variableArr= np.zeros((self.numMagnetsInLayer,numParams)) if variable is None else copy.copy(variable)
         assert len(variableArr)==self.numMagnetsInLayer and len(variableArr.shape)==2
         return variableArr
@@ -351,11 +352,7 @@ class Layer(billyHalbachCollectionWrapper):
         magnetizationAll=magnetizationSingle*np.ones((self.numMagnetsInLayer,3))
         magnetizationAll*=(1+self.M_NormShiftRelative) #add specified fraction shifts, typically errors
         for M,M_Angle in zip(magnetizationAll,self.M_AngleShift):
-            if np.all(M_Angle!=0):
-                assert M[0]!=0.0 and np.all(M[1:]==0.0) and len(M_Angle)==2
-                R = Rotation.from_rotvec([0.0, M_Angle[0], M_Angle[1]])
-            else:
-                R=Rotation.from_rotvec([0.0,0.0,0.0])
+            R = Rotation.from_rotvec([0.0, M_Angle[0], M_Angle[1]])
             M[:]=R.as_matrix()@M[:] #edit in place
         assert magnetizationAll.shape == (self.numMagnetsInLayer, 3)
         return magnetizationAll
@@ -383,6 +380,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         self.length: float = length
         self.applyMethodOfMoments: bool = applyMethodOfMoments
         self.useStandardMagErrors: bool=useStandardMagErrors
+        if sameSeed is True: raise Exception
         self.sameSeed: bool=sameSeed
         self.M: float = M
         self.numSlices=numSlices
@@ -399,7 +397,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                 if self.useStandardMagErrors==True:
                     dimVariation, magVecAngleVariation, magNormVariation=self.standard_Magnet_Errors()
                 else:
-                    dimVariation, magVecAngleVariation, magNormVariation=[np.zeros((12,1))]*3
+                    dimVariation, magVecAngleVariation, magNormVariation=np.zeros((12,3)),np.zeros((12,2)),np.zeros((12,1))
                 layer=Layer(radiusLayer,widthLayer,length,M=self.M,position=(0,0,zLayer),
                             M_AngleShift=magVecAngleVariation,dimShift=dimVariation,
                             M_NormShiftRelative=magNormVariation,mur=self.mur)
@@ -418,19 +416,26 @@ class HalbachLens(billyHalbachCollectionWrapper):
         dimTol=inch_To_Meter(.004) #dimension variation,inch to meter, +/- meters
         MagVecAngleTol=radians(1.5) #magnetization vector angle tolerane,degree to radian,, +/- radians
         MagNormTol=.0125 #magnetization value tolerance, +/- fraction
-        dimVariation=self.make_Base_Error_Arr(numParams=3)*dimTol
-        MagVecAngleVariation=self.make_Base_Error_Arr(numParams=2)*MagVecAngleTol/np.sqrt(2) #two dimensional variation
-        magNormVariation=self.make_Base_Error_Arr()*MagNormTol
+        dimVariation=self.make_Base_Error_Arr_Cartesian(numParams=3)*dimTol
+        MagVecAngleVariation=self.make_Base_Error_Arr_Circular()*MagVecAngleTol
+        magNormVariation=self.make_Base_Error_Arr_Cartesian()*MagNormTol
         if self.sameSeed==True:
             #todo: Does this random seed thing work, or is it a pitfall?
             np.random.seed(int(time.time()))
         return dimVariation,MagVecAngleVariation,magNormVariation
 
-    def make_Base_Error_Arr(self,numParams=1):
+    def make_Base_Error_Arr_Cartesian(self,numParams: int=1)-> np.ndarray:
         """values range between -1 and 1 with shape (12,numParams)"""
         return 2*(np.random.random_sample((self.numMagnetsInLayer,numParams)) - .5)
 
-    def subdivide_Lens(self):
+    def make_Base_Error_Arr_Circular(self)->np.ndarray:
+        """Make error array confined inside unit circle. Return results in cartesian with shape (12,2)"""
+        theta=2*np.pi*np.random.random_sample(self.numMagnetsInLayer)
+        radius=np.random.random_sample(self.numMagnetsInLayer)
+        x,y=np.cos(theta)*radius,np.sin(theta)*radius
+        return np.column_stack((x,y))
+
+    def subdivide_Lens(self)-> tuple[np.ndarray,np.ndarray]:
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
          if the lens is composed of slices"""
         if self.numSlices is None:
