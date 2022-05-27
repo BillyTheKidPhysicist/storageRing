@@ -307,7 +307,7 @@ class SwarmTracer:
 
     def trace_Swarm_Through_Lattice(self, swarm: Swarm, h: float, T: float, parallel: bool=False, fastMode: bool=True,
                                     copySwarm: bool=True, accelerated: bool=False,stepsBetweenLogging: int=1,
-                                    energyCorrection: bool=False,tau_Collision: Optional[float]=None,
+                                    energyCorrection: bool=False,collisionDynamics: bool=False,
                                     logPhaseSpaceCoords:bool=False)-> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
@@ -315,8 +315,8 @@ class SwarmTracer:
             swarmNew = swarm
         def trace_Particle(particle):
             particleNew = self.particleTracer.trace(particle, h, T, fastMode=fastMode, accelerated=accelerated,
-            stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection,tau_Collision=tau_Collision,
-                                                    logPhaseSpaceCoords=logPhaseSpaceCoords)
+            stepsBetweenLogging=stepsBetweenLogging,energyCorrection=energyCorrection,
+                                                logPhaseSpaceCoords=logPhaseSpaceCoords,collisionDynamics=collisionDynamics)
             return particleNew
         if parallel=='superfast':
             #use trick of accessing only the important class variabels and passing those through. about 30%

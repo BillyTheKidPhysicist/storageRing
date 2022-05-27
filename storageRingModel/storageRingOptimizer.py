@@ -47,7 +47,7 @@ class Solution:
 class LatticeOptimizer:
     
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
-                 numParticlesSwarm: int=1024):
+                 numParticlesSwarm: int=1024,collisionDynamics: bool=False):
         assert latticeRing.latticeType=='storageRing' and latticeInjector.latticeType=='injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -79,6 +79,7 @@ class LatticeOptimizer:
         self.numParticlesSurrogate=50
         self.swarmInjectorInitial=None
         self.swarmInjectorInitial_Surrogate=None
+        self.collisionDynamics=collisionDynamics
         self.generate_Swarms()
 
     def generate_Swarms(self)-> None:
@@ -217,11 +218,12 @@ class LatticeOptimizer:
         self.swarmInjectorInitial.particles=self.swarmInjectorInitial.particles[:100]
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
             self.swarmInjectorInitial.quick_Copy(), 1e-5, 1, parallel=False,
-            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True,energyCorrection=True)
+            fastMode=False, copySwarm=False, accelerated=False,logPhaseSpaceCoords=True,energyCorrection=True,
+            collisionDynamics=self.collisionDynamics)
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                             copyParticles=True,onlyUnclipped=False)
         swarmRingTraced=self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial,1e-5,1,fastMode=False,
-                                                    parallel=False,energyCorrection=True,stepsBetweenLogging=4)
+                    parallel=False,energyCorrection=True,stepsBetweenLogging=4,collisionDynamics=self.collisionDynamics)
 
         for particleInj,particleRing in zip(swarmInjectorTraced,swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped) #this wouldn't make sense
@@ -266,7 +268,8 @@ class LatticeOptimizer:
         self.update_Ring_And_Injector(X)
         swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring(useSurrogate)
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
-                                    fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection)
+                            fastMode=True, accelerated=True, copySwarm=False,energyCorrection=energyCorrection,
+                                                                       collisionDynamics=self.collisionDynamics)
         return swarmTraced
     
     def transform_Swarm_From_Injector_Frame_To_Ring_Frame(self, swarmInjectorTraced: Swarm,
@@ -294,7 +297,8 @@ class LatticeOptimizer:
         else:
             swarm=self.swarmInjectorInitial
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True,accelerated=True)
+            swarm.quick_Copy(), self.h, 1.0, fastMode=True, copySwarm=False,logPhaseSpaceCoords=True,accelerated=True,
+            collisionDynamics=self.collisionDynamics)
         swarmRingInitial=self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,copyParticles=True)
         return swarmRingInitial
 
@@ -305,7 +309,7 @@ class LatticeOptimizer:
         swarmTestInitial = self.swarmTracerRing.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
         swarmTestAtCombiner = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTestInitial)
         swarmTestTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
-                                T_Max, accelerated=False, fastMode=True)
+                                T_Max, accelerated=False, fastMode=True,collisionDynamics=self.collisionDynamics)
         stable = False
         for particle in swarmTestTraced:
             if particle.revolutions > minRevsToTest: #any stable particle, consider lattice stable

@@ -87,6 +87,8 @@ flange_OD: lockedDict=lockedDict({
     '4-1/2': 114e-3
 })
 
+standard_Tubing_OD = (3/16,1/4,3/8,1/2,5/8,3/4,1.0)
+
 atomCharacteristic=lockedDict({"nominalDesignSpeed":DEFAULT_ATOM_SPEED})#Elements are placed assuming this is the nominal
 # speed in the ring.
 

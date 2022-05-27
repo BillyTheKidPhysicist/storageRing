@@ -3,12 +3,14 @@ import math
 from typing import Optional
 from math import isnan,sqrt
 import numba
-import numpy.linalg as npl
+from collisionPhysics import collision
 import numpy as np
+from numba.typed import List
 from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 import elementPT
-from constants import GRAVITATIONAL_ACCELERATION
+from constants import GRAVITATIONAL_ACCELERATION,BOLTZMANN_CONSTANT,MASS_LITHIUM_7,SIMULATION_MAGNETON
+from collisionPhysics import apply_Collision,get_Collision_Params
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
@@ -31,7 +33,6 @@ def fast_pNew(p,F,F_n,h):
     return p+.5*(F+F_n)*h
 
 
-
 @numba.njit()
 def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
     #don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
@@ -44,6 +45,7 @@ def _transform_To_Next_Element(q,p,r01,r02,ROutEl1,RInEl2):
     p[:2]=ROutEl1@p[:2]
     p[:2]=RInEl2@p[:2]
     return q,p
+
 #this class does the work of tracing the particles through the lattice with timestepping algorithms.
 #it utilizes fast numba functions that are compiled and saved at the moment that the lattice is passed. If the lattice
 #is changed, then the particle tracer needs to be updated.
@@ -59,7 +61,7 @@ class ParticleTracer:
 
         self.PTL=PTL
 
-        self.tau_Collision=np.inf #collision time constant
+        self.collisionDynamics=None
         self.T_CollisionLast=0.0 # time since last collision
         self.accelerated=None
 
@@ -134,7 +136,7 @@ class ParticleTracer:
             self.particle.log_Params(self.currentEl,self.qEl,self.pEl)
 
     def trace(self,particle: Optional[Particle],h: float,T0: float,fastMode: bool=False,accelerated: bool=False,
-              energyCorrection: bool=False,stepsBetweenLogging: int=1, tau_Collision: bool=None,
+              energyCorrection: bool=False,stepsBetweenLogging: int=1, collisionDynamics: bool=False,
               logPhaseSpaceCoords:bool=False)-> Particle:
         #trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         #the particle's position transformed into the element frame and then the force is transformed out. This is obviously
@@ -145,9 +147,7 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
-        if tau_Collision is not None and tau_Collision<=0.0:
-            raise Exception('Collision time must be None or nonzero positive number')
-        self.tau_Collision=tau_Collision if tau_Collision is not None else np.inf
+        self.collisionDynamics=collisionDynamics
         self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
         self.logPhaseSpaceCoords=logPhaseSpaceCoords
@@ -231,19 +231,23 @@ class ParticleTracer:
                 self.particle.clipped=self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self)-> None:
-        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fastFieldHelper)
+        collisionParams=get_Collision_Params(self.currentEl,self.PTL.v0Nominal)
+        results=self._multi_Step_Verlet(self.qEl,self.pEl,self.T,self.T0,self.h,self.currentEl.fastFieldHelper,
+                                        collisionParams,self.collisionDynamics)
         qEl_n,self.qEl[:],self.pEl[:],self.T,particleOutside=results
         qEl_n=np.array(qEl_n)
         self.particle.T=self.T
         if particleOutside:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n,self.qEl,self.pEl)
 
+
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper):
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper,collisionParams,applyCollisions):
         #pylint: disable = E, W, R, C
         # copy the input arrays to prevent modifying them outside the function
         force=helper.force
+        collisionRate= 0.0 if not applyCollisions else collisionParams[1]
         x, y, z = qEln
         px, py, pz = pEln
         Fx, Fy, Fz = force(x,y,z)
@@ -276,6 +280,8 @@ class ParticleTracer:
             pz =pz+.5 * (Fz_n + Fz) * h
             Fx, Fy, Fz = Fx_n, Fy_n, Fz_n
             T += h
+            if np.random.rand() < h*collisionRate:
+                px,py,pz=apply_Collision((px,py,pz),(x,y,z),collisionParams)
 
     @staticmethod
     @numba.njit(numba.float64(numba.float64[:],numba.float64[:],numba.float64))
@@ -353,12 +359,12 @@ class ParticleTracer:
             return
         #a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n=fast_pNew(pEl,F,F_n,self.h)
-        # if self.tau_Collision is not None:
-        #     probabilityCutoff=self.h/self.tau_Collision
-        #     if np.random.rand()<probabilityCutoff:
-        #         vHe=self.sample_Helium_Momentum()
-        #         pEl_n=np.asarray(vLi_final(pEl_n,vHe))
-        #         self.T_CollisionLast = self.T
+        if self.collisionDynamics:
+            collisionParams = get_Collision_Params(self.currentEl,self.PTL.v0Nominal)
+            if collisionParams[0]!='NONE':
+                if np.random.rand() < self.h * collisionParams[1]:
+                    pEl_n[:] = apply_Collision(tuple(pEl_n), tuple(qEl_n), collisionParams)
+
         self.qEl=qEl_n
         self.pEl=pEl_n
         self.forceLast=F_n #record the force to be recycled
@@ -465,11 +471,3 @@ class ParticleTracer:
                     if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qElLab)):
                         return el
             return None
-
-    # def sample_Helium_Momentum(self)-> tuple[float,float,float]:
-    #     T_Room = 300.0
-    #     sigma = np.sqrt(BOLTZMANN_CONSTANT * T_Room / MASS_HELIUM)
-    #     px = np.random.normal(loc=0.0, scale=sigma)
-    #     py = np.random.normal(loc=0.0, scale=sigma)
-    #     pz = np.random.normal(loc=0.0, scale=sigma)
-    #     return px, py, pz

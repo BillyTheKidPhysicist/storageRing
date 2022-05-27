@@ -2,7 +2,7 @@ import numpy.linalg as npl
 import numpy as np
 import numba
 from math import floor
-from constants import SIMULATION_MAGNETON
+from constants import SIMULATION_MAGNETON,MASS_LITHIUM_7,BOLTZMANN_CONSTANT
 
 #this needs to be refactored
 

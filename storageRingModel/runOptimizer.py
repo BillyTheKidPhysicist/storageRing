@@ -25,11 +25,11 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     return sol
 
 def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice)-> Solution:
-    optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
+    optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector,collisionDynamics=True)
 
     sol = Solution()
     knobParams = None
-    swarmCost, floorPlanCost,swarmTraced = optimizer.mode_Match_Cost(knobParams, False, True, floorPlanCostCutoff=.05,
+    swarmCost, floorPlanCost,swarmTraced = optimizer.mode_Match_Cost(knobParams, False, False, floorPlanCostCutoff=.05,
                                                          rejectUnstable=False, returnFullResults=True)
     if swarmTraced is None: #wasn't traced because of other cutoff
         sol.floorPlanCost = floorPlanCost
@@ -71,12 +71,31 @@ def main():
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
     # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
-
+    #
     x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166, 0.51208528]
     # print(wrapper(x))
-    plot_Results(x)
+    def func(T):
+        from temp3 import MUT
+        MUT.T=T
+        return wrapper(x)
+    # from helperTools import tool_Parallel_Process
+    # TArr=np.arange(0.0,.015,.001)
+    # res= tool_Parallel_Process(func,TArr)
+    # print(res)
+    print(func(0.01))
+    # plot_Results(x)
 if __name__=='__main__':
     main()
+
+"""
+----------Solution-----------   
+parameters: None
+cost: 0.7977996715202829
+flux multiplication: 63.53567502478887
+----------------------------
+0.7977996715202829
+"""
+
 
 
 """
