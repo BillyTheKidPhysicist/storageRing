@@ -60,14 +60,14 @@ def collision_Rate(T: float, rp_Meters: float)-> frequency:
     rp=rp_Meters*1e2 #convert to cm
     vRelThermal=1e2*np.sqrt(16 * BOLTZMANN_CONSTANT*T/(3.14 *MASS_LITHIUM_7)) #cm/s
     vRelRingDynamics=50.0 #cm/s .even with zero temperature, there is still relative motion between atoms
-    vRel=max([vRelRingDynamics,vRelThermal])
+    vRel=np.sqrt(vRelRingDynamics**2+vRelThermal**2) #cm/s
     sigma=5e-13 #cm^2
     speed=210*1e2 #cm^2
     flux=2e12*500 #1/s
     area=np.pi*(.7*rp)**2 #cm
     n=flux/(area*speed) #1/cm^3
-    meanFreePath=1/(np.sqrt(2)*n*sigma)
-    return vRel/meanFreePath
+    meanFreePath=1/(np.sqrt(2)*n*sigma) #cm
+    return vRel/meanFreePath #1/s
 
 @numba.njit()
 def momentum_sample_3D(T: float)-> vec3D:

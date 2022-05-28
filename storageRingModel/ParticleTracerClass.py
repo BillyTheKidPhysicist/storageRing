@@ -147,6 +147,7 @@ class ParticleTracer:
         #T0: total tracing time
         #fastMode: wether to use the performance optimized versoin that doesn't track paramters
         assert 0<h<1e-4 and T0>0.0# reasonable ranges
+        assert not (energyCorrection and collisionDynamics)
         self.collisionDynamics=collisionDynamics
         self.energyCorrection=energyCorrection
         self.stepsBetweenLogging=stepsBetweenLogging
