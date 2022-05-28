@@ -78,11 +78,14 @@ def main():
         from temp3 import MUT
         MUT.T=T
         return wrapper(x)
+    print(func(.01))
     # from helperTools import tool_Parallel_Process
-    # TArr=np.arange(0.0,.015,.001)
+    # TArr=np.logspace(-4,np.log10(20e-3),20)
     # res= tool_Parallel_Process(func,TArr)
     # print(res)
-    print(func(0.01))
+    # from helperTools import plt
+    # plt.plot(TArr,res)
+    # plt.show()
     # plot_Results(x)
 if __name__=='__main__':
     main()

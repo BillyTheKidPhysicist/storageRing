@@ -101,6 +101,9 @@ def radians(degrees: float):
 def degrees(radians: float):
     return (radians/np.pi)*180
 
+def clamp(a: float,a_min: float,a_max: float):
+    return min([max([a_min,a]),a_max])
+
 def iscloseAll(a: lst_tup_arr_type,b: lst_tup_arr_type,abstol: float)->bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a,b,atol=abstol,equal_nan=False))
@@ -145,44 +148,44 @@ def low_Discrepancy_Sample(bounds: lst_tup_arr_type,num: int, seed=None)-> np.nd
     for i,sample in enumerate(samples):
         samples[i]=sample*scaleFactors+offsets
     return samples
-
-def test_Parallel_Process():
-    tol=1e-12
-    def dummy(X,a,b=None):
-        b=0.0 if b is None else b['stuff']
-        return np.sin(X[0])+a+np.tanh(X[1])-b
-    X_Arr=np.linspace(0.0,10.0,40).reshape(-1,2)
-    a0=(7.5,)
-    b0=np.pi
-    optionalArgs={'b':{'stuff':b0}}
-    results=np.asarray([dummy(X,a0[0],b={'stuff':b0}) for X in X_Arr])
-    resultsParallel=tool_Parallel_Process(dummy,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
-                                                  resultsAsArray=True)
-    assert np.all(np.abs(np.mean(results-resultsParallel))<tol)
-
-    def dummy2(X,a,b=None):
-        b=0.0 if b is None else b['stuff']
-        return np.random.random_sample()*1e-6
-    resultsParallel=np.sort(tool_Parallel_Process(dummy2,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
-                                                  resultsAsArray=True,reRandomize=True))
-    assert len(np.unique(resultsParallel))==len(X_Arr)
-
-def test_tool_Make_Image_Cartesian():
-    def fake_Func(x, y, z):
-        assert z is None
-        if np.abs(x + 1.0) < 1e-9 and np.abs(y + 1.0) < 1e-9:  # x=-1.0,y=-1.0   BL
-            return 1
-        if np.abs(x + 1.0) < 1e-9 and np.abs(y - 1.0) < 1e-9:  # x=-1.0, y=1.0 TL
-            return 2
-        if np.abs(x - 1.0) < 1e-9 and np.abs(y - 1.0) < 1e-9:  # x=1.0,y=1.0   TR
-            return 3
-        return 0.0
-
-    xArr = np.linspace(-1, 1, 15)
-    yArr = np.linspace(-1, 1, 5)
-    image, extent = tool_Make_Image_Cartesian(fake_Func, xArr, yArr, extraArgs=[None])
-    assert (
-        image[len(yArr) - 1, 0] == 1
-        and image[0, 0] == 2
-        and image[0, len(xArr) - 1] == 3
-    )
+#
+# def test_Parallel_Process():
+#     tol=1e-12
+#     def dummy(X,a,b=None):
+#         b=0.0 if b is None else b['stuff']
+#         return np.sin(X[0])+a+np.tanh(X[1])-b
+#     X_Arr=np.linspace(0.0,10.0,40).reshape(-1,2)
+#     a0=(7.5,)
+#     b0=np.pi
+#     optionalArgs={'b':{'stuff':b0}}
+#     results=np.asarray([dummy(X,a0[0],b={'stuff':b0}) for X in X_Arr])
+#     resultsParallel=tool_Parallel_Process(dummy,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
+#                                                   resultsAsArray=True)
+#     assert np.all(np.abs(np.mean(results-resultsParallel))<tol)
+#
+#     def dummy2(X,a,b=None):
+#         b=0.0 if b is None else b['stuff']
+#         return np.random.random_sample()*1e-6
+#     resultsParallel=np.sort(tool_Parallel_Process(dummy2,X_Arr,extraArgs=a0,extraKeyWordArgs=optionalArgs,
+#                                                   resultsAsArray=True,reRandomize=True))
+#     assert len(np.unique(resultsParallel))==len(X_Arr)
+#
+# def test_tool_Make_Image_Cartesian():
+#     def fake_Func(x, y, z):
+#         assert z is None
+#         if np.abs(x + 1.0) < 1e-9 and np.abs(y + 1.0) < 1e-9:  # x=-1.0,y=-1.0   BL
+#             return 1
+#         if np.abs(x + 1.0) < 1e-9 and np.abs(y - 1.0) < 1e-9:  # x=-1.0, y=1.0 TL
+#             return 2
+#         if np.abs(x - 1.0) < 1e-9 and np.abs(y - 1.0) < 1e-9:  # x=1.0,y=1.0   TR
+#             return 3
+#         return 0.0
+#
+#     xArr = np.linspace(-1, 1, 15)
+#     yArr = np.linspace(-1, 1, 5)
+#     image, extent = tool_Make_Image_Cartesian(fake_Func, xArr, yArr, extraArgs=[None])
+#     assert (
+#         image[len(yArr) - 1, 0] == 1
+#         and image[0, 0] == 2
+#         and image[0, len(xArr) - 1] == 3
+#     )
