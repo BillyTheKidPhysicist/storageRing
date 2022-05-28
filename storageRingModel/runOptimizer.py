@@ -73,12 +73,7 @@ def main():
     # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
     #
     x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166, 0.51208528]
-    # print(wrapper(x))
-    def func(T):
-        from temp3 import MUT
-        MUT.T=T
-        return wrapper(x)
-    print(func(.01))
+    print(wrapper(x))
     # from helperTools import tool_Parallel_Process
     # TArr=np.logspace(-4,np.log10(20e-3),20)
     # res= tool_Parallel_Process(func,TArr)

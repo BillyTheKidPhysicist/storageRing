@@ -133,8 +133,7 @@ def apply_Collision(p: vec3D,q: vec3D,collisionParams: tuple)->vec3D:
 
 def get_Collision_Params(element:Element,atomSpeed: realNum):
     """Will be changed soon I anticipate"""
-    from temp3 import MUT
-    T=MUT.T
+    T=.01
     if type(element) in (elementPT.HalbachLensSim,elementPT.Drift):
         rp = element.rp
         rpDrift_Fake = .03
@@ -147,10 +146,6 @@ def get_Collision_Params(element:Element,atomSpeed: realNum):
         return 'SEG_BEND',collisionRate, atomSpeed,element.ang,T,rb,rp
     else: return 'NONE',np.nan,np.nan,np.nan,np.nan,np.nan,np.nan
 
-
-@numba.njit()
-def percent_difference(x,y):
-    return abs((x-y) * 2 / (x+y))
 
 @numba.njit()
 def vel_comp_after_collision(v_rel):
