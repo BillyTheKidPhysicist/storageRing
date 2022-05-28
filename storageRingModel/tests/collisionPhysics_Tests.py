@@ -1,0 +1,39 @@
+from collisionPhysics import max_Momentum_1D_In_Trap,trim_Momentum_To_Maximum,collision_Rate,\
+    collision_Partner_Momentum_Lens,collision_Partner_Momentum_Bender
+from math import isclose
+from helperTools import *
+from constants import *
+
+def test_max_Momentum_1D_In_Trap():
+    rp,Bp=.02314,1.0532984
+    Fconst=0.0
+    assert max_Momentum_1D_In_Trap(rp*.5,rp,Bp,Fconst)==max_Momentum_1D_In_Trap(-rp*.5,rp,Bp,Fconst)
+    assert max_Momentum_1D_In_Trap(rp,rp,Bp,Fconst)==0.0
+    assert max_Momentum_1D_In_Trap(0.0,rp,Bp,Fconst)==np.sqrt(2*Bp*SIMULATION_MAGNETON)
+
+    Fconst=10000.0
+    rMax=Fconst/(2*Bp*SIMULATION_MAGNETON/rp**2)
+    assert max_Momentum_1D_In_Trap(rMax,rp,Bp,Fconst)>max_Momentum_1D_In_Trap(rMax*.99,rp,Bp,Fconst)
+    assert max_Momentum_1D_In_Trap(rMax,rp,Bp,Fconst)>max_Momentum_1D_In_Trap(rMax*1.01,rp,Bp,Fconst)
+def test_trim_Momentum_To_Maximum():
+    assert trim_Momentum_To_Maximum(1000.0,0.0,1.0)==-trim_Momentum_To_Maximum(-1000.0,0.0,1.0)
+    assert trim_Momentum_To_Maximum(1.0,0.99999,1.0)==-trim_Momentum_To_Maximum(-1.0,0.99999,1.0)
+    assert trim_Momentum_To_Maximum(1.0,0.99999,1.0,Fconst=100)!=-trim_Momentum_To_Maximum(-1.0,0.99999,1.0)
+
+def test_collision_Rate():
+    assert collision_Rate(0.00,.01)==0.0
+    assert isclose(collision_Rate(.01,.01)/collision_Rate(.01,.02),4.0)
+    assert isclose(collision_Rate(.04,.01)/collision_Rate(.01,.01),2.0)
+    assert 0.0<collision_Rate(.05,.01)<1000.0
+
+def test_collision_Partner_Momentum_Lens():
+    assert iscloseAll(collision_Partner_Momentum_Lens((0.0,0.0,0.0),210.0,0.0,.01),(210.0,0.0,0.0),1e-12)
+    px,py,pz=collision_Partner_Momentum_Lens((.5,0.0,0.0),210.0,.09,.015)
+    assert abs(py)<px and abs(pz)<px and pz!=0.0 and py!=0.0 and px!=0.0
+
+def test_collision_Partner_Momentum_Bender():
+    rBend=1.032435
+    px,py,pz=collision_Partner_Momentum_Bender((rBend+1e-3,0.0,0.0),210.0,.01,.015,rBend )
+    assert py<-150 and px!=0.0 and pz!=0.0 and abs(px)<abs(py) and abs(pz)<abs(py)
+
+

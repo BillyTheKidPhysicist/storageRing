@@ -5,5 +5,6 @@ from elementPT_Tests import test_Elements
 from fastNumbaMethodsAndClass_Tests import test
 from storageRingConstraint_Tests import  test_Storage_Ring_Constraints
 from optimizerTester import test_Optimizer
+from collisionPhysics_Tests import *
 def test():
     pass

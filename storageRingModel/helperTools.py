@@ -101,7 +101,7 @@ def radians(degrees: float):
 def degrees(radians: float):
     return (radians/np.pi)*180
 
-def iscloseAll(a: np.ndarray,b: np.ndarray,abstol: float)->bool:
+def iscloseAll(a: lst_tup_arr_type,b: lst_tup_arr_type,abstol: float)->bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a,b,atol=abstol,equal_nan=False))
 
