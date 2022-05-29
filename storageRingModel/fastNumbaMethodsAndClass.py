@@ -722,18 +722,14 @@ class CombinerIdealFieldHelper_Numba:
         self.baseClass.set_Misalignment_Params(alignmentParams)
 
     def force(self,x,y,z):
-        return self._force(x,y,z,True)
+        if not self.is_Coord_Inside_Vacuum(x, y, z):
+            return np.nan, np.nan, np.nan
+        else:
+            return self.force_Without_isInside_Check(x,y,z)
 
-    def force_NoSearchInside(self,x,y,z):
-        F= self._force(x,y,z,False)
-        return F
-
-    def _force(self, x,y,z,searchIsCoordInside):
+    def force_Without_isInside_Check(self,x,y,z):
         # force at point q in element frame
         # q: particle's position in element frame
-        if searchIsCoordInside==True:
-            if self.is_Coord_Inside_Vacuum(x,y,z) == False:
-                return np.nan,np.nan,np.nan
         Fx,Fy,Fz=0.0,0.0,0.0
         if 0<x < self.Lb:
             B0 = np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
@@ -837,38 +833,14 @@ class CombinerSimFieldHelper_Numba:
         return scalar_interp3D(x,y,z,self.xArr,self.yArr,self.zArr,self.VArr)
 
     def force(self,x,y,z):
-        return self._force(x,y,z,True)
+        if not self.is_Coord_Inside_Vacuum(x, y, z):
+            return np.nan, np.nan, np.nan
+        else:
+            return self.force_Without_isInside_Check(x,y,z)
 
-    def force_NoSearchInside(self,x,y,z):
-        F= self._force(x,y,z,False)
-        return F
-
-    def _force(self,x, y, z,searchIsCoordInside):
+    def force_Without_isInside_Check(self,x, y, z):
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
-        if searchIsCoordInside == True:
-            if not -self.apz <= z <= self.apz:  # if outside the z apeture (vertical)
-                return np.nan, np.nan, np.nan
-            elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
-                # through the combiner. Simple square apeture
-                if -self.apL <= y <= self.apR:  # if inside the y (width) apeture
-                    pass
-                else:
-                    return np.nan, np.nan, np.nan
-            elif x < 0:
-                return np.nan, np.nan, np.nan
-            else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-                # todo: better modeled as a simpler rotation?
-                m = np.tan(self.ang)
-                Y1 = m * x + (self.apR - m * self.Lb)  # upper limit
-                Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-                Y3 = m * x + (-self.apL - m * self.Lb)
-                if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
-                    pass
-                elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
-                    pass
-                else:
-                    return np.nan, np.nan, np.nan
         xFact = 1  # value to modify the force based on symmetry
         zFact = 1
         if 0 <= x <= (self.Lm / 2 + self.space):  # if the particle is in the first half of the magnet
@@ -899,7 +871,7 @@ class CombinerSimFieldHelper_Numba:
                 z = -z
         return self.fieldFact*self._magnetic_Potential_Func(x,y,z)
 
-    def is_Coord_Inside_Vacuum(self, x,y,z):
+    def is_Coord_Inside_Vacuum(self, x,y,z)-> bool:
         # q: coordinate to test in element's frame
         if not -self.apz <= z <= self.apz:  # if outside the z apeture (vertical)
             return False
@@ -907,6 +879,8 @@ class CombinerSimFieldHelper_Numba:
             # through the combiner. Simple square apeture
             if -self.apL < y < self.apR:  # if inside the y (width) apeture
                 return True
+            else:
+                return False
         elif x < 0:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
@@ -982,21 +956,17 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         return scalar_interp3D(-z,y,x,self.xArr,self.yArr,self.zArr,self.VArr)
 
     def force(self,x,y,z):
-        return self._force(x,y,z,True)
+        if not self.is_Coord_Inside_Vacuum(x, y, z):
+            return np.nan, np.nan, np.nan
+        else:
+            return self.force_Without_isInside_Check(x,y,z)
 
-    def force_NoSearchInside(self,x,y,z):
-        F= self._force(x,y,z,False)
-        return F
-
-    def _force(self,x0, y0, z0,searchIsCoordInside):
+    def force_Without_isInside_Check(self,x0, y0, z0):
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
-        if searchIsCoordInside == True:
-            if self.is_Coord_Inside_Vacuum(x0,y0,z0)==False:
-                return np.nan,np.nan,np.nan
         x,y,z=self.baseClass.misalign_Coords(x0,y0,z0)
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
-        if self.useSymmetry==True:
+        if self.useSymmetry:
             FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
             FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
             y = abs(y)  # confine to upper right quadrant
@@ -1028,7 +998,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryPlaneX = self.Lm/2 + self.space #field symmetry plane location
-        if self.useSymmetry==True:
+        if self.useSymmetry:
             if -self.extraFieldLength <= x <= symmetryPlaneX:
                 x = symmetryPlaneX - x
                 V = self._magnetic_Potential_Func(x, y, z)
@@ -1061,7 +1031,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             m = np.tan(self.ang)
             Y1 = m * x + (self.ap - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * x + (-self.ap - m * self.Lb)
+            Y3 = m * x + (-1.5*self.ap - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 return True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'

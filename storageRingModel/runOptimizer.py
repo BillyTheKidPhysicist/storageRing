@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 import numpy as np
 from asyncDE import solve_Async
-from storageRingOptimizer import LatticeOptimizer,Solution
+from storageRingOptimizer import FullSystemModel,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3,RingGeometryError,InjectorGeometryError
@@ -10,7 +10,7 @@ from latticeModels_Parameters import optimizerBounds_V1_3,atomCharacteristic
 
 def plot_Results(params):
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
-    optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector)
+    optimizer = FullSystemModel(PTL_Ring, PTL_Injector)
     optimizer.show_Floor_Plan_And_Trajectories(None,True)
 
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
@@ -25,7 +25,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     return sol
 
 def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice)-> Solution:
-    optimizer = LatticeOptimizer(PTL_Ring, PTL_Injector,collisionDynamics=True)
+    optimizer = FullSystemModel(PTL_Ring, PTL_Injector,collisionDynamics=True)
 
     sol = Solution()
     knobParams = None
@@ -65,7 +65,7 @@ def wrapper(params):
     if sol.fluxMultiplication>10:
         print(sol)
     cost=sol.cost
-    return cost
+    return sol.fluxMultiplication
 
 def main():
     bounds = np.array(list(optimizerBounds_V1_3.values()))

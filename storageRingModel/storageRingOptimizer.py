@@ -44,7 +44,7 @@ class Solution:
         return string
 
 
-class LatticeOptimizer:
+class FullSystemModel:
     
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
                  numParticlesSwarm: int=1024,collisionDynamics: bool=False):
@@ -174,11 +174,11 @@ class LatticeOptimizer:
             shapelyObjectLabFrameList.append(SO)
         return shapelyObjectLabFrameList
 
-    def generate_Shapely_Object_List_Of_Floor_Plan(self,which: str)-> list[Polygon]:
-        assert which in ('exterior','interior')
+    def generate_Shapely_Object_List_Of_Floor_Plan(self, whichSide: str)-> list[Polygon]:
+        assert whichSide in ('exterior', 'interior')
         shapelyObjectList = []
-        shapelyObjectList.extend([el.SO_Outer if which=='exterior' else el.SO for el in self.latticeRing])
-        shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame(which))
+        shapelyObjectList.extend([el.SO_Outer if whichSide == 'exterior' else el.SO for el in self.latticeRing])
+        shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame(whichSide))
         return shapelyObjectList
 
     def floor_Plan_OverLap_mm(self)-> float:

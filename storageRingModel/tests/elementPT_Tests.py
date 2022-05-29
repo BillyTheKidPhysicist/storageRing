@@ -374,9 +374,9 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm=.1453423
         self.rp=.0123749
         particle0=Particle(qi=np.asarray([-.01,5e-3,-3.43e-3]),pi=np.asarray([-201.0,5.0,-3.2343]))
-        qf0=np.array([-0.2068900292327156  , -0.005641841676577974,0.00386611213936313 ])
-        pf0=np.array([-200.41108416757243 ,  -12.975066691134593,   10.238350303998391])
-        super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,True,True)
+        qf0=np.array([-0.20688515484565864  , -0.005642160974905653 ,0.0038664085805719195])
+        pf0=np.array([-200.40536822850595 ,  -13.018335214780414,   10.239579199239653])
+        super().__init__(CombinerHalbachLensSim,particle0,qf0,pf0,True,False,True)
 
     def make_coordTestRules(self):
         #test generic conditions of the element
@@ -420,14 +420,13 @@ class ElementTestRunner:
         @given(*self.elTestHelper.coordTestRules)
         @settings(max_examples=1_000, deadline=None)
         def is_Inside_Consistency(x1: float, x2: float, x3: float):
-            coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
-            F = el.force(coord)
-            V = el.magnetic_Potential(coord)
-            coord2D = coord.copy()
-            coord2D[2] = 0.0
-            if self.elTestHelper.useShapelyTest == True:
-                self.test_Coord2D_Against_Shapely(coord2D)
-            isInsideFull3D = el.is_Coord_Inside(coord)
+            qEl = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
+            F = el.force(qEl)
+            V = el.magnetic_Potential(qEl)
+            qEl_2D = qEl[:2].copy()
+            if self.elTestHelper.useShapelyTest:
+                self.test_Coord2D_Against_Shapely(qEl_2D)
+            isInsideFull3D = el.is_Coord_Inside(qEl)
             isInsideList.append(isInsideFull3D)
             #todo: clean this up
             if isInsideFull3D == False:
@@ -484,7 +483,8 @@ class ElementTestRunner:
             def wrapper(magnetError,jitterAmp):
                 PTL=self.elTestHelper.make_Latice(magnetErrors=magnetError,jitterAmp=jitterAmp)
                 el=self.elTestHelper.get_Element(PTL)
-                el.perturb_Element(.1*jitterAmp,.1*jitterAmp,.1*jitterAmp/el.L,.1*jitterAmp/el.L)
+                if jitterAmp!=0.0:
+                    el.perturb_Element(.1*jitterAmp,.1*jitterAmp,.1*jitterAmp/el.L,.1*jitterAmp/el.L)
                 particleList = self.trace_Different_Conditions(PTL)
                 with pytest.raises(ValueError) as excInfo:
                     #it's possible this won't trigger if the magnet or misalignment errors are really small
@@ -537,26 +537,29 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf,qf0,absTol)==False or iscloseAll(pf,pf0,absTol)==False:
-                print(repr(qf), repr(pf))
-                print(repr(qf0), repr(pf0))
+                # print(repr(qf), repr(pf))
+                # print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
-    def is_Inside_Shapely(self,qEl):
+    def is_Inside_Shapely(self,qEl_2D):
         """Check with Shapely library that point resides in 2D footprint of element. It's possible that the point may
         fall just on the edge of the object, so return result with and without small padding"""
         el=self.elTestHelper.el
-        qLab = el.transform_Element_Coords_Into_Lab_Frame(qEl)
-        isInsideUnpadded=el.SO.contains(Point(qLab[:2]))
+        qLab_2D = el.transform_Element_Coords_Into_Lab_Frame(np.append(qEl_2D,0))
+        isInsideUnpadded=el.SO.contains(Point(qLab_2D))
         SO_Padded = el.SO.buffer(1e-9)  # add padding to avoid issues of point right on edge
-        isInsidePadded = SO_Padded.contains(Point(qLab[:2]))
-        return isInsidePadded,isInsideUnpadded
+        isInsidePadded = SO_Padded.contains(Point(qLab_2D))
+        SO_NegPadded = el.SO.buffer(-1e-9)  # add padding to avoid issues of point right on edge
+        isInsideNegPadded = SO_NegPadded.contains(Point(qLab_2D))
+        return isInsideUnpadded,isInsidePadded,isInsideNegPadded
 
-    def test_Coord2D_Against_Shapely(self,coord2D):
-        isInside2DShapely, isInside2DShapelyPadded = self.is_Inside_Shapely(coord2D)
-        if isInside2DShapely == isInside2DShapelyPadded:  # if consistent for both its not a weird situation of being
+    def test_Coord2D_Against_Shapely(self,qEl_2D):
+        isInside2DShapely, isInside2DShapelyPadded,isInside2DShapelyNegPadded = self.is_Inside_Shapely(qEl_2D)
+        if isInside2DShapely == isInside2DShapelyPadded and isInside2DShapely == isInside2DShapelyNegPadded:
+            # if consistent for both its not a weird situation of being
             # right on the edge, so go ahead and check
-            isInside2D = self.elTestHelper.el.is_Coord_Inside(coord2D)
-            assert isInside2DShapely==isInside2D #this can be falsely triggered by circles in shapely!!
+            isInside_Fast = self.elTestHelper.el.is_Coord_Inside(np.append(qEl_2D,0))
+            assert isInside2DShapely==isInside_Fast #this can be falsely triggered by circles in shapely!!
 
 
 def test_Elements(parallel=True):

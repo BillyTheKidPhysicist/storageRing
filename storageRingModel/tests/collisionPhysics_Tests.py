@@ -27,7 +27,7 @@ def test_trim_Momentum_To_Maximum():
 def test_collision_Rate():
     assert collision_Rate(0.00,.01)!=.0
     assert isclose(collision_Rate(.01,.01)/collision_Rate(.01,.02),4.0)
-    assert isclose(collision_Rate(.04,.01)/collision_Rate(.01,.01),2.0)
+    assert isclose(collision_Rate(.08,.01)/collision_Rate(.02,.01),2.0,abs_tol=1e-2)
     assert 0.0<collision_Rate(.05,.01)<1000.0
 
 def test_collision_Partner_Momentum_Lens():

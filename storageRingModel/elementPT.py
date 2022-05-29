@@ -627,7 +627,7 @@ class CombinerIdeal(Element):
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La,self.Lb,
                                                                                 self.apL,self.apR, self.apz, self.ang])
 
-    def compute_Input_Angle_And_Offset(self, inputOffset:float=0.0, h:float=1e-6,ap: Optional[float]=None)->tuple:
+    def compute_Input_Angle_And_Offset(self, outputOffset:float=0.0, h:float=1e-6, ap: Optional[float]=None)->tuple:
         # this computes the output angle and offset for a combiner magnet.
         # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
         # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -636,50 +636,49 @@ class CombinerIdeal(Element):
         # length, but for the simulated magnets, it's that plus twice the length at the ends.
         # h: timestep
         # lowField: wether to model low or high field seekers
-        if isinstance(self,CombinerHalbachLensSim):
-            assert 0.0 <= inputOffset < self.ap
-        q = np.asarray([0.0, -inputOffset, 0.0])
-        p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
-        coordList = []  # Array that holds particle coordinates traced through combiner. This is used to find lenght
-
+        if type(self)==CombinerHalbachLensSim:
+            assert 0.0 <= outputOffset < self.ap
         def force(x):
-            if ap is not None:
-                if x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > ap:
+            if ap is not None and (x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > ap):
                     return np.empty(3) * np.nan
-            return np.asarray(self.fastFieldHelper.force_NoSearchInside(x[0], x[1], x[2]))
+            Force= np.array(self.fastFieldHelper.force_Without_isInside_Check(x[0], x[1], x[2]))
+            Force[2]=0.0 ##only interested in xy plane bending
+            return Force
 
-        limit = self.Lm + 2 * self.space
+
+        q = np.asarray([0.0, -outputOffset, 0.0])
+        p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
+        qList = []
+
+
+        xPosStopTracing = self.Lm + 2 * self.space
         forcePrev = force(q)  # recycling the previous force value cut simulation time in half
         while True:
             F = forcePrev
-            F[2] = 0.0  # exclude z component, ideally zero
-            a = F
-            q_n = q + p * h + .5 * a * h ** 2
-            if not 0<=q_n[0]<=limit:  # if overshot, go back and walk up to the edge assuming no force
-                dr = limit - q[0]
+            q_n = q + p * h + .5 * F * h ** 2
+            if not 0<=q_n[0]<=xPosStopTracing:  # if overshot, go back and walk up to the edge assuming no force
+                dr = xPosStopTracing - q[0]
                 dt = dr / p[0]
-                q = q + p * dt
-                coordList.append(q)
+                qFinal = q + p * dt
+                pFinal=p
+                qList.append(qFinal)
                 break
             F_n = force(q_n)
             assert not np.any(np.isnan(F_n))
-
-            F_n[2] = 0.0
-            a_n = F_n  # accselferation new or accselferation sub n+1
-            p_n = p + .5 * (a + a_n) * h
-            q = q_n
-            p = p_n
+            p_n = p + .5 * (F + F_n) * h
+            q,p = q_n,p_n
             forcePrev = F_n
-            coordList.append(q)
-        qArr = np.asarray(coordList)
-        outputAngle = np.arctan2(p[1], p[0])
-        outputOffset = q[1]
+            qList.append(q)
+        assert qFinal[2]==0.0 #only interested in xy plane bending, expected to be zero
+        qArr = np.asarray(qList)
+        outputAngle = np.arctan2(pFinal[1], pFinal[0])
+        inputOffset = qFinal[1]
         if ap is not None:
             lensCorner = np.asarray([self.space + self.Lm, -ap, 0.0])
-            minSep = np.min(np.linalg.norm(qArr - lensCorner, axis=1))
+            minSepBottomRightMagEdge = np.min(np.linalg.norm(qArr - lensCorner, axis=1))
         else:
-            minSep=None
-        return outputAngle, outputOffset, qArr,minSep
+            minSepBottomRightMagEdge=None
+        return outputAngle, inputOffset, qArr,minSepBottomRightMagEdge
 
     def compute_Trajectory_Length(self, qTracedArr:np.ndarray)->float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
@@ -766,11 +765,8 @@ class CombinerSim(CombinerIdeal):
         self.fastFieldHelper=self.init_fastFieldHelper([fieldData,np.nan,self.Lb,self.Lm,
                                                         self.space,self.apL,self.apR,self.apz,np.nan,self.fieldFact])
         inputAngle, inputOffset, qTracedArr,_ = self.compute_Input_Angle_And_Offset()
-        # TODO: I'M PRETTY SURE i CAN CONDENSE THIS WITH THE COMBINER IDEAL
-         # 0.07891892567413786
-        # to find the length
         self.Lo = self.compute_Trajectory_Length(
-            qTracedArr)  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+            qTracedArr)
         self.L = self.Lo
         self.ang = inputAngle
         y0 = inputOffset
@@ -1488,6 +1484,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.extraFieldLength: float=0.0
         self.apMaxGoodField: Optional[float]=None
         self.useStandardMagErrors=useStandardMagErrors
+        self.extraLoadApFrac=1.5
 
         self.La: Optional[float] = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -1552,8 +1549,10 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
         yMax = self.rp + (La + self.rp * np.sin(abs(ang))) * np.sin(abs(ang))
+        yMax_Minimum=self.rp*1.5*1.1
+        yMax=yMax if yMax>yMax_Minimum else yMax_Minimum
         yMax=np.clip(yMax,self.rp,np.inf)
-        yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
+        # yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
         yMin=-TINY_OFFSET if not self.useStandardMagErrors else -yMax
         xMin=-(self.rp - TINY_OFFSET)
         xMax=TINY_OFFSET if not self.useStandardMagErrors else -xMin
@@ -1656,6 +1655,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float)->None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
+        raise NotImplementedError
 
         assert abs(rotZ)<.05 and abs(rotZ)<.05 #small angle
         totalShiftY=shiftY+np.tan(rotZ)*self.L

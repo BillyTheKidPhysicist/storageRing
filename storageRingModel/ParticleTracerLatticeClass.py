@@ -362,9 +362,9 @@ class ParticleTracerLattice:
         point5=np.asarray([el.Lb,apR+VACUUM_TUBE_THICKNESS]) #top middle when theta=0
         point6=np.asarray([el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang),
                         apR+(el.La-apR*np.sin(el.ang))*np.sin(el.ang)+VACUUM_TUBE_THICKNESS]) #top right when theta=0
-        point7=np.asarray([el.Lb+(el.La+apL*np.sin(el.ang))*np.cos(el.ang),
-                    -apL+(el.La+apL*np.sin(el.ang))*np.sin(el.ang)-VACUUM_TUBE_THICKNESS]) #bottom right when theta=0
-        point8=np.asarray([el.Lb,-apL-VACUUM_TUBE_THICKNESS]) #bottom middle when theta=0
+        point7=np.asarray([el.Lb+(el.La+1.5*apL*np.sin(el.ang))*np.cos(el.ang),
+                    -1.5*apL+(el.La+1.5*apL*np.sin(el.ang))*np.sin(el.ang)-VACUUM_TUBE_THICKNESS]) #bottom right when theta=0
+        point8=np.asarray([el.Lb,-1.5*apL-VACUUM_TUBE_THICKNESS]) #bottom middle when theta=0
         point9=np.asarray([el.Lb,-halfWidth]) #bottom middle when theta=0
         point10=np.asarray([el.space,-halfWidth]) #bottom middle when theta=0
         point11=np.asarray([el.space,-apL-VACUUM_TUBE_THICKNESS]) #bottom middle when theta=0
@@ -373,6 +373,24 @@ class ParticleTracerLattice:
         for i,point in enumerate(pointsOuter):
             pointsOuter[i] = el.ROut @ point + el.r2[:2]
         return pointsOuter
+
+    def make_Combiner_Inner_Geometry(self,el):
+        assert type(el) in (elementPT.CombinerHalbachLensSim,elementPT.CombinerIdeal,elementPT.CombinerSim)
+        apR,apL= (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
+        extraFact=1.5 if type(el) is CombinerHalbachLensSim else 1.0
+        q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
+        q2Inner = np.asarray([el.Lb, apR])  # top middle when theta=0
+        q3Inner = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
+                              apR + (el.La - apR * np.sin(el.ang)) * np.sin(el.ang)])  # top right when theta=0
+        q4Inner = np.asarray([el.Lb + (el.La + extraFact*apL * np.sin(el.ang)) * np.cos(el.ang),
+                              -extraFact*apL+ (el.La + extraFact*apL * np.sin(el.ang)) * np.sin(el.ang)])  # bottom right when theta=0
+        q5Inner = np.asarray([el.Lb, -extraFact*apL])  # bottom middle when theta=0
+        q6Inner = np.asarray([el.Lb, -apL])  # bottom middle when theta=0
+        q7Inner = np.asarray([0, -apL])  # bottom left when theta=0
+        pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner,q7Inner]
+        for i in range(len(pointsInner)):
+            pointsInner[i] = el.ROut @ pointsInner[i] + el.r2[:2]
+        return pointsInner
 
     def make_Geometry(self)-> None:
         #todo: refactor this whole thing
@@ -433,21 +451,7 @@ class ParticleTracerLattice:
                 if type(el) is elementPT.HalbachBenderSimSegmented:
                     pointsOuter=self.make_Bender_Outer_Geometry(el)
             elif el.shape in ('COMBINER_SQUARE','COMBINER_CIRCULAR'):
-                if el.shape=='COMBINER_SQUARE':
-                    apR=el.apR #the 'right' apeture. here this confusingly means when looking in the yz plane, ie the place
-                    #that the particle would look into as it revolves in the lattice
-                    apL=el.apL
-                else:
-                    apR,apL=el.ap,el.ap
-                q1Inner=np.asarray([0,apR]) #top left ( in standard xy plane) when theta=0
-                q2Inner=np.asarray([el.Lb,apR]) #top middle when theta=0
-                q3Inner=np.asarray([el.Lb+(el.La-apR*np.sin(el.ang))*np.cos(el.ang),apR+(el.La-apR*np.sin(el.ang))*np.sin(el.ang)]) #top right when theta=0
-                q4Inner=np.asarray([el.Lb+(el.La+apL*np.sin(el.ang))*np.cos(el.ang),-apL+(el.La+apL*np.sin(el.ang))*np.sin(el.ang)]) #bottom right when theta=0
-                q5Inner=np.asarray([el.Lb,-apL]) #bottom middle when theta=0
-                q6Inner = np.asarray([0, -apL])  # bottom left when theta=0
-                pointsInner=[q1Inner,q2Inner,q3Inner,q4Inner,q5Inner,q6Inner]
-                for i in range(len(pointsInner)):
-                    pointsInner[i]=el.ROut@pointsInner[i]+el.r2[:2]
+                pointsInner=self.make_Combiner_Inner_Geometry(el)
                 if el.outerHalfWidth is None:
                     pointsOuter=pointsInner.copy()
                 if type(el) is elementPT.CombinerHalbachLensSim:

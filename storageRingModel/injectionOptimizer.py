@@ -6,7 +6,7 @@ from typing import Union,Optional
 import numpy as np
 import warnings
 from constants import DEFAULT_ATOM_SPEED,COST_PER_CUBIC_INCH_PERM_MAGNET
-from storageRingOptimizer import LatticeOptimizer
+from storageRingOptimizer import FullSystemModel
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_For_Injection_Version_1,InjectorGeometryError
 from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny,atomCharacteristic,optimizerBounds_V1_3
@@ -27,7 +27,7 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
 CUBIC_METER_TO_INCH=61023.7
 
 
-class Injection_Model(LatticeOptimizer):
+class Injection_Model(FullSystemModel):
 
     def __init__(self, latticeRing, latticeInjector,tunabilityLength: float=2e-2):
         super().__init__(latticeRing,latticeInjector)
