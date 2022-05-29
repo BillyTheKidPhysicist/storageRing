@@ -219,7 +219,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,c
 
     return PTL
 
-def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool,combinerSeed:Optional[int]) \
+def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool=False,combinerSeed:int=None) \
         -> InjectorModel:
     """Make ParticleTraceLattice object that represents injector. Injector is a double lens design. """
 
@@ -347,7 +347,7 @@ def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str,useM
     injectorParams=make_injectorParams_Dict_Version_Any(variableParams)
 
     PTL_Ring = make_Ring(ringParams,whichVersion,useMagnetErrors,combinerSeed)
-    PTL_Injector = make_Injector_Version_Any(injectorParams,useMagnetErrors,combinerSeed)
+    PTL_Injector = make_Injector_Version_Any(injectorParams,useMagnetError=useMagnetErrors,combinerSeed=combinerSeed)
     assert_Combiners_Are_Same(PTL_Injector,PTL_Ring)
     return PTL_Ring, PTL_Injector
 

@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from typing import Union,Optional
 from shapely.geometry import Polygon,LineString
+from floorPlanCheckerFunctions import does_Fit_In_Room
 list_array_tuple=Union[np.ndarray,tuple,list]
 
 class Solution:
@@ -44,7 +45,7 @@ class Solution:
         return string
 
 
-class FullSystemModel:
+class StorageRingModel:
     
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
                  numParticlesSwarm: int=1024,collisionDynamics: bool=False):
@@ -398,11 +399,13 @@ class FullSystemModel:
         return maxFluxMult
     
     def floor_Plan_Cost(self,X: Optional[list_array_tuple])-> float:
+        costMax=1.0
         self.update_Ring_And_Injector(X)
         overlap=self.floor_Plan_OverLap_mm() #units of mm^2
         factor = 300 #units of mm^2
-        cost = 2 / (1 + np.exp(-overlap / factor)) - 1
-        assert 0.0<=cost<=1.0
+        costOverlap = 2 / (1 + np.exp(-overlap / factor)) - 1
+        cost=costMax if not does_Fit_In_Room(self) else costOverlap
+        assert 0.0<=cost<=costMax
         return cost
     
     def swarm_Cost(self, swarm: Swarm)-> float:

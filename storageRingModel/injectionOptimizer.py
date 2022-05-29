@@ -6,7 +6,7 @@ from typing import Union,Optional
 import numpy as np
 import warnings
 from constants import DEFAULT_ATOM_SPEED,COST_PER_CUBIC_INCH_PERM_MAGNET
-from storageRingOptimizer import FullSystemModel
+from storageRingModeler import StorageRingModel
 from ParticleTracerLatticeClass import ElementDimensionError,ElementTooShortError,CombinerDimensionError
 from latticeModels import make_Injector_Version_Any,make_Ring_Surrogate_For_Injection_Version_1,InjectorGeometryError
 from latticeModels_Parameters import lockedDict,injectorRingConstraintsV1,injectorParamsBoundsAny,atomCharacteristic,optimizerBounds_V1_3
@@ -27,7 +27,7 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
 CUBIC_METER_TO_INCH=61023.7
 
 
-class Injection_Model(FullSystemModel):
+class Injection_Model(StorageRingModel):
 
     def __init__(self, latticeRing, latticeInjector,tunabilityLength: float=2e-2):
         super().__init__(latticeRing,latticeInjector)
@@ -43,7 +43,6 @@ class Injection_Model(FullSystemModel):
         assert 0.0<=floorPlanCost<=1.0
         priceCost=self.get_Rough_Material_Cost()
         cost=np.sqrt(floorPlanCost**2+swarmCost**2+priceCost**2)
-        print(100*(1-swarmCost))
         return cost
 
     def injected_Swarm_Cost(self)-> float:
@@ -140,10 +139,10 @@ def main():
     # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
     # loadBeamDiam, L1, L2, L3
     # bounds = [vals for vals in injectorParamsBoundsAny.values()]
-
+    #
     # member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
     # print(repr(member.DNA),member.cost)
-    #
+
     from latticeModels_Parameters import injectorParamsOptimalAny
     # # X0=np.array([0.08326160110590838 , 0.020993060372921774, 0.16088998779932584 ,
     # #        0.024763975149604798, 0.19375652148870226 , 0.0398938436893404  ,
@@ -151,28 +150,52 @@ def main():
     # #        0.21231305487552196 ])
     X0=np.array(list(injectorParamsOptimalAny.values()))
     print(wrapper(X0))
-    # plot_Results(X0)
+    plot_Results(X0)
 if __name__=="__main__":
     main()
 
 
 """
-finished with total evals:  4859
-array([0.14594592081998312 , 0.028800950957952504, 0.1538512998987364  ,
-       0.02487578688773267 , 0.25                , 0.03897640362553732 ,
-       0.007423530258284747, 0.19931722036910796 , 0.29246235217634403 ,
-       0.17889654441708114 ]) 0.573154229279458
-       
-finished with total evals:  5129
-array([0.08251423568600101 , 0.019731015668225795, 0.18816905729758865 ,
-       0.027608082260531668, 0.25                , 0.04                ,
-       0.008632660123890558, 0.15507124987889837 , 0.27219342741741254 ,
-       0.24922526271441278 ]) 0.5692792220703192
 
-finished with total evals:  7972
-array([0.10049725042352656 , 0.01                , 0.23705861693141206 ,
-       0.028519741201464555, 0.25                , 0.04                ,
-       0.009163253685091657, 0.07608320475107998 , 0.3                 ,
-       0.23048782966964318 ]) 0.5416627572363332
+-----------------attack 1: 
+
+coarse: 
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.15983706722579363 , 0.03                , 0.1318471593072328  ,
+       0.02224089503466501 , 0.20020617195221901 , 0.03912975206758641 ,
+       0.014889359039106131, 0.19473657568556155 , 0.2425783750828193  ,
+       0.15842445390730578 ])
+cost: 0.22240731523646098
+finished with total evals:  7935
+array([0.15983706722579363 , 0.03                , 0.1318471593072328  ,
+       0.02224089503466501 , 0.20020617195221901 , 0.03912975206758641 ,
+       0.014889359039106131, 0.19473657568556155 , 0.2425783750828193  ,
+       0.15842445390730578 ]) 0.22240731523646098
+fine: 
+
+0.19245109021710935 array([0.153132  , 0.02963415, 0.13430734, 0.02258658, 0.19126756,
+       0.0418939 , 0.01501351, 0.20163243, 0.23014572, 0.17625537])
+
+-----------------attack 2:
+
+coarse:
+
+DNA: array([0.12262512509801454 , 0.03                , 0.15497825945216434 ,
+       0.023588293574130267, 0.17972102518246974 , 0.04                ,
+       0.014340208454092672, 0.16881858164260252 , 0.234654880587174   ,
+       0.19908381690019694 ])
+cost: 0.21081256710195267
+finished with total evals:  7211
+array([0.12262512509801454 , 0.03                , 0.15497825945216434 ,
+       0.023588293574130267, 0.17972102518246974 , 0.04                ,
+       0.014340208454092672, 0.16881858164260252 , 0.234654880587174   ,
+       0.19908381690019694 ]) 0.21081256710195267
+
+
+
+fine: 
+38 0.19468989454681276 array([0.13862286, 0.03007318, 0.15414578, 0.02380996, 0.18852086,
+       0.04141863, 0.01434852, 0.16452731, 0.23317253, 0.1854686 ])
 
 """

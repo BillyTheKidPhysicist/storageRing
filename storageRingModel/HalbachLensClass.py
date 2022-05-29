@@ -218,6 +218,14 @@ class billyHalbachCollectionWrapper(Collection):
         else:
             return BNormGrad
 
+    def shape_Eval_Coords(self,evalCoords:np.ndarray)->np.ndarray:
+        """Shape the coordinates that the field values are evaluated at. valid input shapes are (3) and (N,3) where N
+        is the number of points to evaluate. (3) is converted to (1,3)"""
+
+        assert evalCoords.ndim in (1,2)
+        evalCoordsShaped = np.array([evalCoords]) if evalCoords.ndim != 2 else evalCoords
+        return evalCoordsShaped
+
     def BNorm_Gradient(self,evalCoords: np.ndarray,returnNorm: bool=False,differenceMethod='forward',
                        useApprox: bool=False) ->Union[np.ndarray,tuple]:
         #Return the gradient of the norm of the B field. use forward difference theorom
@@ -226,7 +234,7 @@ class billyHalbachCollectionWrapper(Collection):
         #dr: step size
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
 
-        evalCoordsShaped=np.array([evalCoords]) if len(evalCoords.shape)!=2 else evalCoords
+        evalCoordsShaped=self.shape_Eval_Coords(evalCoords)
 
         assert differenceMethod in ('central','forward')
         results=self.central_Difference(evalCoordsShaped,returnNorm,useApprox) if differenceMethod=='central' else \

@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS']='1'
 import numpy as np
 from asyncDE import solve_Async
-from storageRingOptimizer import FullSystemModel,Solution
+from storageRingModeler import StorageRingModel,Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3,RingGeometryError,InjectorGeometryError
@@ -10,7 +10,7 @@ from latticeModels_Parameters import optimizerBounds_V1_3,atomCharacteristic
 
 def plot_Results(params):
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
-    optimizer = FullSystemModel(PTL_Ring, PTL_Injector)
+    optimizer = StorageRingModel(PTL_Ring, PTL_Injector)
     optimizer.show_Floor_Plan_And_Trajectories(None,True)
 
 def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
@@ -25,7 +25,7 @@ def invalid_Solution(XLattice,invalidInjector=None,invalidRing=None):
     return sol
 
 def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice)-> Solution:
-    optimizer = FullSystemModel(PTL_Ring, PTL_Injector,collisionDynamics=True)
+    optimizer = StorageRingModel(PTL_Ring, PTL_Injector,collisionDynamics=True)
 
     sol = Solution()
     knobParams = None
@@ -65,15 +65,15 @@ def wrapper(params):
     if sol.fluxMultiplication>10:
         print(sol)
     cost=sol.cost
-    return sol.fluxMultiplication
+    return cost
 
 def main():
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
+    solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=9,saveData='optimizerProgress')
     #
-    x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166, 0.51208528]
-    print(wrapper(x))
+    # x = [0.02477938, 0.01079024, 0.04059919, 0.010042, 0.07175166, 0.51208528]
+    # print(wrapper(x))
     # from helperTools import tool_Parallel_Process
     # TArr=np.logspace(-4,np.log10(20e-3),20)
     # res= tool_Parallel_Process(func,TArr)
