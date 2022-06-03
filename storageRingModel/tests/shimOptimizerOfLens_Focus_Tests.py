@@ -51,7 +51,7 @@ def test1():
     z1 = (L0 / 2 + .75+sphereDiam/2)
     z2 = -(L0 / 2 + .75+sphereDiam/2)
     assert abs(DNA_List[1]['z'] - z1) < tol and abs(DNA_List[2]['z'] - z2) < tol
-    assert len(shimOptimizerAB.bounds)==len(args)
+    assert len(shimOptimizerAB.globalSearchBounds) == len(args)
 
     r0, phi0, deltaz0, theta0, psi0 = rp, np.pi / 13, .02, np.pi / 3, np.pi / 7
     argsAB = [L0, r0, phi0, deltaz0, theta0, psi0, r0, phi0, deltaz0, np.pi - theta0, psi0]

@@ -21,6 +21,7 @@ SIMULATION_MAGNETON=BHOR_MAGNETON/MASS_LITHIUM_7
 VACUUM_TUBE_THICKNESS: float=.05*inch_To_Meter #minimum weldable thickness of a vacuum tube, m
 DEFAULT_ATOM_SPEED: float=210.0 #default speed of atoms, m/s
 MIN_MAGNET_MOUNT_THICKNESS: float=1e-3
+FLAT_WALL_VACUUM_THICKNESS=(1/8)*inch_To_Meter
 
 COST_PER_CUBIC_INCH_PERM_MAGNET: float= 26.19#USD. Per KJ magnetics:
                                             # https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0

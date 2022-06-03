@@ -5,7 +5,9 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleClass import Particle,Swarm
 import os
 from ParticleTracerClass import ParticleTracer
-#TODO: test swarmTracer class features
+
+# pylint: disable=too-many-locals, too-many-arguments,missing-function-docstring
+
 testDataFolderPath=os.path.join(os.getcwd(),'testData')
 V0=200.0
 def generate_Test_Swarm(PTL):

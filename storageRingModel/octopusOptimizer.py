@@ -12,7 +12,7 @@ from helperTools import low_Discrepancy_Sample
 
 class Octopus:
 
-    def __init__(self,func: Callable,bounds: np.ndarray, xInitial: np.ndarray,tentacleLength):
+    def __init__(self,func: Callable,globalBounds: np.ndarray, xInitial: np.ndarray,tentacleLength,maxTrainingMemory):
         """
         Initialize Octopus object
 
@@ -22,18 +22,19 @@ class Octopus:
             accepted by func
         :param xInitial: initial location of search. Becomes the position of the octopus
         """
-        bounds=np.array(bounds) if isinstance(bounds,(list,tuple)) else bounds
+        bounds=np.array(globalBounds) if isinstance(globalBounds,(list,tuple)) else globalBounds
         xInitial=np.array(xInitial) if isinstance(xInitial,(list,tuple)) else xInitial
         assert isinstance(xInitial,np.ndarray) and isinstance(bounds,np.ndarray)
         assert callable(func) and bounds.ndim==2 and bounds.shape[1]==2
         assert all(upper>lower for lower,upper in bounds) and xInitial.ndim==1
         assert 0.0<tentacleLength<=1.0
         self.func =func
-        self.bounds=bounds.astype(float) #if int some goofy stuff can happen
-        self.tentacleLengths=tentacleLength * (self.bounds[:, 1] - self.bounds[:, 0])
+        self.globalSearchBounds=bounds.astype(float) #if int some goofy stuff can happen
+        self.tentacleLengths=tentacleLength * (self.globalSearchBounds[:, 1] - self.globalSearchBounds[:, 0])
         self.octopusLocation=xInitial
         self.tentaclePositions: np.ndarray=None
         self.numTentacles: int=round(max([1.5*len(bounds),mp.cpu_count()]))
+        self.maxTrainingMemory=maxTrainingMemory
         self.memory: list=[]
 
     def make_Tentacle_Bounds(self)-> np.ndarray:
@@ -42,7 +43,7 @@ class Octopus:
 
         tentacleBounds = np.column_stack((-self.tentacleLengths + self.octopusLocation,
                                           self.tentacleLengths + self.octopusLocation))
-        for i,((tentLower,tentUpper),(globLower,globUpper)) in enumerate(zip(tentacleBounds,self.bounds)):
+        for i,((tentLower,tentUpper),(globLower,globUpper)) in enumerate(zip(tentacleBounds, self.globalSearchBounds)):
             if tentLower<globLower:
                 tentacleBounds[i]+=globLower-tentLower
             elif tentUpper>globUpper:
@@ -55,50 +56,43 @@ class Octopus:
         return min(cost for position,cost in self.memory)
 
     def pick_New_Tentacle_Positions(self)-> None:
-        """Determine new positions to place tentacles to search for food (Reduction in minimum cost). Half of tentacle
-        positions are determine randomly, other half intelligently with gaussian process when enough historical data
-        is present"""
+        """Determine new positions to place tentacles to search for food (Reduction in minimum cost). Some fraction of
+        tentacle positions are determine randomly, others intelligently with gaussian process when enough historical
+        data is present"""
 
         tentacleBounds = self.make_Tentacle_Bounds()
-        self.tentaclePositions=self.smart_Tentacle_Positions(tentacleBounds)
+        fractionSmart=.1
+        numSmart=round(fractionSmart*self.numTentacles)
+        numRandom=self.numTentacles-numSmart
+        randTentaclePositions=self.random_Tentacle_Positions(tentacleBounds,numRandom)
+        smartTentaclePositions=self.smart_Tentacle_Positions(tentacleBounds,numSmart)
+        self.tentaclePositions=np.row_stack((randTentaclePositions,*smartTentaclePositions))
         assert len(self.tentaclePositions)==self.numTentacles
 
     def random_Tentacle_Positions(self,bounds: np.ndarray,numPostions: int)-> np.ndarray:
-        """
-        Get new positions of tentacles to search for food with low discrepancy pseudorandom sampling
-
-        :param bounds: bounds of parameter space. shape (n,2) where n is dimensionality
-        :param numPostions: Number of tentacles positions to generate
-        :return:
-        """
+        """Get new positions of tentacles to search for food with low discrepancy pseudorandom sampling"""
 
         positions=low_Discrepancy_Sample(bounds, numPostions)
         return positions
 
-    def smart_Tentacle_Positions(self,bounds: np.ndarray)-> np.ndarray:
+    def smart_Tentacle_Positions(self,bounds: np.ndarray,numPositions)-> np.ndarray:
         """Intelligently determine where to put tentacles to search for food. Uses gaussian process regression. Training
         data has minimum size for accuracy for maximum size for computation time considerations"""
-        maxTrainingMemory=150 #computation grows as n^3, gets much slower for larger numbers
         validMemory = [(pos,cost) for pos,cost in self.memory if
                        np.all(pos >= bounds[:, 0]) and np.all(pos <= bounds[:, 1])]
         if len(validMemory)<2*len(bounds):
-            return self.random_Tentacle_Positions(bounds,self.numTentacles)
-        if len(validMemory)>maxTrainingMemory:
-            random.shuffle(validMemory)
-            validMemory=validMemory[:maxTrainingMemory]
-
-        base_estimator = cook_estimator("GP", space=bounds,noise=.005)
-        opt=skopt.Optimizer(bounds,base_estimator=base_estimator,n_initial_points=0,n_jobs=-1,
-                            acq_optimizer_kwargs={"n_restarts_optimizer":10,"n_points":30_000})
+            return self.random_Tentacle_Positions(bounds,numPositions)
+        if len(validMemory)>self.maxTrainingMemory:
+            random.shuffle(validMemory) #so the model can change
+            validMemory=validMemory[:self.maxTrainingMemory]
+        # base_estimator = cook_estimator("GP", space=bounds,noise=.005)
+        opt=skopt.Optimizer(bounds,n_initial_points=0,n_jobs=-1,
+                            acq_optimizer_kwargs={"n_restarts_optimizer":10,"n_points":30_000},acq_func="EI")
 
         x=[list(pos) for pos,cost in validMemory]
         y=[cost for pos,cost in validMemory]
         opt.tell(x,y) #train model
-        numExplore=round(.5*self.numTentacles)
-        numExploit=self.numTentacles-numExplore
-        positionsExploit=np.array(opt.ask(numExploit,strategy="cl_min"))
-        positionsExplore=np.array(opt.ask(numExplore,strategy="cl_max"))
-        positions=np.row_stack((positionsExplore,positionsExploit))
+        positions=np.array(opt.ask(numPositions))
         return positions
         
 
@@ -163,7 +157,7 @@ class Octopus:
 # pylint: disable=too-many-arguments
 def octopus_Optimize(func,bounds,xi,costInitial:float=None,numSearchesCriteria:int=10,
                      searchCutoff: float=.01,processes: int=-1,disp: bool=True,tentacleLength: float=.01,
-                     memory: list=None) ->tuple[np.ndarray,float]:
+                     memory: list=None, maxTrainingMemory: int=150) ->tuple[np.ndarray,float]:
     """
     Minimize a scalar function within bounds by octopus optimization. An octopus searches for food
     (reduction in cost function) by a combinations of intelligently and blindly searching with her tentacles in her
@@ -182,9 +176,10 @@ def octopus_Optimize(func,bounds,xi,costInitial:float=None,numSearchesCriteria:i
     :param tentacleLength: The distance that each tentacle can reach. Expressed as a fraction of the separation between
         min and max of bounds for each dimension
     :param memory: List of previous results to use for optimizer
+    :param maxTrainingMemory: Maximum number of samples to use to build gaussian process fit.
     :return: Tuple as (optimal position in parameter, cost at optimal position)
     """
 
-    octopus=Octopus(func,bounds,xi,tentacleLength)
+    octopus=Octopus(func,bounds,xi,tentacleLength,maxTrainingMemory)
     posOptimal,costMin=octopus.search_For_Food(costInitial,numSearchesCriteria,searchCutoff,processes,disp,memory)
     return posOptimal,costMin
