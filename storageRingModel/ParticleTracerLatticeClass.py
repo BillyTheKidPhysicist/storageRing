@@ -1,3 +1,5 @@
+import copy
+
 import elementPT
 # from geneticLensElement_Wrapper import GeneticLens
 from typing import Union, Generator, Iterable
@@ -6,17 +8,17 @@ from ParticleTracerClass import ParticleTracer
 import numpy as np
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
-from shapely.geometry import Polygon
 import scipy.interpolate as spi
 import numpy.linalg as npl
 from joblib import Parallel, delayed
 from elementPT import *
 from storageRingConstraintSolver import build_Particle_Tracer_Lattice, is_Particle_Tracer_Lattice_Closed
 from constants import DEFAULT_ATOM_SPEED, FLAT_WALL_VACUUM_THICKNESS
+from shapelyObjectBuilder import build_Shapely_Objects
 
 # todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 # people, I need to change that. This was before my cleaner code approach
-BENDER_POINTS = 250  # how many points to represent the bender with along each curve
+
 # todo: refactor!
 
 benderTypes = Union[elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
@@ -289,11 +291,10 @@ class ParticleTracerLattice:
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
     def build_Lattice(self, constrain: bool):
-
         build_Particle_Tracer_Lattice(self, constrain)
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
-        self.make_Geometry()
+        build_Shapely_Objects(self.elList)
         self.totalLength = 0
         for el in self.elList:  # total length of particle's orbit in an element
             self.totalLength += el.Lo
@@ -303,191 +304,6 @@ class ParticleTracerLattice:
         self.catch_Errors(constrain)
         if buildLattice:
             self.build_Lattice(constrain)
-
-    def make_Lens_Outer_Geometry(self, el):
-        # todo: make this work for ideal lens as well in one swoop
-        assert type(el) is elementPT.HalbachLensSim
-        halfWidth = el.outerHalfWidth
-        vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
-        fringeLength = el.rp * el.fringeFracOuter
-        point1 = np.asarray([0.0, vacuumTubeOuterWidth])
-        point2 = np.asarray([fringeLength, vacuumTubeOuterWidth])
-        point3 = np.asarray([fringeLength, halfWidth])
-        point4 = np.asarray([el.L - fringeLength, halfWidth])
-        point5 = np.asarray([el.L - fringeLength, vacuumTubeOuterWidth])
-        point6 = np.asarray([el.L, vacuumTubeOuterWidth])
-        topPoints = [point1, point2, point3, point4, point5, point6]
-
-        bottomPoints = np.flip(np.row_stack(topPoints), axis=0)  # points need to go clockwise
-        bottomPoints[:, -1] *= -1
-        pointsOuter = topPoints + list(bottomPoints)
-        rotMatrix2D = Rot.from_rotvec([0, 0, el.theta]).as_matrix()[:2, :2]
-        for i, point in enumerate(pointsOuter):
-            pointsOuter[i] = rotMatrix2D @ point + el.r1[:2]
-        return pointsOuter
-
-    def make_Bender_Outer_Geometry(self, el):
-        assert type(el) is elementPT.HalbachBenderSimSegmented
-        phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
-        halfWidth = el.outerHalfWidth
-        vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
-
-        xInner = (el.rb - halfWidth) * np.cos(phiArr)  # x values for inner bend
-        yInner = (el.rb - halfWidth) * np.sin(phiArr)  # y values for inner bend
-        xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr))  # x values for outer bend
-        yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr))  # y values for outer bend
-        point1Cap = np.array([el.rb - halfWidth, -el.Lm / 2.0])
-        point2Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0])
-        point3Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap])
-        point4Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap])
-        point5Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0])
-        point6Cap = np.array([el.rb + halfWidth, -el.Lm / 2.0])
-        pointsCapStart = np.row_stack((point1Cap, point2Cap, point3Cap, point4Cap, point5Cap, point6Cap))
-
-        pointsCapEnd = []
-        m = np.tan(el.ang / 2.0)
-        for i, point in enumerate(pointsCapStart):
-            xStart, yStart = point
-            d = (xStart + yStart * m) / (1 + m ** 2)
-            pointEnd = np.array([2 * d - xStart, 2 * d * m - yStart])
-            pointsCapEnd.append(pointEnd)
-        pointsCapEnd = np.row_stack(pointsCapEnd)
-        xInner = np.append(np.flip(pointsCapEnd[:, 0]), xInner)
-        yInner = np.append(np.flip(pointsCapEnd[:, 1]), yInner)
-        xInner = np.append(xInner, pointsCapStart[:, 0])
-        yInner = np.append(yInner, pointsCapStart[:, 1])
-        x = np.append(xInner, xOuter)  # list of x values in order
-        y = np.append(yInner, yOuter)  # list of y values in order
-        pointsOuter = np.column_stack((x, y))  # shape the coordinates and make the object
-        rotMatrix2D = Rot.from_rotvec([0, 0, el.theta - el.ang + np.pi / 2]).as_matrix()[:2, :2]
-        for i, point in enumerate(pointsOuter):
-            pointsOuter[i] = rotMatrix2D @ point  # + el.r2[:2]
-        pointsOuter += el.r0[:2]
-        return pointsOuter
-
-    def make_Combiner_Outer_Geometry(self, el):
-
-        assert type(el) is elementPT.CombinerHalbachLensSim
-        apR, apL = el.ap, el.ap
-        halfWidth = el.outerHalfWidth
-        point1 = np.asarray([0, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
-        point2 = np.asarray([el.space, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
-        point3 = np.asarray([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
-        point4 = np.asarray([el.Lb, halfWidth])  # top middle when theta=0
-        point5 = np.asarray([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
-        point6 = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
-                             apR + (el.La - apR * np.sin(el.ang)) * np.sin(
-                                 el.ang) + VACUUM_TUBE_THICKNESS])  # top right when theta=0
-        point7 = np.asarray([el.Lb + (el.La + 1.5 * apL * np.sin(el.ang)) * np.cos(el.ang),
-                             -1.5 * apL + (el.La + 1.5 * apL * np.sin(el.ang)) * np.sin(
-                                 el.ang) - VACUUM_TUBE_THICKNESS])  # bottom right when theta=0
-        point8 = np.asarray([el.Lb, -1.5 * apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
-        point9 = np.asarray([el.Lb, -halfWidth])  # bottom middle when theta=0
-        point10 = np.asarray([el.space, -halfWidth])  # bottom middle when theta=0
-        point11 = np.asarray([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
-        point12 = np.asarray([0, -apL - VACUUM_TUBE_THICKNESS])  # bottom left when theta=0
-        pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
-                       point12]
-        for i, point in enumerate(pointsOuter):
-            pointsOuter[i] = el.ROut @ point + el.r2[:2]
-        return pointsOuter
-
-    def make_Combiner_Inner_Geometry(self, el):
-        assert type(el) in (elementPT.CombinerHalbachLensSim, elementPT.CombinerIdeal, elementPT.CombinerSim)
-        LbVac = el.Lb if type(el) is elementPT.CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
-        apR, apL = (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
-        extraFact = 1.5 if type(el) is CombinerHalbachLensSim else 1.0
-        q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
-        q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0
-        q3Inner = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
-                              apR + (el.La - apR * np.sin(el.ang)) * np.sin(el.ang)])  # top right when theta=0
-        q4Inner = np.asarray([el.Lb + (el.La + extraFact * apL * np.sin(el.ang)) * np.cos(el.ang),
-                              -extraFact * apL + (el.La + extraFact * apL * np.sin(el.ang)) * np.sin(
-                                  el.ang)])  # bottom right when theta=0
-        q5Inner = np.asarray([LbVac, -extraFact * apL])  # bottom middle when theta=0
-        q6Inner = np.asarray([LbVac, -apL])  # bottom middle when theta=0
-        q7Inner = np.asarray([0, -apL])  # bottom left when theta=0
-        pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner, q7Inner]
-        for i in range(len(pointsInner)):
-            pointsInner[i] = el.ROut @ pointsInner[i] + el.r2[:2]
-        return pointsInner
-
-    def make_Geometry(self) -> None:
-        # todo: refactor this whole thing
-        # construct the shapely objects used to plot the lattice and to determine if particles are inside of the lattice.
-        # Ideally I would never need to use this to find which particle the elment is in because it's slower.
-        # This is all done in the xy plane.
-        # ----------
-        # all of these take some thinking to visualize what's happening.
-        for el in self.elList:
-            xb = el.r1[0]
-            yb = el.r1[1]
-            xe = el.r2[0]
-            ye = el.r2[1]
-            halfWidth = el.ap
-            theta = el.theta
-            if el.shape == 'STRAIGHT':
-                q1Inner = np.asarray(
-                    [xb - np.sin(theta) * halfWidth, yb + halfWidth * np.cos(theta)])  # top left when theta=0
-                q2Inner = np.asarray(
-                    [xe - np.sin(theta) * halfWidth, ye + halfWidth * np.cos(theta)])  # top right when theta=0
-                q3Inner = np.asarray(
-                    [xe + np.sin(theta) * halfWidth, ye - halfWidth * np.cos(theta)])  # bottom right when theta=0
-                q4Inner = np.asarray(
-                    [xb + np.sin(theta) * halfWidth, yb - halfWidth * np.cos(theta)])  # bottom left when theta=0
-                pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner]
-                if el.outerHalfWidth is None:
-                    pointsOuter = pointsInner.copy()
-                else:
-                    halfWidth = el.outerHalfWidth
-                    if type(el) is HalbachLensSim:
-                        pointsOuter = self.make_Lens_Outer_Geometry(el)
-                    else:
-                        q1Outer = np.asarray(
-                            [xb - np.sin(theta) * halfWidth, yb + halfWidth * np.cos(theta)])  # top left when theta=0
-                        q2Outer = np.asarray(
-                            [xe - np.sin(theta) * halfWidth, ye + halfWidth * np.cos(theta)])  # top right when theta=0
-                        q3Outer = np.asarray([xe + np.sin(theta) * halfWidth,
-                                              ye - halfWidth * np.cos(theta)])  # bottom right when theta=0
-                        q4Outer = np.asarray([xb + np.sin(theta) * halfWidth,
-                                              yb - halfWidth * np.cos(theta)])  # bottom left when theta=0
-                        pointsOuter = [q1Outer, q2Outer, q3Outer, q4Outer]
-            elif el.shape == 'BEND':
-
-                phiArr = np.linspace(0, -el.ang, BENDER_POINTS) + theta + np.pi / 2  # angles swept out
-                r0 = el.r0.copy()
-                xInner = (el.rb - halfWidth) * np.cos(phiArr) + r0[0]  # x values for inner bend
-                yInner = (el.rb - halfWidth) * np.sin(phiArr) + r0[1]  # y values for inner bend
-                xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr) + r0[0])  # x values for outer bend
-                yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr) + r0[1])  # y values for outer bend
-
-                if isinstance(el, elementPT.HalbachBenderSimSegmented):
-                    xInner = np.append(xInner[0] + el.nb[0] * el.Lcap, xInner)
-                    yInner = np.append(yInner[0] + el.nb[1] * el.Lcap, yInner)
-                    xInner = np.append(xInner, xInner[-1] + el.ne[0] * el.Lcap)
-                    yInner = np.append(yInner, yInner[-1] + el.ne[1] * el.Lcap)
-                    xOuter = np.append(xOuter, xOuter[-1] + el.nb[0] * el.Lcap)
-                    yOuter = np.append(yOuter, yOuter[-1] + el.nb[1] * el.Lcap)
-                    xOuter = np.append(xOuter[0] + el.ne[0] * el.Lcap, xOuter)
-                    yOuter = np.append(yOuter[0] + el.ne[1] * el.Lcap, yOuter)
-
-                x = np.append(xInner, xOuter)  # list of x values in order
-                y = np.append(yInner, yOuter)  # list of y values in order
-                pointsInner = np.column_stack((x, y))  # shape the coordinates and make the object
-                if el.outerHalfWidth is None:
-                    pointsOuter = pointsInner.copy()
-                if type(el) is elementPT.HalbachBenderSimSegmented:
-                    pointsOuter = self.make_Bender_Outer_Geometry(el)
-            elif el.shape in ('COMBINER_SQUARE', 'COMBINER_CIRCULAR'):
-                pointsInner = self.make_Combiner_Inner_Geometry(el)
-                if el.outerHalfWidth is None:
-                    pointsOuter = pointsInner.copy()
-                if type(el) is elementPT.CombinerHalbachLensSim:
-                    pointsOuter = self.make_Combiner_Outer_Geometry(el)
-            else:
-                raise Exception('No correct element provided')
-            el.SO = Polygon(pointsInner)
-            el.SO_Outer = Polygon(pointsOuter)
 
     def catch_Errors(self, constrain: bool) -> None:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
@@ -581,7 +397,7 @@ class ParticleTracerLattice:
                     elif particle.qf is not None:
                         xy = particle.qf[:2]
                     else:
-                        raise ValueError()
+                        raise ValueError
                     color = 'yellow'
                 plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*xy, marker='o', s=10, c=color)

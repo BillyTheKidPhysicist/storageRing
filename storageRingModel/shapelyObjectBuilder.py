@@ -1,0 +1,200 @@
+from scipy.spatial.transform import Rotation as Rot
+from shapely.geometry import Polygon
+import numpy as np
+import elementPT
+from typeHints import element
+from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
+
+BENDER_POINTS = 250  # how many points to represent the bender with along each curve
+
+
+def make_Lens_Outer_Geometry(el: element) -> list[np.ndarray]:
+    assert type(el) is elementPT.HalbachLensSim
+    halfWidth = el.outerHalfWidth
+    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+    fringeLength = el.rp * el.fringeFracOuter
+    point1 = np.asarray([0.0, vacuumTubeOuterWidth])
+    point2 = np.asarray([fringeLength, vacuumTubeOuterWidth])
+    point3 = np.asarray([fringeLength, halfWidth])
+    point4 = np.asarray([el.L - fringeLength, halfWidth])
+    point5 = np.asarray([el.L - fringeLength, vacuumTubeOuterWidth])
+    point6 = np.asarray([el.L, vacuumTubeOuterWidth])
+    topPoints = [point1, point2, point3, point4, point5, point6]
+
+    bottomPoints = np.flip(np.row_stack(topPoints), axis=0)  # points need to go clockwise
+    bottomPoints[:, -1] *= -1
+    pointsOuter = [*topPoints, *bottomPoints]
+    return pointsOuter
+
+
+def make_Bender_Outer_Geometry(el: element) -> list[np.ndarray]:
+    assert type(el) is elementPT.HalbachBenderSimSegmented
+    phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
+    halfWidth = el.outerHalfWidth
+    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+
+    xInner = (el.rb - halfWidth) * np.cos(phiArr)  # x values for inner bend
+    yInner = (el.rb - halfWidth) * np.sin(phiArr)  # y values for inner bend
+    xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr))  # x values for outer bend
+    yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr))  # y values for outer bend
+    point1Cap = np.array([el.rb - halfWidth, -el.Lm / 2.0])
+    point2Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0])
+    point3Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap])
+    point4Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap])
+    point5Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0])
+    point6Cap = np.array([el.rb + halfWidth, -el.Lm / 2.0])
+    pointsCapStart = np.row_stack((point1Cap, point2Cap, point3Cap, point4Cap, point5Cap, point6Cap))
+
+    pointsCapEnd = []
+    m = np.tan(el.ang / 2.0)
+    for i, point in enumerate(pointsCapStart):
+        xStart, yStart = point
+        d = (xStart + yStart * m) / (1 + m ** 2)
+        pointEnd = np.array([2 * d - xStart, 2 * d * m - yStart])
+        pointsCapEnd.append(pointEnd)
+    pointsCapEnd = np.row_stack(pointsCapEnd)
+    xInner = np.append(np.flip(pointsCapEnd[:, 0]), xInner)
+    yInner = np.append(np.flip(pointsCapEnd[:, 1]), yInner)
+    xInner = np.append(xInner, pointsCapStart[:, 0])
+    yInner = np.append(yInner, pointsCapStart[:, 1])
+    x = np.append(xInner, xOuter)  # list of x values in order
+    y = np.append(yInner, yOuter)  # list of y values in order
+    pointsOuter = np.column_stack((x, y))  # shape the coordinates and make the object
+    rotMatrix2D = Rot.from_rotvec([0, 0, el.theta - el.ang + np.pi / 2]).as_matrix()[:2, :2]
+    for i, point in enumerate(pointsOuter):
+        pointsOuter[i] = rotMatrix2D @ point
+    pointsOuter += el.r0[:2]
+    return pointsOuter
+
+
+def make_Hexapole_Combiner_Outer_Geometry(el: element) -> list[np.ndarray]:
+    assert type(el) is elementPT.CombinerHalbachLensSim
+    apR, apL = el.ap, el.ap
+    halfWidth = el.outerHalfWidth
+    point1 = np.asarray([0, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point2 = np.asarray([el.space, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point3 = np.asarray([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
+    point4 = np.asarray([el.Lb, halfWidth])  # top middle when theta=0
+    point5 = np.asarray([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
+    point6 = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
+                         apR + (el.La - apR * np.sin(el.ang)) * np.sin(
+                             el.ang) + VACUUM_TUBE_THICKNESS])  # top right when theta=0
+    point7 = np.asarray([el.Lb + (el.La + 1.5 * apL * np.sin(el.ang)) * np.cos(el.ang),
+                         -1.5 * apL + (el.La + 1.5 * apL * np.sin(el.ang)) * np.sin(
+                             el.ang) - VACUUM_TUBE_THICKNESS])  # bottom right when theta=0
+    point8 = np.asarray([el.Lb, -1.5 * apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
+    point9 = np.asarray([el.Lb, -halfWidth])  # bottom middle when theta=0
+    point10 = np.asarray([el.space, -halfWidth])  # bottom middle when theta=0
+    point11 = np.asarray([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
+    point12 = np.asarray([0, -apL - VACUUM_TUBE_THICKNESS])  # bottom left when theta=0
+    pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
+                   point12]
+    for i, point in enumerate(pointsOuter):
+        pointsOuter[i] = el.ROut @ point + el.r2[:2]
+    return pointsOuter
+
+
+def make_Any_Combiner_Inner_Geometry(el: element) -> list[np.ndarray]:
+    assert type(el) in (elementPT.CombinerHalbachLensSim, elementPT.CombinerIdeal, elementPT.CombinerSim)
+    LbVac = el.Lb if type(el) is elementPT.CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
+    apR, apL = (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
+    extraFact = 1.5 if type(el) is elementPT.CombinerHalbachLensSim else 1.0
+    q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
+    q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0
+    q3Inner = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
+                          apR + (el.La - apR * np.sin(el.ang)) * np.sin(el.ang)])  # top right when theta=0
+    q4Inner = np.asarray([el.Lb + (el.La + extraFact * apL * np.sin(el.ang)) * np.cos(el.ang),
+                          -extraFact * apL + (el.La + extraFact * apL * np.sin(el.ang)) * np.sin(
+                              el.ang)])  # bottom right when theta=0
+    q5Inner = np.asarray([LbVac, -extraFact * apL])  # bottom middle when theta=0
+    q6Inner = np.asarray([LbVac, -apL])  # bottom middle when theta=0
+    q7Inner = np.asarray([0, -apL])  # bottom left when theta=0
+    pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner, q7Inner]
+    for point in pointsInner:
+        point[:] = el.ROut @ point + el.r2[:2]
+    return pointsInner
+
+
+def make_Rectangle(L: float, halfWidth: float) -> list[np.ndarray]:
+    q1Inner = np.asarray([0.0, halfWidth])  # top left when theta=0
+    q2Inner = np.asarray([L, halfWidth])  # top right when theta=0
+    q3Inner = np.asarray([L, -halfWidth])  # bottom right when theta=0
+    q4Inner = np.asarray([0, -halfWidth])  # bottom left when theta=0
+    return [q1Inner, q2Inner, q3Inner, q4Inner]
+
+
+def make_Lens_And_Drift_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
+    assert type(el) in (elementPT.LensIdeal, elementPT.HalbachLensSim, elementPT.Drift)
+    pointsInner = make_Rectangle(el.L, el.ap)
+    if type(el) is elementPT.HalbachLensSim:
+        pointsOuter = make_Lens_Outer_Geometry(el)
+    else:
+        outerHalfWidth = el.outerHalfWidth if el.outerHalfWidth is not None else el.ap
+        pointsOuter = make_Rectangle(el.L, outerHalfWidth)
+    for point in [*pointsInner, *pointsOuter]:
+        point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
+    return Polygon(pointsOuter), Polygon(pointsInner)
+
+
+def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    assert type(el) in (elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented)
+    halfWidth = el.ap
+    theta = el.theta
+    phiArr = np.linspace(0, -el.ang, BENDER_POINTS) + theta + np.pi / 2  # angles swept out
+    r0 = el.r0.copy()
+    xInner = (el.rb - halfWidth) * np.cos(phiArr) + r0[0]  # x values for inner bend
+    yInner = (el.rb - halfWidth) * np.sin(phiArr) + r0[1]  # y values for inner bend
+    xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr) + r0[0])  # x values for outer bend
+    yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr) + r0[1])  # y values for outer bend
+
+    if isinstance(el, elementPT.HalbachBenderSimSegmented):
+        xInner = np.append(xInner[0] + el.nb[0] * el.Lcap, xInner)
+        yInner = np.append(yInner[0] + el.nb[1] * el.Lcap, yInner)
+        xInner = np.append(xInner, xInner[-1] + el.ne[0] * el.Lcap)
+        yInner = np.append(yInner, yInner[-1] + el.ne[1] * el.Lcap)
+        xOuter = np.append(xOuter, xOuter[-1] + el.nb[0] * el.Lcap)
+        yOuter = np.append(yOuter, yOuter[-1] + el.nb[1] * el.Lcap)
+        xOuter = np.append(xOuter[0] + el.ne[0] * el.Lcap, xOuter)
+        yOuter = np.append(yOuter[0] + el.ne[1] * el.Lcap, yOuter)
+
+    x = np.append(xInner, xOuter)  # list of x values in order
+    y = np.append(yInner, yOuter)  # list of y values in order
+    pointsInner = np.column_stack((x, y))  # shape the coordinates and make the object
+    if el.outerHalfWidth is None:
+        pointsOuter = pointsInner.copy()
+    elif type(el) is elementPT.HalbachBenderSimSegmented:
+        pointsOuter = make_Bender_Outer_Geometry(el)
+    else:
+        raise NotImplementedError
+    return Polygon(pointsOuter), Polygon(pointsInner)
+
+
+def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    assert type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim, elementPT.CombinerHalbachLensSim)
+    pointsInner = make_Any_Combiner_Inner_Geometry(el)
+    if type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim):
+        pointsOuter = pointsInner.copy()
+    elif type(el) is elementPT.CombinerHalbachLensSim:
+        pointsOuter = make_Hexapole_Combiner_Outer_Geometry(el)
+    else:
+        raise NotImplementedError
+    return Polygon(pointsOuter), Polygon(pointsInner)
+
+
+def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    if el.shape == 'STRAIGHT':
+        shapelyOuter, shapelyInner = make_Lens_And_Drift_Shapely_Objects(el)
+    elif el.shape == 'BEND':
+        shapelyOuter, shapelyInner = make_Bender_Shapely_Object(el)
+    elif el.shape in ('COMBINER_SQUARE', 'COMBINER_CIRCULAR'):
+        shapelyOuter, shapelyInner = make_Combiner_Shapely_Object(el)
+    else:
+        raise NotImplementedError
+    return shapelyOuter, shapelyInner
+
+
+def build_Shapely_Objects(elementList: list[element]) -> None:
+    for el in elementList:
+        shapelyObject_Outer, shapelyObject_Inner = make_Element_Shapely_Object(el)
+        el.SO = shapelyObject_Inner
+        el.SO_Outer = shapelyObject_Outer

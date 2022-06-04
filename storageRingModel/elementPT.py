@@ -83,7 +83,7 @@ class Element:
     """
 
     def __init__(self, PTL, plotColor: str, ang: float = 0.0, build: bool = True, L=None):
-        # self.theta = None  # angle that describes an element's rotation in the xy plane.
+        self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
         # east. for theta=90 the output is pointing up.
