@@ -27,7 +27,8 @@ benderTypes = Union[elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
 class ParticleTracerLattice:
 
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
-                 jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False):
+                 jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
+                 useSolenoidField: bool = False):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -38,8 +39,8 @@ class ParticleTracerLattice:
         # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         # is also at the origin, but seceeding elements follow along the positive x axis
         self.v0Nominal = v0Nominal  # Design particle speed
-        self.benderIndices: list[
-            int] = []  # list that holds index values of benders. First bender is the first one that the particle sees
+        self.benderIndices: list[int] = []  # list that holds index values of benders. First bender is the
+        # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.combinerIndex: Optional[int] = None  # the index in the lattice where the combiner is
         self.totalLength: Optional[float] = None  # total length of lattice, m
@@ -53,6 +54,8 @@ class ParticleTracerLattice:
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
         self.isClosed = None  # is the lattice closed, ie end and beginning are smoothly connected?
+
+        self.useSolenoidField = useSolenoidField
 
         self.elList: list = []  # to hold all the lattice elements
 

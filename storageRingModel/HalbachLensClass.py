@@ -380,7 +380,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
     def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float,
                  position: list_tuple_arr = None, orientation: Rotation = None,
                  M: float = M_Default, numSlices: Optional[int] = 1, applyMethodOfMoments=False,
-                 useStandardMagErrors=False,
+                 useStandardMagErrors=False, useSolenoidField: bool = False,
                  sameSeed=False):
         # todo: Better seeding system
         super().__init__()
@@ -401,6 +401,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         self.M: float = M
         self.numSlices = numSlices
         self.numLayers = len(self.rp)
+        self.useSolenoidField = useSolenoidField
         self.mur = 1.05
 
         self.layerList: list[Layer] = []
@@ -464,6 +465,15 @@ class HalbachLens(billyHalbachCollectionWrapper):
                                                                     0.0)  # length adds up and centered on 0
         return zArr, LArr
 
+    def B_Vec(self, evalCoords: np.ndarray, useApprox: int = False) -> np.ndarray:
+        BVec = super().B_Vec(evalCoords, useApprox=useApprox)
+        if self.useSolenoidField:
+            Bz0 = 1 / 10_000  # 1 gauss field
+            z = evalCoords[:, 2]
+            falloffFact = 1 / (1 + np.exp(30 * (abs(z) - self.length / 2) / self.length))
+            BVec[:, 2] += Bz0 * falloffFact
+        return BVec
+
 
 class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
@@ -471,7 +481,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, numLenses: int = 3,
                  M: float = M_Default, positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False,
-                 useMagnetError: bool = False, useHalfCapEnd: tuple = None):
+                 useMagnetError: bool = False, useHalfCapEnd: tuple = None, useSolenoidField: bool = False):
         # todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(numLenses, int)
@@ -483,6 +493,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # solve the rest
         self.Lm: float = Lm  # length of single magnet
         self.M: float = M  # magnetization, SI
+        self.useSolenoidField = useSolenoidField
         self.positiveAngleMagnetsOnly: bool = positiveAngleMagnetsOnly  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
@@ -526,7 +537,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         for Lm, angle in self.lens_Length_And_Angle_Iter():
             lens = HalbachLens(self.rp, self.magnetWidth, Lm, M=self.M, position=(self.rb, 0.0, 0.0),
                                useStandardMagErrors=self.useStandardMagnetErrors,
-                               applyMethodOfMoments=False)
+                               applyMethodOfMoments=False, useSolenoidField=self.useSolenoidField)
             R = Rotation.from_rotvec([0.0, -angle, 0.0])
             lens.rotate(R, anchor=0)
             # my angle convention is unfortunately opposite what it should be here. positive theta

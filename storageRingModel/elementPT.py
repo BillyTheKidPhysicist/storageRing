@@ -1386,7 +1386,7 @@ class HalbachLensSim(LensIdeal):
         numSlices = None if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
         lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
-                                          numSlices=numSlices)
+                                          numSlices=numSlices, useSolenoidField=self.PTL.useSolenoidField)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt((xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2 + (xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2)
         if enforceGoodField == True:
@@ -1549,7 +1549,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.lens = _HalbachLensFieldGenerator(tuple(rpList), tuple(magnetWidthList), self.Lm,
                                                applyMethodOfMoments=True,
                                                useStandardMagErrors=self.useStandardMagErrors,
-                                               numSlices=numSlicesApprox)  # must reuse lens
+                                               numSlices=numSlicesApprox,
+                                               useSolenoidField=self.PTL.useSolenoidField)  # must reuse lens
         # because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
         assert trajectoryLength > self.Lm + 2 * self.space

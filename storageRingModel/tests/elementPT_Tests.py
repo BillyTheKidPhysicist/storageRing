@@ -36,6 +36,7 @@ class PTL_Dummy:
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
+        self.useSolenoidField = False
 
 
 class ElementTestHelper:
