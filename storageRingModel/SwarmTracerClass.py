@@ -197,7 +197,7 @@ class SwarmTracer:
 
         if circular is True:
             numParticlesfrac = 1 / (
-                        (np.pi / 4) ** 2)  # the ratio of the are of the circle to the cross section. There is one
+                    (np.pi / 4) ** 2)  # the ratio of the are of the circle to the cross section. There is one
             # factor for momentum and one for position
         else:
             numParticlesfrac = 1.0

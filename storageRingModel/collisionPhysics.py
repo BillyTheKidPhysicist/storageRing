@@ -7,7 +7,7 @@ described in electronic lab book. Briefly, the model assumptions are:
 - effect is only modeled in lens and arc section of bender to keep things simple
 
 """
-#pylint: disable=too-many-locals, too-many-arguments
+# pylint: disable=too-many-locals, too-many-arguments
 from typing import Union
 import numpy as np
 import numba
@@ -45,10 +45,10 @@ def max_Momentum_1D_In_Trap(r, rp, F_Centrifugal) -> float:
     delta_E_Const = -F_Centrifugal * rp - -F_Centrifugal * r
     E_Escape = delta_E_Mag + delta_E_Const
     if E_Escape < 0.0:  # particle would escape according to simple model. Instead, low energy level
-        E_Low = Bp * SIMULATION_MAGNETON * .5**2
-        vMax = np.sqrt(2*E_Low)
+        E_Low = Bp * SIMULATION_MAGNETON * .5 ** 2
+        vMax = np.sqrt(2 * E_Low)
     else:
-        vMax = np.sqrt(2*E_Escape)
+        vMax = np.sqrt(2 * E_Escape)
     return vMax
 
 
@@ -57,7 +57,7 @@ def trim_Longitudinal_Momentum_To_Maximum(pLong: float, nominalSpeed: float) -> 
     """Longitudinal momentum can only exist within a range of stability. Momentum outside that range is lost,
     and so particles with that momentum are not likely to be present in the ring in much numbers"""
     deltaPMax = 15.0  # from observations of phase space survival
-    pmin, pmax = nominalSpeed-deltaPMax, nominalSpeed+deltaPMax
+    pmin, pmax = nominalSpeed - deltaPMax, nominalSpeed + deltaPMax
     return clamp_value(pLong, pmin, pmax)
 
 
@@ -83,18 +83,18 @@ def collision_Rate(T: float, rp_Meters: float) -> frequency:
     """Calculate the collision rate of a beam of flux with a moving frame temperature of T confined to a fraction of
     the area rp_Meters. NOTE: This is all done in centimeters instead of meters!"""
     assert 0 < rp_Meters < .1 and 0 <= T < .1  # reasonable values
-    rp = rp_Meters*1e2  # convert to cm
-    vRelThermal = 1e2*np.sqrt(16 * BOLTZMANN_CONSTANT * T/(3.14 * MASS_LITHIUM_7))  # cm/s
+    rp = rp_Meters * 1e2  # convert to cm
+    vRelThermal = 1e2 * np.sqrt(16 * BOLTZMANN_CONSTANT * T / (3.14 * MASS_LITHIUM_7))  # cm/s
     # cm/s .even with zero temperature, there is still relative motion between atoms
     vRelRingDynamics = 50.0
-    vRel = np.sqrt(vRelRingDynamics**2+vRelThermal**2)  # cm/s
+    vRel = np.sqrt(vRelRingDynamics ** 2 + vRelThermal ** 2)  # cm/s
     sigma = 5e-13  # cm^2
-    speed = 210*1e2  # cm^2
-    flux = 2e12*500  # 1/s
-    area = np.pi*(.7*rp)**2  # cm
-    n = flux/(area*speed)  # 1/cm^3
-    meanFreePath = 1/(np.sqrt(2)*n*sigma)  # cm
-    return vRel/meanFreePath  # 1/s
+    speed = 210 * 1e2  # cm^2
+    flux = 2e12 * 500  # 1/s
+    area = np.pi * (.7 * rp) ** 2  # cm
+    n = flux / (area * speed)  # 1/cm^3
+    meanFreePath = 1 / (np.sqrt(2) * n * sigma)  # cm
+    return vRel / meanFreePath  # 1/s
 
 
 @numba.njit()
@@ -127,15 +127,15 @@ def collision_Partner_Momentum_Bender(qEl: vec3D, nominalSpeed: float, T: float,
     """
     delta_pso, pxo, pyo = momentum_sample_3D(T)
     pso = nominalSpeed + delta_pso
-    xo = np.sqrt(qEl[0]**2+qEl[1]**2)-rBend
+    xo = np.sqrt(qEl[0] ** 2 + qEl[1] ** 2) - rBend
     yo = qEl[2]
-    Fcentrigfugal = nominalSpeed**2/rBend  # approximately centripetal force
+    Fcentrigfugal = nominalSpeed ** 2 / rBend  # approximately centripetal force
     pxo = trim_Transverse_Momentum_To_Maximum(pxo, xo, rp, Fcentrifugal=Fcentrigfugal)
     pyo = trim_Transverse_Momentum_To_Maximum(pyo, yo, rp, Fcentrifugal=Fcentrigfugal)
     pso = trim_Longitudinal_Momentum_To_Maximum(pso, nominalSpeed)
     theta = full_Arctan(qEl[1], qEl[0])
-    px = pxo*np.cos(theta)--pso*np.sin(theta)
-    py = pxo*np.sin(theta)+-pso*np.cos(theta)
+    px = pxo * np.cos(theta) - -pso * np.sin(theta)
+    py = pxo * np.sin(theta) + -pso * np.cos(theta)
     pz = pyo
     pCollision = (px, py, pz)
     return pCollision
@@ -172,7 +172,7 @@ def get_Collision_Params(element: Element, atomSpeed: realNum):
         rpDrift_Fake = .03
         rp = rpDrift_Fake if rp == np.inf else rp
         collisionRate = collision_Rate(T, rp)
-        return 'STRAIGHT', collisionRate,  atomSpeed, T, rp, np.nan, np.nan
+        return 'STRAIGHT', collisionRate, atomSpeed, T, rp, np.nan, np.nan
     elif type(element) is elementPT.HalbachBenderSimSegmented:
         rp, rb = element.rp, element.rb
         collisionRate = collision_Rate(T, rp)

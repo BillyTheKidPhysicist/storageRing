@@ -14,6 +14,7 @@ from collisionPhysics import post_Collision_Momentum, get_Collision_Params
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
+
 @numba.njit()
 def norm_3D(vec):
     return sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)

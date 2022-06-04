@@ -3,6 +3,7 @@ import numpy as np
 import magpylib as magpy
 import copy
 
+
 def mesh_cuboid(cuboid, nnn):
     """
     Splits Cuboid up into small Cuboid cells
@@ -32,18 +33,17 @@ def mesh_cuboid(cuboid, nnn):
     nnn = np.array(nnn, dtype=int)
 
     # new dimension
-    new_dim = dim/nnn
+    new_dim = dim / nnn
 
     # inside position grid
-    xs,ys,zs = [np.linspace(d/2*(1/n-1), d/2*(1-1/n), n) for d,n in zip(dim,nnn)]
-    grid = np.array([(x,y,z) for x in xs for y in ys for z in zs])
+    xs, ys, zs = [np.linspace(d / 2 * (1 / n - 1), d / 2 * (1 - 1 / n), n) for d, n in zip(dim, nnn)]
+    grid = np.array([(x, y, z) for x in xs for y in ys for z in zs])
     grid = rot.apply(grid) + pos
 
     # create cells as magpylib objects and return Collection
     cells = [magpy.magnet.Cuboid(mag, new_dim, pp, rot) for pp in grid]
 
     return magpy.Collection(cells)
-
 
 
 def demag_tensor(collection, store=False, load=False):
@@ -86,10 +86,9 @@ def demag_tensor(collection, store=False, load=False):
         except FileNotFoundError:
             print(' - file not found')
 
-
     # compute cell positions
-    pos = np.empty((n,3))
-    for i,src in enumerate(collection.sources_all):
+    pos = np.empty((n, 3))
+    for i, src in enumerate(collection.sources_all):
         if isinstance(src, magpy.magnet.CylinderSegment):
             pos[i] = src.barycenter
         else:
@@ -97,13 +96,13 @@ def demag_tensor(collection, store=False, load=False):
     # split up magnetizations
 
     coll3 = magpy.Collection()
-    for unit_mag in [(1,0,0), (0,1,0), (0,0,1)]:
+    for unit_mag in [(1, 0, 0), (0, 1, 0), (0, 0, 1)]:
         for src in collection.sources_all:
-            src.magnetization=src.orientation.inv().apply(unit_mag)   # ROTATION CHECK
+            src.magnetization = src.orientation.inv().apply(unit_mag)  # ROTATION CHECK
             coll3.add(src.copy())
     # point matching field and demag tensor
-    Hpoint = magpy.getH(coll3.sources, pos) # shape (3n cells, n pos, 3 xyz)
-    T = Hpoint.reshape(3, n, n, 3) # shape (3 unit mag, n cells, n pos, 3 xyz)
+    Hpoint = magpy.getH(coll3.sources, pos)  # shape (3n cells, n pos, 3 xyz)
+    T = Hpoint.reshape(3, n, n, 3)  # shape (3 unit mag, n cells, n pos, 3 xyz)
 
     # store tensor
     if isinstance(store, str):
@@ -140,11 +139,11 @@ def invert(matrix, solver):
 
 
 def apply_demag(
-    collection,
-    solver='np.linalg.inv',
-    demag_store=False,
-    demag_load=False,
-    ):
+        collection,
+        solver='np.linalg.inv',
+        demag_store=False,
+        demag_load=False,
+):
     '''
     Computes the interaction between all collection magnets and fixes their magnetization.
 
@@ -169,42 +168,39 @@ def apply_demag(
     -------
     None
     '''
-    xi=[src.mur-1.0 for src in collection.sources_all]
+    xi = [src.mur - 1.0 for src in collection.sources_all]
     n = len(collection.sources_all)
 
-
-
     # set up mr
-    mag = [src.orientation.apply(src.magnetization) for src in collection.sources_all]    # ROTATION CHECK
-    mag = np.reshape(mag,(3*n,1), order='F')   # shape ii = x1, ... xn, y1, ... yn, z1, ... zn
+    mag = [src.orientation.apply(src.magnetization) for src in collection.sources_all]  # ROTATION CHECK
+    mag = np.reshape(mag, (3 * n, 1), order='F')  # shape ii = x1, ... xn, y1, ... yn, z1, ... zn
 
     # set up S
     xi = np.array(xi)
     if len(xi) != n:
         raise ValueError('Apply_demag input collection and xi must have same length.')
-    S = np.diag(np.tile(xi, 3)) # shape ii, jj
+    S = np.diag(np.tile(xi, 3))  # shape ii, jj
 
     # set up T
     T = demag_tensor(
         collection,
         store=demag_store,
         load=demag_load,
-    ) # shape (3 mag unit, n cells, n positions, 3 Bxyz)
+    )  # shape (3 mag unit, n cells, n positions, 3 Bxyz)
 
     T = T.swapaxes(0, 3)
-    T = T*(4*np.pi/10)
+    T = T * (4 * np.pi / 10)
     T = T.swapaxes(2, 3)
-    T = np.reshape(T, (3*n,3*n)).T # shape ii, jj
+    T = np.reshape(T, (3 * n, 3 * n)).T  # shape ii, jj
 
     # set up and invert Q
-    Q = np.eye(3*n) - np.matmul(S, T)
+    Q = np.eye(3 * n) - np.matmul(S, T)
     Q_inv = invert(matrix=Q, solver=solver)
 
     # determine new magnetization vectors
     mag_new = np.matmul(Q_inv, mag)
-    mag_new = np.reshape(mag_new, (n,3), order='F')
-    #mag_new *= .4*np.pi
+    mag_new = np.reshape(mag_new, (n, 3), order='F')
+    # mag_new *= .4*np.pi
 
-    for s,mag in zip(collection.sources_all, mag_new):
-        s.magnetization = s.orientation.inv().apply(mag)   # ROTATION CHECK
-
+    for s, mag in zip(collection.sources_all, mag_new):
+        s.magnetization = s.orientation.inv().apply(mag)  # ROTATION CHECK

@@ -36,18 +36,18 @@ def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Hexapole_Bender_Caps_Outer_Points(el:element)-> tuple[list[np.ndarray], list[np.ndarray]]:
+def make_Hexapole_Bender_Caps_Outer_Points(el: element) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Make points that describe the shape of the input and outputs of the hexapole bender. They have
     a stepped shape from the width of the magnets. Output cap points along -y and is easy to specify the
     coordinates and is then mirrored to produce the input cap as well."""
 
     vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
-    pointsCapStart=[np.array([el.rb - el.halfWidth, -el.Lm / 2.0]),
-                    np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0]),
-                    np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap]),
-                    np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap]),
-                    np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0]),
-                    np.array([el.rb + el.halfWidth, -el.Lm / 2.0])]
+    pointsCapStart = [np.array([el.rb - el.outerHalfWidth, -el.Lm / 2.0]),
+                      np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0]),
+                      np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap]),
+                      np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap]),
+                      np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0]),
+                      np.array([el.rb + el.outerHalfWidth, -el.Lm / 2.0])]
 
     pointsCapEnd = []
     m = np.tan(el.ang / 2.0)
@@ -56,7 +56,8 @@ def make_Hexapole_Bender_Caps_Outer_Points(el:element)-> tuple[list[np.ndarray],
         d = (xStart + yStart * m) / (1 + m ** 2)
         pointEnd = np.array([2 * d - xStart, 2 * d * m - yStart])
         pointsCapEnd.append(pointEnd)
-    return pointsCapStart,pointsCapEnd
+    return pointsCapStart, pointsCapEnd
+
 
 def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a hexapole bending section.
@@ -65,14 +66,13 @@ def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
     assert type(el) is elementPT.HalbachBenderSimSegmented
     phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
 
-
     xInner = (el.rb - el.outerHalfWidth) * np.cos(phiArr)  # x values for inner bend
     yInner = (el.rb - el.outerHalfWidth) * np.sin(phiArr)  # y values for inner bend
     xOuter = np.flip((el.rb + el.outerHalfWidth) * np.cos(phiArr))  # x values for outer bend
     yOuter = np.flip((el.rb + el.outerHalfWidth) * np.sin(phiArr))  # y values for outer bend
 
-    pointsCapStart,pointsCapEnd=make_Hexapole_Bender_Caps_Outer_Points(el)
-    pointsCapStart, pointsCapEnd=np.array(pointsCapStart),np.array(pointsCapEnd)
+    pointsCapStart, pointsCapEnd = make_Hexapole_Bender_Caps_Outer_Points(el)
+    pointsCapStart, pointsCapEnd = np.array(pointsCapStart), np.array(pointsCapEnd)
     xInner = np.append(np.flip(pointsCapEnd[:, 0]), xInner)
     yInner = np.append(np.flip(pointsCapEnd[:, 1]), yInner)
     xInner = np.append(xInner, pointsCapStart[:, 0])
@@ -90,7 +90,7 @@ def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
 def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach combiner. Very similiar
     to halbach lens geometry, but with tiled input and enlarged input"""
-    #pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals
     assert type(el) is elementPT.CombinerHalbachLensSim
     apR, apL = el.ap, el.ap
     halfWidth = el.outerHalfWidth
@@ -100,11 +100,11 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
     point5 = np.array([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
     point6 = np.array([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
-                         apR + (el.La - apR * np.sin(el.ang)) * np.sin(
-                             el.ang) + VACUUM_TUBE_THICKNESS])  # top right when theta=0
+                       apR + (el.La - apR * np.sin(el.ang)) * np.sin(
+                           el.ang) + VACUUM_TUBE_THICKNESS])  # top right when theta=0
     point7 = np.array([el.Lb + (el.La + 1.5 * apL * np.sin(el.ang)) * np.cos(el.ang),
-                         -1.5 * apL + (el.La + 1.5 * apL * np.sin(el.ang)) * np.sin(
-                             el.ang) - VACUUM_TUBE_THICKNESS])  # bottom right when theta=0
+                       -1.5 * apL + (el.La + 1.5 * apL * np.sin(el.ang)) * np.sin(
+                           el.ang) - VACUUM_TUBE_THICKNESS])  # bottom right when theta=0
     point8 = np.array([el.Lb, -1.5 * apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
     point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
     point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
@@ -190,9 +190,9 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     x = np.append(xInner, xOuter)  # list of x values in order
     y = np.append(yInner, yOuter)  # list of y values in order
     pointsInner = np.column_stack((x, y))  # shape the coordinates and make the object
-    if type(el) is elementPT.HalbachBenderSimSegmented:
+    if type(el) is elementPT.BenderIdeal:
         pointsOuter = pointsInner.copy()
-    elif type(el) is elementPT.BenderIdeal:
+    elif type(el) is elementPT.HalbachBenderSimSegmented:
         pointsOuter = make_Hexapole_Bender_Outer_Points(el)
     else:
         raise NotImplementedError

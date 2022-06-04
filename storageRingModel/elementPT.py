@@ -841,7 +841,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
             round(25 * self.PTL.fieldDensityMultiplier))  # This many points should span the
         # bore ap for good field sampling
         self.longitudinalCoordSpacing: float = (
-                                                           .8 * self.rp / 10.0) / self.PTL.fieldDensityMultiplier  # Spacing through unit
+                                                       .8 * self.rp / 10.0) / self.PTL.fieldDensityMultiplier  # Spacing through unit
         # cell. .8 was carefully chosen
         self.numModelLenses: int = 7  # number of lenses in halbach model to represent repeating system. Testing has shown
         # this to be optimal
@@ -868,7 +868,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         apMaxGeom = self.rb - radiusCorner - VACUUM_TUBE_THICKNESS  # max aperture without clipping magnet
         safetyFactor = .95
         apMaxGoodField = safetyFactor * self.numPointsBoreAp * self.rp / (
-                    self.numPointsBoreAp + np.sqrt(2))  # max aperture
+                self.numPointsBoreAp + np.sqrt(2))  # max aperture
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
         apMax = min([apMaxGeom, apMaxGoodField])
@@ -1406,7 +1406,7 @@ class HalbachLensSim(LensIdeal):
         else:
             xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn = [np.ones(1) * np.nan] * 5
         fieldData = (
-        xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn)
+            xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn)
         fieldDataPerturbations = self.make_Field_Perturbation_Data()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
                                                           self.extraFieldLength])

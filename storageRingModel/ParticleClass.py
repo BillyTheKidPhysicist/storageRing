@@ -1,7 +1,7 @@
 import warnings
 import copy
 from math import isnan
-from typing import Union, Optional,Iterable
+from typing import Union, Optional, Iterable
 import matplotlib.pyplot as plt
 import numpy.linalg as npl
 import numpy as np
@@ -103,7 +103,7 @@ class Particle:
             elementIndexPrev = self._TList[0][0]
             E_AfterEnteringEl = self.EArr[0]
 
-            for i,_ in enumerate(self._TList):
+            for i, _ in enumerate(self._TList):
                 if self._TList[i][0] != elementIndexPrev:
                     E_BeforeLeavingEl = self.EArr[i - 1]
                     deltaE = E_BeforeLeavingEl - E_AfterEnteringEl
@@ -169,7 +169,7 @@ class Particle:
         plt.show()
 
     def plot_Orbit_Reference_Frame_Position(self, plotYAxis: bool = 'y') -> None:
-        if plotYAxis not in ('y','z'):
+        if plotYAxis not in ('y', 'z'):
             raise Exception('plotYAxis MUST BE EITHER \'y\' or \'z\'')
         if self.qoArr.shape[0] == 0:
             warnings.warn('Particle has no logged position values')
