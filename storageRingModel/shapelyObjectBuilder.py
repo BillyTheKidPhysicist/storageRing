@@ -1,3 +1,10 @@
+"""
+Functions to construct shapely geometry objects for elements in ElementPT.py. These shapely objects are primarily
+used for:
+- enforcing spatial constraints such as elements not overlapping and the ring fitting in the room
+- visualizing the floorplan layout
+- a secondary method of testing if particles are in a specific element
+"""
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 import numpy as np
@@ -8,7 +15,9 @@ from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
 BENDER_POINTS = 250  # how many points to represent the bender with along each curve
 
 
-def make_Lens_Outer_Geometry(el: element) -> list[np.ndarray]:
+def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
+    """Construct a list of points of coordinates of corners of the outer geometry of a halbach lens. Overall shape is
+    a rectangle overlayd on a shorter but wider rectangle. This represents the width of the magnets"""
     assert type(el) is elementPT.HalbachLensSim
     halfWidth = el.outerHalfWidth
     vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
@@ -27,32 +36,43 @@ def make_Lens_Outer_Geometry(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Bender_Outer_Geometry(el: element) -> list[np.ndarray]:
-    assert type(el) is elementPT.HalbachBenderSimSegmented
-    phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
-    halfWidth = el.outerHalfWidth
-    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+def make_Hexapole_Bender_Caps_Outer_Points(el:element)-> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Make points that describe the shape of the input and outputs of the hexapole bender. They have
+    a stepped shape from the width of the magnets. Output cap points along -y and is easy to specify the
+    coordinates and is then mirrored to produce the input cap as well."""
 
-    xInner = (el.rb - halfWidth) * np.cos(phiArr)  # x values for inner bend
-    yInner = (el.rb - halfWidth) * np.sin(phiArr)  # y values for inner bend
-    xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr))  # x values for outer bend
-    yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr))  # y values for outer bend
-    point1Cap = np.array([el.rb - halfWidth, -el.Lm / 2.0])
-    point2Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0])
-    point3Cap = np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap])
-    point4Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap])
-    point5Cap = np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0])
-    point6Cap = np.array([el.rb + halfWidth, -el.Lm / 2.0])
-    pointsCapStart = np.row_stack((point1Cap, point2Cap, point3Cap, point4Cap, point5Cap, point6Cap))
+    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+    pointsCapStart=[np.array([el.rb - el.halfWidth, -el.Lm / 2.0]),
+                    np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0]),
+                    np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap]),
+                    np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap]),
+                    np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0]),
+                    np.array([el.rb + el.halfWidth, -el.Lm / 2.0])]
 
     pointsCapEnd = []
     m = np.tan(el.ang / 2.0)
-    for i, point in enumerate(pointsCapStart):
+    for point in pointsCapStart:
         xStart, yStart = point
         d = (xStart + yStart * m) / (1 + m ** 2)
         pointEnd = np.array([2 * d - xStart, 2 * d * m - yStart])
         pointsCapEnd.append(pointEnd)
-    pointsCapEnd = np.row_stack(pointsCapEnd)
+    return pointsCapStart,pointsCapEnd
+
+def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
+    """Construct a list of points of coordinates of corners of the outer geometry of a hexapole bending section.
+    Shape is a toroid with short straight section at input/ouput, with another wider but shorter toroid ontop """
+
+    assert type(el) is elementPT.HalbachBenderSimSegmented
+    phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
+
+
+    xInner = (el.rb - el.outerHalfWidth) * np.cos(phiArr)  # x values for inner bend
+    yInner = (el.rb - el.outerHalfWidth) * np.sin(phiArr)  # y values for inner bend
+    xOuter = np.flip((el.rb + el.outerHalfWidth) * np.cos(phiArr))  # x values for outer bend
+    yOuter = np.flip((el.rb + el.outerHalfWidth) * np.sin(phiArr))  # y values for outer bend
+
+    pointsCapStart,pointsCapEnd=make_Hexapole_Bender_Caps_Outer_Points(el)
+    pointsCapStart, pointsCapEnd=np.array(pointsCapStart),np.array(pointsCapEnd)
     xInner = np.append(np.flip(pointsCapEnd[:, 0]), xInner)
     yInner = np.append(np.flip(pointsCapEnd[:, 1]), yInner)
     xInner = np.append(xInner, pointsCapStart[:, 0])
@@ -67,26 +87,29 @@ def make_Bender_Outer_Geometry(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Hexapole_Combiner_Outer_Geometry(el: element) -> list[np.ndarray]:
+def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
+    """Construct a list of points of coordinates of corners of the outer geometry of a halbach combiner. Very similiar
+    to halbach lens geometry, but with tiled input and enlarged input"""
+    #pylint: disable=too-many-locals
     assert type(el) is elementPT.CombinerHalbachLensSim
     apR, apL = el.ap, el.ap
     halfWidth = el.outerHalfWidth
-    point1 = np.asarray([0, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
-    point2 = np.asarray([el.space, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
-    point3 = np.asarray([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
-    point4 = np.asarray([el.Lb, halfWidth])  # top middle when theta=0
-    point5 = np.asarray([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
-    point6 = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
+    point1 = np.array([0, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point2 = np.array([el.space, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point3 = np.array([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
+    point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
+    point5 = np.array([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
+    point6 = np.array([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
                          apR + (el.La - apR * np.sin(el.ang)) * np.sin(
                              el.ang) + VACUUM_TUBE_THICKNESS])  # top right when theta=0
-    point7 = np.asarray([el.Lb + (el.La + 1.5 * apL * np.sin(el.ang)) * np.cos(el.ang),
+    point7 = np.array([el.Lb + (el.La + 1.5 * apL * np.sin(el.ang)) * np.cos(el.ang),
                          -1.5 * apL + (el.La + 1.5 * apL * np.sin(el.ang)) * np.sin(
                              el.ang) - VACUUM_TUBE_THICKNESS])  # bottom right when theta=0
-    point8 = np.asarray([el.Lb, -1.5 * apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
-    point9 = np.asarray([el.Lb, -halfWidth])  # bottom middle when theta=0
-    point10 = np.asarray([el.space, -halfWidth])  # bottom middle when theta=0
-    point11 = np.asarray([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
-    point12 = np.asarray([0, -apL - VACUUM_TUBE_THICKNESS])  # bottom left when theta=0
+    point8 = np.array([el.Lb, -1.5 * apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
+    point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
+    point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
+    point11 = np.array([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
+    point12 = np.array([0, -apL - VACUUM_TUBE_THICKNESS])  # bottom left when theta=0
     pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
                    point12]
     for i, point in enumerate(pointsOuter):
@@ -94,7 +117,9 @@ def make_Hexapole_Combiner_Outer_Geometry(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Any_Combiner_Inner_Geometry(el: element) -> list[np.ndarray]:
+def make_Any_Combiner_Inner_Points(el: element) -> list[np.ndarray]:
+    """Construct a list of points of coordinates of corners of the inner (vacuum tube) geometry of a halbach combiner.
+    Basically a rectangle with a wider tilted rectangle coming off one end (the input)"""
     assert type(el) in (elementPT.CombinerHalbachLensSim, elementPT.CombinerIdeal, elementPT.CombinerSim)
     LbVac = el.Lb if type(el) is elementPT.CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
     apR, apL = (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
@@ -116,6 +141,7 @@ def make_Any_Combiner_Inner_Geometry(el: element) -> list[np.ndarray]:
 
 
 def make_Rectangle(L: float, halfWidth: float) -> list[np.ndarray]:
+    """Make a simple rectangle. Used to model drift regions or interior(vacuum tube) of lenses"""
     q1Inner = np.asarray([0.0, halfWidth])  # top left when theta=0
     q2Inner = np.asarray([L, halfWidth])  # top right when theta=0
     q3Inner = np.asarray([L, -halfWidth])  # bottom right when theta=0
@@ -124,10 +150,12 @@ def make_Rectangle(L: float, halfWidth: float) -> list[np.ndarray]:
 
 
 def make_Lens_And_Drift_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
+    """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of lens elements and drift
+    region. Drift regions are just vacuum tubes between elements"""
     assert type(el) in (elementPT.LensIdeal, elementPT.HalbachLensSim, elementPT.Drift)
     pointsInner = make_Rectangle(el.L, el.ap)
     if type(el) is elementPT.HalbachLensSim:
-        pointsOuter = make_Lens_Outer_Geometry(el)
+        pointsOuter = make_Halbach_Lens_Outer_Points(el)
     else:
         outerHalfWidth = el.outerHalfWidth if el.outerHalfWidth is not None else el.ap
         pointsOuter = make_Rectangle(el.L, outerHalfWidth)
@@ -137,6 +165,8 @@ def make_Lens_And_Drift_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
 
 
 def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of bender elements"""
+
     assert type(el) in (elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented)
     halfWidth = el.ap
     theta = el.theta
@@ -160,28 +190,31 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     x = np.append(xInner, xOuter)  # list of x values in order
     y = np.append(yInner, yOuter)  # list of y values in order
     pointsInner = np.column_stack((x, y))  # shape the coordinates and make the object
-    if el.outerHalfWidth is None:
+    if type(el) is elementPT.HalbachBenderSimSegmented:
         pointsOuter = pointsInner.copy()
-    elif type(el) is elementPT.HalbachBenderSimSegmented:
-        pointsOuter = make_Bender_Outer_Geometry(el)
+    elif type(el) is elementPT.BenderIdeal:
+        pointsOuter = make_Hexapole_Bender_Outer_Points(el)
     else:
         raise NotImplementedError
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
 def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of combiner elements"""
     assert type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim, elementPT.CombinerHalbachLensSim)
-    pointsInner = make_Any_Combiner_Inner_Geometry(el)
+    pointsInner = make_Any_Combiner_Inner_Points(el)
     if type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim):
         pointsOuter = pointsInner.copy()
     elif type(el) is elementPT.CombinerHalbachLensSim:
-        pointsOuter = make_Hexapole_Combiner_Outer_Geometry(el)
+        pointsOuter = make_Hexapole_Combiner_Outer_Points(el)
     else:
         raise NotImplementedError
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
 def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+    """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of elementPT objects such
+    as lenses, drifts, benders and combiners"""
     if el.shape == 'STRAIGHT':
         shapelyOuter, shapelyInner = make_Lens_And_Drift_Shapely_Objects(el)
     elif el.shape == 'BEND':
@@ -194,6 +227,9 @@ def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
 
 
 def build_Shapely_Objects(elementList: list[element]) -> None:
+    """Build the inner and outer shapely obejcts that represent the 2D geometries of the each element. This is the
+    projection of an element onto the horizontal plane that bisects it. Inner geometry repsents vacuum, and outer
+     the eternal profile. Ideal elements have to out profile"""
     for el in elementList:
         shapelyObject_Outer, shapelyObject_Inner = make_Element_Shapely_Object(el)
         el.SO = shapelyObject_Inner
