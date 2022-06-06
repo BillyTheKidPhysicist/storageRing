@@ -66,7 +66,7 @@ def _assert_Consraint_Match_Saved_Vals(PTL: ParticleTracerLattice, fileName: str
     r1_2TestArr = np.loadtxt(os.path.join(testDataFolderPath, fileName))
     r1TestArr, r2TestArr = r1_2TestArr[:, :3], r1_2TestArr[:, 3:]
     for el, r1Test, r2Test in zip(PTL.elList, r1TestArr, r2TestArr):
-        assert np.all(el.r1 == r1Test) and np.all(el.r2 == r2Test)
+        assert iscloseAll(el.r1,r1Test,1e-14) and iscloseAll(el.r2, r2Test,1e-14)
 
 
 def _test_Storage_Ring_Constraint_3():

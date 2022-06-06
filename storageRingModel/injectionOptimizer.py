@@ -1,7 +1,6 @@
 import itertools
 import os
 import elementPT
-from asyncDE import solve_Async
 from typing import Union, Optional
 import numpy as np
 import warnings

@@ -231,7 +231,8 @@ class ParticleTracerLattice:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
 
-    def add_Drift(self, L: float, ap: float = .03, outerHalfWidth: float = None) -> None:
+    def add_Drift(self, L: float, ap: float = .03, outerHalfWidth: float = None, 
+                  inputTiltAngle=0.0,outputTiltAngle=0.0) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -240,7 +241,7 @@ class ParticleTracerLattice:
         :return:
         """
 
-        el = Drift(self, L, ap, outerHalfWidth)  # create a drift element object
+        el = Drift(self, L, ap, outerHalfWidth,inputTiltAngle,outputTiltAngle)  # create a drift element object
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
 

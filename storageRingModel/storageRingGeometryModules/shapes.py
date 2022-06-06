@@ -21,7 +21,7 @@ class Shape:
 
     def get_Pos_And_Normal(self, which: str)-> tuple[np.ndarray,np.ndarray]:
         """Get position coordinates and normal vector of input or output of an element"""
-        
+
         assert which in ('out', 'in')
         if which == 'out':
             return self.pos_out, self.n_out
@@ -37,10 +37,10 @@ class Shape:
         """Using a previous element which has already been placed, place this the current element"""
 
         raise NotImplementedError
-    
+
     def place(self,*args,**kwargs):
         """With arguments required to constrain the position of a shape, set the location parameters of the shape"""
-        
+
         raise NotImplementedError
 
     def get_Plot_Coords(self) -> tuple[np.ndarray, np.ndarray]:
@@ -60,7 +60,7 @@ class Line(Shape):
 
     def set_Length(self, length: float)-> None:
         """Set the length of the line"""
-        
+
         assert length > 0.0
         self.length = length
 
@@ -71,20 +71,33 @@ class Line(Shape):
         yVals = np.array([self.pos_in[1], self.pos_out[1]])
         return xVals, yVals
 
-    def place(self, pos_in: np.ndarray, tiltAngle: float) -> None: #pylint: disable=arguments-differ
+    def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None:
         self.pos_in = pos_in
-        self.n_out = np.array([np.cos(tiltAngle), np.sin(tiltAngle)])
-        self.n_in = -1*self.n_out
+        self.n_in = n_in
+        self.n_out = -1*self.n_in
         self.pos_out = self.pos_in + self.length * self.n_out
 
     def daisy_Chain(self, geometry: Shape) -> None:
-        pos_out, n_out = geometry.pos_out, geometry.n_out
-        self.pos_in=pos_out.copy()
-        self.n_in=-n_out.copy()
-        self.n_out=n_out.copy()
-        self.pos_out = self.pos_in + self.length * self.n_out
-        # tiltAngle = np.arctan2(n_out[1], n_out[0])
-        # self.place(pos_out, tiltAngle)
+        pos_in, n_in = geometry.pos_out, -geometry.n_out
+        self.place(pos_in,n_in)
+
+class LineWithAngledEnds(Line):
+    def __init__(self,length, inputTilt,outputTilt):
+        assert abs(inputTilt)<np.pi/2 and abs(outputTilt)<np.pi/2
+        super().__init__(length)
+        self.inputTilt=inputTilt
+        self.outputTilt=outputTilt
+
+    def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None: #pylint: disable=arguments-differ
+        self.pos_in = pos_in
+        self.n_in = n_in
+        from scipy.spatial.transform import Rotation as Rot
+        self.pos_out = self.pos_in + self.length * self.n_From_Input_To_Output_Pos()
+        self.n_out=Rot.from_rotvec([0, 0, self.outputTilt-self.inputTilt]).as_matrix()[:2, :2]@(-n_in)
+
+    def n_From_Input_To_Output_Pos(self):
+        from scipy.spatial.transform import Rotation as Rot
+        return -Rot.from_rotvec([0, 0, -self.inputTilt]).as_matrix()[:2, :2] @ self.n_in
 
 
 class Bend(Shape):
@@ -100,7 +113,7 @@ class Bend(Shape):
 
     def set_Arc_Angle(self, angle):
         """Set the arc angle (bending angle) of the bend bend"""
-        
+
         assert 0 < angle <= 2 * np.pi
         self.bendingAngle = angle
 
@@ -119,7 +132,7 @@ class Bend(Shape):
         return xVals, yVals
 
     def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None: #pylint: disable=arguments-differ
-        assert n_in[0] != 0.0 and n_in[1] != 0.0 and isclose(norm_2D(n_in), 1.0, abs_tol=1e-12)
+        assert isclose(norm_2D(n_in), 1.0, abs_tol=1e-12)
         self.pos_in, self.n_in = pos_in, n_in
         _radiusVector = [-self.n_in[1]* self.radius, self.n_in[0]* self.radius]
         self.benderCenter=[self.pos_in[0]+_radiusVector[0],self.pos_in[1]+_radiusVector[1]]
@@ -180,8 +193,7 @@ class CappedSlicedBend(SlicedBend):
         self.caps: list[Line]=[Line(self.lengthCap),Line(self.lengthCap)]
 
     def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None: #pylint: disable=arguments-differ
-        tiltAngle = np.arctan2(-n_in[1], -n_in[0]) #flip normal around
-        self.caps[0].place(pos_in,tiltAngle)
+        self.caps[0].place(pos_in,n_in)
         super().place(self.caps[0].pos_out,-1*self.caps[0].n_out)
         self.caps[1].daisy_Chain(self)
         self.pos_in,self.n_in=self.caps[0].pos_in,self.caps[0].n_in
@@ -217,8 +229,7 @@ class Kink(Shape):
         yVals.extend([posCenter[1], self.pos_out[1]])
         return np.array(xVals), np.array(yVals)
 
-    def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None: #pylint: disable=arguments-differ
-        assert n_in[0] != 0.0 and n_in[1] != 0.0
+    def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None:
         assert isclose(norm_2D(n_in), 1.0, abs_tol=1e-12)
         self.pos_in, self.n_in = pos_in, n_in
         rotMatrix = Rotation.from_rotvec([0, 0, self.kinkAngle]).as_matrix()[:2, :2]

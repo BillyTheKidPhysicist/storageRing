@@ -42,9 +42,8 @@ class PTL_Dummy:
 class ElementTestHelper:
     ElementBaseClass = type(Element)
 
-    def __init__(self, elType: ElementBaseClass, particle0: Particle, qf0: np.ndarray, pf0: np.ndarray,
-                 useShapelyTest: bool,
-                 testMisalignment: bool, testMagnetErrors: bool):
+    def __init__(self, elType: ElementBaseClass, particle0: Optional[Particle], qf0: Optional[np.ndarray],
+                 pf0: Optional[np.ndarray],useShapelyTest: bool, testMisalignment: bool, testMagnetErrors: bool):
         self.elType = elType
         self.PTL = self.make_Latice()
         self.el = self.get_Element(self.PTL)
@@ -134,6 +133,35 @@ class DriftTestHelper(ElementTestHelper):
         slopez_final = slopez_initial - GRAVITATIONAL_ACCELERATION * abs(deltaX / vx) / vx
         assert isclose(slopey, slopeyTrace, abs_tol=tol) and isclose(slopez_final, slopezTrace, abs_tol=tol)
         assert abs(yf - yfTrace) < tol and abs(zf - zfTrace) < tol
+
+class _TiltedDriftTester(ElementTestHelper):
+
+    def __init__(self,inputAngle,outputAngle):
+        self.L, self.ap = .15432, .0392
+        self.inputAngle=inputAngle
+        self.outputAngle=outputAngle
+        super().__init__(Drift, None, None, None, True, False, False)
+
+
+    def make_coordTestRules(self):
+        floatyz = st.floats(min_value=-1.5 * self.ap, max_value=1.5 * self.ap)
+        floatx = st.floats(min_value=-self.L * .25, max_value=self.L * 1.25)
+        return (floatx, floatyz, floatyz)
+
+    def make_Latice(self, magnetErrors=False, jitterAmp=0.0):
+        PTL = ParticleTracerLattice(v0Nominal=200.0, standardMagnetErrors=magnetErrors, jitterAmp=jitterAmp)
+        PTL.add_Drift(self.L, self.ap,inputTiltAngle=self.inputAngle,outputTiltAngle=self.outputAngle)
+        PTL.end_Lattice(constrain=False)
+        return PTL
+
+class TiltedDriftTestHelper:
+    def __init__(self):
+        pass
+
+    def run_Tests(self):
+        anglesToTest=[-.1,0.0,.1]
+        for inputAngle,outputAngle in itertools.product(anglesToTest,anglesToTest):
+            _TiltedDriftTester(inputAngle,outputAngle).run_Tests()
 
 
 class HexapoleLensSimTestHelper(ElementTestHelper):
@@ -556,8 +584,9 @@ class ElementTestRunner:
         particleList = []
         for fastMode in (True, False):
             for accelerated in (True, False):
-                particleList.append(
-                    PT.trace(self.elTestHelper.particle0.copy(), self.timeStepTracing, 1.0, fastMode=fastMode,
+                if self.elTestHelper.particle0 is not None:
+                    particleList.append(
+                        PT.trace(self.elTestHelper.particle0.copy(), self.timeStepTracing, 1.0, fastMode=fastMode,
                              accelerated=accelerated))
         return particleList
 
@@ -594,6 +623,7 @@ class ElementTestRunner:
 
 def test_Elements(parallel=True):
     testersToRun = [DriftTestHelper,
+                    TiltedDriftTestHelper,
                     LensIdealTestHelper,
                     BenderIdealTestHelper,
                     CombinerIdealTestHelper,

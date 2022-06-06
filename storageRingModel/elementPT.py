@@ -463,15 +463,13 @@ class Drift(LensIdeal):
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
 
-    def __init__(self, PTL, L: float, ap: float, outerHalfWidth: float, build=True):
-        """
-        :param PTL: Instance of ParticleTracerLatticeClass
-        :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
-        :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
-        """
+    def __init__(self, PTL, L: float, ap: float, outerHalfWidth: float,
+                 inputTiltAngle: float,outputTiltAngle: float, build=True):
+
         super().__init__(PTL, L, 0, np.inf, ap, build=False)  # set Bp to zero and bore radius to infinite
         self.plotColor = ELEMENT_PLOT_COLORS['drift']
-        self.fastFieldHelper = self.init_fastFieldHelper([L, ap])
+        self.inputTiltAngle,self.outputTiltAngle=inputTiltAngle,outputTiltAngle
+        self.fastFieldHelper = self.init_fastFieldHelper([L, ap,inputTiltAngle,outputTiltAngle])
         self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth >= ap + VACUUM_TUBE_THICKNESS
         if build:
