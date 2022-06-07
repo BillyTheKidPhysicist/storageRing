@@ -6,18 +6,21 @@ used for:
 - a secondary method of testing if particles are in a specific element
 """
 import copy
+from math import pi, tan
 from typing import Union
-from math import pi,tan,cos,sin
+
+import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
-import numpy as np
+
 import elementPT
-from typeHints import element
 from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
+from typeHints import element
 
 BENDER_POINTS = 250  # how many points to represent the bender with along each curve
-realNum=Union[float,int]
-SMALL_NUMBER=1e-16
+realNum = Union[float, int]
+SMALL_NUMBER = 1e-16
+
 
 def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach lens. Overall shape is
@@ -104,13 +107,14 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     point3 = np.array([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
     point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
     point5 = np.array([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
-    point6 = np.array([el.Lb + (el.La - (apR+ VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-            (apR+ VACUUM_TUBE_THICKNESS) + (el.La - (apR+ VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
-    point7 = np.array([el.Lb + (el.La + extraFact * (apL+ VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-        -extraFact * (apL+ VACUUM_TUBE_THICKNESS) + ((el.La+ VACUUM_TUBE_THICKNESS) + extraFact *
-                                                     (apL+ VACUUM_TUBE_THICKNESS)
-                                                     * np.sin(el.ang)) * np.sin(el.ang)])
-    point8 = np.array([el.Lb, -extraFact * (apL +VACUUM_TUBE_THICKNESS)])  # bottom middle when theta=0
+    point6 = np.array([el.Lb + (el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       (apR + VACUUM_TUBE_THICKNESS) + (
+                                   el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
+    point7 = np.array([el.Lb + (el.La + extraFact * (apL + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       -extraFact * (apL + VACUUM_TUBE_THICKNESS) + ((el.La + VACUUM_TUBE_THICKNESS) + extraFact *
+                                                                     (apL + VACUUM_TUBE_THICKNESS)
+                                                                     * np.sin(el.ang)) * np.sin(el.ang)])
+    point8 = np.array([el.Lb, -extraFact * (apL + VACUUM_TUBE_THICKNESS)])  # bottom middle when theta=0
     point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
     point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
     point11 = np.array([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
@@ -167,26 +171,29 @@ def make_Lens_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
         point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
     return Polygon(pointsOuter), Polygon(pointsInner)
 
-def is_Drift_Input_Output_Tilt_Valid(L: realNum,halfWidth: realNum,theta1: realNum,theta2: realNum)-> bool:
-    m1,m2=tan(pi/2+theta1),tan(pi/2+theta2)
-    yCross=np.inf if theta1==theta2==0.0 else m1*m2*L/(m2-m1+SMALL_NUMBER)
-    return not (abs(yCross)<halfWidth or abs(theta1)>pi/2 or abs(theta2)>pi/2)
 
-def make_Trapezoid_Points(L,theta1,theta2,halfWidth):
-    assert is_Drift_Input_Output_Tilt_Valid(L,halfWidth,theta1,theta2)
-    points= [np.array([-halfWidth*tan(theta1),halfWidth]),
-             np.array([L-halfWidth*tan(theta2),halfWidth]),
-             np.array([L+halfWidth*tan(theta2),-halfWidth]),
-             np.array([halfWidth*tan(theta1),-halfWidth])]
+def is_Drift_Input_Output_Tilt_Valid(L: realNum, halfWidth: realNum, theta1: realNum, theta2: realNum) -> bool:
+    m1, m2 = tan(pi / 2 + theta1), tan(pi / 2 + theta2)
+    yCross = np.inf if theta1 == theta2 == 0.0 else m1 * m2 * L / (m2 - m1 + SMALL_NUMBER)
+    return not (abs(yCross) < halfWidth or abs(theta1) > pi / 2 or abs(theta2) > pi / 2)
+
+
+def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
+    assert is_Drift_Input_Output_Tilt_Valid(L, halfWidth, theta1, theta2)
+    points = [np.array([-halfWidth * tan(theta1), halfWidth]),
+              np.array([L - halfWidth * tan(theta2), halfWidth]),
+              np.array([L + halfWidth * tan(theta2), -halfWidth]),
+              np.array([halfWidth * tan(theta1), -halfWidth])]
     return points
 
-def make_Drift_Shapely_Objects(el:elementPT.Drift):
-    L,ap,outerHalfWidth,theta1,theta2=el.L,el.ap,el.outerHalfWidth,el.inputTiltAngle,el.outputTiltAngle
-    pointsInner=make_Trapezoid_Points(L,theta1,theta2,ap)
-    pointsOuter=make_Trapezoid_Points(L,theta1,theta2,outerHalfWidth)
+
+def make_Drift_Shapely_Objects(el: elementPT.Drift):
+    L, ap, outerHalfWidth, theta1, theta2 = el.L, el.ap, el.outerHalfWidth, el.inputTiltAngle, el.outputTiltAngle
+    pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
+    pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outerHalfWidth)
     for point in [*pointsInner, *pointsOuter]:
         point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
-    return Polygon(pointsOuter),Polygon(pointsInner)
+    return Polygon(pointsOuter), Polygon(pointsInner)
 
 
 def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
@@ -240,18 +247,18 @@ def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
 def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of elementPT objects such
     as lenses, drifts, benders and combiners"""
-    if type(el) in (elementPT.HalbachLensSim,elementPT.LensIdeal):
+    if type(el) in (elementPT.HalbachLensSim, elementPT.LensIdeal):
         shapelyOuter, shapelyInner = make_Lens_Shapely_Objects(el)
-    elif type(el) in (elementPT.BenderIdeal,elementPT.HalbachBenderSimSegmented):
+    elif type(el) in (elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented):
         shapelyOuter, shapelyInner = make_Bender_Shapely_Object(el)
-    elif type(el) in (elementPT.CombinerIdeal,elementPT.CombinerSim,elementPT.CombinerHalbachLensSim):
-        shapelyOuter, shapelyInner=make_Combiner_Shapely_Object(el)
+    elif type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim, elementPT.CombinerHalbachLensSim):
+        shapelyOuter, shapelyInner = make_Combiner_Shapely_Object(el)
     elif type(el) is elementPT.Drift:
         shapelyOuter, shapelyInner = make_Drift_Shapely_Objects(el)
     else:
         raise NotImplementedError
-    assert shapelyOuter.buffer(1e-12).contains(shapelyInner) #inner object must be smaller or same size as outer.
-        #add a small buffer for numerical issues
+    assert shapelyOuter.buffer(1e-12).contains(shapelyInner)  # inner object must be smaller or same size as outer.
+    # add a small buffer for numerical issues
     return shapelyOuter, shapelyInner
 
 

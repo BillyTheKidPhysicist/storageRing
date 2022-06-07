@@ -1,11 +1,9 @@
-from typing import Union
+from elementPT import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, LensIdeal, BenderIdeal, \
+    CombinerIdeal, CombinerSim
 from helperTools import *
 from storageRingGeometryModules.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry
 from storageRingGeometryModules.storageRingGeometrySolver import StorageRingGeometryConstraintsSolver
-import numpy as np
-from elementPT import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, LensIdeal, BenderIdeal, \
-    CombinerIdeal, CombinerSim
 
 
 # todo: The output offset stuff for bender is a 0th order approximation only. go to 1st at least
@@ -56,7 +54,7 @@ def _build_Storage_Ring_Geometry_From_PTL(PTL, constrain: bool) -> StorageRingGe
             constrained = True if el_PTL in PTL.linearElementsToConstraint else False
             elements.append(Line(el_PTL.L, constrained=constrained))
         elif type(el_PTL) is Drift:
-            elements.append(LineWithAngledEnds(el_PTL.L,el_PTL.inputTiltAngle,el_PTL.outputTiltAngle))
+            elements.append(LineWithAngledEnds(el_PTL.L, el_PTL.inputTiltAngle, el_PTL.outputTiltAngle))
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
             elements.append(_kink_From_Combiner(el_PTL))
         elif type(el_PTL) is HalbachBenderSimSegmented:
@@ -67,7 +65,12 @@ def _build_Storage_Ring_Geometry_From_PTL(PTL, constrain: bool) -> StorageRingGe
             raise Exception
         if i == 0:
             firstEl = elements[0]
-    firstEl.place(np.array([0.0, 0.0]), np.array([1.0,0.0]))
+
+    n_in_Initial = -np.array([np.cos(PTL.initialAngle), np.sin(PTL.initialAngle)]) if PTL.initialAngle != -np.pi \
+        else np.array([1.0, 0.0])
+    pos_in_Initial = np.array(PTL.initialLocation)
+    firstEl.place(pos_in_Initial, n_in_Initial)
+
     storageRing = StorageRingGeometry(elements)
     if constrain == True:
         targetRadii = _get_Target_Radii(PTL)
@@ -128,10 +131,10 @@ def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, Comb
 
 
 def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal],
-                                 shape: Union[Line,LineWithAngledEnds]):
+                                 shape: Union[Line, LineWithAngledEnds]):
     """Given a geometric shape object, fill the geometric attributes of an Element object. """
 
-    assert type(element) in (Drift, HalbachLensSim, LensIdeal) and type(shape) in (Line,LineWithAngledEnds)
+    assert type(element) in (Drift, HalbachLensSim, LensIdeal) and type(shape) in (Line, LineWithAngledEnds)
     if shape.constrained:
         element.set_Length(shape.length)
 
@@ -142,7 +145,7 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
     if type(shape) is Line:
         theta = np.arctan2(shape.n_out[1], shape.n_out[0])
     elif type(shape) is LineWithAngledEnds:
-        n=shape.n_From_Input_To_Output_Pos()
+        n = shape.n_From_Input_To_Output_Pos()
         theta = np.arctan2(n[1], n[0])
     else:
         raise NotImplementedError
@@ -182,9 +185,9 @@ def build_Particle_Tracer_Lattice(PTL, constrain: bool) -> None:
     assert not (constrain and PTL.latticeType == 'injector')
     storageRingGeometry = _build_Storage_Ring_Geometry_From_PTL(PTL, constrain)
     for i, (el_PTL, el_Geom) in enumerate(zip(PTL.elList, storageRingGeometry)):
-        if type(el_PTL) in (LensIdeal,HalbachLensSim,Drift):
+        if type(el_PTL) in (LensIdeal, HalbachLensSim, Drift):
             _build_Lattice_Lens_Or_Drift(el_PTL, el_Geom)
-        elif type(el_PTL) in (CombinerHalbachLensSim,CombinerIdeal,CombinerSim):
+        elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
             _build_Lattice_Combiner_Element(el_PTL, el_Geom)
         elif type(el_PTL) in (HalbachBenderSimSegmented, BenderIdeal):
             _build_Lattice_Bending_Element(el_PTL, el_Geom)

@@ -1,16 +1,18 @@
 import warnings
 from math import sqrt, isclose
 from typing import Optional, Union
+
+import numpy as np
 import pandas as pd
+import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
-import numpy as np
+
 import fastNumbaMethodsAndClass
-from helperTools import arr_Product, iscloseAll, make_Odd
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS, ELEMENT_PLOT_COLORS, MIN_MAGNET_MOUNT_THICKNESS
-import scipy.optimize as spo
+from helperTools import arr_Product, iscloseAll, make_Odd
 
 # todo: this needs a good scrubbing and refactoring
 
@@ -463,15 +465,13 @@ class Drift(LensIdeal):
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
 
-    def __init__(self, PTL, L: float, ap: float, outerHalfWidth: float,
-                 inputTiltAngle: float,outputTiltAngle: float, build=True):
-
+    def __init__(self, PTL, L: float, ap: float,
+                 inputTiltAngle: float, outputTiltAngle: float, build=True):
         super().__init__(PTL, L, 0, np.inf, ap, build=False)  # set Bp to zero and bore radius to infinite
         self.plotColor = ELEMENT_PLOT_COLORS['drift']
-        self.inputTiltAngle,self.outputTiltAngle=inputTiltAngle,outputTiltAngle
-        self.fastFieldHelper = self.init_fastFieldHelper([L, ap,inputTiltAngle,outputTiltAngle])
-        self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
-        assert self.outerHalfWidth >= ap + VACUUM_TUBE_THICKNESS
+        self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
+        self.fastFieldHelper = self.init_fastFieldHelper([L, ap, inputTiltAngle, outputTiltAngle])
+        self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS
         if build:
             self.build()
 

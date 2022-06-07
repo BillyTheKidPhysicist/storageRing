@@ -23,12 +23,11 @@ from shapelyObjectBuilder import build_Shapely_Objects
 
 benderTypes = Union[elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
 
-
 class ParticleTracerLattice:
 
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
-                 useSolenoidField: bool = False):
+                 useSolenoidField: bool = False, initialLocation=None,initialAngle=None):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -42,6 +41,8 @@ class ParticleTracerLattice:
         self.benderIndices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
+        self.initialLocation=(0.0,0.0) if initialLocation is None else initialLocation
+        self.initialAngle=-np.pi if initialAngle is None else initialAngle
         self.combinerIndex: Optional[int] = None  # the index in the lattice where the combiner is
         self.totalLength: Optional[float] = None  # total length of lattice, m
         self.jitterAmp = jitterAmp
@@ -179,17 +180,28 @@ class ParticleTracerLattice:
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
     def add_Halbach_Lens_Sim(self, rp: Union[float, tuple], L: Optional[float], ap: Optional[float] = None,
-                             constrain: bool = False, magnetWidth: float = None) -> None:
+                             constrain: bool = False, magnetWidth: Union[float, tuple] = None) -> None:
         """
         Add simulated halbach sextupole element to lattice.
 
-        :param rp: Bore radius, m
+        Combinations of rp and magnetWidth specify how to handle multiple layers, according to:
+
+        rp    | magnetWidth | Explanation
+        float | None        | Single layer with radius rp and magnet widths maximum possible
+        float | float       | Single layer with radius rp and magnet widths of magnetWidth
+        tuple | tuple       | Number of layers is len(rp). Each layer has radius corresponding value in rp, such that
+                            | rp[0] is radius of first layer. Same logic for magnet widths. rp and magnetWidth must
+                            | be same length.
+
+        Configuration must be realistic.
+
+        :param rp: Bore radius, m.
         :param L: Length of element, m. This includes fringe fields, actual magnet length will be smaller
         :param ap: Size of aperture
         :param constrain: Wether element is being used as part of a constraint. If so, fields construction will be
-        deferred
-        :param magnetWidth: Width of both side cuboid magnets in polar plane of lens, m. Magnets length is L minus
-        fringe fields
+            deferred
+        :param magnetWidth: Width of cuboid magnets in polar plane of lens, m. Magnets length is L minus
+            fringe fields.
         :return: None
         """
         rpLayers = rp if isinstance(rp, tuple) else (rp,)
@@ -231,17 +243,24 @@ class ParticleTracerLattice:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
 
-    def add_Drift(self, L: float, ap: float = .03, outerHalfWidth: float = None, 
-                  inputTiltAngle=0.0,outputTiltAngle=0.0) -> None:
+    def add_Drift(self, L: float, ap: float = .03, inputTiltAngle: float=0.0,outputTiltAngle: float=0.0) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
+        The general shape is a trapezoid in the xy lab/element frame, and a circle in the zx,zy element frame. In the
+        element frame in the xy plane the two bases are parallel with \vec{x}, and the input output can be at saome
+        angle relative to \vec{y}. Positive angles are counterclockwise notation. The length of the drift region is the
+        same no matter the input/output tilt because the tilt is pinned at the centerline of the two bases of the
+        trapezoid.
+
         :param L: Length of drift region, m
         :param ap: Aperture of drift region, m
+        :param inputTiltAngle: Tilt angle of the input plane to the drift region.
+        :param outputTiltAngle: Tilt angle of the output to the drift region.
         :return:
         """
 
-        el = Drift(self, L, ap, outerHalfWidth,inputTiltAngle,outputTiltAngle)  # create a drift element object
+        el = Drift(self, L, ap,inputTiltAngle,outputTiltAngle)  # create a drift element object
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
 

@@ -1,9 +1,5 @@
 import os
-
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
-import random
-from asyncDE import solve_Async
 from storageRingModeler import StorageRingModel, Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
@@ -76,6 +72,7 @@ def wrapper(params):
 
 
 def main():
+    from asyncDE import solve_Async
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
     # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
