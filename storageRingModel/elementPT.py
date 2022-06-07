@@ -1,6 +1,8 @@
+import copy
 import warnings
 from math import sqrt, isclose
 from typing import Optional, Union
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -11,6 +13,7 @@ from shapely.geometry import Polygon
 import fastNumbaMethodsAndClass
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
+from HalbachLensClass import billyHalbachCollectionWrapper
 from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS, ELEMENT_PLOT_COLORS, MIN_MAGNET_MOUNT_THICKNESS
 from helperTools import arr_Product, iscloseAll, make_Odd
 
@@ -928,13 +931,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
-        self.build_Fast_Field_Helper()
         self.ro = self.rb + self.outputOffset
         self.L = self.ang * self.rb
         self.Lo = self.ang * self.ro + 2 * self.Lcap
         self.outerHalfWidth = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_Fast_Field_Helper(self,extraFieldSources) -> None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
@@ -1220,7 +1222,6 @@ class HalbachLensSim(LensIdeal):
     def fill_Post_Constrained_Parameters(self):
         self.set_extraFieldLength()
         self.fill_Geometric_Params()
-        self.build_Field_Helper()
 
     def set_Length(self, L: float) -> None:
         assert L > 0.0
@@ -1306,7 +1307,7 @@ class HalbachLensSim(LensIdeal):
         zArr = np.linspace(zMin, zMax, numPointsZ)
         return xArr_Quadrant, yArr_Quadrant, zArr
 
-    def make_2D_Field_Data(self, lens: _HalbachLensFieldGenerator, xArr: np.ndarray,
+    def make_2D_Field_Data(self, fieldGenerator: billyHalbachCollectionWrapper, xArr: np.ndarray,
                            yArr: np.ndarray) -> Optional[np.ndarray]:
         """
         Make 2d field data for interpolation.
@@ -1314,7 +1315,7 @@ class HalbachLensSim(LensIdeal):
         This comes from the center of the lens, and models a continuous segment homogenous in x (element frame)
         that allows for constructing very long lenses. If lens is too short, return None
 
-        :param lens: lens object to compute fields values
+        :param fieldGenerator: magnet object to compute fields values
         :param xArr: Grid edge x values of quarter of plane
         :param yArr: Grid edge y values of quarter of plane
         :return: Either 2d array of field data, or None
@@ -1327,13 +1328,13 @@ class HalbachLensSim(LensIdeal):
             planeCoords = np.asarray(np.meshgrid(xArr, yArr, 0)).T.reshape(-1, 3)
             validIndices = np.linalg.norm(planeCoords, axis=1) <= self.rp
             BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
-            BNormGrad[validIndices], BNorm[validIndices] = lens.BNorm_Gradient(planeCoords[validIndices],
+            BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(planeCoords[validIndices],
                                                                                returnNorm=True)
             data2D = np.column_stack((planeCoords[:, :2], BNormGrad[:, :2], BNorm))  # 2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data2D
 
-    def make_3D_Field_Data(self, lens: _HalbachLensFieldGenerator, xArr: np.ndarray, yArr: np.ndarray,
+    def make_3D_Field_Data(self, fieldGenerator: billyHalbachCollectionWrapper, xArr: np.ndarray, yArr: np.ndarray,
                            zArr: np.ndarray) -> np.ndarray:
         """
         Make 3d field data for interpolation from end of lens region
@@ -1342,7 +1343,7 @@ class HalbachLensSim(LensIdeal):
         (fringe frields and interior near end) because the interior region is modeled as a single plane to exploit
         longitudinal symmetry. Otherwise, it is exactly half of the lens and fringe fields
 
-        :param lens: lens object to compute fields values
+        :param fieldGenerator: magnet objects to compute fields values
         :param xArr: Grid edge x values of quarter of plane if using symmetry, else full
         :param yArr: Grid edge y values of quarter of plane if using symmetry, else full
         :param zArr: Grid edge z values of half of lens, or region near end if long enough, if using symmetry. Else
@@ -1357,7 +1358,7 @@ class HalbachLensSim(LensIdeal):
         validZ = volumeCoords[:, 2] >= self.Lm / 2
         validIndices = np.logical_or(validXY, validZ)
         BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
-        BNormGrad[validIndices], BNorm[validIndices] = lens.BNorm_Gradient(volumeCoords[validIndices], returnNorm=True)
+        BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices], returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         return data3D
 
@@ -1366,27 +1367,29 @@ class HalbachLensSim(LensIdeal):
         assert numSlices > 0
         return numSlices
 
-    def make_Field_Data(self, useSymmetry: bool, useStandardMagnetErrors: bool, enforceGoodField: bool = True) \
-            -> tuple[np.ndarray, np.ndarray]:
+    def make_Field_Data(self, useSymmetry: bool, useStandardMagnetErrors: bool, extraFieldSources,
+                        enforceGoodField: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength = self.effectiveLength if useSymmetry else self.Lm
         numSlices = None if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
         lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
                                           numSlices=numSlices, useSolenoidField=self.PTL.useSolenoidField)
+        sources=[src.copy() for src in [*lens.sources_all,*extraFieldSources]]
+        fieldGenerator=billyHalbachCollectionWrapper(sources)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt((xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2 + (xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2)
         if enforceGoodField == True:
             assert self.rp - maxGridSep >= self.apMaxGoodField
-        data2D = self.make_2D_Field_Data(lens, xArr_Quadrant, yArr_Quadrant) if useSymmetry else None
-        data3D = self.make_3D_Field_Data(lens, xArr_Quadrant, yArr_Quadrant, zArr)
+        data2D = self.make_2D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant) if useSymmetry else None
+        data3D = self.make_3D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant, zArr)
         return data2D, data3D
 
-    def build_Field_Helper(self) -> None:
+    def build_Fast_Field_Helper(self,extraFieldSources) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
 
-        data2D, data3D = self.make_Field_Data(True, False)
+        data2D, data3D = self.make_Field_Data(True, False,extraFieldSources)
         xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd = self.shape_Field_Data_3D(data3D)
         if data2D is not None:  # if no inner plane being used
             xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn = self.shape_Field_Data_2D(data2D)
@@ -1394,14 +1397,14 @@ class HalbachLensSim(LensIdeal):
             xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn = [np.ones(1) * np.nan] * 5
         fieldData = (
             xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn)
-        fieldDataPerturbations = self.make_Field_Perturbation_Data()
+        fieldDataPerturbations = self.make_Field_Perturbation_Data(extraFieldSources)
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
                                                           self.extraFieldLength])
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
         assert F_edge / F_center < .01
 
-    def make_Field_Perturbation_Data(self) -> Optional[tuple]:
+    def make_Field_Perturbation_Data(self,extraFieldSources) -> Optional[tuple]:
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
         and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
         force is small, and so I can get away with interpolating with low density, while keeping my high density
@@ -1410,8 +1413,8 @@ class HalbachLensSim(LensIdeal):
         perturbation interpolation"""
 
         if self.useStandardMagErrors:
-            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False, enforceGoodField=False)
-            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True, enforceGoodField=False)
+            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False,extraFieldSources, enforceGoodField=False)
+            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True,extraFieldSources, enforceGoodField=False)
             assert len(data3D_Perturbations) == len(data3D_NoPerturbations)
             assert iscloseAll(data3D_Perturbations[:, :3], data3D_NoPerturbations[:, :3], 1e-12)
             assert data2D_1 is None and data2D_2 is None
@@ -1549,14 +1552,15 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
+        self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
+
+    def build_Fast_Field_Helper(self,extraSources):
         fieldData = self.make_Field_Data(self.La, self.ang, True)
         self.set_extraFieldLength()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
                                                           self.Lb, self.Lm, self.space, self.ap, self.ang,
                                                           self.fieldFact,
                                                           self.extraFieldLength, not self.useStandardMagErrors])
-
-        self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile

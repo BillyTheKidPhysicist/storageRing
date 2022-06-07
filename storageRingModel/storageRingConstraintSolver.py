@@ -98,12 +98,6 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
     if theta < 0:
         theta += np.pi * 2
     bender.theta = theta
-    # rot = bender.theta - bender.ang + np.pi / 2
-    # bender.ROut = np.asarray(
-    #     [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
-    # rot = -rot
-    # bender.RIn = np.asarray(
-    #     [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(bender.ROut)
 
 
 def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, CombinerIdeal, CombinerSim], shape: Kink):

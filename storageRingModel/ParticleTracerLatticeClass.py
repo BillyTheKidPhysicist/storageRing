@@ -332,6 +332,8 @@ class ParticleTracerLattice:
         update_And_Place_Elements_From_Floor_Plan(self,floorPlan)
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
+            if type(el) in (HalbachLensSim,HalbachBenderSimSegmented,CombinerHalbachLensSim):
+                el.build_Fast_Field_Helper([])
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed

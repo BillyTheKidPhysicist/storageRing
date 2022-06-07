@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 from magpylib.magnet import Cuboid as _Cuboid
 import magpylib
 from magpylib import Collection
-from typing import Union, Optional
+from magpylib._src.obj_classes.class_BaseTransform import apply_move
 from demag_functions import apply_demag
 import copy
 from helperTools import *
@@ -133,18 +133,18 @@ class billyHalbachCollectionWrapper(Collection):
     SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
     meterTo_mm = 1e3  # magpy takes distance in mm
 
-    def __init__(self, *sources):
-        super().__init__(*sources)
+    def __init__(self, *sources,**kwargs):
+        super().__init__(*sources,**kwargs)
 
     def rotate(self, rot, anchor=None, start=-1, increment=False):
         if anchor is None:
             raise NotImplementedError  # not sure how to best deal with rotating collection about itself
         super().rotate(rot, anchor=0.0)
 
-    def move_Meters(self, displacement: list_tuple_arr, start=-1,
-                    increment=False):  # todo: for some reason I need to name this differently :(
+    def move(self,displacement, start="auto"):
         displacement = [entry * self.meterTo_mm for entry in displacement]
-        super().move(displacement)
+        for child in self.children_all:
+            apply_move(child,displacement)
 
     def _getB_Wrapper(self, evalCoords_mm: np.ndarray, sizeMax: float = 500_000) -> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
@@ -322,7 +322,7 @@ class Layer(billyHalbachCollectionWrapper):
 
         if self.orientationToSet is not None:
             self.rotate(self.orientationToSet, anchor=0.0)
-        self.move_Meters(self.positionToSet)
+        self.move(self.positionToSet)
         if self.applyMethodOfMoments == True:
             self.method_Of_Moments()
 
@@ -423,7 +423,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                 self.layerList.append(layer)
         if self.orientationToSet is not None:
             self.rotate(self.orientationToSet, anchor=0.0)
-        self.move_Meters(self.positionToSet)
+        self.move(self.positionToSet)
         if self.applyMethodOfMoments == True:
             self.method_Of_Moments()
 
