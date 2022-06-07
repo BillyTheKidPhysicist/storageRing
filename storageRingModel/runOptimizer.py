@@ -72,10 +72,13 @@ def wrapper(params):
 
 
 def main():
-    from asyncDE import solve_Async
+    # from asyncDE import solve_Async
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
     # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
+    x = np.array([0.023801057453580743, 0.010865155679545636, 0.039901298278481497,
+                  0.010145870717811905, 0.060600536295301044, 0.4895337924060436])
+    print(wrapper(x))
 
     raise Exception("issue with repeatability with collision physics")
 
