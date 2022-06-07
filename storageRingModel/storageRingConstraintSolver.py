@@ -42,11 +42,10 @@ def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> C
     return CappedSlicedBend(lengthSegment, numMagnets, magnetDepth, Lcap, radius)
 
 
-def _build_Storage_Ring_Geometry_From_PTL(PTL, constrain: bool) -> StorageRingGeometry:
+def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     """Use a ParticleTracerLattice to construct a geometric representation of the storage ring. The geometric
     representation is of the ideal orbit of a particle loosely speaking, not the centerline of elements."""
-
-    if constrain is True: assert PTL.latticeType == 'storageRing'
+    assert not (constrain and PTL.latticeType == 'injector')
     elements = []
     firstEl = None
     for i, el_PTL in enumerate(PTL):
@@ -72,7 +71,7 @@ def _build_Storage_Ring_Geometry_From_PTL(PTL, constrain: bool) -> StorageRingGe
     firstEl.place(pos_in_Initial, n_in_Initial)
 
     storageRing = StorageRingGeometry(elements)
-    if constrain == True:
+    if constrain:
         targetRadii = _get_Target_Radii(PTL)
         solver = StorageRingGeometryConstraintsSolver(storageRing, targetRadii)
         storageRing = solver.make_Valid_Storage_Ring()
@@ -89,7 +88,6 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
     bender.rb = shape.radius - bender.outputOffset  # get the bending radius back from orbit radius
     if type(bender) is HalbachBenderSimSegmented:
         bender.numMagnets = shape.numMagnets
-        bender.build_Post_Constrained()
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
     bender.nb = np.array([*shape.n_in, 0])
@@ -100,12 +98,12 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
     if theta < 0:
         theta += np.pi * 2
     bender.theta = theta
-    rot = bender.theta - bender.ang + np.pi / 2
-    bender.ROut = np.asarray(
-        [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
-    rot = -rot
-    bender.RIn = np.asarray(
-        [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(bender.ROut)
+    # rot = bender.theta - bender.ang + np.pi / 2
+    # bender.ROut = np.asarray(
+    #     [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
+    # rot = -rot
+    # bender.RIn = np.asarray(
+    #     [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(bender.ROut)
 
 
 def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, CombinerIdeal, CombinerSim], shape: Kink):
@@ -168,23 +166,8 @@ def is_Particle_Tracer_Lattice_Closed(PTL) -> bool:
     return True
 
 
-def build_Particle_Tracer_Lattice(PTL, constrain: bool) -> None:
-    """
-    Build up a ParticleTracerLattice (PTL) in place. Apply constraints if indicated. To build the lattice, elements are
-    iterated through build one at a time based on a StorageRingGeometry object that is used to represent and solve the
-    geometry.
-
-    :param PTL: type of ParticleTracerLattice. A class that hold the elements used for particle tracing. Can be an
-        injector type lattice, or a ring type. If constraints are applied, the ring type lattice must be built to be
-        closed
-    :param constrain: Wether to solve for constraints (ie, must be closed if a ring lattice)
-    :return: None
-    """
-
-    # todo: There's an inconsistency in how r1/r2/ne/nb is handled with the storage ring
-    assert not (constrain and PTL.latticeType == 'injector')
-    storageRingGeometry = _build_Storage_Ring_Geometry_From_PTL(PTL, constrain)
-    for i, (el_PTL, el_Geom) in enumerate(zip(PTL.elList, storageRingGeometry)):
+def update_And_Place_Elements_From_Floor_Plan(PTL, floorPlan):
+    for i, (el_PTL, el_Geom) in enumerate(zip(PTL.elList, floorPlan)):
         if type(el_PTL) in (LensIdeal, HalbachLensSim, Drift):
             _build_Lattice_Lens_Or_Drift(el_PTL, el_Geom)
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
@@ -193,6 +176,3 @@ def build_Particle_Tracer_Lattice(PTL, constrain: bool) -> None:
             _build_Lattice_Bending_Element(el_PTL, el_Geom)
         else:
             raise NotImplementedError
-
-    if PTL.latticeType == 'storageRing' and constrain:
-        assert is_Particle_Tracer_Lattice_Closed(PTL)

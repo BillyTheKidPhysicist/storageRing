@@ -9,10 +9,10 @@ import numpy as np
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
-import numpy.linalg as npl
+from storageRingConstraintSolver import solve_Floor_Plan,update_And_Place_Elements_From_Floor_Plan
 from joblib import Parallel, delayed
 from elementPT import *
-from storageRingConstraintSolver import build_Particle_Tracer_Lattice, is_Particle_Tracer_Lattice_Closed
+from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
 from constants import DEFAULT_ATOM_SPEED, FLAT_WALL_VACUUM_THICKNESS
 from shapelyObjectBuilder import build_Shapely_Objects
 
@@ -316,16 +316,35 @@ class ParticleTracerLattice:
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
     def build_Lattice(self, constrain: bool):
-        build_Particle_Tracer_Lattice(self, constrain)
+        """Build the specified lattice. This includes:
+        - Fill pre constrained parameters derive from simple inputs of length, field strength etc of each element.
+        - Solve the floor plan layout. If constrained, solve for bumber of magnets and lengths of bending segment and
+            lenses to find a valid configuration. 
+        - Use the floor plan layout to update and place elementPT elements in the lab frame.
+        - Use the results from the previous step to finish filling values of the element
+        - Build shapely object for elementPT
+        """
+
+        for el in self.elList:
+            el.fill_Pre_Constrained_Parameters()
+
+        floorPlan=solve_Floor_Plan(self, constrain)
+        update_And_Place_Elements_From_Floor_Plan(self,floorPlan)
+        for el in self.elList:
+            el.fill_Post_Constrained_Parameters()
+
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
+        if self.latticeType == 'storageRing' and constrain: #double check
+            assert is_Particle_Tracer_Lattice_Closed(self)
         build_Shapely_Objects(self.elList)
         self.totalLength = 0
         for el in self.elList:  # total length of particle's orbit in an element
             self.totalLength += el.Lo
 
     def end_Lattice(self, constrain: bool = False, buildLattice: bool = True) -> None:
-
+        # for element in self.elList:
+        #     element.build()
         self.catch_Errors(constrain)
         if buildLattice:
             self.build_Lattice(constrain)

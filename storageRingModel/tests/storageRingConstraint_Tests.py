@@ -1,6 +1,6 @@
 import os
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from storageRingConstraintSolver import _build_Storage_Ring_Geometry_From_PTL
+from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Elements_From_Floor_Plan
 from helperTools import *
 from math import isclose
 
@@ -38,8 +38,8 @@ def _test_Storage_Ring_Constraint_1():
 
     PTL_List = [_make_Lattice_1(), _make_Lattice_2()]
     for PTL in PTL_List:
-        storageRingGeom = _build_Storage_Ring_Geometry_From_PTL(PTL, False)
-        posSep, normSep = storageRingGeom.get_End_Separation_Vectors()
+        floorPlan = solve_Floor_Plan(PTL,False)
+        posSep, normSep = floorPlan.get_End_Separation_Vectors()
         assert iscloseAll(posSep, normSep, 1e-10)
 
 

@@ -129,8 +129,6 @@ class Element:
         self._fastFieldHelperInitParams = None  # variable to assist in workaround for jitclass pickling issue
         self._fastFieldHelperInternalParam = None
         self.shape: Optional[str] = None
-        if build:
-            self.build()
 
     def init_fastFieldHelper(self, initParams):
         """Because jitclass cannot be pickled, I need to do some gymnastics. An Element object must be able to fully
@@ -319,9 +317,17 @@ class Element:
         """
         return self.fastFieldHelper.is_Coord_Inside_Vacuum(*qEl)  # will raise NotImplementedError if called
 
-    def build(self) -> None:
-        """build the element either by simulating fields, loading fields, or using analytic results. Called in __init__"""
+    def fill_Pre_Constrained_Parameters(self):
+        """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely
+        objects, and positions still need to be solved for/computed after this point. Most elements call compute all
+        their internal parameters before the floorplan is solved, but lenses may have length unspecified and bending
+        elements may have bending angle or number of magnets unspecified for example"""
         raise NotImplementedError
+
+    def fill_Post_Constrained_Parameters(self):
+        """Fill internal parameters after constrained lattice layout is solved. See fill_Pre_Constrainted_Parameters.
+        At this point everything about the geometry of the element is specified"""
+        pass
 
     def shape_Field_Data_3D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
         """
@@ -409,10 +415,8 @@ class LensIdeal(Element):
         self.ap = rp if ap is None else ap  # size of apeture radially
         self.shape = 'STRAIGHT'  # The element's geometry
         self.K = None
-        if build:
-            self.build()
 
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self)-> None:
         """Overrides abstract method from Element"""
         self.K = self.fieldFact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
@@ -473,10 +477,8 @@ class Drift(LensIdeal):
         self.fastFieldHelper = self.init_fastFieldHelper([L, ap, inputTiltAngle, outputTiltAngle])
         self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth>ap
-        if build:
-            self.build()
 
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.Lo = self.L
 
@@ -521,10 +523,8 @@ class BenderIdeal(Element):
         self.shape: str = 'BEND'
         self.ro: Optional[float] = None  # bending radius of orbit, ie rb + rOffset.
         self.segmented: bool = False  # wether the element is made up of discrete segments, or is continuous
-        if build:
-            self.build()
 
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.outputOffset = sqrt(
@@ -534,6 +534,14 @@ class BenderIdeal(Element):
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
         self.fastFieldHelper = self.init_fastFieldHelper([self.ang, self.K, self.rp, self.rb, self.ap])
+
+    def fill_Post_Constrained_Parameters(self):
+        self.fill_In_And_Out_Rotation_Matrices()
+
+    def fill_In_And_Out_Rotation_Matrices(self):
+        rot = self.theta - self.ang + np.pi / 2
+        self.ROut = Rot.from_rotvec([0.0,0.0,rot]).as_matrix()[:2,:2]
+        self.RIn = Rot.from_rotvec([0.0,0.0,-rot]).as_matrix()[:2,:2]
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
@@ -613,10 +621,7 @@ class CombinerIdeal(Element):
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
 
-        if build:
-            self.build()
-
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self)-> None:
         """Overrides abstract method from Element"""
         self.apR, self.apL, self.apz, self.Lm = [val * self.sizeScale for val in
                                                  (self.apR, self.apL, self.apz, self.Lm)]
@@ -752,10 +757,8 @@ class CombinerSim(CombinerIdeal):
         super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale, build=False)
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
-        if build:
-            self.build()
 
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
         self.apL = self.apL * self.sizeScale
@@ -850,15 +853,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
             callable] = None  # function that returns the spring constant as a function of bending radii. This is used in the
         # constraint solver
         self.useStandardMagErrors = useStandardMagErrors
-        self.build()
-
-    def build(self) -> None:
-        """Overrides abstract method from Element"""
-        if self.numMagnets is not None:
-            self.build_Pre_Constraint()
-            self.build_Post_Constrained()
-        else:
-            self.build_Pre_Constraint()
 
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
@@ -877,8 +871,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         assert 0.0 <= BpFact
         self.fieldFact = BpFact
 
-    def build_Pre_Constraint(self) -> None:
-
+    def fill_Pre_Constrained_Parameters(self) -> None:
         self.outputOffset = self.find_Optimal_Radial_Offset() * self.rOffsetFact
         self.ro = self.outputOffset + self.rb
 
@@ -920,7 +913,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         ucAng = np.arctan(.5 * self.Lseg / (self.rb - self.rp - self.yokeWidth))
         return ucAng
 
-    def build_Post_Constrained(self) -> None:
+    def fill_Post_Constrained_Parameters(self) -> None:
 
         self.ap = self.ap if self.ap is not None else self.compute_Maximum_Aperture()
         assert self.ap <= self.compute_Maximum_Aperture()
@@ -928,6 +921,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.ucAng = self.get_Unit_Cell_Angle()
         # 500um works very well, but 1mm may be acceptable
         self.ang = 2 * self.numMagnets * self.ucAng
+        self.fill_In_And_Out_Rotation_Matrices()
         assert self.ang < 2 * np.pi * 3 / 4
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
         m = np.tan(self.ucAng)
@@ -1179,7 +1173,7 @@ class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
 
     def __init__(self, PTL, rpLayers: tuple, L: Optional[float], ap: Optional[float],
-                 magnetWidths: Optional[tuple], useStandardMagErrors: bool, build: bool = True):
+                 magnetWidths: Optional[tuple], useStandardMagErrors: bool):
         assert all(rp > 0 for rp in rpLayers)
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
@@ -1212,21 +1206,25 @@ class HalbachLensSim(LensIdeal):
         self.fieldFact = 1.0  # factor to multiply field values by for tunability
         self.individualMagnetLength: float = None
         # or down
-        if build:
-            self.build()
 
     def calculate_Maximum_Good_Field_Aperture(self, rp: float) -> float:
         """ from geometric arguments of grid inside circle.
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
-
         apMax = (rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
+
+    def fill_Pre_Constrained_Parameters(self):
+        pass
+
+    def fill_Post_Constrained_Parameters(self):
+        self.set_extraFieldLength()
+        self.fill_Geometric_Params()
+        self.build_Field_Helper()
 
     def set_Length(self, L: float) -> None:
         assert L > 0.0
         self.L = L
-        self.build()
 
     def set_extraFieldLength(self) -> None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
@@ -1237,17 +1235,6 @@ class HalbachLensSim(LensIdeal):
         assert 0.0 <= tiltMax < .1  # small angle. Not sure if valid outside that range
         self.extraFieldLength = self.rp * tiltMax * 1.5  # safety factor for approximations
 
-    def build(self) -> None:
-        """Overrides abstract method from Element"""
-
-        if self.L is None:  # defer building until constraints are satisified
-            return
-        self.set_extraFieldLength()
-        self.fill_Geometric_Params()
-        self.build_Field_Helper()
-        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
-        F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
-        assert F_edge / F_center < .01
 
     def set_Effective_Length(self):
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
@@ -1410,8 +1397,9 @@ class HalbachLensSim(LensIdeal):
         fieldDataPerturbations = self.make_Field_Perturbation_Data()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
                                                           self.extraFieldLength])
-        self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
-        self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
+        F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
+        F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
+        assert F_edge / F_center < .01
 
     def make_Field_Perturbation_Data(self) -> Optional[tuple]:
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
@@ -1526,10 +1514,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
             float] = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         self.lens: Optional[_HalbachLensFieldGenerator] = None
-        if build:
-            self.build()
 
-    def build(self) -> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         rpList = []
         magnetWidthList = []

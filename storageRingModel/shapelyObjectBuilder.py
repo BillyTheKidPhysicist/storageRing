@@ -109,7 +109,7 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     point5 = np.array([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
     point6 = np.array([el.Lb + (el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
                        (apR + VACUUM_TUBE_THICKNESS) + (
-                                   el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
+                               el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
     point7 = np.array([el.Lb + (el.La + extraFact * (apL + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
                        -extraFact * (apL + VACUUM_TUBE_THICKNESS) + ((el.La + VACUUM_TUBE_THICKNESS) + extraFact *
                                                                      (apL + VACUUM_TUBE_THICKNESS)
@@ -173,12 +173,15 @@ def make_Lens_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
 
 
 def is_Drift_Input_Output_Tilt_Valid(L: realNum, halfWidth: realNum, theta1: realNum, theta2: realNum) -> bool:
+    """Check that te drift region, a trapezoid shape, is concave. theta1 and theta2 can violate this condition
+    depending on their value"""
     m1, m2 = tan(pi / 2 + theta1), tan(pi / 2 + theta2)
     yCross = np.inf if theta1 == theta2 == 0.0 else m1 * m2 * L / (m2 - m1 + SMALL_NUMBER)
     return not (abs(yCross) < halfWidth or abs(theta1) > pi / 2 or abs(theta2) > pi / 2)
 
 
 def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
+    """Make the coordinates of the vertices of the trapezoid."""
     assert is_Drift_Input_Output_Tilt_Valid(L, halfWidth, theta1, theta2)
     points = [np.array([-halfWidth * tan(theta1), halfWidth]),
               np.array([L - halfWidth * tan(theta2), halfWidth]),
@@ -188,6 +191,7 @@ def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
 
 
 def make_Drift_Shapely_Objects(el: elementPT.Drift):
+    """Make shapely objects for drift element. Drift element is trapezoid shaped to allow for tilted input/output"""
     L, ap, outerHalfWidth, theta1, theta2 = el.L, el.ap, el.outerHalfWidth, el.inputTiltAngle, el.outputTiltAngle
     pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
     pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outerHalfWidth)

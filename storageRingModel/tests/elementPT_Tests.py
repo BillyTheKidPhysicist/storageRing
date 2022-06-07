@@ -192,6 +192,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         np.random.seed(seed)
         lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), L, None,
                                      (self.magnetWidth,), useStandardMagErrors=magnetErrors)
+        lensElement.fill_Pre_Constrained_Parameters()
+        lensElement.fill_Post_Constrained_Parameters()
         gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
         numSlices = None if not magnetErrors else int(round(lensElement.Lm / lensElement.individualMagnetLength))
@@ -347,6 +349,10 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         np.random.seed(42)
         elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0, True)
         elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0, False)
+        for el in [elDeviation,elPerfect]:
+            el.fill_Pre_Constrained_Parameters()
+            el.theta=0.0
+            el.fill_Post_Constrained_Parameters()
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         np.random.seed(42)
