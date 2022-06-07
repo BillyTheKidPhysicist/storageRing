@@ -1194,6 +1194,7 @@ class HalbachLensSim(LensIdeal):
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
         self.apMaxGoodField = self.calculate_Maximum_Good_Field_Aperture(rp)
         ap = self.apMaxGoodField - TINY_OFFSET if ap is None else ap
+        self.fringeFieldLength=max(rpLayers)*self.fringeFracOuter
         assert ap <= self.apMaxGoodField
         assert ap > 5 * rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
         super().__init__(PTL, L, None, rp, ap, build=False)
