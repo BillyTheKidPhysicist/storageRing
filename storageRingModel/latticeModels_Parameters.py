@@ -104,7 +104,7 @@ _constants_Version1_2 = {
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping
-    "bendingApMax": .01,  # maximum from 1.33 flange limit (ID/2). I rounded up
+    "bendTubeODMax": .008,  
     "lensToBendGap": inch_To_Meter(2),  # same at each bend to lens joint. Vacuum tube limited
     "observationGap": inch_To_Meter(2),  # gap required for observing atoms
     "rbTarget": 1.0,  # target bending radius
@@ -129,9 +129,9 @@ constantsV3: lockedDict = lockedDict(_constants_Version3)
 # simple model with [lens,combiner,lens,bender,lens,lens,bender]
 optimizerBounds_V1_3: lockedDict = lockedDict({
     'rpLens3_4': (.005, .03),
-    'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax'] * 1.1),
+    'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens2': (.01, .04),
-    'rpBend': (.005, constantsV1_2["bendingApMax"] + VACUUM_TUBE_THICKNESS),
+    'rpBend': (.005, constantsV1_2["bendTubeODMax"]),
     'L_Lens1': (.05, .5),
     'L_Lens2': (.05, .5)
 })
@@ -141,10 +141,10 @@ optimizerBounds_V1_3: lockedDict = lockedDict({
 optimizerBounds_V2: lockedDict = lockedDict({
     'rpLens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax'] * 2),
-    'rpLens2': (.005, injectorRingConstraintsV1['rp1LensMax'] * 1.1),
+    'rpLens2': (.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens3': (.01, .04),
     'rpLens4': (.01, .04),
-    'rpBend': (.005, constantsV1_2["bendingApMax"] + VACUUM_TUBE_THICKNESS),
+    'rpBend': (.005, constantsV1_2["bendTubeODMax"] + VACUUM_TUBE_THICKNESS),
     'L_Lens1': (.1, .4),
     'L_Lens2': (.1, .4),
     'L_Lens3': (.1, .4),

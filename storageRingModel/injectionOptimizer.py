@@ -3,7 +3,7 @@ import os
 import elementPT
 from typing import Union, Optional
 import numpy as np
-import warnings
+from asyncDE import solve_Async
 from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET
 from storageRingModeler import StorageRingModel
 from ParticleTracerLatticeClass import ElementDimensionError, ElementTooShortError, CombinerDimensionError
@@ -137,67 +137,22 @@ def wrapper(X: Union[np.ndarray, list, tuple]) -> float:
 
 
 def main():
-    # L_InjectorMagnet1, rpInjectorMagnet1, L_InjectorMagnet2, rpInjectorMagnet2, LmCombiner, rpCombiner,
-    # loadBeamDiam, L1, L2, L3
-    # bounds = [vals for vals in injectorParamsBoundsAny.values()]
-    #
-    # member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
-    # print(repr(member.DNA),member.cost)
 
-    from latticeModels_Parameters import injectorParamsOptimalAny
-    # # X0=np.array([0.08326160110590838 , 0.020993060372921774, 0.16088998779932584 ,
-    # #        0.024763975149604798, 0.19375652148870226 , 0.0398938436893404  ,
-    # #        0.018280132203330864, 0.16047790265328432 , 0.26596808943711425 ,
-    # #        0.21231305487552196 ])
-    X0 = np.array(list(injectorParamsOptimalAny.values()))
-    print(wrapper(X0))
-    plot_Results(X0)
+    bounds = [vals for vals in injectorParamsBoundsAny.values()]
+    #
+    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.1, disp=True)
+    print('optimal',repr(member.DNA),member.cost)
+
+    x0=member.DNA
+    from octopusOptimizer import octopus_Optimize
+    octopus_Optimize(wrapper,bounds,x0,tentacleLength=.02,numSearchesCriteria=20,maxTrainingMemory=200)
+    # print(wrapper(X0))
+    # plot_Results(X0)
 
 
 if __name__ == "__main__":
     main()
 
 """
-
------------------attack 1: 
-
-coarse: 
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.15983706722579363 , 0.03                , 0.1318471593072328  ,
-       0.02224089503466501 , 0.20020617195221901 , 0.03912975206758641 ,
-       0.014889359039106131, 0.19473657568556155 , 0.2425783750828193  ,
-       0.15842445390730578 ])
-cost: 0.22240731523646098
-finished with total evals:  7935
-array([0.15983706722579363 , 0.03                , 0.1318471593072328  ,
-       0.02224089503466501 , 0.20020617195221901 , 0.03912975206758641 ,
-       0.014889359039106131, 0.19473657568556155 , 0.2425783750828193  ,
-       0.15842445390730578 ]) 0.22240731523646098
-fine: 
-
-0.19245109021710935 array([0.153132  , 0.02963415, 0.13430734, 0.02258658, 0.19126756,
-       0.0418939 , 0.01501351, 0.20163243, 0.23014572, 0.17625537])
-
------------------attack 2:
-
-coarse:
-
-DNA: array([0.12262512509801454 , 0.03                , 0.15497825945216434 ,
-       0.023588293574130267, 0.17972102518246974 , 0.04                ,
-       0.014340208454092672, 0.16881858164260252 , 0.234654880587174   ,
-       0.19908381690019694 ])
-cost: 0.21081256710195267
-finished with total evals:  7211
-array([0.12262512509801454 , 0.03                , 0.15497825945216434 ,
-       0.023588293574130267, 0.17972102518246974 , 0.04                ,
-       0.014340208454092672, 0.16881858164260252 , 0.234654880587174   ,
-       0.19908381690019694 ]) 0.21081256710195267
-
-
-
-fine: 
-38 0.19468989454681276 array([0.13862286, 0.03007318, 0.15414578, 0.02380996, 0.18852086,
-       0.04141863, 0.01434852, 0.16452731, 0.23317253, 0.1854686 ])
 
 """
