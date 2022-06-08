@@ -1,20 +1,16 @@
-import itertools
-from math import isclose
-from numbers import Number
-import time
-from constants import MAGNETIC_PERMEABILITY
-import numpy as np
-from numpy.linalg import norm
-import numba  # type ignore
-from scipy.spatial.transform import Rotation
-from magpylib.magnet import Cuboid as _Cuboid
-import magpylib
-from magpylib import Collection
-from magpylib._src.obj_classes.class_BaseTransform import apply_move
-from demag_functions import apply_demag
 import copy
-from helperTools import *
+from numbers import Number
+
+from magpylib import Collection
 from magpylib._src.fields.field_wrap_BH_level2 import getBH_level2
+from magpylib._src.obj_classes.class_BaseTransform import apply_move
+from magpylib.magnet import Cuboid as _Cuboid
+from numpy.linalg import norm
+from scipy.spatial.transform import Rotation
+
+from constants import MAGNETIC_PERMEABILITY
+from demag_functions import apply_demag
+from helperTools import numba,np,Union,Optional,math,inch_To_Meter,radians,within_Tol,time
 
 M_Default = 1.018E6  # default magnetization value, SI. Magnetization for N48 grade
 
@@ -97,7 +93,7 @@ class Sphere:
         arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle, not planeSymmetry)
         arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle, not planeSymmetry)
 
-        if planeSymmetry == True:
+        if planeSymmetry:
             arr += self.B_Symmetry(r, 0, negativeSymmetry, rotationAngle, planeSymmetry)
             arr += self.B_Symmetry(r, 1, negativeSymmetry, rotationAngle, planeSymmetry)
             arr += self.B_Symmetry(r, 2, negativeSymmetry, rotationAngle, planeSymmetry)
@@ -118,9 +114,9 @@ class Sphere:
         r0Sym[:2] = M_Rot @ r0Sym[:2]
         mSym = self.m.copy()
         mSym[:2] = M_Rot @ mSym[:2]
-        if negativeSymmetry == True:
+        if negativeSymmetry:
             mSym[:2] *= (-1) ** rotations
-        if planeReflection == True:  # another dipole on the other side of the z=0 line
+        if planeReflection:  # another dipole on the other side of the z=0 line
             r0Sym[2] = -r0Sym[2]
             mSym[-1] *= -1
         # plt.quiver(r0Sym[0], r0Sym[1], mSym[0], mSym[1])
@@ -133,18 +129,18 @@ class billyHalbachCollectionWrapper(Collection):
     SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
     meterTo_mm = 1e3  # magpy takes distance in mm
 
-    def __init__(self, *sources,**kwargs):
-        super().__init__(*sources,**kwargs)
+    def __init__(self, *sources, **kwargs):
+        super().__init__(*sources, **kwargs)
 
-    def rotate(self, rot, anchor=None, start=-1, increment=False):
+    def rotate(self, rotation, anchor=None, start=-1):
         if anchor is None:
             raise NotImplementedError  # not sure how to best deal with rotating collection about itself
-        super().rotate(rot, anchor=0.0)
+        super().rotate(rotation, anchor=0.0,start=start)
 
-    def move(self,displacement, start="auto"):
+    def move(self, displacement, start="auto"):
         displacement = [entry * self.meterTo_mm for entry in displacement]
         for child in self.children_all:
-            apply_move(child,displacement)
+            apply_move(child, displacement)
 
     def _getB_Wrapper(self, evalCoords_mm: np.ndarray, sizeMax: float = 500_000) -> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only

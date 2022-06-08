@@ -1,8 +1,6 @@
-import copy
 import warnings
 from math import sqrt, isclose
 from typing import Optional, Union
-from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -55,25 +53,21 @@ def mirror_Across_Angle(x: float, y: float, ang: float) -> tuple[float, float]:
 
 class ElementDimensionError(Exception):
     """Some dimension of an element is causing an unphysical configuration. Rather general error"""
-    pass
 
 
 class ElementTooShortError(Exception):
     """An element is too short. Because space is required for fringe fields this can result in negative material
     lengths, or nullify my approximation that fields drop to 1% when the element ends."""
-    pass
 
 
 class CombinerIterExceededError(Exception):
     """When solving for the geometry of the combiner, Newton's method is used to set the offset. Throw this if
     iterations are exceeded"""
-    pass
 
 
 class CombinerDimensionError(Exception):
     """Not all configurations of combiner parameters are valid. For one thing, the beam needs to fit into the
     combiner."""
-    pass
 
 
 class Element:
@@ -87,7 +81,7 @@ class Element:
     and construct itself, which is not always trivial.
     """
 
-    def __init__(self, PTL, plotColor: str, ang: float = 0.0, build: bool = True, L=None):
+    def __init__(self, PTL, plotColor: str, ang: float = 0.0, L=None):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -137,24 +131,26 @@ class Element:
         """Because jitclass cannot be pickled, I need to do some gymnastics. An Element object must be able to fully
         release references in __dict__ to the fastFieldHelper. Thus, each Element cannot carry around an uninitiliazed
         class of fastFieldHelper. Instead, it must be initialized from the global namespace."""
-        if type(self) == Element:
+        if type(self) is Element:
             return fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba(*initParams)
-        elif type(self) == LensIdeal:
+        elif type(self) is LensIdeal:
             return fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(*initParams)
-        elif type(self) == Drift:
+        elif type(self) is Drift:
             return fastNumbaMethodsAndClass.DriftFieldHelper_Numba(*initParams)
-        elif type(self) == CombinerIdeal:
+        elif type(self) is CombinerIdeal:
             return fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(*initParams)
-        elif type(self) == CombinerSim:
+        elif type(self) is CombinerSim:
             return fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(*initParams)
-        elif type(self) == CombinerHalbachLensSim:
+        elif type(self) is CombinerHalbachLensSim:
             return fastNumbaMethodsAndClass.CombinerHalbachLensSimFieldHelper_Numba(*initParams)
-        elif type(self) == HalbachBenderSimSegmented:
+        elif type(self) is HalbachBenderSimSegmented:
             return fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(*initParams)
-        elif type(self) == BenderIdeal:
+        elif type(self) is BenderIdeal:
             return fastNumbaMethodsAndClass.BenderIdealFieldHelper_Numba(*initParams)
-        elif type(self) == HalbachLensSim:
+        elif type(self) is HalbachLensSim:
             return fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(*initParams)
+        else:
+            raise NotImplementedError
 
     def __getstate__(self):
         self._fastFieldHelperInitParams = self.fastFieldHelper.get_Init_Params()
@@ -330,7 +326,6 @@ class Element:
     def fill_Post_Constrained_Parameters(self):
         """Fill internal parameters after constrained lattice layout is solved. See fill_Pre_Constrainted_Parameters.
         At this point everything about the geometry of the element is specified"""
-        pass
 
     def shape_Field_Data_3D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
         """
@@ -419,7 +414,7 @@ class LensIdeal(Element):
         self.shape = 'STRAIGHT'  # The element's geometry
         self.K = None
 
-    def fill_Pre_Constrained_Parameters(self)-> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.K = self.fieldFact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
@@ -472,14 +467,14 @@ class Drift(LensIdeal):
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
 
-    def __init__(self, PTL, L: float, ap: float,outerHalfWidth: Optional[float],
+    def __init__(self, PTL, L: float, ap: float, outerHalfWidth: Optional[float],
                  inputTiltAngle: float, outputTiltAngle: float, build=True):
         super().__init__(PTL, L, 0, np.inf, ap, build=False)  # set Bp to zero and bore radius to infinite
         self.plotColor = ELEMENT_PLOT_COLORS['drift']
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
         self.fastFieldHelper = self.init_fastFieldHelper([L, ap, inputTiltAngle, outputTiltAngle])
         self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
-        assert self.outerHalfWidth>ap
+        assert self.outerHalfWidth > ap
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
@@ -543,8 +538,8 @@ class BenderIdeal(Element):
 
     def fill_In_And_Out_Rotation_Matrices(self):
         rot = self.theta - self.ang + np.pi / 2
-        self.ROut = Rot.from_rotvec([0.0,0.0,rot]).as_matrix()[:2,:2]
-        self.RIn = Rot.from_rotvec([0.0,0.0,-rot]).as_matrix()[:2,:2]
+        self.ROut = Rot.from_rotvec([0.0, 0.0, rot]).as_matrix()[:2, :2]
+        self.RIn = Rot.from_rotvec([0.0, 0.0, -rot]).as_matrix()[:2, :2]
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
@@ -587,7 +582,7 @@ class BenderIdeal(Element):
     def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Simple cartesian to cylinderical coordinates"""
 
-        x, y, z = qEl
+        x, y = qEl[:2]
         xDot, yDot, zDot = pEl
         r = np.sqrt(x ** 2 + y ** 2)
         rDot = (x * xDot + y * yDot) / r
@@ -602,8 +597,8 @@ class CombinerIdeal(Element):
     # angle is decided by tracing particles through the combiner and finding the bending angle.
 
     def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, mode: str,
-                 sizeScale: float, build: bool = True):
-        Element.__init__(self, PTL, ELEMENT_PLOT_COLORS['combiner'], build=False)
+                 sizeScale: float):
+        Element.__init__(self, PTL, ELEMENT_PLOT_COLORS['combiner'])
         assert mode in ('injector', 'storageRing')
         self.fieldFact = -1.0 if mode == 'injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
@@ -624,7 +619,7 @@ class CombinerIdeal(Element):
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
 
-    def fill_Pre_Constrained_Parameters(self)-> None:
+    def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.apR, self.apL, self.apz, self.Lm = [val * self.sizeScale for val in
                                                  (self.apR, self.apL, self.apz, self.Lm)]
@@ -936,7 +931,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lo = self.ang * self.ro + 2 * self.Lcap
         self.outerHalfWidth = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_Fast_Field_Helper(self,extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
@@ -963,18 +958,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         coordArrList = [np.linspace(arrArgs[0], arrArgs[1], arrArgs[2]) for arrArgs in (xArrArgs, yArrArgs, zArrArgs)]
         gridCoords = np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1, 3)
         return gridCoords
-
-    # def fill_rOffset_And_Dependent_Params(self,rOffset:float)->None:
-    #     #this needs a seperate function because it is called when finding the optimal rOffset rather than rebuilding
-    #     #the entire element
-    #     self.outputOffset=rOffset
-    #     self.ro=self.rb+self.outputOffset
-    #     self.L=self.ang*self.rb
-    #     self.Lo=self.ang*self.ro+2*self.Lcap
-
-    # def update_rOffset_Fact(self,rOffsetFact:float)->None:
-    #     self.rOffsetFact=rOffsetFact
-    #     self.fill_rOffset_And_Dependent_Params(self.outputOffsetFunc(self.rb))
 
     def convert_Center_To_Cartesian_Coords(self, s: float, xc: float, yc: float) -> tuple[float, float, float]:
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""
@@ -1190,7 +1173,7 @@ class HalbachLensSim(LensIdeal):
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
         self.apMaxGoodField = self.calculate_Maximum_Good_Field_Aperture(rp)
         ap = self.apMaxGoodField - TINY_OFFSET if ap is None else ap
-        self.fringeFieldLength=max(rpLayers)*self.fringeFracOuter
+        self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
         assert ap <= self.apMaxGoodField
         assert ap > 5 * rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
         super().__init__(PTL, L, None, rp, ap, build=False)
@@ -1235,7 +1218,6 @@ class HalbachLensSim(LensIdeal):
         tiltMax = np.arctan(jitterAmp / self.L)
         assert 0.0 <= tiltMax < .1  # small angle. Not sure if valid outside that range
         self.extraFieldLength = self.rp * tiltMax * 1.5  # safety factor for approximations
-
 
     def set_Effective_Length(self):
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
@@ -1329,7 +1311,7 @@ class HalbachLensSim(LensIdeal):
             validIndices = np.linalg.norm(planeCoords, axis=1) <= self.rp
             BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
             BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(planeCoords[validIndices],
-                                                                               returnNorm=True)
+                                                                                         returnNorm=True)
             data2D = np.column_stack((planeCoords[:, :2], BNormGrad[:, :2], BNorm))  # 2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data2D
@@ -1358,7 +1340,8 @@ class HalbachLensSim(LensIdeal):
         validZ = volumeCoords[:, 2] >= self.Lm / 2
         validIndices = np.logical_or(validXY, validZ)
         BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
-        BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices], returnNorm=True)
+        BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices],
+                                                                                     returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         return data3D
 
@@ -1375,8 +1358,8 @@ class HalbachLensSim(LensIdeal):
         lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
                                           numSlices=numSlices, useSolenoidField=self.PTL.useSolenoidField)
-        sources=[src.copy() for src in [*lens.sources_all,*extraFieldSources]]
-        fieldGenerator=billyHalbachCollectionWrapper(sources)
+        sources = [src.copy() for src in [*lens.sources_all, *extraFieldSources]]
+        fieldGenerator = billyHalbachCollectionWrapper(sources)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt((xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2 + (xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2)
         if enforceGoodField == True:
@@ -1385,11 +1368,11 @@ class HalbachLensSim(LensIdeal):
         data3D = self.make_3D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant, zArr)
         return data2D, data3D
 
-    def build_Fast_Field_Helper(self,extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
 
-        data2D, data3D = self.make_Field_Data(True, False,extraFieldSources)
+        data2D, data3D = self.make_Field_Data(True, False, extraFieldSources)
         xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd = self.shape_Field_Data_3D(data3D)
         if data2D is not None:  # if no inner plane being used
             xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn = self.shape_Field_Data_2D(data2D)
@@ -1404,7 +1387,7 @@ class HalbachLensSim(LensIdeal):
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
         assert F_edge / F_center < .01
 
-    def make_Field_Perturbation_Data(self,extraFieldSources) -> Optional[tuple]:
+    def make_Field_Perturbation_Data(self, extraFieldSources) -> Optional[tuple]:
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
         and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
         force is small, and so I can get away with interpolating with low density, while keeping my high density
@@ -1413,8 +1396,10 @@ class HalbachLensSim(LensIdeal):
         perturbation interpolation"""
 
         if self.useStandardMagErrors:
-            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False,extraFieldSources, enforceGoodField=False)
-            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True,extraFieldSources, enforceGoodField=False)
+            data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False, extraFieldSources,
+                                                                    enforceGoodField=False)
+            data2D_2, data3D_Perturbations = self.make_Field_Data(False, True, extraFieldSources,
+                                                                  enforceGoodField=False)
             assert len(data3D_Perturbations) == len(data3D_NoPerturbations)
             assert iscloseAll(data3D_Perturbations[:, :3], data3D_NoPerturbations[:, :3], 1e-12)
             assert data2D_1 is None and data2D_2 is None
@@ -1472,7 +1457,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
 
     def __init__(self, PTL, Lm: float, rp: float, loadBeamDiam: float, layers: int, ap: Optional[float], mode: str,
-                 useStandardMagErrors: bool, build: bool = True):
+                 useStandardMagErrors: bool):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # loadBeamDiam: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -1480,7 +1465,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
         assert mode in ('storageRing', 'injector')
         assert all(val > 0 for val in (Lm, rp, loadBeamDiam, layers))
-        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, mode, 1.0, build=False)
+        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, mode, 1.0)
 
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
         assert self.maxCombinerAng == .2 and self.outerFringeFrac == 1.5, "May need to change " \
@@ -1554,7 +1539,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_Fast_Field_Helper(self,extraSources):
+    def build_Fast_Field_Helper(self, extraSources):
         fieldData = self.make_Field_Data(self.La, self.ang, True)
         self.set_extraFieldLength()
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,

@@ -9,10 +9,12 @@ described in electronic lab book. Briefly, the model assumptions are:
 """
 # pylint: disable=too-many-locals, too-many-arguments
 from typing import Union
-import numpy as np
+
 import numba
-from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
+import numpy as np
+
 import elementPT
+from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
 
 realNum = Union[float, int]
 vec3D = tuple[float, float, float]

@@ -7,8 +7,10 @@ storage ring.
 """
 
 from typing import Union
-from shapely.geometry import box, LineString, Polygon
+
 from shapely.affinity import translate, rotate
+from shapely.geometry import box, LineString, Polygon
+
 from helperTools import np, plt, itertools
 
 shapelyObject = Union[box, LineString, Polygon]

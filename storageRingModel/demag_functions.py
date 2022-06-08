@@ -1,3 +1,5 @@
+"""Provided by Dr. Ortner from Austrian Silicon Labs"""
+
 # pylint: disable=invalid-name, redefined-outer-name
 import numpy as np
 import magpylib as magpy

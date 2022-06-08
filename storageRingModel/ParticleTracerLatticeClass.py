@@ -1,20 +1,18 @@
-import copy
-
-import elementPT
 # from geneticLensElement_Wrapper import GeneticLens
-from typing import Union, Generator, Iterable
-from ParticleClass import Particle
-from ParticleTracerClass import ParticleTracer
-import numpy as np
-import scipy.optimize as spo
+from typing import Iterable
+
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
-from storageRingConstraintSolver import solve_Floor_Plan,update_And_Place_Elements_From_Floor_Plan
 from joblib import Parallel, delayed
+
+import elementPT
+from ParticleClass import Particle
+from ParticleTracerClass import ParticleTracer
+from constants import DEFAULT_ATOM_SPEED
 from elementPT import *
-from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
-from constants import DEFAULT_ATOM_SPEED, FLAT_WALL_VACUUM_THICKNESS
 from shapelyObjectBuilder import build_Shapely_Objects
+from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
+from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Elements_From_Floor_Plan
 
 # todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 # people, I need to change that. This was before my cleaner code approach
@@ -23,11 +21,12 @@ from shapelyObjectBuilder import build_Shapely_Objects
 
 benderTypes = Union[elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
 
+
 class ParticleTracerLattice:
 
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
-                 useSolenoidField: bool = False, initialLocation=None,initialAngle=None):
+                 useSolenoidField: bool = False, initialLocation=None, initialAngle=None):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -41,8 +40,8 @@ class ParticleTracerLattice:
         self.benderIndices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
-        self.initialLocation=(0.0,0.0) if initialLocation is None else initialLocation
-        self.initialAngle=-np.pi if initialAngle is None else initialAngle
+        self.initialLocation = (0.0, 0.0) if initialLocation is None else initialLocation
+        self.initialAngle = -np.pi if initialAngle is None else initialAngle
         self.combinerIndex: Optional[int] = None  # the index in the lattice where the combiner is
         self.totalLength: Optional[float] = None  # total length of lattice, m
         self.jitterAmp = jitterAmp
@@ -243,8 +242,8 @@ class ParticleTracerLattice:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
 
-    def add_Drift(self, L: float, ap: float = .03, inputTiltAngle: float=0.0,outputTiltAngle: float=0.0,
-                  outerHalfWidth: float=None) -> None:
+    def add_Drift(self, L: float, ap: float = .03, inputTiltAngle: float = 0.0, outputTiltAngle: float = 0.0,
+                  outerHalfWidth: float = None) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -262,7 +261,7 @@ class ParticleTracerLattice:
         :return:
         """
 
-        el = Drift(self, L, ap,outerHalfWidth,inputTiltAngle,outputTiltAngle)  # create a drift element object
+        el = Drift(self, L, ap, outerHalfWidth, inputTiltAngle, outputTiltAngle)  # create a drift element object
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
@@ -328,16 +327,16 @@ class ParticleTracerLattice:
         for el in self.elList:
             el.fill_Pre_Constrained_Parameters()
 
-        floorPlan=solve_Floor_Plan(self, constrain)
-        update_And_Place_Elements_From_Floor_Plan(self,floorPlan)
+        floorPlan = solve_Floor_Plan(self, constrain)
+        update_And_Place_Elements_From_Floor_Plan(self, floorPlan)
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
-            if type(el) in (HalbachLensSim,HalbachBenderSimSegmented,CombinerHalbachLensSim):
+            if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim):
                 el.build_Fast_Field_Helper([])
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
-        if self.latticeType == 'storageRing' and constrain: #double check
+        if self.latticeType == 'storageRing' and constrain:  # double check
             assert is_Particle_Tracer_Lattice_Closed(self)
         build_Shapely_Objects(self.elList)
         self.totalLength = 0

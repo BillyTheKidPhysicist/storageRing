@@ -210,7 +210,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,
     assert whichVersion in ('1', '2', '3')
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                standardMagnetErrors=useMagnetErrors)
+                                standardMagnetErrors=useMagnetErrors,useSolenoidField=True)
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
@@ -250,7 +250,7 @@ def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool =
         raise InjectorGeometryError
 
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
-                                standardMagnetErrors=useMagnetError)
+                                standardMagnetErrors=useMagnetError,useSolenoidField=True)
 
     # -----gap between source and first lens-----
 
@@ -301,7 +301,7 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
                                   'rpLens2': surrogateParamsDict['rpLens2'],
                                   'L_Lens2': surrogateParamsDict['L_Lens']})
 
-    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing')
+    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',useSolenoidField=True)
 
     add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, None, whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()
