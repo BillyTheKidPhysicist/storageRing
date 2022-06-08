@@ -407,7 +407,7 @@ class LensIdeal(Element):
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
         # fillParams is used to avoid filling the parameters in inherited classes
-        super().__init__(PTL, ELEMENT_PLOT_COLORS['lens'], build=False, L=L)
+        super().__init__(PTL, ELEMENT_PLOT_COLORS['lens'], L=L)
         self.Bp = Bp
         self.rp = rp
         self.ap = rp if ap is None else ap  # size of apeture radially
@@ -468,8 +468,8 @@ class Drift(LensIdeal):
     """
 
     def __init__(self, PTL, L: float, ap: float, outerHalfWidth: Optional[float],
-                 inputTiltAngle: float, outputTiltAngle: float, build=True):
-        super().__init__(PTL, L, 0, np.inf, ap, build=False)  # set Bp to zero and bore radius to infinite
+                 inputTiltAngle: float, outputTiltAngle: float):
+        super().__init__(PTL, L, 0, np.inf, ap)  # set Bp to zero and bore radius to infinite
         self.plotColor = ELEMENT_PLOT_COLORS['drift']
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
         self.fastFieldHelper = self.init_fastFieldHelper([L, ap, inputTiltAngle, outputTiltAngle])
@@ -511,8 +511,8 @@ class BenderIdeal(Element):
             ParticleTracerLatticeClass
         """
 
-    def __init__(self, PTL, ang: float, Bp: float, rp: float, rb: float, ap: float, build=True):
-        super().__init__(PTL, ELEMENT_PLOT_COLORS['bender'], ang=ang, build=False)
+    def __init__(self, PTL, ang: float, Bp: float, rp: float, rb: float, ap: float):
+        super().__init__(PTL, ELEMENT_PLOT_COLORS['bender'], ang=ang)
         self.Bp: float = Bp
         self.rp: float = rp
         self.ap: float = self.rp if ap is None else ap
@@ -752,7 +752,7 @@ class CombinerSim(CombinerIdeal):
         apL = .015
         apR = .025
         apZ = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale, build=False)
+        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale)
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
 
@@ -820,7 +820,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         assert all(val > 0 for val in (Lm, rp, rb, rOffsetFact))
         assert extraSpace >= 0
         assert rb > rp / 10  # this would be very dubious
-        super().__init__(PTL, None, None, rp, rb, None, build=False)
+        super().__init__(PTL, None, None, rp, rb, None)
         self.rb = rb
         self.space = extraSpace
         self.Lm = Lm
@@ -1176,7 +1176,7 @@ class HalbachLensSim(LensIdeal):
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
         assert ap <= self.apMaxGoodField
         assert ap > 5 * rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
-        super().__init__(PTL, L, None, rp, ap, build=False)
+        super().__init__(PTL, L, None, rp, ap)
         self.L = L
         self.methodOfMomentsHighPrecision = False
         self.useStandardMagErrors = useStandardMagErrors

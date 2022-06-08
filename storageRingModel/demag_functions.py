@@ -170,6 +170,9 @@ def apply_demag(
     -------
     None
     '''
+
+    #in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
+    #system
     xi = [src.mur - 1.0 for src in collection.sources_all]
     n = len(collection.sources_all)
 

@@ -122,6 +122,13 @@ def inch_To_Meter(inches: Union[float, int]) -> float:
 
     return .0254 * inches
 
+def gauss_To_Tesla(gauss: Union[float, int]) -> float:
+    """Convert units of gauss to tesla"""
+    return gauss/10_000.0
+
+def tesla_To_Guass(tesla: Union[float, int])-> float:
+    """Convert units of tesla to gauss"""
+    return tesla*10_000.0
 
 def arr_Product(*args):
     """Use itertools to form a product of provided arrays, and return an array instead of iterable"""

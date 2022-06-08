@@ -1,6 +1,7 @@
 import copy
 from numbers import Number
 
+import magpylib.current
 from magpylib import Collection
 from magpylib._src.fields.field_wrap_BH_level2 import getBH_level2
 from magpylib._src.obj_classes.class_BaseTransform import apply_move
@@ -10,16 +11,22 @@ from scipy.spatial.transform import Rotation
 
 from constants import MAGNETIC_PERMEABILITY
 from demag_functions import apply_demag
-from helperTools import numba,np,Union,Optional,math,inch_To_Meter,radians,within_Tol,time
+from helperTools import numba, np, Union, Optional, math, inch_To_Meter, radians, within_Tol, time, gauss_To_Tesla
 
 M_Default = 1.018E6  # default magnetization value, SI. Magnetization for N48 grade
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 tuple3Float = tuple[float, float, float]
 
+magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
+SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
+METER_TO_mm = 1e3  # magpy takes distance in mm
+SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(3)
+COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number divided by radius of element
 
-@numba.njit(numba.float64[:, :](numba.float64[:, :], numba.float64[:], numba.float64[:]))
-def B_NUMBA(r, r0, m):
+
+@numba.njit()
+def B_NUMBA(r: np.ndarray, r0: np.ndarray, m: np.ndarray) -> np.ndarray:
     r = r - r0  # convert to difference vector
     rNormTemp = np.sqrt(np.sum(r ** 2, axis=1))
     rNorm = np.empty((rNormTemp.shape[0], 1))
@@ -101,9 +108,6 @@ class Sphere:
             arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle, planeSymmetry)
             arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle, planeSymmetry)
 
-        # plt.gca().set_aspect('equal')
-        # plt.grid()
-        # plt.show()
         return arr
 
     def B_Symmetry(self, r: np.ndarray, rotations: float, negativeSymmetry: float, rotationAngle: float,
@@ -125,9 +129,6 @@ class Sphere:
 
 
 class billyHalbachCollectionWrapper(Collection):
-    magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
-    SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
-    meterTo_mm = 1e3  # magpy takes distance in mm
 
     def __init__(self, *sources, **kwargs):
         super().__init__(*sources, **kwargs)
@@ -135,10 +136,10 @@ class billyHalbachCollectionWrapper(Collection):
     def rotate(self, rotation, anchor=None, start=-1):
         if anchor is None:
             raise NotImplementedError  # not sure how to best deal with rotating collection about itself
-        super().rotate(rotation, anchor=0.0,start=start)
+        super().rotate(rotation, anchor=0.0, start=start)
 
     def move(self, displacement, start="auto"):
-        displacement = [entry * self.meterTo_mm for entry in displacement]
+        displacement = [entry * METER_TO_mm for entry in displacement]
         for child in self.children_all:
             apply_move(child, displacement)
 
@@ -166,11 +167,10 @@ class billyHalbachCollectionWrapper(Collection):
     def B_Vec(self, evalCoords: np.ndarray, useApprox: int = False) -> np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
         assert len(self) > 0
-        if useApprox == True:
+        if useApprox:
             raise NotImplementedError  # this is only implement on the bender
         mTesla_To_Tesla = 1e-3
-        meterTo_mm = 1e3
-        evalCoords_mm = meterTo_mm * evalCoords
+        evalCoords_mm = METER_TO_mm * evalCoords
         BVec = mTesla_To_Tesla * self._getB_Wrapper(evalCoords_mm)
         return BVec
 
@@ -243,7 +243,7 @@ class billyHalbachCollectionWrapper(Collection):
         results = self.central_Difference(evalCoordsShaped, returnNorm, useApprox) if differenceMethod == 'central' else \
             self.forward_Difference(evalCoordsShaped, returnNorm, useApprox)
         if len(evalCoords.shape) == 1:
-            if returnNorm == True:
+            if returnNorm:
                 [[Bgradx, Bgrady, Bgradz]], [B0] = results
                 results = (np.array([Bgradx, Bgrady, Bgradz]), B0)
             else:
@@ -265,10 +265,6 @@ class Cuboid(_Cuboid):
 class Layer(billyHalbachCollectionWrapper):
     # class object for a layer of the magnet. Uses the RectangularPrism object
 
-    magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
-    SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
-    meterTo_mm = 1e3  # magpy takes distance in mm
-
     numMagnetsInLayer = 12
 
     def __init__(self, rp: float, magnetWidth: float, length: float, position: tuple3Float = None,
@@ -277,7 +273,7 @@ class Layer(billyHalbachCollectionWrapper):
                  M_AngleShift=None, applyMethodOfMoments=False):
         super().__init__()
         assert magnetWidth > 0.0 and length > 0.0 and M > 0.0
-        assert isinstance(orientation, (type(None), Rotation)) == True
+        assert isinstance(orientation, (type(None), Rotation))
         position = (0.0, 0.0, 0.0) if position is None else position
         self.rMagnetShift: np.ndarray = self.make_Arr_If_None_Else_Copy(rMagnetShift)
         self.thetaShift: np.ndarray = self.make_Arr_If_None_Else_Copy(thetaShift)
@@ -319,7 +315,7 @@ class Layer(billyHalbachCollectionWrapper):
         if self.orientationToSet is not None:
             self.rotate(self.orientationToSet, anchor=0.0)
         self.move(self.positionToSet)
-        if self.applyMethodOfMoments == True:
+        if self.applyMethodOfMoments:
             self.method_Of_Moments()
 
     def make_Cuboid_Orientation_Magpy(self):
@@ -342,7 +338,7 @@ class Layer(billyHalbachCollectionWrapper):
         rMagnetCenter = rArr + self.magnetWidth / 2  # add specified rotation, typically errors
         xCenter, yCenter = rMagnetCenter * np.cos(thetaArr), rMagnetCenter * np.sin(thetaArr)
         positionAll = np.column_stack((xCenter, yCenter, np.zeros(self.numMagnetsInLayer)))
-        positionAll *= self.meterTo_mm
+        positionAll *= METER_TO_mm
         assert positionAll.shape == (self.numMagnetsInLayer, 3)
         return positionAll
 
@@ -352,14 +348,14 @@ class Layer(billyHalbachCollectionWrapper):
         dimensionAll = dimensionSingle * np.ones((self.numMagnetsInLayer, 3))
         dimensionAll += self.dimShift
         assert np.all(10 * np.abs(self.dimShift) < dimensionAll)  # model probably doesn't work
-        dimensionAll *= self.meterTo_mm
+        dimensionAll *= METER_TO_mm
         assert dimensionAll.shape == (self.numMagnetsInLayer, 3)
         return dimensionAll
 
     def make_Mag_Vec_Arr_Magpy(self):
         """Make array of magnetization vector of each magpylib cuboid in units of mT. add error effects (may be zero
         though)"""
-        M_MagpyUnit = self.M * self.SI_MagnetizationToMagpy  # uses units of mT for magnetization.
+        M_MagpyUnit = self.M * SI_MagnetizationToMagpy  # uses units of mT for magnetization.
         magnetizationSingle = np.asarray([M_MagpyUnit, 0.0, 0.0])
         magnetizationAll = magnetizationSingle * np.ones((self.numMagnetsInLayer, 3))
         magnetizationAll *= (1 + self.M_NormShiftRelative)  # add specified fraction shifts, typically errors
@@ -382,17 +378,21 @@ class HalbachLens(billyHalbachCollectionWrapper):
         super().__init__()
         assert length > 0.0 and M > 0.0
         assert (isinstance(numSlices, int) and numSlices >= 1) if numSlices is not None else numSlices is None
-        assert isinstance(orientation, (type(None), Rotation)) == True
+        assert isinstance(orientation, (type(None), Rotation))
         assert isinstance(rp, (float, tuple)) and isinstance(magnetWidth, (float, tuple))
         position = (0.0, 0.0, 0.0) if position is None else position
+        self.rp: tuple = rp if isinstance(rp, tuple) else (rp,)
+        assert length / min(self.rp) >= .5 if useSolenoidField else True #shorter than this and the solenoid model
+            # is dubious
+        self.length: float = length
+
         self.positionToSet = position
         self.orientationToSet = orientation  # orientation about body frame
-        self.rp: tuple = rp if isinstance(rp, tuple) else (rp,)
         self.magnetWidth: tuple = magnetWidth if isinstance(magnetWidth, tuple) else (magnetWidth,)
-        self.length: float = length
         self.applyMethodOfMoments: bool = applyMethodOfMoments
         self.useStandardMagErrors: bool = useStandardMagErrors
-        if sameSeed is True: raise Exception
+        if sameSeed is True:
+            raise Exception
         self.sameSeed: bool = sameSeed
         self.M: float = M
         self.numSlices = numSlices
@@ -407,7 +407,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         zArr, lengthArr = self.subdivide_Lens()
         for zLayer, length in zip(zArr, lengthArr):
             for radiusLayer, widthLayer in zip(self.rp, self.magnetWidth):
-                if self.useStandardMagErrors == True:
+                if self.useStandardMagErrors:
                     dimVariation, magVecAngleVariation, magNormVariation = self.standard_Magnet_Errors()
                 else:
                     dimVariation, magVecAngleVariation, magNormVariation = np.zeros((12, 3)), np.zeros(
@@ -417,15 +417,18 @@ class HalbachLens(billyHalbachCollectionWrapper):
                               M_NormShiftRelative=magNormVariation, mur=self.mur)
                 self.add(layer)
                 self.layerList.append(layer)
+        if self.applyMethodOfMoments:  # this must come before adding solenoids because the demag does not play nice with
+            # coils
+            self.method_Of_Moments()
+        if self.useSolenoidField:
+            self.add_Solenoid_Coils()
         if self.orientationToSet is not None:
             self.rotate(self.orientationToSet, anchor=0.0)
         self.move(self.positionToSet)
-        if self.applyMethodOfMoments == True:
-            self.method_Of_Moments()
 
     def standard_Magnet_Errors(self):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
-        if self.sameSeed == True:
+        if self.sameSeed:
             np.random.seed(42)
         dimTol = inch_To_Meter(.004)  # dimension variation,inch to meter, +/- meters
         MagVecAngleTol = radians(1.5)  # magnetization vector angle tolerane,degree to radian,, +/- radians
@@ -433,7 +436,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         dimVariation = self.make_Base_Error_Arr_Cartesian(numParams=3) * dimTol
         MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * MagVecAngleTol
         magNormVariation = self.make_Base_Error_Arr_Cartesian() * MagNormTol
-        if self.sameSeed == True:
+        if self.sameSeed:
             # todo: Does this random seed thing work, or is it a pitfall?
             np.random.seed(int(time.time()))
         return dimVariation, MagVecAngleVariation, magNormVariation
@@ -461,14 +464,21 @@ class HalbachLens(billyHalbachCollectionWrapper):
                                                                     0.0)  # length adds up and centered on 0
         return zArr, LArr
 
-    def B_Vec(self, evalCoords: np.ndarray, useApprox: int = False) -> np.ndarray:
-        BVec = super().B_Vec(evalCoords, useApprox=useApprox)
-        if self.useSolenoidField:
-            Bz0 = 1 / 10_000  # 1 gauss field
-            z = evalCoords[:, 2]
-            falloffFact = 1 / (1 + np.exp(30 * (abs(z) - self.length / 2) / self.length))
-            BVec[:, 2] += Bz0 * falloffFact
-        return BVec
+    def add_Solenoid_Coils(self) -> None:
+        """Add simple coils through length of lens. This is to remove the region of non zero magnetic field to prevent
+        spin flips"""
+        coilDiam = 1.95 * min(self.rp) * METER_TO_mm  # slightly smaller than magnet bore
+        zArr, lengthArr = self.subdivide_Lens()
+        zLensMin, zLensMax = zArr[0] - lengthArr[0] / 2, zArr[-1] + lengthArr[-1] / 2
+        numCoils = round((zLensMax - zLensMin) / (min(self.rp) / COILS_PER_RADIUS)) + 1  # prevent zero by adding 1
+        B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * (zLensMax - zLensMin)
+        currentInfiniteSolenoid = B_dot_dl / (MAGNETIC_PERMEABILITY * numCoils)
+        scale = np.sqrt(1 + (2 * min(self.rp) / self.length) ** 2)
+        currentFiniteSolenoid = currentInfiniteSolenoid * scale
+        coilLocationsZArr = METER_TO_mm * np.linspace(zLensMin, zLensMax, numCoils)
+        for z in coilLocationsZArr:
+            loop = magpylib.current.Loop(current=currentFiniteSolenoid, diameter=coilDiam, position=(0, 0, z))
+            self.add(loop)
 
 
 class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
@@ -503,7 +513,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def make_Lens_Angle_Array(self) -> np.ndarray:
         if self.numLenses == 1:
-            if self.positiveAngleMagnetsOnly == True:
+            if self.positiveAngleMagnetsOnly:
                 raise Exception('Not applicable with only 1 magnet')
             angleArr = np.asarray([0.0])
         else:
@@ -533,7 +543,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         for Lm, angle in self.lens_Length_And_Angle_Iter():
             lens = HalbachLens(self.rp, self.magnetWidth, Lm, M=self.M, position=(self.rb, 0.0, 0.0),
                                useStandardMagErrors=self.useStandardMagnetErrors,
-                               applyMethodOfMoments=False, useSolenoidField=self.useSolenoidField)
+                               applyMethodOfMoments=False)
             R = Rotation.from_rotvec([0.0, -angle, 0.0])
             lens.rotate(R, anchor=0)
             # my angle convention is unfortunately opposite what it should be here. positive theta
@@ -541,7 +551,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             # lens.position(r0)
             self.lensList.append(lens)
             self.add(lens)
-        if self.applyMethodsOfMoments == True:
+        if self.applyMethodsOfMoments:
             self.method_Of_Moments()
 
     def get_Seperated_Split_Indices(self, thetaArr: np.ndarray, deltaTheta: float, thetaMin: float, thetaMax: float) \
@@ -557,7 +567,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # remember, indexEnd is one past the last index!
         indexEnd = len(thetaArr) if thetaMax + deltaTheta > thetaArr.max() else np.argmax(
             thetaArr > thetaMax + deltaTheta)
-        if not indexStart == 0:
+        if indexStart != 0:
             assert thetaArr[indexStart] <= thetaMin - deltaTheta
         if not indexEnd == len(thetaArr):
             assert thetaArr[indexEnd] >= thetaMax + deltaTheta
