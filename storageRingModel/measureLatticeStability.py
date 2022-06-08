@@ -10,7 +10,7 @@ import skopt
 import elementPT
 from SwarmTracerClass import SwarmTracer
 from latticeModels import make_Ring_And_Injector_Version3
-from runOptimizer import solution_From_Lattice
+from ringOptimizer import solution_From_Lattice
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
 

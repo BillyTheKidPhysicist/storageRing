@@ -13,7 +13,7 @@ from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
 from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS, ELEMENT_PLOT_COLORS, MIN_MAGNET_MOUNT_THICKNESS
-from helperTools import arr_Product, iscloseAll, make_Odd
+from helperTools import arr_Product, iscloseAll, make_Odd, max_Tube_Radius_In_Segmented_Bend
 
 # todo: this needs a good scrubbing and refactoring
 
@@ -855,14 +855,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        radiusCorner = np.sqrt((self.rb - self.rp) ** 2 + (self.Lm / 2) ** 2)
-        apMaxGeom = self.rb - radiusCorner - VACUUM_TUBE_THICKNESS  # max aperture without clipping magnet
+        apMaxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, VACUUM_TUBE_THICKNESS)
         safetyFactor = .95
         apMaxGoodField = safetyFactor * self.numPointsBoreAp * self.rp / (
                 self.numPointsBoreAp + np.sqrt(2))  # max aperture
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
         apMax = min([apMaxGeom, apMaxGoodField])
+        assert apMax < self.rp
         return apMax
 
     def set_BpFact(self, BpFact: float):
@@ -880,7 +880,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         m = 1  # in simulation units mass is 1kg
         ucAngApprox = self.get_Unit_Cell_Angle()  # this will be different if the bore radius changes
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, numLenses=5,
-                                            applyMethodOfMoments=True)
+                                            applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
         thetaArr = np.linspace(-ucAngApprox, ucAngApprox, 100)
         yArr = np.zeros(len(thetaArr))
 
@@ -1007,11 +1007,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
         lensMisaligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                       numLenses=self.numMagnets, positiveAngleMagnetsOnly=True,
                                                       useMagnetError=True, useHalfCapEnd=(True, True),
-                                                      applyMethodOfMoments=False)
+                                                      applyMethodOfMoments=False,
+                                                      useSolenoidField=self.PTL.useSolenoidField)
         lensAligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                                    numLenses=self.numMagnets, positiveAngleMagnetsOnly=True,
                                                    useMagnetError=False, useHalfCapEnd=(True, True),
-                                                   applyMethodOfMoments=False)
+                                                   applyMethodOfMoments=False,
+                                                   useSolenoidField=self.PTL.useSolenoidField)
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices = rCenterArr < self.rp
         valsMisaligned = np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned, coordsCartesian, validIndices))
@@ -1033,8 +1035,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 1] ** 2) < self.rp
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                             numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,
-                                            applyMethodOfMoments=True,
-                                            useHalfCapEnd=(True, False))
+                                            applyMethodOfMoments=True, useHalfCapEnd=(True, False),
+                                            useSolenoidField=self.PTL.useSolenoidField)
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def is_Valid_Internal_Fringe(self, coord0: np.ndarray) -> bool:
@@ -1059,8 +1061,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         validIndices = [self.is_Valid_Internal_Fringe(coord) for coord in fieldCoords]
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                             numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,
-                                            applyMethodOfMoments=True,
-                                            useHalfCapEnd=(True, False))
+                                            applyMethodOfMoments=True, useHalfCapEnd=(True, False),
+                                            useSolenoidField=self.PTL.useSolenoidField)
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def generate_Segment_Field_Data(self) -> tuple[np.ndarray, ...]:
@@ -1075,7 +1077,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         assert not is_Even(self.numModelLenses)  # must be odd so magnet is centered at z=0
         lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
                                             numLenses=self.numModelLenses, applyMethodOfMoments=True,
-                                            positiveAngleMagnetsOnly=False)
+                                            positiveAngleMagnetsOnly=False, useSolenoidField=self.PTL.useSolenoidField)
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def compute_Valid_Field_Vals(self, lens: _HalbachBenderFieldGenerator, fieldCoords: np.ndarray,

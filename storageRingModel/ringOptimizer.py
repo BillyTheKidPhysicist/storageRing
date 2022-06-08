@@ -1,10 +1,10 @@
-import os
 import numpy as np
-from storageRingModeler import StorageRingModel, Solution
+
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
-from latticeModels_Parameters import optimizerBounds_V1_3, atomCharacteristic
+from latticeModels_Parameters import optimizerBounds_V1_3
+from storageRingModeler import StorageRingModel, Solution
 
 
 def plot_Results(params):
@@ -26,11 +26,14 @@ def invalid_Solution(XLattice, invalidInjector=None, invalidRing=None):
 
 
 def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice) -> Solution:
-    optimizer = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=True, numParticlesSwarm=1000)
+    energyConservation = True
+    collisionDynamics = False
+    optimizer = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=collisionDynamics)
 
     sol = Solution()
     knobParams = None
-    swarmCost, floorPlanCost, swarmTraced = optimizer.mode_Match_Cost(knobParams, False, False, floorPlanCostCutoff=.05,
+    swarmCost, floorPlanCost, swarmTraced = optimizer.mode_Match_Cost(knobParams, False, energyConservation,
+                                                                      floorPlanCostCutoff=.05,
                                                                       rejectUnstable=False, returnFullResults=True)
     if swarmTraced is None:  # wasn't traced because of other cutoff
         sol.floorPlanCost = floorPlanCost

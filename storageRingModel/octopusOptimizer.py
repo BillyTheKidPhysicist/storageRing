@@ -14,16 +14,17 @@ from helperTools import low_Discrepancy_Sample
 class Octopus:
 
     def __init__(self, func: Callable, globalBounds: np.ndarray, xInitial: np.ndarray, tentacleLength,
-                 maxTrainingMemory):
+                 maxTrainingMemory,processes):
         """
         Initialize Octopus object
 
         :param func: Callable to be optimized. Must accept a sequence of n numbers, and return a single numeric
             value between -inf and inf
-        :param bounds: array of shape (n,2) where each row is the bounds of the nth entry in sequence of numbers
+        :param globalBounds: array of shape (n,2) where each row is the bounds of the nth entry in sequence of numbers
             accepted by func
         :param xInitial: initial location of search. Becomes the position of the octopus
         """
+        processes=mp.cpu_count() if processes==-1 else processes
         bounds = np.array(globalBounds) if isinstance(globalBounds, (list, tuple)) else globalBounds
         xInitial = np.array(xInitial) if isinstance(xInitial, (list, tuple)) else xInitial
         assert isinstance(xInitial, np.ndarray) and isinstance(bounds, np.ndarray)
@@ -35,7 +36,7 @@ class Octopus:
         self.tentacleLengths = tentacleLength * (self.globalSearchBounds[:, 1] - self.globalSearchBounds[:, 0])
         self.octopusLocation = xInitial
         self.tentaclePositions: np.ndarray = None
-        self.numTentacles: int = round(max([1.5 * len(bounds), mp.cpu_count()]))
+        self.numTentacles: int = round(max([1.5 * len(bounds), processes]))
         self.maxTrainingMemory = maxTrainingMemory
         self.memory: list = []
 
@@ -182,7 +183,7 @@ def octopus_Optimize(func, bounds, xi, costInitial: float = None, numSearchesCri
     :return: Tuple as (optimal position in parameter, cost at optimal position)
     """
 
-    octopus = Octopus(func, bounds, xi, tentacleLength, maxTrainingMemory)
+    octopus = Octopus(func, bounds, xi, tentacleLength, maxTrainingMemory,processes)
     posOptimal, costMin = octopus.search_For_Food(costInitial, numSearchesCriteria, searchCutoff, processes, disp,
                                                   memory)
     return posOptimal, costMin

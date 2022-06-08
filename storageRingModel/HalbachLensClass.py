@@ -9,9 +9,10 @@ from magpylib.magnet import Cuboid as _Cuboid
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 
-from constants import MAGNETIC_PERMEABILITY
+from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD
 from demag_functions import apply_demag
-from helperTools import numba, np, Union, Optional, math, inch_To_Meter, radians, within_Tol, time, gauss_To_Tesla
+from helperTools import numba, np, Union, Optional, math, inch_To_Meter, radians, within_Tol, \
+    time, max_Tube_Radius_In_Segmented_Bend
 
 M_Default = 1.018E6  # default magnetization value, SI. Magnetization for N48 grade
 
@@ -21,7 +22,7 @@ tuple3Float = tuple[float, float, float]
 magpyMagnetization_ToSI: float = 1 / (1e3 * MAGNETIC_PERMEABILITY)
 SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
 METER_TO_mm = 1e3  # magpy takes distance in mm
-SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(3)
+
 COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number divided by radius of element
 
 
@@ -382,8 +383,8 @@ class HalbachLens(billyHalbachCollectionWrapper):
         assert isinstance(rp, (float, tuple)) and isinstance(magnetWidth, (float, tuple))
         position = (0.0, 0.0, 0.0) if position is None else position
         self.rp: tuple = rp if isinstance(rp, tuple) else (rp,)
-        assert length / min(self.rp) >= .5 if useSolenoidField else True #shorter than this and the solenoid model
-            # is dubious
+        assert length / min(self.rp) >= .5 if useSolenoidField else True  # shorter than this and the solenoid model
+        # is dubious
         self.length: float = length
 
         self.positionToSet = position
@@ -470,14 +471,13 @@ class HalbachLens(billyHalbachCollectionWrapper):
         coilDiam = 1.95 * min(self.rp) * METER_TO_mm  # slightly smaller than magnet bore
         zArr, lengthArr = self.subdivide_Lens()
         zLensMin, zLensMax = zArr[0] - lengthArr[0] / 2, zArr[-1] + lengthArr[-1] / 2
-        numCoils = round((zLensMax - zLensMin) / (min(self.rp) / COILS_PER_RADIUS)) + 1  # prevent zero by adding 1
-        B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * (zLensMax - zLensMin)
-        currentInfiniteSolenoid = B_dot_dl / (MAGNETIC_PERMEABILITY * numCoils)
-        scale = np.sqrt(1 + (2 * min(self.rp) / self.length) ** 2)
-        currentFiniteSolenoid = currentInfiniteSolenoid * scale
+        numCoils = max([round(COILS_PER_RADIUS * (zLensMax - zLensMin) / min(self.rp)), 1])
+        B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * (zLensMax - zLensMin)  # amperes law
+        currentInfiniteSolenoid = B_dot_dl / (MAGNETIC_PERMEABILITY * numCoils)  # amperes law
+        current = currentInfiniteSolenoid * np.sqrt(1 + (2 * min(self.rp) / self.length) ** 2)
         coilLocationsZArr = METER_TO_mm * np.linspace(zLensMin, zLensMax, numCoils)
-        for z in coilLocationsZArr:
-            loop = magpylib.current.Loop(current=currentFiniteSolenoid, diameter=coilDiam, position=(0, 0, z))
+        for coilPosZ in coilLocationsZArr:
+            loop = magpylib.current.Loop(current=current, diameter=coilDiam, position=(0, 0, coilPosZ))
             self.add(loop)
 
 
@@ -504,6 +504,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
         self.magnetWidth: float = rp * np.tan(2 * np.pi / 24) * 2  # set to size that exactly fits
+        assert np.tan(.5 * Lm / (rb - self.magnetWidth)) <= UCAngle  # magnets should not overlap!
         self.numLenses: int = numLenses  # number of lenses in the model
         self.lensList: list[HalbachLens] = []  # list to hold lenses
         self.lensAnglesArr: np.ndarray = self.make_Lens_Angle_Array()
@@ -551,8 +552,10 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             # lens.position(r0)
             self.lensList.append(lens)
             self.add(lens)
-        if self.applyMethodsOfMoments:
+        if self.applyMethodsOfMoments:  # must be done before adding coils because coils dont' play nice
             self.method_Of_Moments()
+        if self.useSolenoidField:
+            self.add_Solenoid_Coils()
 
     def get_Seperated_Split_Indices(self, thetaArr: np.ndarray, deltaTheta: float, thetaMin: float, thetaMax: float) \
             -> tuple[int, int]:
@@ -657,3 +660,20 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             return self.B_Vec_Approx(evalCoords)
         else:
             return super().B_Vec(evalCoords)
+
+    def add_Solenoid_Coils(self) -> None:
+        """Add simple coils through length of lens. This is to remove the region of non zero magnetic field to prevent
+        spin flips. Solenoid wraps around an imaginary vacuum tube such that the wires but up against the inside edge
+        of the magnets where they approach the bending radius the closest"""
+
+        coilDiam = METER_TO_mm * 2 * max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm,
+                                                                       tubeWallThickness=MAGNET_WIRE_DIAM)
+        angleStart, angleEnd = self.lensAnglesArr[0] - self.UCAngle, self.lensAnglesArr[-1] + self.UCAngle,
+        circumference = self.rb * (angleEnd - angleStart)
+        numCoils = max([round(COILS_PER_RADIUS * circumference / self.rp), 1])
+        B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * circumference  # amperes law
+        current = B_dot_dl / (MAGNETIC_PERMEABILITY * numCoils)  # amperes law
+        for theta in np.linspace(angleStart, angleEnd, numCoils):
+            loop = magpylib.current.Loop(current=current, diameter=coilDiam, position=(self.rb * METER_TO_mm, 0, 0))
+            loop.rotate(Rotation.from_rotvec([0, -theta, 0]), anchor=0)
+            self.add(loop)

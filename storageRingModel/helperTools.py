@@ -1,5 +1,9 @@
 import itertools
+import math
+import time
+from typing import Optional, Union, Callable, Any
 
+import multiprocess as mp
 import numpy as np
 from scipy.stats.qmc import Sobol
 import os
@@ -122,13 +126,16 @@ def inch_To_Meter(inches: Union[float, int]) -> float:
 
     return .0254 * inches
 
+
 def gauss_To_Tesla(gauss: Union[float, int]) -> float:
     """Convert units of gauss to tesla"""
-    return gauss/10_000.0
+    return gauss / 10_000.0
 
-def tesla_To_Guass(tesla: Union[float, int])-> float:
+
+def tesla_To_Guass(tesla: Union[float, int]) -> float:
     """Convert units of tesla to gauss"""
-    return tesla*10_000.0
+    return tesla * 10_000.0
+
 
 def arr_Product(*args):
     """Use itertools to form a product of provided arrays, and return an array instead of iterable"""
@@ -141,6 +148,15 @@ def full_Arctan(y, x):
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     return phi
+
+
+def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallThickness: float) -> float:
+    """What is the maximum size that will fit in a segmented bender and respect the geometry"""
+    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 < tubeWallThickness < rp
+    radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
+    maximumTubeRadius = rb - radiusCorner - tubeWallThickness
+    assert maximumTubeRadius > 0.0
+    return maximumTubeRadius
 
 
 def make_Odd(num: int) -> int:
