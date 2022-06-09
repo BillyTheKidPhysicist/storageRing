@@ -181,7 +181,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
     def compute_Input_Orbit_Characteristics(self) -> tuple:
         """compute characteristics of the input orbit. This applies for injected beam, or recirculating beam"""
-
+        from latticeElements.combiner_characterizer import characterize_CombinerHalbach
         LaMax = (self.rp + self.space / np.tan(self.maxCombinerAng)) / (np.sin(self.maxCombinerAng) +
                                                                         np.cos(self.maxCombinerAng) ** 2 / np.sin(
                     self.maxCombinerAng))
@@ -190,8 +190,9 @@ class CombinerHalbachLensSim(CombinerIdeal):
                                                           self.Lm, self.space, self.ap, np.nan, self.fieldFact,
                                                           self.extraFieldLength, not self.useStandardMagErrors])
         self.outputOffset = self.find_Ideal_Offset()
-        inputAngle, inputOffset, qTracedArr, _ = self.compute_Input_Angle_And_Offset(self.outputOffset, ap=self.ap)
-        trajectoryLength = self.compute_Trajectory_Length(qTracedArr)
+        atomState='HIGH_FIELD_SEEKING' if self.fieldFact==-1 else 'LOW_FIELD_SEEKING'
+        inputAngle, inputOffset, trajectoryLength, minBeamLensSep=characterize_CombinerHalbach(self,atomState,
+                                                                                    particleOffset=self.outputOffset)
         assert np.abs(inputAngle) < self.maxCombinerAng  # tilt can't be too large or it exceeds field region.
         assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
         # Sometimes this can happen because the lens is to long so an oscilattory behaviour is required by injector
@@ -247,6 +248,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         between atomic beam path and lens is equal to the specified beam diameter for INJECTED beam. This requires
         modeling high field seekers. Particle is traced backwards from the output of the combiner to the input.
         Can possibly error out from modeling magnet or assembly error"""
+        from latticeElements.combiner_characterizer import characterize_CombinerHalbach
 
         if self.loadBeamDiam / 2 > self.rp * .9:  # beam doens't fit in combiner
             raise CombinerDimensionError
@@ -254,7 +256,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.update_Field_Fact(-1.0)
         yInitial = self.ap / 10.0
         try:
-            inputAngle, _, _, seperationInitial = self.compute_Input_Angle_And_Offset(yInitial, ap=self.ap)
+            inputAngle, _, _, seperationInitial = characterize_CombinerHalbach(self,'HIGH_FIELD_SEEKING',
+                                                                               particleOffset=yInitial)
         except:
             raise CombinerDimensionError
         assert inputAngle < 0  # loading beam enters from y<0, if positive then this is circulating beam
@@ -269,7 +272,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
             deltaX = -.8 * (seperation - targetSep) / gradient  # I like to use a little damping
             deltaX = -y / 2 if y + deltaX < 0 else deltaX  # restrict deltax to allow value
             y = y + deltaX
-            inputAngle, _, _, seperationNew = self.compute_Input_Angle_And_Offset(y, ap=self.ap)
+            inputAngle, _, _, seperationNew = characterize_CombinerHalbach(self, 'HIGH_FIELD_SEEKING',particleOffset=y)
             assert inputAngle < 0  # loading beam enters from y<0, if positive then this is circulating beam
             gradient = (seperationNew - seperation) / deltaX
             seperation = seperationNew

@@ -135,8 +135,6 @@ class billyHalbachCollectionWrapper(Collection):
         super().__init__(*sources, **kwargs)
 
     def rotate(self, rotation, anchor=None, start=-1):
-        if anchor is None:
-            raise NotImplementedError  # not sure how to best deal with rotating collection about itself
         super().rotate(rotation, anchor=0.0, start=start)
 
     def move(self, displacement, start="auto"):

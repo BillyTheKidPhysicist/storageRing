@@ -407,8 +407,8 @@ class CombinerIdealTestHelper(ElementTestHelper):
         self.Lm = .218734921
         self.ap = .014832794
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 0.0, 0.0]))
-        qf0 = np.array([-0.22328330064926563, 0.00998854916179846, -0.0023411835183533964])
-        pf0 = np.array([-199.53214662301482, 16.878448509595106, -0.6776825317367712])
+        qf0 = np.array([-0.22328507641728806 ,  0.009988699191880843,-0.002341300261489336])
+        pf0 = np.array([-199.53548090705544  ,   16.878732582305176 ,-0.6778345463513105])
         super().__init__(CombinerIdeal, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
@@ -432,8 +432,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0123749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-0.20688515484565864, -0.005642160974905653, 0.0038664085805719195])
-        pf0 = np.array([-200.40536822850595, -13.018335214780414, 10.239579199239653])
+        qf0 = np.array([-0.20688787244352483 , -0.005641388442434395,0.003866446621163612])
+        pf0 = np.array([-200.3985889058164  ,  -13.117685055099885,   10.246844700508609])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -608,8 +608,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf, qf0, absTol) == False or iscloseAll(pf, pf0, absTol) == False:
-                # print(repr(qf), repr(pf))
-                # print(repr(qf0), repr(pf0))
+                print(repr(qf), repr(pf))
+                print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self, qEl_2D):

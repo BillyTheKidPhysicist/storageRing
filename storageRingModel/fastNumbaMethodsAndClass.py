@@ -8,6 +8,15 @@ from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 tupleOf3Floats = tuple[float, float, float]
 nanArr7Tuple = tuple([np.ones(1) * np.nan] * 7)
 
+@numba.njit()
+def combiner_Ideal_Force(x,y,z,LEnd,c1,c2)-> tuple[float,float,float]:
+
+    Fx, Fy, Fz = 0.0, 0.0, 0.0
+    if 0 < x < LEnd:
+        B0 = np.sqrt((c2 * z) ** 2 + (c1 + c2 * y) ** 2)
+        Fy = SIMULATION_MAGNETON * c2 * (c1 + c2 * y) / B0
+        Fz = SIMULATION_MAGNETON * c2 ** 2 * z / B0
+    return Fx,Fy,Fz
 
 @numba.njit()
 def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
@@ -783,13 +792,7 @@ class CombinerIdealFieldHelper_Numba:
     def force_Without_isInside_Check(self, x, y, z):
         # force at point q in element frame
         # q: particle's position in element frame
-        Fx, Fy, Fz = 0.0, 0.0, 0.0
-        if 0 < x < self.Lb:
-            B0 = np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
-            Fy = SIMULATION_MAGNETON * self.c2 * (self.c1 + self.c2 * y) / B0
-            Fz = SIMULATION_MAGNETON * self.c2 ** 2 * z / B0
-        else:
-            pass
+        Fx, Fy, Fz = combiner_Ideal_Force(x,y,z,self.Lb,self.c1,self.c2)
         Fx *= self.fieldFact
         Fy *= self.fieldFact
         Fz *= self.fieldFact

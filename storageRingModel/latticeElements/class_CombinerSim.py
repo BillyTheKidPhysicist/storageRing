@@ -26,6 +26,7 @@ class CombinerSim(CombinerIdeal):
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
+        from latticeElements.combiner_characterizer import characterize_CombinerSim
         self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
         self.apL = self.apL * self.sizeScale
         self.apR = self.apR * self.sizeScale
@@ -39,13 +40,12 @@ class CombinerSim(CombinerIdeal):
         # to the hard edge of the input
         fieldData = self.shape_Field_Data_3D(data)
 
+
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb, self.Lm,
                                                           self.space, self.apL, self.apR, self.apz, np.nan,
                                                           self.fieldFact])
-        inputAngle, inputOffset, qTracedArr, _ = self.compute_Input_Angle_And_Offset()
-        self.Lo = self.compute_Trajectory_Length(
-            qTracedArr)
-        self.L = self.Lo
+        inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
+        self.L=self.Lo=trajectoryLength
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space
@@ -58,6 +58,7 @@ class CombinerSim(CombinerIdeal):
                                                           self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
                                                           self.fieldFact])
         self.update_Field_Fact(self.fieldFact)
+
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
         self.fastFieldHelper.fieldFact = fieldStrengthFact

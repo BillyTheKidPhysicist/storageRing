@@ -1,7 +1,6 @@
 from math import sqrt
 
 import numpy as np
-
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
 
@@ -38,14 +37,16 @@ class CombinerIdeal(BaseElement):
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
+        from latticeElements.combiner_characterizer import characterize_CombinerIdeal
         self.apR, self.apL, self.apz, self.Lm = [val * self.sizeScale for val in
                                                  (self.apR, self.apL, self.apz, self.Lm)]
         self.c1, self.c2 = self.c1 / self.sizeScale, self.c2 / self.sizeScale
         self.Lb = self.Lm  # length of segment after kink after the inlet
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, np.nan, self.Lb,
                                                           self.apL, self.apR, np.nan, np.nan])
-        inputAngle, inputOffset, qTracedArr, _ = self.compute_Input_Angle_And_Offset()
-        self.Lo = np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        inputAngle, inputOffset, trajectoryLength = characterize_CombinerIdeal(self)
+
+        self.Lo = trajectoryLength#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
         self.La = .5 * (self.apR + self.apL) * np.sin(self.ang)
@@ -53,62 +54,6 @@ class CombinerIdeal(BaseElement):
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
         self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La, self.Lb,
                                                           self.apL, self.apR, self.apz, self.ang])
-
-    def compute_Input_Angle_And_Offset(self, outputOffset: float = 0.0, h: float = 1e-6,
-                                       ap: float = None) -> tuple:
-        # this computes the output angle and offset for a combiner magnet.
-        # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
-        # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
-        # to go to zero (finite field space) so the the particle will violate conservation of energy
-        # limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
-        # length, but for the simulated magnets, it's that plus twice the length at the ends.
-        # h: timestep
-        # lowField: wether to model low or high field seekers
-        # if type(self) == CombinerHalbachLensSim:
-        try:
-            assert 0.0 <= outputOffset < self.ap
-        except:
-            pass
-
-        def force(x):
-            if ap is not None and (x[0] < self.Lm + self.space and sqrt(x[1] ** 2 + x[2] ** 2) > ap):
-                return np.empty(3) * np.nan
-            Force = np.array(self.fastFieldHelper.force_Without_isInside_Check(x[0], x[1], x[2]))
-            Force[2] = 0.0  ##only interested in xy plane bending
-            return Force
-
-        q = np.asarray([0.0, -outputOffset, 0.0])
-        p = np.asarray([self.PTL.v0Nominal, 0.0, 0.0])
-        qList = []
-
-        xPosStopTracing = self.Lm + 2 * self.space
-        forcePrev = force(q)  # recycling the previous force value cut simulation time in half
-        while True:
-            F = forcePrev
-            q_n = q + p * h + .5 * F * h ** 2
-            if not 0 <= q_n[0] <= xPosStopTracing:  # if overshot, go back and walk up to the edge assuming no force
-                dr = xPosStopTracing - q[0]
-                dt = dr / p[0]
-                qFinal = q + p * dt
-                pFinal = p
-                qList.append(qFinal)
-                break
-            F_n = force(q_n)
-            assert not np.any(np.isnan(F_n))
-            p_n = p + .5 * (F + F_n) * h
-            q, p = q_n, p_n
-            forcePrev = F_n
-            qList.append(q)
-        assert qFinal[2] == 0.0  # only interested in xy plane bending, expected to be zero
-        qArr = np.asarray(qList)
-        outputAngle = np.arctan2(pFinal[1], pFinal[0])
-        inputOffset = qFinal[1]
-        if ap is not None:
-            lensCorner = np.asarray([self.space + self.Lm, -ap, 0.0])
-            minSepBottomRightMagEdge = np.min(np.linalg.norm(qArr - lensCorner, axis=1))
-        else:
-            minSepBottomRightMagEdge = None
-        return outputAngle, inputOffset, qArr, minSepBottomRightMagEdge
 
     def compute_Trajectory_Length(self, qTracedArr: np.ndarray) -> float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their
