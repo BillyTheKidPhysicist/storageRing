@@ -34,6 +34,9 @@ class Solution:
 
 
 class StorageRingModel:
+    maximumCost = 2.0
+    maximumSwarmCost = 1.0
+    maximumFloorPlanCost = 1.0
 
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
                  numParticlesSwarm: int = 1024, collisionDynamics: bool = False):
@@ -218,14 +221,14 @@ class StorageRingModel:
         assert floorPlanCostCutoff >= 0
         floorPlanCost = self.floor_Plan_Cost_With_Tunability()
         if self.floor_Plan_Cost() > floorPlanCostCutoff:
-            cost = 1.0 + floorPlanCost
+            cost = self.maximumSwarmCost + floorPlanCost
             fluxMultiplication = np.nan
         else:
             swarmTraced = self.inject_And_Trace_Swarm(energyCorrection)
             fluxMultiplication = self.compute_Flux_Multiplication(swarmTraced)
             swarmCost = self.swarm_Cost(swarmTraced)
             cost = swarmCost + floorPlanCost
-        assert 0.0 <= cost <= 2.0
+        assert 0.0 <= cost <= self.maximumCost
         return cost, fluxMultiplication
 
     def inject_And_Trace_Swarm(self, energyCorrection: bool) -> Swarm:
@@ -297,12 +300,11 @@ class StorageRingModel:
         return maxFluxMult
 
     def floor_Plan_Cost(self) -> float:
-        costMax = 1.0
         overlap = self.floor_Plan_OverLap_mm()  # units of mm^2
         factor = 100  # units of mm^2
         costOverlap = 2 / (1 + np.exp(-overlap / factor)) - 1
-        cost = costMax if not does_Fit_In_Room(self) else costOverlap
-        assert 0.0 <= cost <= costMax
+        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self) else costOverlap
+        assert 0.0 <= cost <= self.maximumFloorPlanCost
         return cost
 
     def get_Drift_After_Second_Lens_Injector(self) -> Drift:
@@ -332,5 +334,5 @@ class StorageRingModel:
         """Cost associated with a swarm after being traced through system"""
         fluxMultPerc = self.compute_Swarm_Flux_Mult_Percent(swarm)
         swarmCost = (100.0 - fluxMultPerc) / 100.0
-        assert 0.0 <= swarmCost <= 1.0
+        assert 0.0 <= swarmCost <= self.maximumSwarmCost
         return swarmCost

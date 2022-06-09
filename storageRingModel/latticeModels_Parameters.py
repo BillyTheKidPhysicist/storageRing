@@ -56,16 +56,16 @@ class lockedDict(dict):
 
 # optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
-    "L1": 0.153132,  # length of first lens
-    "rp1": 0.02963415,  # bore radius of first lens
-    "L2": 0.13430734,  # length of first lens
-    "rp2": 0.02258658,  # bore radius of first lens
-    "LmCombiner": 0.19126756,  # hard edge length of combiner
-    "rpCombiner": 0.0418939,  # bore radius of combiner
-    "loadBeamDiam": 0.01501351,  # assumed diameter of incoming beam
-    "gap1": 0.20163243,  # separation between source and first lens
-    "gap2": 0.23014572,  # separation between two lenses
-    "gap3": 0.17625537  ##separation between final lens and input to combiner
+    "L1": 0.15296214,  # length of first lens
+    "rp1": 0.02929302,  # bore radius of first lens
+    "L2": 0.12755628,  # length of first lens
+    "rp2": 0.02196965,  # bore radius of first lens
+    "LmCombiner": 0.1947876,  # hard edge length of combiner
+    "rpCombiner": 0.04,  # bore radius of combiner
+    "loadBeamDiam": 0.01543,  # assumed diameter of incoming beam
+    "gap1": 0.20473507,  # separation between source and first lens
+    "gap2": 0.23142568,  # separation between two lenses
+    "gap3": 0.18207568  ##separation between final lens and input to combiner
 })
 
 injectorParamsBoundsAny: lockedDict = lockedDict({

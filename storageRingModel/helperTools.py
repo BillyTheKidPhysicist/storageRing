@@ -1,4 +1,5 @@
 import itertools
+import warnings
 import math
 import time
 from typing import Optional, Union, Callable, Any
@@ -175,7 +176,9 @@ def low_Discrepancy_Sample(bounds: lst_tup_arr_type, num: int, seed=None) -> np.
     """
     sobolSeed = None if not seed else seed
     bounds = np.array(bounds).astype(float)
-    samples = np.array(Sobol(len(bounds), scramble=True, seed=sobolSeed).random(num))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples = np.array(Sobol(len(bounds), scramble=True, seed=sobolSeed).random(num))
     scaleFactors = bounds[:, 1] - bounds[:, 0]
     offsets = bounds[:, 0]
     for i, sample in enumerate(samples):

@@ -13,15 +13,17 @@ def plot_Results(params):
 
 
 def invalid_Solution(params):
-    sol = Solution(params, None, None)
+    sol = Solution(params, None, StorageRingModel.maximumCost)
     return sol
 
 
 def solve(params: tuple[float, ...]) -> Solution:
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
-    energyConservation = False
-    collisionDynamics = True
-    optimizer = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=collisionDynamics)
+    energyConservation = True
+    collisionDynamics = False
+    numParticles = 500
+    optimizer = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=collisionDynamics,
+                                 numParticlesSwarm=numParticles)
     cost, fluxMultiplication = optimizer.mode_Match(energyConservation, floorPlanCostCutoff=.05)
     sol = Solution(params, fluxMultiplication, cost)
     return sol
@@ -39,30 +41,18 @@ def solve_For_Lattice_Params(params: tuple[float, ...]) -> Solution:
 
 def wrapper(params):
     sol = solve_For_Lattice_Params(params)
-    if sol.fluxMultiplication > 10:
+    if sol.fluxMultiplication is not None and sol.fluxMultiplication > 10:
         print(sol)
     cost = sol.cost
     return cost
 
 
 def main():
-    # from asyncDE import solve_Async
+    from asyncDE import solve_Async
     bounds = np.array(list(optimizerBounds_V1_3.values()))
 
-    # solve_Async(wrapper,bounds,15*len(bounds),timeOut_Seconds=100_000,disp=True,workers=10,saveData='optimizerProgress')
-    x = np.array([0.023801057453580743, 0.010865155679545636, 0.039901298278481497,
-                  0.010145870717811905, 0.060600536295301044, 0.4895337924060436])
-    print(wrapper(x))
-
-    raise Exception("issue with repeatability with collision physics")
-
-    x = np.array([0.023801057453580743, 0.010865155679545636, 0.039901298278481497,
-                  0.010145870717811905, 0.060600536295301044, 0.4895337924060436])
-    print(wrapper(x))
-
-    x = np.array([0.023801057453580743, 0.010865155679545636, 0.039901298278481497,
-                  0.010145870717811905, 0.060600536295301044, 0.4895337924060436])
-    print(wrapper(x))
+    solve_Async(wrapper, bounds, 15 * len(bounds), timeOut_Seconds=100_000, disp=True, workers=10,
+                saveData='optimizerProgress')
     # from helperTools import tool_Parallel_Process
     # TArr=np.logspace(-4,np.log10(20e-3),20)
     # res= tool_Parallel_Process(func,TArr)
