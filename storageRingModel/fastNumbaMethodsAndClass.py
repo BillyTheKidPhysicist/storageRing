@@ -176,7 +176,7 @@ class BaseClassFieldHelper_Numba:
     there output to an array in elementPT classes. There are two major downsides however:
 
     1: jitclass does no allow for inheritance, so instead I use this class as a variable in other classes.
-    NotImplementedError could still be raised in elementPT.py with inheritance there
+    NotImplementedError could still be raised in element modules with inheritance there
 
     2: jitclass is not pickleable, and so multiprocessing does not work. This is fine in most cases because particle
     tracing is so fast that multiprocessing is a poor use case.

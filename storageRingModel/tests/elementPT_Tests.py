@@ -5,7 +5,7 @@ import numpy as np
 from helperTools import *
 import sys
 import pytest
-from elementPT import Element, BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
+from latticeElements.elements import  BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
     HalbachBenderSimSegmented, HalbachLensSim
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
@@ -37,7 +37,7 @@ class PTL_Dummy:
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
-
+Element=None
 
 class ElementTestHelper:
     ElementBaseClass = type(Element)

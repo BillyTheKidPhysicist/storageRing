@@ -7,14 +7,14 @@ import numpy as np
 from helperTools import *
 from typing import Union
 import skopt
-import elementPT
+from latticeElements.elements import CombinerHalbachLensSim,CombinerIdeal,CombinerSim,LensIdeal,HalbachLensSim
 from SwarmTracerClass import SwarmTracer
 from latticeModels import make_Ring_And_Injector_Version3
 from ringOptimizer import solution_From_Lattice
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from collections.abc import Sequence
 
-combinerTypes = (elementPT.CombinerHalbachLensSim, elementPT.CombinerIdeal, elementPT.CombinerSim)
+combinerTypes = (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
 
 
 class StabilityAnalyzer:
@@ -32,7 +32,7 @@ class StabilityAnalyzer:
         self.paramsOptimal = paramsOptimal
         self.alignmentTol = alignmentTol
         self.machineTolerance = machineTolerance
-        self.jitterableElements = (elementPT.CombinerHalbachLensSim, elementPT.LensIdeal, elementPT.HalbachLensSim)
+        self.jitterableElements = (CombinerHalbachLensSim, LensIdeal, HalbachLensSim)
 
     def generate_Ring_And_Injector_Lattice(self, useMagnetErrors: bool,
                                            combinerSeed: int = None) \
@@ -50,7 +50,7 @@ class StabilityAnalyzer:
         params_Error = params + deltaParams
         return params_Error
 
-    def make_Jitter_Amplitudes(self, element: elementPT.Element, randomOverRide: Optional[tuple]) -> tuple[float, ...]:
+    def make_Jitter_Amplitudes(self, element, randomOverRide: Optional[tuple]) -> tuple[float, ...]:
         angleMax = np.arctan(self.alignmentTol / element.L)
         randomNum = np.random.random_sample() if randomOverRide is None else randomOverRide[0]
         random4Nums = np.random.random_sample(4) if randomOverRide is None else randomOverRide[1]

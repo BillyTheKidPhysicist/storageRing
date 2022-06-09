@@ -13,7 +13,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 
-import elementPT
+from latticeElements.elements import BenderIdeal,LensIdeal,CombinerIdeal,HalbachLensSim,Drift,\
+    HalbachBenderSimSegmented,CombinerHalbachLensSim,CombinerSim
 from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
 from typeHints import element
 
@@ -25,7 +26,7 @@ SMALL_NUMBER = 1e-16
 def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach lens. Overall shape is
     a rectangle overlayd on a shorter but wider rectangle. This represents the width of the magnets"""
-    assert type(el) is elementPT.HalbachLensSim
+    assert type(el) is HalbachLensSim
     halfWidth = el.outerHalfWidth
     vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
     fringeLength = el.fringeFieldLength
@@ -70,7 +71,7 @@ def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a hexapole bending section.
     Shape is a toroid with short straight section at input/ouput, with another wider but shorter toroid ontop """
 
-    assert type(el) is elementPT.HalbachBenderSimSegmented
+    assert type(el) is HalbachBenderSimSegmented
     phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
 
     xInner = (el.rb - el.outerHalfWidth) * np.cos(phiArr)  # x values for inner bend
@@ -98,7 +99,7 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach combiner. Very similiar
     to halbach lens geometry, but with tiled input and enlarged input"""
     # pylint: disable=too-many-locals
-    assert type(el) is elementPT.CombinerHalbachLensSim
+    assert type(el) is CombinerHalbachLensSim
     apR, apL = el.ap, el.ap
     extraFact = 1.5
     halfWidth = el.outerHalfWidth
@@ -129,10 +130,10 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
 def make_Any_Combiner_Inner_Points(el: element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the inner (vacuum tube) geometry of a halbach combiner.
     Basically a rectangle with a wider tilted rectangle coming off one end (the input)"""
-    assert type(el) in (elementPT.CombinerHalbachLensSim, elementPT.CombinerIdeal, elementPT.CombinerSim)
-    LbVac = el.Lb if type(el) is elementPT.CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
+    assert type(el) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
+    LbVac = el.Lb if type(el) is CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
     apR, apL = (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
-    extraFact = 1.5 if type(el) is elementPT.CombinerHalbachLensSim else 1.0
+    extraFact = 1.5 if type(el) is CombinerHalbachLensSim else 1.0
     q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
     q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0
     q3Inner = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
@@ -161,9 +162,9 @@ def make_Rectangle(L: float, halfWidth: float) -> list[np.ndarray]:
 def make_Lens_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of lens elements and drift
     region. Drift regions are just vacuum tubes between elements"""
-    assert type(el) in (elementPT.LensIdeal, elementPT.HalbachLensSim)
+    assert type(el) in (LensIdeal, HalbachLensSim)
     pointsInner = make_Rectangle(el.L, el.ap)
-    if type(el) is elementPT.HalbachLensSim:
+    if type(el) is HalbachLensSim:
         pointsOuter = make_Halbach_Lens_Outer_Points(el)
     else:
         pointsOuter = copy.deepcopy(pointsInner)
@@ -190,7 +191,7 @@ def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
     return points
 
 
-def make_Drift_Shapely_Objects(el: elementPT.Drift):
+def make_Drift_Shapely_Objects(el: Drift):
     """Make shapely objects for drift element. Drift element is trapezoid shaped to allow for tilted input/output"""
     L, ap, outerHalfWidth, theta1, theta2 = el.L, el.ap, el.outerHalfWidth, el.inputTiltAngle, el.outputTiltAngle
     pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
@@ -203,7 +204,7 @@ def make_Drift_Shapely_Objects(el: elementPT.Drift):
 def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of bender elements"""
 
-    assert type(el) in (elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented)
+    assert type(el) in (BenderIdeal, HalbachBenderSimSegmented)
     halfWidth = el.ap
     theta = el.theta
     phiArr = np.linspace(0, -el.ang, BENDER_POINTS) + theta + pi / 2  # angles swept out
@@ -213,7 +214,7 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     xOuter = np.flip((el.rb + halfWidth) * np.cos(phiArr) + r0[0])  # x values for outer bend
     yOuter = np.flip((el.rb + halfWidth) * np.sin(phiArr) + r0[1])  # y values for outer bend
 
-    if isinstance(el, elementPT.HalbachBenderSimSegmented):
+    if isinstance(el, HalbachBenderSimSegmented):
         xInner = np.append(xInner[0] + el.nb[0] * el.Lcap, xInner)
         yInner = np.append(yInner[0] + el.nb[1] * el.Lcap, yInner)
         xInner = np.append(xInner, xInner[-1] + el.ne[0] * el.Lcap)
@@ -226,9 +227,9 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     x = np.append(xInner, xOuter)  # list of x values in order
     y = np.append(yInner, yOuter)  # list of y values in order
     pointsInner = np.column_stack((x, y))  # shape the coordinates and make the object
-    if type(el) is elementPT.BenderIdeal:
+    if type(el) is BenderIdeal:
         pointsOuter = copy.deepcopy(pointsInner)
-    elif type(el) is elementPT.HalbachBenderSimSegmented:
+    elif type(el) is HalbachBenderSimSegmented:
         pointsOuter = make_Hexapole_Bender_Outer_Points(el)
     else:
         raise NotImplementedError
@@ -237,11 +238,11 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
 
 def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of combiner elements"""
-    assert type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim, elementPT.CombinerHalbachLensSim)
+    assert type(el) in (CombinerIdeal, CombinerSim, CombinerHalbachLensSim)
     pointsInner = make_Any_Combiner_Inner_Points(el)
-    if type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim):
+    if type(el) in (CombinerIdeal, CombinerSim):
         pointsOuter = copy.deepcopy(pointsInner)
-    elif type(el) is elementPT.CombinerHalbachLensSim:
+    elif type(el) is CombinerHalbachLensSim:
         pointsOuter = make_Hexapole_Combiner_Outer_Points(el)
     else:
         raise NotImplementedError
@@ -251,17 +252,17 @@ def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
 def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of elementPT objects such
     as lenses, drifts, benders and combiners"""
-    if type(el) in (elementPT.HalbachLensSim, elementPT.LensIdeal):
+    if type(el) in (HalbachLensSim, LensIdeal):
         shapelyOuter, shapelyInner = make_Lens_Shapely_Objects(el)
-    elif type(el) in (elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented):
+    elif type(el) in (BenderIdeal, HalbachBenderSimSegmented):
         shapelyOuter, shapelyInner = make_Bender_Shapely_Object(el)
-    elif type(el) in (elementPT.CombinerIdeal, elementPT.CombinerSim, elementPT.CombinerHalbachLensSim):
+    elif type(el) in (CombinerIdeal, CombinerSim, CombinerHalbachLensSim):
         shapelyOuter, shapelyInner = make_Combiner_Shapely_Object(el)
-    elif type(el) is elementPT.Drift:
+    elif type(el) is Drift:
         shapelyOuter, shapelyInner = make_Drift_Shapely_Objects(el)
     else:
         raise NotImplementedError
-    assert shapelyOuter.buffer(1e-12).contains(shapelyInner)  # inner object must be smaller or same size as outer.
+    assert shapelyOuter.buffer(1e-9).contains(shapelyInner)  # inner object must be smaller or same size as outer.
     # add a small buffer for numerical issues
     return shapelyOuter, shapelyInner
 

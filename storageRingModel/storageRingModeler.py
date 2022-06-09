@@ -4,14 +4,13 @@ import skopt
 from shapely.affinity import rotate, translate
 import copy
 
-import elementPT
 from ParticleTracerClass import ParticleTracer
 import numpy as np
 from ParticleClass import Swarm, Particle
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
 from SwarmTracerClass import SwarmTracer
-from elementPT import HalbachLensSim, LensIdeal, Drift
+from latticeElements.elements import HalbachLensSim, LensIdeal, Drift
 import multiprocess as mp
 from collections.abc import Iterable
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -21,7 +20,7 @@ from floorPlanCheckerFunctions import does_Fit_In_Room
 
 list_array_tuple = Union[np.ndarray, tuple, list]
 
-
+Element=None
 class Solution:
     # class to hold onto results of each solution
 
@@ -224,6 +223,8 @@ class StorageRingModel:
             self.swarmInjectorInitial.quick_Copy(), 1e-5, 1, parallel=False,
             fastMode=False, copySwarm=False, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
             collisionDynamics=self.collisionDynamics)
+        for particle in swarmInjectorTraced:
+            particle.clipped=True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                                   copyParticles=True,
                                                                                   onlyUnclipped=False)
@@ -374,7 +375,7 @@ class StorageRingModel:
             self.move_Element_Longitudinally(elCenter, spaceFracElBefore)
         self.latticeRing.build_Lattice()
 
-    def move_Element_Longitudinally(self, elCenter: elementPT.Element, spaceFracElBefore: float) -> None:
+    def move_Element_Longitudinally(self, elCenter: Element, spaceFracElBefore: float) -> None:
         assert 0 <= spaceFracElBefore <= 1.0
         elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
         assert isinstance(elBefore, Drift) and isinstance(elAfter, Drift)

@@ -1,7 +1,7 @@
 from typing import Union, Optional
 import numpy as np
 from constants import DEFAULT_ATOM_SPEED
-import elementPT
+from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim,HalbachBenderSimSegmented
 from latticeModels_Parameters import constantsV1_2, constantsV3, injectorParamsOptimalAny, optimizerBounds_V1_3, \
     optimizerBounds_V2, lockedDict, atomCharacteristic
 from ParticleTracerLatticeClass import ParticleTracerLattice
@@ -30,9 +30,9 @@ def el_Fringe_Space(elementName: str, elementBoreRadius: float) -> float:
     assert elementBoreRadius > 0
     if elementName == 'none':
         return 0.0
-    fringeFracs = {"combiner": elementPT.CombinerHalbachLensSim.outerFringeFrac,
-                   "lens": elementPT.HalbachLensSim.fringeFracOuter,
-                   "bender": elementPT.HalbachBenderSimSegmented.fringeFracOuter}
+    fringeFracs = {"combiner": CombinerHalbachLensSim.outerFringeFrac,
+                   "lens": HalbachLensSim.fringeFracOuter,
+                   "bender": HalbachBenderSimSegmented.fringeFracOuter}
     return fringeFracs[elementName] * elementBoreRadius
 
 

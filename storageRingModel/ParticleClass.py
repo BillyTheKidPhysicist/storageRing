@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy.linalg as npl
 import numpy as np
 from constants import DEFAULT_ATOM_SPEED
-from elementPT import Element
 
+Element=None
 
 class Particle:
     # This object represents a single particle with unit mass. It can track parameters such as position, momentum, and

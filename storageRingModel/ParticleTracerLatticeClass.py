@@ -1,15 +1,17 @@
 # from geneticLensElement_Wrapper import GeneticLens
-from typing import Iterable
+from typing import Iterable,Union,Optional
 
 import matplotlib.pyplot as plt
 import scipy.interpolate as spi
 from joblib import Parallel, delayed
 
-import elementPT
+import numpy as np
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 from constants import DEFAULT_ATOM_SPEED
-from elementPT import *
+
+from latticeElements.elements import BenderIdeal,HalbachBenderSimSegmented,LensIdeal,CombinerIdeal,\
+    CombinerSim,CombinerHalbachLensSim,HalbachLensSim,Drift
 from shapelyObjectBuilder import build_Shapely_Objects
 from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Elements_From_Floor_Plan
@@ -19,7 +21,9 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Eleme
 
 # todo: refactor!
 
-benderTypes = Union[elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
+Element=None
+
+benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
 
 class ParticleTracerLattice:
@@ -48,9 +52,8 @@ class ParticleTracerLattice:
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.standardMagnetErrors = standardMagnetErrors
 
-        self.combiner: Optional[elementPT.Element] = None  # combiner element object
-        self.linearElementsToConstraint: list[
-            elementPT.HalbachLensSim] = []  # elements whos length will be changed when the
+        self.combiner: Optional[Element] = None  # combiner element object
+        self.linearElementsToConstraint: list[HalbachLensSim] = []  # elements whos length will be changed when the
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
         self.isClosed = None  # is the lattice closed, ie end and beginning are smoothly connected?
@@ -376,7 +379,7 @@ class ParticleTracerLattice:
             if self.combiner is None:
                 raise Exception('COMBINER MUST BE PRESENT')
 
-    def get_Element_Before_And_After(self, elCenter: elementPT.Element) -> tuple[Element, Element]:
+    def get_Element_Before_And_After(self, elCenter: Element) -> tuple[Element, Element]:
         if (elCenter.index == len(self.elList) - 1 or elCenter.index == 0) and self.latticeType == 'injector':
             raise Exception('Element cannot be first or last if lattice is injector type')
         elBeforeIndex = elCenter.index - 1 if elCenter.index != 0 else len(self.elList) - 1

@@ -1,12 +1,13 @@
 import itertools
 import os
-import elementPT
+from latticeElements.utilities import CombinerDimensionError,ElementTooShortError,ElementDimensionError
+from latticeElements.elements import Drift,CombinerHalbachLensSim,HalbachLensSim
 from typing import Union, Optional
 import numpy as np
 from asyncDE import solve_Async
 from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET
 from storageRingModeler import StorageRingModel
-from ParticleTracerLatticeClass import ElementDimensionError, ElementTooShortError, CombinerDimensionError
+
 from latticeModels import make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1, InjectorGeometryError
 from latticeModels_Parameters import lockedDict, injectorRingConstraintsV1, injectorParamsBoundsAny
 from scipy.special import expit as sigmoid
@@ -53,10 +54,10 @@ class Injection_Model(StorageRingModel):
 
         return swarmCost
 
-    def get_Drift_After_Second_Lens_Injector(self) -> elementPT.Drift:
+    def get_Drift_After_Second_Lens_Injector(self) -> Drift:
 
         drift = self.latticeInjector.elList[self.injectorLensIndices[-1] + 1]
-        assert type(drift) is elementPT.Drift
+        assert type(drift) is Drift
         return drift
 
     def floor_Plan_Cost_With_Tunability(self) -> float:
@@ -80,7 +81,7 @@ class Injection_Model(StorageRingModel):
 
         volume = 0.0  # volume of magnetic material in cubic inches
         for el in itertools.chain(self.latticeRing.elList, self.latticeInjector):
-            if type(el) in (elementPT.CombinerHalbachLensSim, elementPT.HalbachLensSim):
+            if type(el) in (CombinerHalbachLensSim, HalbachLensSim):
                 volume += CUBIC_METER_TO_INCH * np.sum(el.Lm * np.array(el.magnetWidths) ** 2)
         price_USD = volume * COST_PER_CUBIC_INCH_PERM_MAGNET
         price_USD_Scale = 5_000.0

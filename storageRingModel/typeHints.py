@@ -1,5 +1,5 @@
 from typing import Union
-import elementPT
-
-element = Union[elementPT.Element, elementPT.CombinerHalbachLensSim, elementPT.HalbachLensSim,
-                elementPT.CombinerSim, elementPT.CombinerIdeal, elementPT.BenderIdeal, elementPT.HalbachBenderSimSegmented]
+from latticeElements.elements import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, \
+    LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
+element = Union[CombinerHalbachLensSim, HalbachLensSim,CombinerSim, CombinerIdeal,
+                BenderIdeal, HalbachBenderSimSegmented,Drift,LensIdeal]

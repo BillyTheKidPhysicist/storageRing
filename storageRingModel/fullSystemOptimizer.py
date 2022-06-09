@@ -5,7 +5,7 @@ import numpy as np
 # from asyncDE import solve_Async
 from storageRingModeler import StorageRingModel, Solution
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from elementPT import ElementTooShortError, CombinerDimensionError, CombinerIterExceededError
+from latticeElements.utilities import ElementTooShortError, CombinerDimensionError, CombinerIterExceededError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorParamsOptimalAny
 

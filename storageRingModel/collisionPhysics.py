@@ -13,15 +13,15 @@ from typing import Union
 import numba
 import numpy as np
 
-import elementPT
+# import latticeElements.elementPT
+from latticeElements.elements import BenderIdeal,LensIdeal,CombinerIdeal,HalbachLensSim,Drift,HalbachBenderSimSegmented
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
 
 realNum = Union[float, int]
 vec3D = tuple[float, float, float]
 frequency = float
 angle = Union[float, int]
-Element = Union[elementPT.BenderIdeal,
-                elementPT.LensIdeal, elementPT.CombinerIdeal]
+Element = Union[BenderIdeal,LensIdeal, CombinerIdeal]
 
 
 @numba.njit()
@@ -169,13 +169,13 @@ def post_Collision_Momentum(p: vec3D, q: vec3D, collisionParams: tuple) -> vec3D
 def get_Collision_Params(element: Element, atomSpeed: realNum):
     """Will be changed soon I anticipate. Dealing with numba wonkiness"""
     T = .01
-    if type(element) in (elementPT.HalbachLensSim, elementPT.Drift):
+    if type(element) in (HalbachLensSim, Drift):
         rp = element.rp
         rpDrift_Fake = .03
         rp = rpDrift_Fake if rp == np.inf else rp
         collisionRate = collision_Rate(T, rp)
         return 'STRAIGHT', collisionRate, atomSpeed, T, rp, np.nan, np.nan
-    elif type(element) is elementPT.HalbachBenderSimSegmented:
+    elif type(element) is HalbachBenderSimSegmented:
         rp, rb = element.rp, element.rb
         collisionRate = collision_Rate(T, rp)
         return 'SEG_BEND', collisionRate, atomSpeed, element.ang, T, rb, rp

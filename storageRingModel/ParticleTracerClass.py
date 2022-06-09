@@ -8,12 +8,13 @@ import numpy as np
 from numba.typed import List
 from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
-import elementPT
+from latticeElements.elements import LensIdeal,CombinerIdeal
 from constants import GRAVITATIONAL_ACCELERATION, BOLTZMANN_CONSTANT, MASS_LITHIUM_7, SIMULATION_MAGNETON
 from collisionPhysics import post_Collision_Momentum, get_Collision_Params
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
+Element=None
 
 @numba.njit()
 def norm_3D(vec):
@@ -93,7 +94,7 @@ class ParticleTracer:
 
         self.logPhaseSpaceCoords = False  # wether to log lab frame phase space coords at element inputs
 
-    def transform_To_Next_Element(self, q: np.ndarray, p: np.ndarray, nextEll: elementPT.Element) \
+    def transform_To_Next_Element(self, q: np.ndarray, p: np.ndarray, nextEll: Element) \
             -> tuple[np.ndarray, np.ndarray]:
         el1 = self.currentEl
         el2 = nextEll
@@ -197,9 +198,9 @@ class ParticleTracer:
         elLast = self.elList[-1]
         # qEl = elLast.transform_Lab_Coords_Into_Element_Frame(self.qEl)
         # pEl = elLast.transform_Lab_Frame_Vector_Into_Element_Frame(self.pEl)
-        if isinstance(elLast, elementPT.LensIdeal):
+        if isinstance(elLast, LensIdeal):
             timeStepToEnd = (elLast.L - self.qEl[0]) / self.pEl[0]
-        elif isinstance(elLast, elementPT.CombinerIdeal):
+        elif isinstance(elLast, CombinerIdeal):
             timeStepToEnd = self.qEl[0] / -self.pEl[0]
         else:
             print('not implemented, falling back to previous behaviour')
@@ -404,20 +405,20 @@ class ParticleTracer:
             deltaPx, deltaPy, deltaPz = deltaPNorm * Fx_unit, deltaPNorm * Fy_unit, deltaPNorm * Fz_unit
             return deltaPx, deltaPy, deltaPz
 
-    def which_Element_Lab_Coords(self, qLab: np.ndarray) -> Optional[elementPT.Element]:
+    def which_Element_Lab_Coords(self, qLab: np.ndarray) -> Optional[Element]:
         for el in self.elList:
             if el.is_Coord_Inside(el.transform_Lab_Coords_Into_Element_Frame(qLab)):
                 return el
         return None
 
-    def get_Next_Element(self) -> elementPT.Element:
+    def get_Next_Element(self) -> Element:
         if self.currentEl.index + 1 >= len(self.elList):
             nextEl = self.elList[0]
         else:
             nextEl = self.elList[self.currentEl.index + 1]
         return nextEl
 
-    def which_Element(self, qEl: np.ndarray) -> Optional[elementPT.Element]:
+    def which_Element(self, qEl: np.ndarray) -> Optional[Element]:
         # find which element the particle is in, but check the next element first ,which save time
         # and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)

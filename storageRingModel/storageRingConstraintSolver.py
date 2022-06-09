@@ -1,5 +1,5 @@
-from elementPT import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, LensIdeal, BenderIdeal, \
-    CombinerIdeal, CombinerSim
+from latticeElements.elements import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, \
+    LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
 from helperTools import *
 from storageRingGeometryModules.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry
