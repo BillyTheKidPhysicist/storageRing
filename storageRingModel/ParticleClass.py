@@ -1,13 +1,16 @@
-import warnings
 import copy
+import warnings
 from math import isnan
 from typing import Union, Optional, Iterable
+
 import matplotlib.pyplot as plt
-import numpy.linalg as npl
 import numpy as np
+import numpy.linalg as npl
+
 from constants import DEFAULT_ATOM_SPEED
 
-Element=None
+Element = None
+
 
 class Particle:
     # This object represents a single particle with unit mass. It can track parameters such as position, momentum, and

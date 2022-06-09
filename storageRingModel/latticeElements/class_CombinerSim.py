@@ -1,7 +1,8 @@
 import numpy as np
-from scipy.spatial.transform import Rotation as Rot
 import pandas as pd
+
 from latticeElements.class_CombinerIdeal import CombinerIdeal
+
 
 class CombinerSim(CombinerIdeal):
 

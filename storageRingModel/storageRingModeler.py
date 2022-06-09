@@ -1,26 +1,27 @@
-import random
-import time
+import copy
+from collections.abc import Iterable
+from typing import Union, Optional
+
+import matplotlib.pyplot as plt
+import multiprocess as mp
+import numpy as np
+import scipy.optimize as spo
 import skopt
 from shapely.affinity import rotate, translate
-import copy
-
-from ParticleTracerClass import ParticleTracer
-import numpy as np
-from ParticleClass import Swarm, Particle
-import scipy.optimize as spo
-import matplotlib.pyplot as plt
-from SwarmTracerClass import SwarmTracer
-from latticeElements.elements import HalbachLensSim, LensIdeal, Drift
-import multiprocess as mp
-from collections.abc import Iterable
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from typing import Union, Optional
 from shapely.geometry import Polygon, LineString
+
+from ParticleClass import Swarm, Particle
+from ParticleTracerClass import ParticleTracer
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_Fit_In_Room
+from latticeElements.elements import HalbachLensSim, LensIdeal, Drift
 
 list_array_tuple = Union[np.ndarray, tuple, list]
 
-Element=None
+Element = None
+
+
 class Solution:
     # class to hold onto results of each solution
 
@@ -224,7 +225,7 @@ class StorageRingModel:
             fastMode=False, copySwarm=False, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
             collisionDynamics=self.collisionDynamics)
         for particle in swarmInjectorTraced:
-            particle.clipped=True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
+            particle.clipped = True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                                   copyParticles=True,
                                                                                   onlyUnclipped=False)
@@ -509,7 +510,7 @@ class StorageRingModel:
         sol_Surrogate = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=self.tolerance,
                                                    polish=False, args=(useSurrogate, energyCorrection),
                                                    maxiter=self.maxEvals // (
-                                                               self.optimalPopSize * len(self.tuningBounds)),
+                                                           self.optimalPopSize * len(self.tuningBounds)),
                                                    popsize=self.optimalPopSize, init='halton')
         return sol_Surrogate
 

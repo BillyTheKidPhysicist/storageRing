@@ -1,17 +1,16 @@
 # from geneticLensElement_Wrapper import GeneticLens
-from typing import Iterable,Union,Optional
+from typing import Iterable, Union, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 import scipy.interpolate as spi
 from joblib import Parallel, delayed
 
-import numpy as np
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 from constants import DEFAULT_ATOM_SPEED
-
-from latticeElements.elements import BenderIdeal,HalbachBenderSimSegmented,LensIdeal,CombinerIdeal,\
-    CombinerSim,CombinerHalbachLensSim,HalbachLensSim,Drift
+from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
+    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift
 from shapelyObjectBuilder import build_Shapely_Objects
 from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Elements_From_Floor_Plan
@@ -21,7 +20,7 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Eleme
 
 # todo: refactor!
 
-Element=None
+Element = None
 
 benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 

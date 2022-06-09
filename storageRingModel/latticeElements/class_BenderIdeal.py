@@ -1,9 +1,12 @@
-from latticeElements.class_BaseElement import BaseElement
 from math import sqrt
-from latticeElements.utilities import ELEMENT_PLOT_COLORS,full_Arctan
-from constants import SIMULATION_MAGNETON
+
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
+
+from constants import SIMULATION_MAGNETON
+from latticeElements.class_BaseElement import BaseElement
+from latticeElements.utilities import ELEMENT_PLOT_COLORS, full_Arctan
+
 
 class BenderIdeal(BaseElement):
     """

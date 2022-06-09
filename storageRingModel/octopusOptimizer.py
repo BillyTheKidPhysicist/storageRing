@@ -4,17 +4,18 @@ smart octopus might search for food."""
 
 import random
 from typing import Callable, Optional
+
 import multiprocess as mp
 import numpy as np
 import skopt
-from skopt.utils import cook_estimator
+
 from helperTools import low_Discrepancy_Sample
 
 
 class Octopus:
 
     def __init__(self, func: Callable, globalBounds: np.ndarray, xInitial: np.ndarray, tentacleLength,
-                 maxTrainingMemory,processes):
+                 maxTrainingMemory, processes):
         """
         Initialize Octopus object
 
@@ -24,7 +25,7 @@ class Octopus:
             accepted by func
         :param xInitial: initial location of search. Becomes the position of the octopus
         """
-        processes=mp.cpu_count() if processes==-1 else processes
+        processes = mp.cpu_count() if processes == -1 else processes
         bounds = np.array(globalBounds) if isinstance(globalBounds, (list, tuple)) else globalBounds
         xInitial = np.array(xInitial) if isinstance(xInitial, (list, tuple)) else xInitial
         assert isinstance(xInitial, np.ndarray) and isinstance(bounds, np.ndarray)
@@ -183,7 +184,7 @@ def octopus_Optimize(func, bounds, xi, costInitial: float = None, numSearchesCri
     :return: Tuple as (optimal position in parameter, cost at optimal position)
     """
 
-    octopus = Octopus(func, bounds, xi, tentacleLength, maxTrainingMemory,processes)
+    octopus = Octopus(func, bounds, xi, tentacleLength, maxTrainingMemory, processes)
     posOptimal, costMin = octopus.search_For_Food(costInitial, numSearchesCriteria, searchCutoff, processes, disp,
                                                   memory)
     return posOptimal, costMin

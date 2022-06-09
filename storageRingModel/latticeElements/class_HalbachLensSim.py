@@ -1,18 +1,16 @@
-import numpy as np
 import warnings
 from typing import Optional
-from helperTools import max_Tube_Radius_In_Segmented_Bend,arr_Product,iscloseAll
-from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from latticeElements.class_LensIdeal import LensIdeal
-from math import isclose
-from latticeElements.utilities import make_Odd,MAGNET_ASPECT_RATIO,TINY_OFFSET,CombinerDimensionError,\
-    CombinerIterExceededError,is_Even,SMALL_OFFSET,mirror_Across_Angle,full_Arctan,lst_tup_arr,ElementTooShortError
-from shapely.geometry import Polygon
-import scipy.optimize as spo
+
+import numpy as np
+
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
-from constants import MIN_MAGNET_MOUNT_THICKNESS,SIMULATION_MAGNETON,VACUUM_TUBE_THICKNESS
-from scipy.spatial.transform import Rotation as Rot
+from helperTools import iscloseAll
+from latticeElements.class_LensIdeal import LensIdeal
+from helperTools import make_Odd
+from latticeElements.utilities import  MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
+    ElementTooShortError
+
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5

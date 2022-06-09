@@ -1,11 +1,13 @@
 from typing import Union, Optional
+
 import numpy as np
+
+from ParticleTracerClass import ParticleTracer
+from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
-from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim,HalbachBenderSimSegmented
+from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBenderSimSegmented
 from latticeModels_Parameters import constantsV1_2, constantsV3, injectorParamsOptimalAny, optimizerBounds_V1_3, \
     optimizerBounds_V2, lockedDict, atomCharacteristic
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from ParticleTracerClass import ParticleTracer
 
 
 class RingGeometryError(Exception):
@@ -210,7 +212,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,
     assert whichVersion in ('1', '2', '3')
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                standardMagnetErrors=useMagnetErrors,useSolenoidField=False)
+                                standardMagnetErrors=useMagnetErrors, useSolenoidField=False)
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
@@ -250,7 +252,7 @@ def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool =
         raise InjectorGeometryError
 
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
-                                standardMagnetErrors=useMagnetError,useSolenoidField=False)
+                                standardMagnetErrors=useMagnetError, useSolenoidField=False)
 
     # -----gap between source and first lens-----
 
@@ -301,7 +303,8 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
                                   'rpLens2': surrogateParamsDict['rpLens2'],
                                   'L_Lens2': surrogateParamsDict['L_Lens']})
 
-    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',useSolenoidField=False)
+    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
+                                useSolenoidField=False)
 
     add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, None, whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()

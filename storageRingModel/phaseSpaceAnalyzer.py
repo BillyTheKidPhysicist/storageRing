@@ -1,12 +1,14 @@
-from tqdm import tqdm
-from SwarmTracerClass import SwarmTracer
-import celluloid
 import warnings
-import numpy as np
-from ParticleClass import Swarm
-from ParticleClass import Particle as ParticleBase
-from ParticleTracerLatticeClass import ParticleTracerLattice
+
+import celluloid
 import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
+
+from ParticleClass import Particle as ParticleBase
+from ParticleClass import Swarm
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from SwarmTracerClass import SwarmTracer
 
 cmap = plt.get_cmap('viridis')
 

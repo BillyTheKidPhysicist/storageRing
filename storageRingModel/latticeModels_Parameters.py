@@ -1,7 +1,9 @@
 import copy
-from helperTools import inch_To_Meter
-from constants import VACUUM_TUBE_THICKNESS, DEFAULT_ATOM_SPEED
+
 import numpy as np
+
+from constants import VACUUM_TUBE_THICKNESS, DEFAULT_ATOM_SPEED
+from helperTools import inch_To_Meter
 
 realNumber = (float, int, np.float64, np.int64)
 
@@ -104,7 +106,7 @@ _constants_Version1_2 = {
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping
-    "bendTubeODMax": .008,  
+    "bendTubeODMax": .008,
     "lensToBendGap": inch_To_Meter(2),  # same at each bend to lens joint. Vacuum tube limited
     "observationGap": inch_To_Meter(2),  # gap required for observing atoms
     "rbTarget": 1.0,  # target bending radius

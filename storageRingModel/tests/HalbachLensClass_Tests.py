@@ -1,11 +1,11 @@
-import matplotlib.pyplot as plt
-import numpy as np
 import time
 from HalbachLensClass import Layer, HalbachLens, Sphere, SegmentedBenderHalbach
 import scipy.optimize as spo
 import multiprocess as mp
 import itertools
-from helperTools import *
+from helperTools import iscloseAll,tool_Parallel_Process,realNumType,arr_Product
+import math
+import numpy as np
 
 numericTol = 1e-14  # my working numeric tolerance
 

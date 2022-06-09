@@ -13,15 +13,16 @@ from typing import Union
 import numba
 import numpy as np
 
-# import latticeElements.elementPT
-from latticeElements.elements import BenderIdeal,LensIdeal,CombinerIdeal,HalbachLensSim,Drift,HalbachBenderSimSegmented
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
+# import latticeElements.elementPT
+from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
+    HalbachBenderSimSegmented
 
 realNum = Union[float, int]
 vec3D = tuple[float, float, float]
 frequency = float
 angle = Union[float, int]
-Element = Union[BenderIdeal,LensIdeal, CombinerIdeal]
+Element = Union[BenderIdeal, LensIdeal, CombinerIdeal]
 
 
 @numba.njit()

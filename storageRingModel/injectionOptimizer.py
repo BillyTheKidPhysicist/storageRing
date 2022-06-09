@@ -1,16 +1,16 @@
 import itertools
-import os
-from latticeElements.utilities import CombinerDimensionError,ElementTooShortError,ElementDimensionError
-from latticeElements.elements import Drift,CombinerHalbachLensSim,HalbachLensSim
 from typing import Union, Optional
+
 import numpy as np
 from asyncDE import solve_Async
-from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET
-from storageRingModeler import StorageRingModel
+from scipy.special import expit as sigmoid
 
+from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET
+from latticeElements.elements import Drift, CombinerHalbachLensSim, HalbachLensSim
+from latticeElements.utilities import CombinerDimensionError, ElementTooShortError, ElementDimensionError
 from latticeModels import make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1, InjectorGeometryError
 from latticeModels_Parameters import lockedDict, injectorRingConstraintsV1, injectorParamsBoundsAny
-from scipy.special import expit as sigmoid
+from storageRingModeler import StorageRingModel
 
 
 def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
@@ -138,15 +138,14 @@ def wrapper(X: Union[np.ndarray, list, tuple]) -> float:
 
 
 def main():
-
     bounds = [vals for vals in injectorParamsBoundsAny.values()]
     #
     member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.1, disp=True)
-    print('optimal',repr(member.DNA),member.cost)
+    print('optimal', repr(member.DNA), member.cost)
 
-    x0=member.DNA
+    x0 = member.DNA
     from octopusOptimizer import octopus_Optimize
-    octopus_Optimize(wrapper,bounds,x0,tentacleLength=.02,numSearchesCriteria=20,maxTrainingMemory=200)
+    octopus_Optimize(wrapper, bounds, x0, tentacleLength=.02, numSearchesCriteria=20, maxTrainingMemory=200)
     # print(wrapper(X0))
     # plot_Results(X0)
 

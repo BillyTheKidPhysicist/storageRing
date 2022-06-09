@@ -1,18 +1,19 @@
-from latticeElements.class_BenderIdeal import BenderIdeal
-import numpy as np
-from typing import Optional
-from math import isclose,sqrt
-from helperTools import max_Tube_Radius_In_Segmented_Bend,arr_Product
-from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-
 from math import isclose
-from latticeElements.utilities import make_Odd,MAGNET_ASPECT_RATIO,TINY_OFFSET,CombinerDimensionError,\
-    CombinerIterExceededError,is_Even,TINY_STEP,mirror_Across_Angle,full_Arctan,lst_tup_arr
-from shapely.geometry import Polygon
-import scipy.optimize as spo
+from math import sqrt
+from typing import Optional
 
-from constants import MIN_MAGNET_MOUNT_THICKNESS,SIMULATION_MAGNETON,VACUUM_TUBE_THICKNESS
+import numpy as np
+import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
+from shapely.geometry import Polygon
+
+from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
+from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS
+from helperTools import max_Tube_Radius_In_Segmented_Bend, arr_Product
+from latticeElements.class_BenderIdeal import BenderIdeal
+from helperTools import make_Odd
+from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan, \
+    lst_tup_arr
 
 
 class HalbachBenderSimSegmented(BenderIdeal):

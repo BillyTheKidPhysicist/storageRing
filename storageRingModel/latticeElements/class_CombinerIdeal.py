@@ -1,10 +1,12 @@
-from latticeElements.class_BaseElement import BaseElement
 from math import sqrt
-from latticeElements.utilities import ELEMENT_PLOT_COLORS,full_Arctan
 
 import numpy as np
+
+from latticeElements.class_BaseElement import BaseElement
+from latticeElements.utilities import ELEMENT_PLOT_COLORS
+
+
 # from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
-from scipy.spatial.transform import Rotation as Rot
 
 class CombinerIdeal(BaseElement):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
@@ -13,7 +15,7 @@ class CombinerIdeal(BaseElement):
 
     def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, mode: str,
                  sizeScale: float):
-        super().__init__( PTL, ELEMENT_PLOT_COLORS['combiner'])
+        super().__init__(PTL, ELEMENT_PLOT_COLORS['combiner'])
         assert mode in ('injector', 'storageRing')
         self.fieldFact = -1.0 if mode == 'injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would

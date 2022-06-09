@@ -2,7 +2,11 @@ import time
 
 import numpy as np
 
-from helperTools import *
+from helperTools import iscloseAll,tool_Parallel_Process
+import itertools
+import math
+import os
+from typing import Optional
 import sys
 import pytest
 from latticeElements.elements import  BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \

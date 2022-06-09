@@ -1,7 +1,6 @@
-import numpy.linalg as npl
-import numpy as np
 import numba
-from math import floor
+import numpy as np
+
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 
 # this needs to be refactored
@@ -297,16 +296,16 @@ spec = [
 class DriftFieldHelper_Numba:
     """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self, L, ap,inputAngleTilt,outputAngleTilt):
+    def __init__(self, L, ap, inputAngleTilt, outputAngleTilt):
         self.L = L
         self.ap = ap
-        self.inputAngleTilt,self.outputAngleTilt= inputAngleTilt,outputAngleTilt
+        self.inputAngleTilt, self.outputAngleTilt = inputAngleTilt, outputAngleTilt
         self.fieldFact = 1.0
         self.baseClass = BaseClassFieldHelper_Numba(None)
 
     def get_Init_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.L, self.ap,self.inputAngleTilt,self.outputAngleTilt
+        return self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -332,23 +331,24 @@ class DriftFieldHelper_Numba:
 
     def is_Coord_Inside_Vacuum(self, x, y, z):
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
-        if self.inputAngleTilt==self.outputAngleTilt==0.0: #drift is a simple cylinder
-                return 0 <= x <= self.L and np.sqrt(y ** 2 + z ** 2) < self.ap
+        if self.inputAngleTilt == self.outputAngleTilt == 0.0:  # drift is a simple cylinder
+            return 0 <= x <= self.L and np.sqrt(y ** 2 + z ** 2) < self.ap
         else:
-            #min max of purely cylinderical portion of drift region
-            xMinCylinder=abs(np.tan(self.inputAngleTilt)*self.ap)
-            xMaxCylinder=self.L-abs(np.tan(self.outputAngleTilt)*self.ap)
-            if xMinCylinder<=x<=xMaxCylinder: #if in simple straight section
+            # min max of purely cylinderical portion of drift region
+            xMinCylinder = abs(np.tan(self.inputAngleTilt) * self.ap)
+            xMaxCylinder = self.L - abs(np.tan(self.outputAngleTilt) * self.ap)
+            if xMinCylinder <= x <= xMaxCylinder:  # if in simple straight section
                 return np.sqrt(y ** 2 + z ** 2) < self.ap
-            else: #if in the tilted ends, our outside, along x
-                xMinDrift,xMaxDrift=-xMinCylinder,self.L+abs(np.tan(self.outputAngleTilt)*self.ap)
-                if not xMinDrift<=x<=xMaxDrift: #if entirely outside
+            else:  # if in the tilted ends, our outside, along x
+                xMinDrift, xMaxDrift = -xMinCylinder, self.L + abs(np.tan(self.outputAngleTilt) * self.ap)
+                if not xMinDrift <= x <= xMaxDrift:  # if entirely outside
                     return False
-                else: #maybe it's in the tilted slivers now
-                    slopeInput,slopeOutput=np.tan(np.pi/2+self.inputAngleTilt),np.tan(np.pi/2+self.outputAngleTilt)
-                    yInput=slopeInput*x
-                    yOutput=slopeOutput*x-slopeOutput*self.L
-                    if ((slopeInput>0 and y<yInput) or (slopeInput<0 and y>yInput)) and x<xMinCylinder:
+                else:  # maybe it's in the tilted slivers now
+                    slopeInput, slopeOutput = np.tan(np.pi / 2 + self.inputAngleTilt), np.tan(
+                        np.pi / 2 + self.outputAngleTilt)
+                    yInput = slopeInput * x
+                    yOutput = slopeOutput * x - slopeOutput * self.L
+                    if ((slopeInput > 0 and y < yInput) or (slopeInput < 0 and y > yInput)) and x < xMinCylinder:
                         return np.sqrt(y ** 2 + z ** 2) < self.ap
                     elif ((slopeOutput > 0 and y > yOutput) or (slopeOutput < 0 and y < yOutput)) and x > xMaxCylinder:
                         return np.sqrt(y ** 2 + z ** 2) < self.ap

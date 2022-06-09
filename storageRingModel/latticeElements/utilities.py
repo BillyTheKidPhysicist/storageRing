@@ -1,22 +1,6 @@
-import warnings
-from math import sqrt, isclose
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
-import pandas as pd
-import scipy.optimize as spo
-from scipy.spatial.transform import Rotation as Rot
-from shapely.geometry import Polygon
-
-import fastNumbaMethodsAndClass
-
-
-from HalbachLensClass import billyHalbachCollectionWrapper
-
-from helperTools import arr_Product, iscloseAll, make_Odd, max_Tube_Radius_In_Segmented_Bend
-
-
-
 
 realNumber = (int, float)
 lst_tup_arr = Union[list, tuple, np.ndarray]
@@ -27,6 +11,7 @@ SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of ele
 MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
 
 ELEMENT_PLOT_COLORS: dict[str] = {'drift': 'grey', 'lens': 'magenta', 'combiner': 'blue', 'bender': 'black'}
+
 
 def full_Arctan(q):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
@@ -69,23 +54,3 @@ class CombinerIterExceededError(Exception):
 class CombinerDimensionError(Exception):
     """Not all configurations of combiner parameters are valid. For one thing, the beam needs to fit into the
     combiner."""
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

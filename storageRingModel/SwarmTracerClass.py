@@ -1,13 +1,12 @@
 from collections.abc import Iterable
-from ParticleTracerClass import ParticleTracer
-import numpy as np
-from ParticleClass import Swarm, Particle
-import time
-import skopt
+from typing import Union
+
 import multiprocess as mp
-from constants import BOLTZMANN_CONSTANT, MASS_LITHIUM_7
+import numpy as np
+
+from ParticleClass import Swarm, Particle
+from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from typing import Union, Optional
 from helperTools import low_Discrepancy_Sample
 
 

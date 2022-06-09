@@ -33,4 +33,3 @@ SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(1)  # field to prevent majorana splin
 
 COST_PER_CUBIC_INCH_PERM_MAGNET: float = 26.19  # USD. Per K&J magnetics:
 # https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0
-

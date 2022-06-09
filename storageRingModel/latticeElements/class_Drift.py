@@ -1,21 +1,10 @@
-import warnings
-from math import sqrt, isclose
 from typing import Optional, Union
 
 import numpy as np
-import pandas as pd
-import scipy.optimize as spo
-from scipy.spatial.transform import Rotation as Rot
-from shapely.geometry import Polygon
 
-import fastNumbaMethodsAndClass
-from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from HalbachLensClass import billyHalbachCollectionWrapper
-from constants import SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS, MIN_MAGNET_MOUNT_THICKNESS
-from latticeElements.utilities import ELEMENT_PLOT_COLORS
+from constants import VACUUM_TUBE_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
-from helperTools import arr_Product, iscloseAll, make_Odd, max_Tube_Radius_In_Segmented_Bend
+from latticeElements.utilities import ELEMENT_PLOT_COLORS
 
 # todo: this needs a good scrubbing and refactoring
 

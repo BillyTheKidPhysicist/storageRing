@@ -1,7 +1,7 @@
 import numpy as np
+from elementPT import ElementTooShortError
 
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from elementPT import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3
 from storageRingModeler import StorageRingModel, Solution

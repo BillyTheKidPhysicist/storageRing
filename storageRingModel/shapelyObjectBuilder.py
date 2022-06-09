@@ -13,9 +13,9 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 
-from latticeElements.elements import BenderIdeal,LensIdeal,CombinerIdeal,HalbachLensSim,Drift,\
-    HalbachBenderSimSegmented,CombinerHalbachLensSim,CombinerSim
 from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
+from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
+    HalbachBenderSimSegmented, CombinerHalbachLensSim, CombinerSim
 from typeHints import element
 
 BENDER_POINTS = 250  # how many points to represent the bender with along each curve

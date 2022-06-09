@@ -1,20 +1,10 @@
-import warnings
-from math import sqrt, isclose
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
-import pandas as pd
-import scipy.optimize as spo
-from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 
 import fastNumbaMethodsAndClass
-from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from HalbachLensClass import billyHalbachCollectionWrapper
 from constants import SIMULATION_MAGNETON
-from latticeElements.utilities import ELEMENT_PLOT_COLORS
-from helperTools import arr_Product, iscloseAll, make_Odd, max_Tube_Radius_In_Segmented_Bend
 
 
 class BaseElement:

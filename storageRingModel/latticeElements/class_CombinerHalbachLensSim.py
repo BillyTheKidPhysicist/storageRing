@@ -1,12 +1,14 @@
 from math import isclose
 from typing import Optional
-from latticeElements.utilities import make_Odd,MAGNET_ASPECT_RATIO,TINY_OFFSET,CombinerDimensionError,\
-    CombinerIterExceededError,is_Even
-from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS
+
 import numpy as np
 
+from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
+from constants import MIN_MAGNET_MOUNT_THICKNESS
 from latticeElements.class_CombinerIdeal import CombinerIdeal
+from helperTools import make_Odd
+from latticeElements.utilities import  MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
+    CombinerIterExceededError, is_Even
 
 
 class CombinerHalbachLensSim(CombinerIdeal):
@@ -47,12 +49,12 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.useStandardMagErrors = useStandardMagErrors
         self.extraLoadApFrac = 1.5
 
-        self.La= None  # length of segment between inlet and straight section inside the combiner. This length goes from
+        self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
         self.Lb = None  # length of straight section after the kink after the inlet actuall inside the magnet
 
         self.shape: str = 'COMBINER_CIRCULAR'
-        self.inputOffset= None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
+        self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
         self.lens = None
 

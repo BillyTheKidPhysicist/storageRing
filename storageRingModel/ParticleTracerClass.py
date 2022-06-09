@@ -1,20 +1,21 @@
-import warnings
 import math
-from typing import Optional
+import warnings
 from math import isnan, sqrt
+from typing import Optional
+
 import numba
-from collisionPhysics import collision
 import numpy as np
-from numba.typed import List
 from numba.core.errors import NumbaPerformanceWarning
+
 from ParticleClass import Particle
-from latticeElements.elements import LensIdeal,CombinerIdeal
-from constants import GRAVITATIONAL_ACCELERATION, BOLTZMANN_CONSTANT, MASS_LITHIUM_7, SIMULATION_MAGNETON
 from collisionPhysics import post_Collision_Momentum, get_Collision_Params
+from constants import GRAVITATIONAL_ACCELERATION
+from latticeElements.elements import LensIdeal, CombinerIdeal
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
-Element=None
+Element = None
+
 
 @numba.njit()
 def norm_3D(vec):

@@ -1,8 +1,9 @@
 from collisionPhysics import max_Momentum_1D_In_Trap, trim_Transverse_Momentum_To_Maximum, collision_Rate, \
     collision_Partner_Momentum_Lens, collision_Partner_Momentum_Bender, trim_Longitudinal_Momentum_To_Maximum
 from math import isclose
-from helperTools import *
-from constants import *
+from helperTools import iscloseAll,tool_Parallel_Process
+import numpy as np
+from constants import SIMULATION_MAGNETON
 
 
 def test_max_Momentum_1D_In_Trap():

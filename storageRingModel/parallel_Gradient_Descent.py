@@ -1,13 +1,11 @@
 import sys
+import warnings
+
+import descent
 import matplotlib.pyplot as plt
-from collections.abc import Iterable
-from asyncDE import solve_Async
 import multiprocess as mp
 import numpy as np
-import descent
-import scipy.optimize as spo
 import skopt
-import warnings
 
 SMALL_NUMBER = 1e-9
 

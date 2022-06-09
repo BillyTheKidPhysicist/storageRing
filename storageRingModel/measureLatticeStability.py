@@ -1,18 +1,12 @@
-import itertools
-import os
-# os.environ['OPENBLAS_NUM_THREADS']='1'
 
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from helperTools import tool_Parallel_Process
 import numpy as np
-
-from helperTools import *
-from typing import Union
-import skopt
-from latticeElements.elements import CombinerHalbachLensSim,CombinerIdeal,CombinerSim,LensIdeal,HalbachLensSim
-from SwarmTracerClass import SwarmTracer
+from typing import Optional
+import os
+from latticeElements.elements import CombinerHalbachLensSim, CombinerIdeal, CombinerSim, LensIdeal, HalbachLensSim
 from latticeModels import make_Ring_And_Injector_Version3
 from ringOptimizer import solution_From_Lattice
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from collections.abc import Sequence
 
 combinerTypes = (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
 

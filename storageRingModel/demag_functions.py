@@ -1,9 +1,8 @@
 """Provided by Dr. Ortner from Austrian Silicon Labs"""
 
+import magpylib as magpy
 # pylint: disable=invalid-name, redefined-outer-name
 import numpy as np
-import magpylib as magpy
-import copy
 
 
 def mesh_cuboid(cuboid, nnn):
@@ -171,8 +170,8 @@ def apply_demag(
     None
     '''
 
-    #in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
-    #system
+    # in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
+    # system
     xi = [src.mur - 1.0 for src in collection.sources_all]
     n = len(collection.sources_all)
 
