@@ -100,7 +100,7 @@ class Octopus:
         positions = np.array(opt.ask(numPositions))
         return positions
 
-    def investigate_Results(self, results: np.ndarray) -> None:
+    def investigate_Results(self, results: np.ndarray, disp: bool) -> None:
         """
         Investigate results of function evaluation at tentacle positions. Check format is correct, update location
         of octopus is better results found
@@ -112,10 +112,12 @@ class Octopus:
 
         assert not np.any(np.isnan(results)) and not np.any(np.abs(results) == np.inf)
         if np.min(results) > self.get_Cost_Min():
-            print('didnt find food')
+            message='didnt find food'
         else:
-            print('found food')
+            message='found food'
             self.octopusLocation = self.tentaclePositions[np.argmin(results)]  # octopus gets moved
+        if disp:
+            print(message)
 
     def assess_Food_Quantity(self, processes: int):
         """Run the function being optimized at the parameter space locations of the tentacles. """
@@ -148,7 +150,7 @@ class Octopus:
             self.pick_New_Tentacle_Positions()
             results = self.assess_Food_Quantity(processes)
             self.memory.extend(list(zip(self.tentaclePositions.copy(), results)))
-            self.investigate_Results(results)
+            self.investigate_Results(results, disp)
             costMinList.append(self.get_Cost_Min())
             if numSearchesCriteria is not None and len(costMinList) > numSearchesCriteria + 1:
                 if max(costMinList[-numSearchesCriteria:]) - min(costMinList[-numSearchesCriteria:]) < searchCutoff:

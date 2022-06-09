@@ -25,7 +25,7 @@ def test_Optimizer():
 
     model = Injection_Model(PTL_Ring, PTL_Injector)
 
-    assert model.floor_Plan_Cost(None) == 0  # no overlap between lenses
+    assert model.floor_Plan_Cost() == 0  # no overlap between lenses
     model.swarmInjectorInitial.particles = model.swarmInjectorInitial.particles[:500]
     swarmInjectorTraced = model.swarmTracerInjector.trace_Swarm_Through_Lattice(
         model.swarmInjectorInitial.quick_Copy(), 1e-5, 1.0,

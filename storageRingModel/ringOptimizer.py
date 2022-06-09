@@ -1,7 +1,6 @@
 import numpy as np
-from elementPT import ElementTooShortError
 
-from ParticleTracerLatticeClass import ParticleTracerLattice
+from latticeElements.utilities import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3
 from storageRingModeler import StorageRingModel, Solution
@@ -10,59 +9,31 @@ from storageRingModeler import StorageRingModel, Solution
 def plot_Results(params):
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
     optimizer = StorageRingModel(PTL_Ring, PTL_Injector)
-    optimizer.show_Floor_Plan_And_Trajectories(None, True)
+    optimizer.show_Floor_Plan_And_Trajectories(True)
 
 
-def invalid_Solution(XLattice, invalidInjector=None, invalidRing=None):
-    sol = Solution()
-    sol.xRing_TunedParams1 = XLattice
-    sol.fluxMultiplication = 0.0
-    sol.swarmCost, sol.floorPlanCost = 1.0, 1.0
-    sol.cost = sol.swarmCost + sol.floorPlanCost
-    sol.description = 'Pseudorandom search'
-    sol.invalidRing = invalidRing
-    sol.invalidInjector = invalidInjector
+def invalid_Solution(params):
+    sol = Solution(params, None, None)
     return sol
 
 
-def solution_From_Lattice(PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice) -> Solution:
-    energyConservation = True
-    collisionDynamics = False
+def solve(params: tuple[float, ...]) -> Solution:
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params)
+    energyConservation = False
+    collisionDynamics = True
     optimizer = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=collisionDynamics)
-
-    sol = Solution()
-    knobParams = None
-    swarmCost, floorPlanCost, swarmTraced = optimizer.mode_Match_Cost(knobParams, False, energyConservation,
-                                                                      floorPlanCostCutoff=.05,
-                                                                      rejectUnstable=False, returnFullResults=True)
-    if swarmTraced is None:  # wasn't traced because of other cutoff
-        sol.floorPlanCost = floorPlanCost
-        sol.cost = 1.0 + floorPlanCost
-        sol.swarmCost = np.nan
-        sol.fluxMultiplication = np.nan
-    else:
-        sol.floorPlanCost = floorPlanCost
-        sol.swarmCost = swarmCost
-        sol.cost = swarmCost + floorPlanCost
-        sol.fluxMultiplication = optimizer.compute_Flux_Multiplication(swarmTraced)
-
+    cost, fluxMultiplication = optimizer.mode_Match(energyConservation, floorPlanCostCutoff=.05)
+    sol = Solution(params, fluxMultiplication, cost)
     return sol
 
 
-def solve_For_Lattice_Params(_params: tuple) -> Solution:
-    paramsForBuilding = _params
+def solve_For_Lattice_Params(params: tuple[float, ...]) -> Solution:
     try:
-        PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(paramsForBuilding)
-        sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
-        sol.paramsForBuilding = paramsForBuilding
-    except RingGeometryError:
-        sol = invalid_Solution(paramsForBuilding)
-    except InjectorGeometryError:
-        sol = invalid_Solution(paramsForBuilding)
-    except ElementTooShortError:
-        sol = invalid_Solution(paramsForBuilding)
+        sol = solve(params)
+    except (RingGeometryError, InjectorGeometryError, ElementTooShortError):
+        sol = invalid_Solution(params)
     except:
-        raise Exception("unhandled exception on paramsForBuilding: ", repr(paramsForBuilding))
+        raise Exception("unhandled exception on paramsForBuilding: ", repr(params))
     return sol
 
 

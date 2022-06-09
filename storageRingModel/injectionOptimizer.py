@@ -2,14 +2,15 @@ import itertools
 from typing import Union, Optional
 
 import numpy as np
-from asyncDE import solve_Async
 from scipy.special import expit as sigmoid
 
-from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET
-from latticeElements.elements import Drift, CombinerHalbachLensSim, HalbachLensSim
-from latticeElements.utilities import CombinerDimensionError, ElementTooShortError, ElementDimensionError
+from asyncDE import solve_Async
+from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET, CUBIC_METER_TO_CUBIC_INCH
+from latticeElements.elements import HalbachLensSim, CombinerHalbachLensSim
+from latticeElements.utilities import ElementDimensionError, ElementTooShortError, CombinerDimensionError
 from latticeModels import make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1, InjectorGeometryError
 from latticeModels_Parameters import lockedDict, injectorRingConstraintsV1, injectorParamsBoundsAny
+from octopusOptimizer import octopus_Optimize
 from storageRingModeler import StorageRingModel
 
 
@@ -24,14 +25,10 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
         return True
 
 
-CUBIC_METER_TO_INCH = 61023.7
-
-
 class Injection_Model(StorageRingModel):
 
-    def __init__(self, latticeRing, latticeInjector, tunabilityLength: float = 2e-2):
+    def __init__(self, latticeRing, latticeInjector):
         super().__init__(latticeRing, latticeInjector)
-        self.tunabilityLength = tunabilityLength
         assert len(self.injectorLensIndices) == 2  # i expect this to be two
 
     def cost(self) -> float:
@@ -42,38 +39,17 @@ class Injection_Model(StorageRingModel):
         floorPlanCost = self.floor_Plan_Cost_With_Tunability()
         assert 0.0 <= floorPlanCost <= 1.0
         priceCost = self.get_Rough_Material_Cost()
-        cost = np.sqrt(floorPlanCost ** 2 + swarmCost ** 2 + priceCost ** 2)
+        cost = floorPlanCost + swarmCost + priceCost
         return cost
 
     def injected_Swarm_Cost(self) -> float:
 
-        swarmRingTraced = self.inject_And_Trace_Swarm(None, False, False)
+        swarmRingTraced = self.inject_And_Trace_Swarm(False)
         numParticlesInitial = self.swarmInjectorInitial.num_Particles(weighted=True)
         numParticlesFinal = swarmRingTraced.num_Particles(weighted=True, unClippedOnly=True)
         swarmCost = (numParticlesInitial - numParticlesFinal) / numParticlesInitial
 
         return swarmCost
-
-    def get_Drift_After_Second_Lens_Injector(self) -> Drift:
-
-        drift = self.latticeInjector.elList[self.injectorLensIndices[-1] + 1]
-        assert type(drift) is Drift
-        return drift
-
-    def floor_Plan_Cost_With_Tunability(self) -> float:
-        """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
-        Return the largest value of the three"""
-
-        driftAfterLens = self.get_Drift_After_Second_Lens_Injector()
-        L0 = driftAfterLens.L  # value before tuning
-        cost = [self.floor_Plan_Cost(None)]
-        for separation in (-self.tunabilityLength, self.tunabilityLength):
-            driftAfterLens.set_Length(L0 + separation)  # move lens away from combiner
-            self.latticeInjector.build_Lattice(False)
-            cost.append(self.floor_Plan_Cost(None))
-        driftAfterLens.set_Length(L0)  # reset
-        self.latticeInjector.build_Lattice(False)
-        return max(cost)
 
     def get_Rough_Material_Cost(self) -> float:
         """Get a value proportional to the cost of magnetic materials. This is proportional to the volume of
@@ -82,7 +58,7 @@ class Injection_Model(StorageRingModel):
         volume = 0.0  # volume of magnetic material in cubic inches
         for el in itertools.chain(self.latticeRing.elList, self.latticeInjector):
             if type(el) in (CombinerHalbachLensSim, HalbachLensSim):
-                volume += CUBIC_METER_TO_INCH * np.sum(el.Lm * np.array(el.magnetWidths) ** 2)
+                volume += CUBIC_METER_TO_CUBIC_INCH * np.sum(el.Lm * np.array(el.magnetWidths) ** 2)
         price_USD = volume * COST_PER_CUBIC_INCH_PERM_MAGNET
         price_USD_Scale = 5_000.0
         cost = 2 * (sigmoid(price_USD / price_USD_Scale) - .5)
@@ -113,7 +89,7 @@ def get_Model(paramsInjector: Union[np.ndarray, list, tuple]) -> Optional[Inject
 def plot_Results(paramsInjector: Union[np.ndarray, list, tuple], trueAspectRatio=False):
     model = get_Model(paramsInjector)
     assert model is not None
-    model.show_Floor_Plan_And_Trajectories(None, trueAspectRatio)
+    model.show_Floor_Plan_And_Trajectories(trueAspectRatio)
 
 
 def injector_Cost(paramsInjector: Union[np.ndarray, list, tuple]):
@@ -139,20 +115,31 @@ def wrapper(X: Union[np.ndarray, list, tuple]) -> float:
 
 def main():
     bounds = [vals for vals in injectorParamsBoundsAny.values()]
-    #
-    member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.1, disp=True)
-    print('optimal', repr(member.DNA), member.cost)
 
-    x0 = member.DNA
-    from octopusOptimizer import octopus_Optimize
-    octopus_Optimize(wrapper, bounds, x0, tentacleLength=.02, numSearchesCriteria=20, maxTrainingMemory=200)
-    # print(wrapper(X0))
-    # plot_Results(X0)
+    for _ in range(3):
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=False)
+        x0 = member.DNA
+        posOptimal, costMin = octopus_Optimize(wrapper, bounds, x0, tentacleLength=.02,
+                                               numSearchesCriteria=20, maxTrainingMemory=200, disp=False)
+        print(repr(posOptimal), costMin)
+
+    # print(wrapper(x0))
+    # plot_Results(x)
 
 
 if __name__ == "__main__":
     main()
 
 """
+
+
+array([0.09194512, 0.02083394, 0.13107531, 0.02206909, 0.1886514 ,
+       0.04      , 0.01460026, 0.19921984, 0.23500085, 0.18705991]) 0.2617156644496601
+       
+array([0.29      , 0.01388565, 0.19922547, 0.02661814, 0.19020056,
+       0.04      , 0.0141065 , 0.08446912, 0.25643251, 0.2207812 ]) 0.2883693354872183
+       
+array([0.15296214, 0.02929302, 0.12755628, 0.02196965, 0.1947876 ,
+       0.04      , 0.01543   , 0.20473507, 0.23142568, 0.18207568]) 0.2634068970471264
 
 """
