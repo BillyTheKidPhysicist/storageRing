@@ -4,8 +4,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
 # from asyncDE import solve_Async
 from storageRingModeler import StorageRingModel, Solution
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from latticeElements.utilities import ElementTooShortError, CombinerDimensionError, CombinerIterExceededError
+from latticeElements.utilities import ElementTooShortError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorParamsOptimalAny
 from asyncDE import solve_Async
@@ -67,16 +66,31 @@ def wrapper(params):
     return cost
 
 
-def main():
+def make_Bounds(expand, keysToNotChange=None):
+    """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
+    Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
+    default list of values to ignore"""
     boundsRing = np.array(list(optimizerBounds_V1_3.values()))
     boundsInjector = list(injectorParamsBoundsAny.values())
+    keys = [*list(optimizerBounds_V1_3.keys()), *list(injectorParamsOptimalAny.keys())]
     bounds = np.array([*boundsRing, *boundsInjector])
-    for i, bound in enumerate(bounds):
-        delta = bound[1] - bound[0]
-        bounds[i][0] -= delta * .1
-        bounds[i][1] += delta * .1
-        bounds[i] = [bounds[i][j] if bounds[i][j] >= 0.0 else 0.0 for j in [0, 1]]
-    #
+    if expand:
+        keysToNotChange = ('rpBend',) if keysToNotChange is None else keysToNotChange
+        for key in keysToNotChange:
+            assert key in keys
+        for bound, key in zip(bounds, keys):
+            if key not in keysToNotChange:
+                delta = (bound[1] - bound[0]) / 10.0
+                bound[0] -= delta
+                bound[1] += delta
+                bound[0] = 0.0 if bound[0] < 0.0 else bound[0]
+                assert bound[0] >= 0.0
+    return bounds
+
+
+def main():
+    expandedBounds = False
+    bounds = make_Bounds(expandedBounds)
     solve_Async(wrapper, bounds, 15 * len(bounds), timeOut_Seconds=1_000_000, disp=True, workers=10,
                 saveData='optimizerProgress1')
     #

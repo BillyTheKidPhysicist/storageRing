@@ -4,13 +4,11 @@ from typing import Union, Optional
 import numpy as np
 from scipy.special import expit as sigmoid
 
-from asyncDE import solve_Async
 from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET, CUBIC_METER_TO_CUBIC_INCH
 from latticeElements.elements import HalbachLensSim, CombinerHalbachLensSim
 from latticeElements.utilities import ElementDimensionError, ElementTooShortError, CombinerDimensionError
 from latticeModels import make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1, InjectorGeometryError
 from latticeModels_Parameters import lockedDict, injectorRingConstraintsV1, injectorParamsBoundsAny
-from octopusOptimizer import octopus_Optimize
 from storageRingModeler import StorageRingModel
 
 
@@ -26,7 +24,7 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
 
 
 class Injection_Model(StorageRingModel):
-    maximumCost=2.0
+    maximumCost = 2.0
     L_Injector_TotalMax = 2.0
 
     def __init__(self, latticeRing, latticeInjector):
@@ -40,7 +38,7 @@ class Injection_Model(StorageRingModel):
         floorPlanCost = self.floor_Plan_Cost_With_Tunability()
         priceCost = self.get_Rough_Material_Cost()
         cost = floorPlanCost + swarmCost + priceCost
-        cost=min([self.maximumCost,cost])
+        cost = min([self.maximumCost, cost])
         return cost
 
     def injected_Swarm_Cost(self) -> float:
@@ -49,7 +47,7 @@ class Injection_Model(StorageRingModel):
         numParticlesInitial = self.swarmInjectorInitial.num_Particles(weighted=True)
         numParticlesFinal = swarmRingTraced.num_Particles(weighted=True, unClippedOnly=True)
         swarmCost = (numParticlesInitial - numParticlesFinal) / numParticlesInitial
-        assert 0.0<=swarmCost<=1.0
+        assert 0.0 <= swarmCost <= 1.0
         return swarmCost
 
     def get_Rough_Material_Cost(self) -> float:
@@ -64,6 +62,7 @@ class Injection_Model(StorageRingModel):
         price_USD_Scale = 5_000.0
         cost = 2 * (sigmoid(price_USD / price_USD_Scale) - .5)
         return cost
+
 
 def get_Model(paramsInjector: Union[np.ndarray, list, tuple]) -> Optional[Injection_Model]:
     surrogateParams = lockedDict({'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
@@ -89,7 +88,7 @@ def plot_Results(paramsInjector: Union[np.ndarray, list, tuple], trueAspectRatio
 
 def injector_Cost(paramsInjector: Union[np.ndarray, list, tuple]):
     model = get_Model(paramsInjector)
-    cost=Injection_Model.maximumCost if model is None else model.cost()
+    cost = Injection_Model.maximumCost if model is None else model.cost()
     assert 0.0 <= cost <= Injection_Model.maximumCost
     return cost
 

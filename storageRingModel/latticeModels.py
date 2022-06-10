@@ -23,6 +23,23 @@ lst_arr_tple = Union[list, np.ndarray, tuple]
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 minTimeStepGap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
 InjectorModel = RingModel = ParticleTracerLattice
+DEFAULT_SYSTEM_OPTIONS = lockedDict({'useMagnetErrors': False, 'combinerSeed': None, 'useSolenoidField': False})
+
+
+def check_And_Add_Default_Values(options: Optional[dict]) -> lockedDict:
+    """Check that there are only the allowed keys in options, and any missing keys add them with the default
+    value. If options is None, use the default dictionary"""
+
+    if options is not None:
+        numValidKeysInDict = sum([1 for key in DEFAULT_SYSTEM_OPTIONS if key in options])
+        assert numValidKeysInDict == len(options)  # can't be unexpected stuff
+        for key, val in DEFAULT_SYSTEM_OPTIONS.items():
+            if key not in options:
+                options[key] = val
+        options = lockedDict(options)
+    else:
+        options = DEFAULT_SYSTEM_OPTIONS
+    return options
 
 
 def el_Fringe_Space(elementName: str, elementBoreRadius: float) -> float:
@@ -101,8 +118,7 @@ def add_Combiner(PTL: ParticleTracerLattice, LmCombiner: float, rpCombiner: floa
 
 
 def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamDiam, rpLensBefore, rpLensAfter,
-                        combinerSeed: Optional[int],
-                        whichOP_Ap: str = "Circulating") -> None:
+                        options: Optional[dict], whichOP_Ap: str = "Circulating") -> None:
     """Add gap for vacuum + combiner + gap for optical pumping. Elements before and after must be a lens. """
 
     # gap between combiner and previous lens
@@ -110,7 +126,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamDiam, rpLensBefore,
 
     # -------combiner-------
 
-    add_Combiner(PTL, LmCombiner, rpCombiner, loadBeamDiam, combinerSeed)
+    add_Combiner(PTL, LmCombiner, rpCombiner, loadBeamDiam, options['combinerSeed'])
 
     # ------gap 3--------- combiner-> lens, Optical Pumping (OP) region
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
@@ -125,7 +141,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamDiam, rpLensBefore,
 
 
 def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringParams: lockedDict,
-                                            combinerSeed: Optional[int], whichOP_Ap: str = "Circulating") -> None:
+                                            options: Optional[dict], whichOP_Ap: str = "Circulating") -> None:
     """Starting from a bender output at 0,0 and going in -x direction to a bender input is the first "straight" section.
     elements are [lens,combiner,lens] with gaps as needed for vacuum Not actually straight because of combiner.
      """
@@ -135,14 +151,14 @@ def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringPara
 
     # ---combiner + OP magnet-----
     add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamDiam'],
-                        ringParams['rpLens1'], ringParams['rpLens2'], combinerSeed, whichOP_Ap=whichOP_Ap)
+                        ringParams['rpLens1'], ringParams['rpLens2'], options, whichOP_Ap=whichOP_Ap)
 
     # ---from OP to bender input---
     PTL.add_Halbach_Lens_Sim(ringParams['rpLens2'], ringParams['L_Lens2'])
 
 
 def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ringParams: lockedDict,
-                                          combinerSeed: Optional[int]) -> None:
+                                          options: Optional[dict]) -> None:
     """Starting from a bender output at 0,0 and going in -x direction to a bender input is the first "straight" section.
     elements are [lens,lens,combiner,len,lens] with gaps as needed for vacuum Not actually straight because of combiner.
      """
@@ -153,7 +169,7 @@ def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ringParams
 
     # ---combiner + OP magnet-----
     add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamDiam'],
-                        ringParams['rpLens2'], ringParams['rpLens3'], combinerSeed)
+                        ringParams['rpLens2'], ringParams['rpLens3'], options['combinerSeed'])
 
     # ---from OP to bender input---
     PTL.add_Halbach_Lens_Sim(ringParams['rpLens3'], ringParams['L_Lens3'])
@@ -161,7 +177,7 @@ def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ringParams
 
 
 def add_First_Racetrack_Straight(PTL: ParticleTracerLattice, ringParams: lockedDict, whichVersion: str,
-                                 combinerSeed: Optional[int]) -> None:
+                                 options: Optional[dict]) -> None:
     """Starting from a bender output at 0,0 and going in -x direction to a bender input is the first "straight" section.
      Not actually straight because of combiner. Two lenses and a combiner, with supporting drift regions if
      neccesary for gap spacing"""
@@ -170,9 +186,9 @@ def add_First_Racetrack_Straight(PTL: ParticleTracerLattice, ringParams: lockedD
     assert whichVersion in ('1', '2', '3')
 
     if whichVersion in ('1', '3'):
-        add_First_RaceTrack_Straight_Version1_3(PTL, ringParams, combinerSeed)
+        add_First_RaceTrack_Straight_Version1_3(PTL, ringParams, options)
     else:
-        add_First_RaceTrack_Straight_Version2(PTL, ringParams, combinerSeed)
+        add_First_RaceTrack_Straight_Version2(PTL, ringParams, options)
 
 
 def add_Second_Racetrack_Straight_Version_Any(PTL: ParticleTracerLattice, rpLens3_4: float, rpBend: float) -> None:
@@ -197,8 +213,7 @@ def add_Second_Racetrack_Straight_Version_Any(PTL: ParticleTracerLattice, rpLens
     add_Drift_If_Needed(PTL, constantsV1_2["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
 
 
-def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,
-              combinerSeed: Optional[int]) -> RingModel:
+def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]) -> RingModel:
     """Make ParticleTraceLattice object that represents storage ring. This does not include the injector components.
     Several versions available
 
@@ -208,15 +223,16 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,
     Version 3: Same as Version 1, but instead with the bending sections split into to bending elements so pumping
     can be applied at apex
     """
-
+    options = check_And_Add_Default_Values(options)
     assert whichVersion in ('1', '2', '3')
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                standardMagnetErrors=useMagnetErrors, useSolenoidField=False)
+                                standardMagnetErrors=options['useMagnetErrors'],
+                                useSolenoidField=options['useSolenoidField'])
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
-    add_First_Racetrack_Straight(PTL, ringParams, whichVersion, combinerSeed)
+    add_First_Racetrack_Straight(PTL, ringParams, whichVersion, options)
 
     # -------bender 1------
     add_Bender(PTL, ringParams['rpBend'], whichVersion)
@@ -236,14 +252,13 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, useMagnetErrors: bool,
     return PTL
 
 
-def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool = False, combinerSeed: int = None) \
-        -> InjectorModel:
+def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) -> InjectorModel:
     """Make ParticleTraceLattice object that represents injector. Injector is a double lens design. """
 
+    options = check_And_Add_Default_Values(options)
     gap1 = injectorParams["gap1"]
     gap2 = injectorParams["gap2"]
     gap3 = injectorParams["gap3"]
-
     gap1 -= el_Fringe_Space('lens', injectorParams["rp1"])
     gap2 -= el_Fringe_Space('lens', injectorParams["rp1"]) + el_Fringe_Space('lens', injectorParams["rp2"])
     if gap2 < constantsV1_2["lens1ToLens2_Inject_Gap"]:
@@ -252,7 +267,8 @@ def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool =
         raise InjectorGeometryError
 
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
-                                standardMagnetErrors=useMagnetError, useSolenoidField=False)
+                                standardMagnetErrors=options['useMagnetErrors'],
+                                useSolenoidField=options['useSolenoidField'])
 
     # -----gap between source and first lens-----
 
@@ -279,7 +295,7 @@ def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool =
     PTL.add_Drift(gap3, ap=injectorParams["rp2"])
 
     add_Combiner(PTL, injectorParams["LmCombiner"], injectorParams["rpCombiner"], injectorParams["loadBeamDiam"],
-                 combinerSeed)
+                 options['combinerSeed'])
 
     PTL.end_Lattice(constrain=False)
 
@@ -289,11 +305,13 @@ def make_Injector_Version_Any(injectorParams: lockedDict, useMagnetError: bool =
 
 
 def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
-                                                surrogateParamsDict: lockedDict) -> RingModel:
+                                                surrogateParamsDict: lockedDict, options: dict = None) -> RingModel:
     """Surrogate model of storage to aid in realism of independent injector optimizing. Benders are exluded. Model
     serves to represent geometric constraints between injector and ring, and to test that if particle that travel
     into combiner can make it to the next element. Since injector is optimized independent of ring, the parameters
     for the ring surrogate are typically educated guesses"""
+
+    options = check_And_Add_Default_Values(options)
 
     raceTrackParams = lockedDict({'rpCombiner': injectorParams['rpCombiner'],
                                   'LmCombiner': injectorParams['LmCombiner'],
@@ -304,9 +322,9 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
                                   'L_Lens2': surrogateParamsDict['L_Lens']})
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                useSolenoidField=False)
+                                useSolenoidField=options['useSolenoidField'])
 
-    add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, None, whichOP_Ap='Injection')
+    add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, options, whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()
     PTL.end_Lattice(constrain=False)
     return PTL
@@ -348,34 +366,32 @@ def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: Par
     assert PTL_Injector.combiner.ang < 0 < PTL_Ring.combiner.ang
 
 
-def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str, useMagnetErrors: bool,
-                            combinerSeed: Optional[int]) -> tuple[RingModel, InjectorModel]:
+def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str, options: Optional[dict]) \
+        -> tuple[RingModel, InjectorModel]:
     """
     Make ParticleTracerLattice models of ring and injector system. Combiner must be the same, though in low
     field seeking configuration for ring, and high field seeking for injector
 
     :param variableParams: Non constant parameters to construct lens.
     :param whichVersion: which version of the ring/injector system to use
-    :param useMagnetErrors: Wether to apply neodymium individual cubiod magnet material/alignment errors
-    :param combinerSeed: random number seed for combiner element. WIthout this, using magnet errors will produce
-        different combiners because their magnet will be perturbed differently. This is unphysical
+    :param options: dictionary of parameters that affect the full system such as wether to use magnet errors, solenoid
+        field, etc.
     :return:
     """
 
     assert whichVersion in ('1', '2', '3')
     assert all(val > 0 for val in variableParams)
-    assert isinstance(combinerSeed, int) if combinerSeed is not None else True
 
-    ringParams = make_ringParams_Dict(variableParams, whichVersion)
     injectorParams = make_injectorParams_Dict_Version_Any(variableParams)
-
-    PTL_Ring = make_Ring(ringParams, whichVersion, useMagnetErrors, combinerSeed)
-    PTL_Injector = make_Injector_Version_Any(injectorParams, useMagnetError=useMagnetErrors, combinerSeed=combinerSeed)
+    ringParams = make_ringParams_Dict(variableParams, whichVersion)
+    PTL_Ring = make_Ring(ringParams, whichVersion, options)
+    PTL_Injector = make_Injector_Version_Any(injectorParams, options=options)
     assert_Combiners_Are_Same(PTL_Injector, PTL_Ring)
     return PTL_Ring, PTL_Injector
 
 
-def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple) -> tuple[RingModel, InjectorModel]:
+def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple, options: dict = None) -> tuple[
+    RingModel, InjectorModel]:
     """
     Make ParticleTraceLattice objects that represents storage ring and injector systems
 
@@ -385,10 +401,11 @@ def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple) -> tuple[RingM
     """
 
     version = '1'
-    return _make_Ring_And_Injector(variableParams, version, False, None)
+    return _make_Ring_And_Injector(variableParams, version, options)
 
 
-def make_Ring_And_Injector_Version2(variableParams: lst_arr_tple) -> tuple[RingModel, InjectorModel]:
+def make_Ring_And_Injector_Version2(variableParams: lst_arr_tple, options: dict = None) -> tuple[
+    RingModel, InjectorModel]:
     """
     Make ParticleTraceLattice objects that represents storage ring and injector systems
 
@@ -398,12 +415,11 @@ def make_Ring_And_Injector_Version2(variableParams: lst_arr_tple) -> tuple[RingM
     """
 
     version = '2'
-    return _make_Ring_And_Injector(variableParams, version, False, None)
+    return _make_Ring_And_Injector(variableParams, version, options)
 
 
-def make_Ring_And_Injector_Version3(variableParams: lst_arr_tple, useMagnetErrors: bool = False,
-                                    combinerSeed: int = None) \
-        -> tuple[RingModel, InjectorModel]:
+def make_Ring_And_Injector_Version3(variableParams: lst_arr_tple, options: dict = None) -> tuple[
+    RingModel, InjectorModel]:
     """
     Make ParticleTraceLattice objects that represents storage ring and injector systems
 
@@ -412,4 +428,4 @@ def make_Ring_And_Injector_Version3(variableParams: lst_arr_tple, useMagnetError
     """
 
     version = '3'
-    return _make_Ring_And_Injector(variableParams, version, useMagnetErrors, combinerSeed)
+    return _make_Ring_And_Injector(variableParams, version, options)

@@ -33,7 +33,7 @@ class lockedDict(dict):
     def __delete__(self, instance):
         raise Exception("dictionary cannot be deleted except by garbage collector")
 
-    def __getitem__(self, key) -> float:
+    def __getitem__(self, key):
         """Get key, and record that it was accesed to later it can be checked wether every value was accessed"""
 
         assert key in self._isKeyUsed.keys()
