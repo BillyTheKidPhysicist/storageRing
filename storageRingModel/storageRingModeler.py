@@ -328,7 +328,9 @@ class StorageRingModel:
             cost.append(self.floor_Plan_Cost())
         driftAfterLens.set_Length(L0)  # reset
         self.latticeInjector.build_Lattice(False)
-        return max(cost)
+        floorPlanCost=max(cost)
+        assert 0.0<=floorPlanCost<=1.0
+        return floorPlanCost
 
     def swarm_Cost(self, swarm: Swarm) -> float:
         """Cost associated with a swarm after being traced through system"""

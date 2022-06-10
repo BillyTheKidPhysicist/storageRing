@@ -432,8 +432,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0123749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-0.20688787244352483 , -0.005641388442434395,0.003866446621163612])
-        pf0 = np.array([-200.3985889058164  ,  -13.117685055099885,   10.246844700508609])
+        qf0 = np.array([-0.20689087696012554 , -0.005641459331065852,0.003866246896841823])
+        pf0 = np.array([-200.39925627342822 ,  -13.122168218956155,   10.248605304376847])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -608,8 +608,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf, qf0, absTol) == False or iscloseAll(pf, pf0, absTol) == False:
-                print(repr(qf), repr(pf))
-                print(repr(qf0), repr(pf0))
+                # print(repr(qf), repr(pf))
+                # print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self, qEl_2D):

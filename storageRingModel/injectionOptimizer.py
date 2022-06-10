@@ -26,6 +26,8 @@ def is_Valid_Injector_Phase(L_InjectorMagnet, rpInjectorMagnet):
 
 
 class Injection_Model(StorageRingModel):
+    maximumCost=2.0
+    L_Injector_TotalMax = 2.0
 
     def __init__(self, latticeRing, latticeInjector):
         super().__init__(latticeRing, latticeInjector)
@@ -35,11 +37,10 @@ class Injection_Model(StorageRingModel):
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         swarmCost = self.injected_Swarm_Cost()
-        assert 0.0 <= swarmCost <= 1.0
         floorPlanCost = self.floor_Plan_Cost_With_Tunability()
-        assert 0.0 <= floorPlanCost <= 1.0
         priceCost = self.get_Rough_Material_Cost()
         cost = floorPlanCost + swarmCost + priceCost
+        cost=min([self.maximumCost,cost])
         return cost
 
     def injected_Swarm_Cost(self) -> float:
@@ -48,7 +49,7 @@ class Injection_Model(StorageRingModel):
         numParticlesInitial = self.swarmInjectorInitial.num_Particles(weighted=True)
         numParticlesFinal = swarmRingTraced.num_Particles(weighted=True, unClippedOnly=True)
         swarmCost = (numParticlesInitial - numParticlesFinal) / numParticlesInitial
-
+        assert 0.0<=swarmCost<=1.0
         return swarmCost
 
     def get_Rough_Material_Cost(self) -> float:
@@ -64,12 +65,6 @@ class Injection_Model(StorageRingModel):
         cost = 2 * (sigmoid(price_USD / price_USD_Scale) - .5)
         return cost
 
-
-maximumCost = 2.0
-
-L_Injector_TotalMax = 2.0
-
-
 def get_Model(paramsInjector: Union[np.ndarray, list, tuple]) -> Optional[Injection_Model]:
     surrogateParams = lockedDict({'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
     paramsInjectorDict = {}
@@ -77,7 +72,7 @@ def get_Model(paramsInjector: Union[np.ndarray, list, tuple]) -> Optional[Inject
         paramsInjectorDict[key] = val
     paramsInjectorDict = lockedDict(paramsInjectorDict)
     PTL_I = make_Injector_Version_Any(paramsInjectorDict)
-    if PTL_I.totalLength > L_Injector_TotalMax:
+    if PTL_I.totalLength > Injection_Model.L_Injector_TotalMax:
         return None
     PTL_R = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams)
     if PTL_R is None:
@@ -94,11 +89,8 @@ def plot_Results(paramsInjector: Union[np.ndarray, list, tuple], trueAspectRatio
 
 def injector_Cost(paramsInjector: Union[np.ndarray, list, tuple]):
     model = get_Model(paramsInjector)
-    if model is None:
-        cost = maximumCost
-    else:
-        cost = model.cost()
-    assert 0.0 <= cost <= maximumCost
+    cost=Injection_Model.maximumCost if model is None else model.cost()
+    assert 0.0 <= cost <= Injection_Model.maximumCost
     return cost
 
 
@@ -106,7 +98,7 @@ def wrapper(X: Union[np.ndarray, list, tuple]) -> float:
     try:
         return injector_Cost(X)
     except (ElementDimensionError, InjectorGeometryError, ElementTooShortError, CombinerDimensionError):
-        return maximumCost
+        return Injection_Model.maximumCost
     except:
         np.set_printoptions(precision=100)
         print('unhandled exception on args: ', repr(X))
@@ -117,13 +109,11 @@ def main():
     bounds = [vals for vals in injectorParamsBoundsAny.values()]
 
     for _ in range(3):
-        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=False)
+        member = solve_Async(wrapper, bounds, 15 * len(bounds), tol=.05, disp=True)
         x0 = member.DNA
         posOptimal, costMin = octopus_Optimize(wrapper, bounds, x0, tentacleLength=.02,
-                                               numSearchesCriteria=20, maxTrainingMemory=200, disp=False)
+                                               numSearchesCriteria=20, maxTrainingMemory=200, disp=True)
         print(repr(posOptimal), costMin)
-
-    # print(wrapper(x0))
     # plot_Results(x)
 
 

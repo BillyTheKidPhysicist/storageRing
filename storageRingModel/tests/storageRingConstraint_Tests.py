@@ -70,8 +70,14 @@ def _assert_Consraint_Match_Saved_Vals(PTL: ParticleTracerLattice, fileName: str
     for el, r1Test, r2Test in zip(PTL.elList, r1TestArr, r2TestArr):
         assert iscloseAll(el.r1,r1Test,1e-14) and iscloseAll(el.r2, r2Test,1e-14)
 
+def save_Results(PTL: ParticleTracerLattice, fileName: str):
+    fileName=os.path.join(testDataFolderPath, fileName)
+    data=[]
+    for el in PTL.elList:
+        data.append(np.append(el.r1,el.r2))
+    np.savetxt(fileName,data)
 
-def _test_Storage_Ring_Constraint_3():
+def _test_Storage_Ring_Constraint_3(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 1 lattice in my naming scheme"""
 
     PTL = ParticleTracerLattice(v0Nominal=200.0, latticeType='storageRing')
@@ -88,10 +94,13 @@ def _test_Storage_Ring_Constraint_3():
     PTL.add_Halbach_Lens_Sim(.01, None, constrain=True)
     PTL.add_Halbach_Bender_Sim_Segmented(.0254 / 2, .01, None, 1.0, 0.0, rOffsetFact=1.015)
     PTL.end_Lattice(constrain=True)
-    _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest3')
+    if not save:
+        _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest3')
+    else:
+        save_Results(PTL, 'storageRingConstTest3')
 
 
-def _test_Storage_Ring_Constraint_4():
+def _test_Storage_Ring_Constraint_4(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 3 lattice in my naming scheme"""
 
     PTL = ParticleTracerLattice(v0Nominal=200.0, latticeType='storageRing')
@@ -112,8 +121,14 @@ def _test_Storage_Ring_Constraint_4():
     PTL.add_Drift(.02)
     PTL.add_Halbach_Bender_Sim_Segmented(.0254 / 2, .01, None, 1.0, 0.0, rOffsetFact=1.015)
     PTL.end_Lattice(constrain=True)
-    _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest4')
+    if not save:
+        _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest4')
+    else:
+        save_Results(PTL, 'storageRingConstTest4')
 
+def save_New_Data():
+    _test_Storage_Ring_Constraint_3(save=True)
+    _test_Storage_Ring_Constraint_4(save=True)
 
 def test_Storage_Ring_Constraints():
     tests = [_test_Storage_Ring_Constraint_1,
