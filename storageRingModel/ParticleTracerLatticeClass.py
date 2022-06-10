@@ -153,7 +153,7 @@ class ParticleTracerLattice:
         self.combinerIndex = el.index
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self, Lm: float, rp: float, loadBeamDiam: float = 10e-3, layers: int = 1,
+    def add_Combiner_Sim_Lens(self, Lm: float, rp: float, loadBeamOffset: float = 10e-3, layers: int = 1,
                               ap: float = None,
                               seed: int = None) -> None:
 
@@ -166,14 +166,14 @@ class ParticleTracerLattice:
         :param Lm: Hard edge length of magnet, m. Total length of element depends on degree of deflection of nominal
         trajectory
         :param rp: Bore radius of hexapole lens, m
-        :param loadBeamDiam: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
+        :param loadBeamOffset: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
         :param layers: Number of concentric layers of magnets
         :return: None
         """
 
         if seed is not None:
             np.random.seed(seed)
-        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamDiam, layers, ap, self.latticeType, self.standardMagnetErrors)
+        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType, self.standardMagnetErrors)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -404,7 +404,7 @@ class ParticleTracerLattice:
         return xLab, yLab
 
     def show_Lattice(self, particleCoords=None, particle=None, swarm=None, showRelativeSurvival=True,
-                     showTraceLines=False,
+                     showTraceLines=True,
                      showMarkers=True, traceLineAlpha=1.0, trueAspectRatio=True, extraObjects=None, finalCoords=True,
                      saveTitle=None, dpi=150, defaultMarkerSize=1000, plotOuter: bool = False, plotInner: bool = True):
         # plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
@@ -448,7 +448,7 @@ class ParticleTracerLattice:
                     color = 'yellow'
                 plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
                 plt.scatter(*xy, marker='o', s=10, c=color)
-            if showTraceLines == True:
+            if showTraceLines:
                 if particle.qArr is not None and len(particle.qArr) > 0:  # if there are lines to show
                     plt.plot(particle.qArr[:, 0], particle.qArr[:, 1], c=color, alpha=traceLineAlpha)
 

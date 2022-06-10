@@ -4,7 +4,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
 # from asyncDE import solve_Async
 from storageRingModeler import StorageRingModel, Solution
-from latticeElements.utilities import ElementTooShortError
+from latticeElements.utilities import ElementTooShortError,CombinerDimensionError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorParamsOptimalAny
 from asyncDE import solve_Async
@@ -51,16 +51,17 @@ def solve(_params: tuple[float, ...]) -> Solution:
 def solve_For_Lattice_Params(params: tuple[float, ...]) -> Solution:
     try:
         sol = solve(params)
-    except (RingGeometryError, InjectorGeometryError, ElementTooShortError):
+    except (RingGeometryError, InjectorGeometryError, ElementTooShortError,CombinerDimensionError):
         sol = invalid_Solution(params)
     except:
-        raise Exception("unhandled exception on paramsForBuilding: ", repr(params))
+        print(repr(params))
+        raise Exception("unhandled exception on paramsForBuilding: ")
     return sol
 
 
 def wrapper(params):
     sol = solve_For_Lattice_Params(params)
-    if sol.fluxMultiplication > 10:
+    if sol.fluxMultiplication is not None and sol.fluxMultiplication > 10:
         print(sol)
     cost = sol.cost
     return cost
@@ -75,7 +76,7 @@ def make_Bounds(expand, keysToNotChange=None):
     keys = [*list(optimizerBounds_V1_3.keys()), *list(injectorParamsOptimalAny.keys())]
     bounds = np.array([*boundsRing, *boundsInjector])
     if expand:
-        keysToNotChange = ('rpBend',) if keysToNotChange is None else keysToNotChange
+        keysToNotChange = () if keysToNotChange is None else keysToNotChange
         for key in keysToNotChange:
             assert key in keys
         for bound, key in zip(bounds, keys):
@@ -91,7 +92,7 @@ def make_Bounds(expand, keysToNotChange=None):
 def main():
     expandedBounds = False
     bounds = make_Bounds(expandedBounds)
-    solve_Async(wrapper, bounds, 15 * len(bounds), timeOut_Seconds=1_000_000, disp=True, workers=10,
+    solve_Async(wrapper, bounds, 1 * len(bounds), timeOut_Seconds=1_000_000, disp=True, workers=10,
                 saveData='optimizerProgress1')
     #
     # from octopusOptimizer import octopus_Optimize

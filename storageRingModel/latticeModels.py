@@ -104,7 +104,7 @@ def add_Bender(PTL: ParticleTracerLattice, rpBend: float, whichVersion: str) -> 
         add_Bend_Version_3(PTL, rpBend)
 
 
-def add_Combiner(PTL: ParticleTracerLattice, LmCombiner: float, rpCombiner: float, loadBeamDiam: float,
+def add_Combiner(PTL: ParticleTracerLattice, LmCombiner: float, rpCombiner: float, loadBeamOffset: float,
                  combinerSeed: Optional[int]):
     """add combiner element to PTL. Set random state for reproducible results if seed is not None, then reset the state
     """
@@ -112,12 +112,12 @@ def add_Combiner(PTL: ParticleTracerLattice, LmCombiner: float, rpCombiner: floa
     if combinerSeed is not None:
         state = np.random.get_state()
         np.random.seed(combinerSeed)
-    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamDiam=loadBeamDiam, layers=1)
+    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, loadBeamOffset=loadBeamOffset, layers=1)
     if combinerSeed is not None:
         np.random.set_state(state)
 
 
-def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamDiam, rpLensBefore, rpLensAfter,
+def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamOffset, rpLensBefore, rpLensAfter,
                         options: Optional[dict], whichOP_Ap: str = "Circulating") -> None:
     """Add gap for vacuum + combiner + gap for optical pumping. Elements before and after must be a lens. """
 
@@ -126,7 +126,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamDiam, rpLensBefore,
 
     # -------combiner-------
 
-    add_Combiner(PTL, LmCombiner, rpCombiner, loadBeamDiam, options['combinerSeed'])
+    add_Combiner(PTL, LmCombiner, rpCombiner, loadBeamOffset, options['combinerSeed'])
 
     # ------gap 3--------- combiner-> lens, Optical Pumping (OP) region
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
@@ -150,7 +150,7 @@ def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringPara
     PTL.add_Halbach_Lens_Sim(ringParams['rpLens1'], ringParams['L_Lens1'])
 
     # ---combiner + OP magnet-----
-    add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamDiam'],
+    add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamOffset'],
                         ringParams['rpLens1'], ringParams['rpLens2'], options, whichOP_Ap=whichOP_Ap)
 
     # ---from OP to bender input---
@@ -168,7 +168,7 @@ def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ringParams
     PTL.add_Halbach_Lens_Sim(ringParams['rpLens2'], ringParams['L_Lens2'])
 
     # ---combiner + OP magnet-----
-    add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamDiam'],
+    add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamOffset'],
                         ringParams['rpLens2'], ringParams['rpLens3'], options['combinerSeed'])
 
     # ---from OP to bender input---
@@ -294,7 +294,7 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
 
     PTL.add_Drift(gap3, ap=injectorParams["rp2"])
 
-    add_Combiner(PTL, injectorParams["LmCombiner"], injectorParams["rpCombiner"], injectorParams["loadBeamDiam"],
+    add_Combiner(PTL, injectorParams["LmCombiner"], injectorParams["rpCombiner"], injectorParams["loadBeamOffset"],
                  options['combinerSeed'])
 
     PTL.end_Lattice(constrain=False)
@@ -315,7 +315,7 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
 
     raceTrackParams = lockedDict({'rpCombiner': injectorParams['rpCombiner'],
                                   'LmCombiner': injectorParams['LmCombiner'],
-                                  'loadBeamDiam': injectorParams['loadBeamDiam'],
+                                  'loadBeamOffset': injectorParams['loadBeamOffset'],
                                   'rpLens1': surrogateParamsDict['rpLens1'],
                                   'L_Lens1': surrogateParamsDict['L_Lens'],
                                   'rpLens2': surrogateParamsDict['rpLens2'],
@@ -338,7 +338,7 @@ def make_ringParams_Dict(variableParams: list[float], whichVersion: str) -> lock
 
     ringParams = {"LmCombiner": injectorParamsOptimalAny["LmCombiner"],
                   "rpCombiner": injectorParamsOptimalAny["rpCombiner"],
-                  "loadBeamDiam": injectorParamsOptimalAny["loadBeamDiam"]}
+                  "loadBeamOffset": injectorParamsOptimalAny["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
         assert len(variableParams) == 6

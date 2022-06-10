@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS
+from constants import MIN_MAGNET_MOUNT_THICKNESS,VACUUM_TUBE_THICKNESS
 from helperTools import make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
@@ -93,7 +93,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
-        assert self.ap <= self.get_Ap_Max_Good_Field()
+        if self.ap >= self.max_Ap():
+            raise CombinerDimensionError
 
     def build_Fast_Field_Helper(self, extraSources):
         fieldData = self.make_Field_Data()
@@ -164,10 +165,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert abs((lastPointInLensIndex * zMax / (self.numGridPointsZ - 1) - self.Lm / 2) - 1e-6), 1e-12
         return zMax
 
-    def get_Ap_Max_Good_Field(self):
+    def max_Ap(self):
         xArr, yArr, _ = self.make_Grid_Coords_Arrays()
         apMaxGoodField = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
-        return apMaxGoodField
+        apVacuum=self.rp-VACUUM_TUBE_THICKNESS
+        return min([apMaxGoodField,apVacuum])
 
     def make_Field_Data(self) -> tuple[np.ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
@@ -204,7 +206,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         assert self.PTL.jitterAmp >= 0.0
         jitterAmpProposed = self.PTL.jitterAmp
-        maxJitterAmp = self.get_Ap_Max_Good_Field() - self.ap
+        maxJitterAmp = self.max_Ap() - self.ap
         jitterAmp = maxJitterAmp if jitterAmpProposed > maxJitterAmp else jitterAmpProposed
         if Print:
             if jitterAmpProposed == maxJitterAmp and jitterAmpProposed != 0.0:
