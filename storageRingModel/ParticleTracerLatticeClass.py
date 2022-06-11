@@ -173,7 +173,8 @@ class ParticleTracerLattice:
 
         if seed is not None:
             np.random.seed(seed)
-        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType, self.standardMagnetErrors)
+        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType,
+                                    self.standardMagnetErrors)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -316,7 +317,7 @@ class ParticleTracerLattice:
         self.combinerIndex = el.index
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
-    def build_Lattice(self, constrain: bool):
+    def build_Lattice(self, constrain: bool, buildFieldHelper: bool = True):
         """Build the specified lattice. This includes:
         - Fill pre constrained parameters derive from simple inputs of length, field strength etc of each element.
         - Solve the floor plan layout. If constrained, solve for bumber of magnets and lengths of bending segment and
@@ -333,8 +334,9 @@ class ParticleTracerLattice:
         update_And_Place_Elements_From_Floor_Plan(self, floorPlan)
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
-            if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim):
-                el.build_Fast_Field_Helper([])
+            if buildFieldHelper:
+                if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim):
+                    el.build_Fast_Field_Helper([])
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed

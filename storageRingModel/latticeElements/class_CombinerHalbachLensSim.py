@@ -39,7 +39,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.Lm = Lm
         self.rp = rp
         self.layers = layers
-        self.ap = .9 * rp if ap is None else ap
+        self.ap = min([.9 * rp,rp - VACUUM_TUBE_THICKNESS]) if ap is None else ap
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
         self.magnetWidths = None
@@ -93,7 +93,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
-        if self.ap >= self.max_Ap():
+        if self.ap >=self.max_Ap_Good_Field():
             raise CombinerDimensionError
 
     def build_Fast_Field_Helper(self, extraSources):
@@ -165,11 +165,10 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert abs((lastPointInLensIndex * zMax / (self.numGridPointsZ - 1) - self.Lm / 2) - 1e-6), 1e-12
         return zMax
 
-    def max_Ap(self):
+    def max_Ap_Good_Field(self):
         xArr, yArr, _ = self.make_Grid_Coords_Arrays()
         apMaxGoodField = self.rp - np.sqrt((xArr[1] - xArr[0]) ** 2 + (yArr[1] - yArr[0]) ** 2)
-        apVacuum=self.rp-VACUUM_TUBE_THICKNESS
-        return min([apMaxGoodField,apVacuum])
+        return apMaxGoodField
 
     def make_Field_Data(self) -> tuple[np.ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
@@ -206,7 +205,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         assert self.PTL.jitterAmp >= 0.0
         jitterAmpProposed = self.PTL.jitterAmp
-        maxJitterAmp = self.max_Ap() - self.ap
+        maxJitterAmp = self.max_Ap_Good_Field() - self.ap
         jitterAmp = maxJitterAmp if jitterAmpProposed > maxJitterAmp else jitterAmpProposed
         if Print:
             if jitterAmpProposed == maxJitterAmp and jitterAmpProposed != 0.0:
@@ -267,7 +266,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         tolAbsolute = 1e-6  # m
         targetSep = self.loadBeamOffset / 2
         while not isclose(seperation, targetSep, abs_tol=tolAbsolute):
-            deltaX = -.8 * (seperation - targetSep) / gradient  # I like to use a little damping
+            deltaX = -(seperation - targetSep) / gradient  # I like to use a little damping
             deltaX = -y / 2 if y + deltaX < 0 else deltaX  # restrict deltax to allow value
             y = y + deltaX
             inputAngle, _, _, seperationNew = characterize_CombinerHalbach(self, 'HIGH_FIELD_SEEKING', particleOffset=y)

@@ -4,7 +4,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
 # from asyncDE import solve_Async
 from storageRingModeler import StorageRingModel, Solution
-from latticeElements.utilities import ElementTooShortError,CombinerDimensionError
+from latticeElements.utilities import ElementTooShortError, CombinerDimensionError
 from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorParamsOptimalAny
 from asyncDE import solve_Async
@@ -51,7 +51,7 @@ def solve(_params: tuple[float, ...]) -> Solution:
 def solve_For_Lattice_Params(params: tuple[float, ...]) -> Solution:
     try:
         sol = solve(params)
-    except (RingGeometryError, InjectorGeometryError, ElementTooShortError,CombinerDimensionError):
+    except (RingGeometryError, InjectorGeometryError, ElementTooShortError, CombinerDimensionError):
         sol = invalid_Solution(params)
     except:
         print(repr(params))
@@ -67,14 +67,21 @@ def wrapper(params):
     return cost
 
 
-def make_Bounds(expand, keysToNotChange=None):
+def make_Bounds(expand, keysToNotChange=None, whichBounds='ring'):
     """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
     Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
     default list of values to ignore"""
+    assert whichBounds in ('ring', 'injector', 'both')
     boundsRing = np.array(list(optimizerBounds_V1_3.values()))
     boundsInjector = list(injectorParamsBoundsAny.values())
-    keys = [*list(optimizerBounds_V1_3.keys()), *list(injectorParamsOptimalAny.keys())]
-    bounds = np.array([*boundsRing, *boundsInjector])
+    keysRing = list(optimizerBounds_V1_3.keys())
+    keysInjector = list(injectorParamsOptimalAny.keys())
+    if whichBounds == 'ring':
+        bounds, keys = boundsRing, keysRing
+    elif whichBounds == 'injector':
+        bounds, keys = boundsInjector, keysInjector
+    else:
+        bounds, keys = np.array([*boundsRing, *boundsInjector]), [*keysRing, *keysInjector]
     if expand:
         keysToNotChange = () if keysToNotChange is None else keysToNotChange
         for key in keysToNotChange:

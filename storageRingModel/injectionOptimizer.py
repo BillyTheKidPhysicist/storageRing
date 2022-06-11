@@ -4,11 +4,13 @@ from typing import Union, Optional
 import numpy as np
 from scipy.special import expit as sigmoid
 
+from asyncDE import solve_Async
 from constants import DEFAULT_ATOM_SPEED, COST_PER_CUBIC_INCH_PERM_MAGNET, CUBIC_METER_TO_CUBIC_INCH
 from latticeElements.elements import HalbachLensSim, CombinerHalbachLensSim
 from latticeElements.utilities import ElementDimensionError, ElementTooShortError, CombinerDimensionError
 from latticeModels import make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1, InjectorGeometryError
 from latticeModels_Parameters import lockedDict, injectorRingConstraintsV1, injectorParamsBoundsAny
+from octopusOptimizer import octopus_Optimize
 from storageRingModeler import StorageRingModel
 
 

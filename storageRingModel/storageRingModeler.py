@@ -181,14 +181,14 @@ class StorageRingModel:
         if not deferPltShow:
             plt.show()
 
-    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool) -> None:
+    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool, Tmax=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
 
         self.show_Floor_Plan(deferPltShow=True, trueAspect=trueAspectRatio, color='grey')
         self.show_Floor_Plan(which='interior', deferPltShow=True, trueAspect=trueAspectRatio, linestyle=':')
         self.swarmInjectorInitial.particles = self.swarmInjectorInitial.particles[:100]
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), 1e-5, 1, parallel=False,
+            self.swarmInjectorInitial.quick_Copy(), self.h, 1.0, parallel=False,
             fastMode=False, copySwarm=False, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
             collisionDynamics=self.collisionDynamics)
         for particle in swarmInjectorTraced:
@@ -196,7 +196,8 @@ class StorageRingModel:
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
                                                                                   copyParticles=True,
                                                                                   onlyUnclipped=False)
-        swarmRingTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial, 1e-5, 1, fastMode=False,
+        swarmRingTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial, self.h, Tmax,
+                                                                           fastMode=False,
                                                                            parallel=False, energyCorrection=True,
                                                                            stepsBetweenLogging=4,
                                                                            collisionDynamics=self.collisionDynamics)
@@ -322,14 +323,15 @@ class StorageRingModel:
         driftAfterLens = self.get_Drift_After_Second_Lens_Injector()
         L0 = driftAfterLens.L  # value before tuning
         cost = [self.floor_Plan_Cost()]
-        for separation in (-self.injectorTunabilityLength, self.injectorTunabilityLength):
-            driftAfterLens.set_Length(L0 + separation)  # move lens away from combiner
-            self.latticeInjector.build_Lattice(False)
-            cost.append(self.floor_Plan_Cost())
+
+        driftAfterLens.set_Length(L0 + -self.injectorTunabilityLength)  # move lens away from combiner
+        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)
+        cost.append(self.floor_Plan_Cost())
+
         driftAfterLens.set_Length(L0)  # reset
         self.latticeInjector.build_Lattice(False)
-        floorPlanCost=max(cost)
-        assert 0.0<=floorPlanCost<=1.0
+        floorPlanCost = max(cost)
+        assert 0.0 <= floorPlanCost <= 1.0
         return floorPlanCost
 
     def swarm_Cost(self, swarm: Swarm) -> float:
