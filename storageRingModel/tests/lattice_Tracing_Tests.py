@@ -8,7 +8,7 @@ from ParticleTracerClass import ParticleTracer
 
 # pylint: disable=too-many-locals, too-many-arguments,missing-function-docstring
 
-testDataFolderPath = os.path.join(os.getcwd(), 'testData')
+testDataFolderPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'testData')
 V0 = 200.0
 
 

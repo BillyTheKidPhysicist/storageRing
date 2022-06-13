@@ -29,7 +29,7 @@ class ParticleTracerLattice:
 
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
-                 useSolenoidField: bool = False, initialLocation=None, initialAngle=None):
+                 useSolenoidField: bool = False, initialLocation: tuple[float,float]=None, initialAngle=None):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -335,7 +335,7 @@ class ParticleTracerLattice:
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
             if buildFieldHelper:
-                if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim):
+                if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim,Drift,LensIdeal):
                     el.build_Fast_Field_Helper([])
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could

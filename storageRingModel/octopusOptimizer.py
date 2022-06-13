@@ -25,7 +25,7 @@ class Octopus:
             accepted by func
         :param xInitial: initial location of search. Becomes the position of the octopus
         """
-        processes = mp.cpu_count() if processes == -1 else processes
+        processes = round(1.5*mp.cpu_count()) if processes == -1 else processes
         bounds = np.array(globalBounds) if isinstance(globalBounds, (list, tuple)) else globalBounds
         xInitial = np.array(xInitial) if isinstance(xInitial, (list, tuple)) else xInitial
         assert isinstance(xInitial, np.ndarray) and isinstance(bounds, np.ndarray)
@@ -66,8 +66,12 @@ class Octopus:
         data is present"""
 
         tentacleBounds = self.make_Tentacle_Bounds()
-        fractionSmart = .1
-        numSmart = round(fractionSmart * self.numTentacles)
+        numSmartMin=5
+        if self.numTentacles<numSmartMin:
+            numSmart=self.numTentacles
+        else:
+            fractionSmart = .1
+            numSmart = round(fractionSmart * (self.numTentacles-numSmartMin))+numSmartMin
         numRandom = self.numTentacles - numSmart
         randTentaclePositions = self.random_Tentacle_Positions(tentacleBounds, numRandom)
         smartTentaclePositions = self.smart_Tentacle_Positions(tentacleBounds, numSmart)
@@ -163,7 +167,7 @@ class Octopus:
 # pylint: disable=too-many-arguments
 def octopus_Optimize(func, bounds, xi, costInitial: float = None, numSearchesCriteria: int = 10,
                      searchCutoff: float = .01, processes: int = -1, disp: bool = True, tentacleLength: float = .01,
-                     memory: list = None, maxTrainingMemory: int = 150) -> tuple[np.ndarray, float]:
+                     memory: list = None, maxTrainingMemory: int = 250) -> tuple[np.ndarray, float]:
     """
     Minimize a scalar function within bounds by octopus optimization. An octopus searches for food
     (reduction in cost function) by a combinations of intelligently and blindly searching with her tentacles in her

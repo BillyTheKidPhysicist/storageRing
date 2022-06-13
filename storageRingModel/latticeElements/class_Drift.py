@@ -28,9 +28,11 @@ class Drift(LensIdeal):
         super().__init__(PTL, L, 0, np.inf, ap)  # set Bp to zero and bore radius to infinite
         self.plotColor = ELEMENT_PLOT_COLORS['drift']
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
-        self.fastFieldHelper = self.init_fastFieldHelper([L, ap, inputTiltAngle, outputTiltAngle])
         self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth > ap
+
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+        self.fastFieldHelper = self.init_fastFieldHelper([self.L, self.ap, self.inputTiltAngle, self.outputTiltAngle])
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""

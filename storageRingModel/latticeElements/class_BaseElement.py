@@ -91,6 +91,9 @@ class BaseElement:
         else:
             raise NotImplementedError
 
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+        raise NotImplementedError
+
     def __getstate__(self):
         self._fastFieldHelperInitParams = self.fastFieldHelper.get_Init_Params()
         self._fastFieldHelperInternalParam = self.fastFieldHelper.get_Internal_Params()

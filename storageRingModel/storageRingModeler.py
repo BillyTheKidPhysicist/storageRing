@@ -39,7 +39,7 @@ class StorageRingModel:
     maximumFloorPlanCost = 1.0
 
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
-                 numParticlesSwarm: int = 1024, collisionDynamics: bool = False):
+                 numParticlesSwarm: int = 1024, collisionDynamics: bool = False,energyCorrection: bool=False):
         assert latticeRing.latticeType == 'storageRing' and latticeInjector.latticeType == 'injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -61,6 +61,7 @@ class StorageRingModel:
         self.swarmInjectorInitial = None
 
         self.collisionDynamics = collisionDynamics
+        self.energyCorrection=energyCorrection
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(
             numParticlesSwarm)
 
@@ -181,7 +182,7 @@ class StorageRingModel:
         if not deferPltShow:
             plt.show()
 
-    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool, Tmax=1.0) -> None:
+    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool=True, Tmax=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
 
         self.show_Floor_Plan(deferPltShow=True, trueAspect=trueAspectRatio, color='grey')
@@ -216,7 +217,7 @@ class StorageRingModel:
                     plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1], marker='x', zorder=100, c=color)
         plt.show()
 
-    def mode_Match(self, energyCorrection: bool, floorPlanCostCutoff: float = np.inf) -> tuple[float, float]:
+    def mode_Match(self, floorPlanCostCutoff: float = np.inf) -> tuple[float, float]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         assert floorPlanCostCutoff >= 0
@@ -225,19 +226,19 @@ class StorageRingModel:
             cost = self.maximumSwarmCost + floorPlanCost
             fluxMultiplication = np.nan
         else:
-            swarmTraced = self.inject_And_Trace_Swarm(energyCorrection)
+            swarmTraced = self.inject_And_Trace_Swarm()
             fluxMultiplication = self.compute_Flux_Multiplication(swarmTraced)
             swarmCost = self.swarm_Cost(swarmTraced)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= self.maximumCost
         return cost, fluxMultiplication
 
-    def inject_And_Trace_Swarm(self, energyCorrection: bool) -> Swarm:
+    def inject_And_Trace_Swarm(self) -> Swarm:
 
         swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring()
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
                                                                        fastMode=True, accelerated=True, copySwarm=False,
-                                                                       energyCorrection=energyCorrection,
+                                                                       energyCorrection=self.energyCorrection,
                                                                        collisionDynamics=self.collisionDynamics)
         return swarmTraced
 

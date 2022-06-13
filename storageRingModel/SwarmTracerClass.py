@@ -8,7 +8,7 @@ from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import low_Discrepancy_Sample
-
+import os
 
 def lorentz_Function(x, gamma):
     # returns a value of 1.0 for x=0
@@ -94,8 +94,8 @@ class SwarmTracer:
         :param numParticles: Number of particles to add to swarm from data file
         :return: swarm of particles
         """
-
-        particleData = np.loadtxt("particleInitialConditions.txt")
+        swarmDataFile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "particleInitialConditions.txt")
+        particleData = np.loadtxt(swarmDataFile)
         assert len(particleData) >= numParticles and particleData.shape[1] == 6 and len(particleData.shape) == 2
         qArr, pArr = particleData[:numParticles, :3], particleData[:numParticles, 3:]
         swarm = Swarm()

@@ -6,7 +6,7 @@ import numpy as np
 
 from math import isclose
 
-testDataFolderPath = os.path.join(os.getcwd(), 'testData')
+testDataFolderPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'testData')
 
 
 def _make_Lattice_1():

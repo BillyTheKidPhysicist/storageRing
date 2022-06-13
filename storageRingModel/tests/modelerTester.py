@@ -1,12 +1,13 @@
-from injectionOptimizer import Injection_Model
+from storageRingModeler import StorageRingModel
 import numpy as np
 from shapely.geometry import LineString
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import iscloseAll
 from math import isclose
+import os
 
 
-def test_Optimizer():
+def test_Modeler():
     PTL_Ring = ParticleTracerLattice()
     PTL_Ring.add_Halbach_Lens_Sim(.02, .1)
     PTL_Ring.add_Drift(.02)
@@ -23,7 +24,7 @@ def test_Optimizer():
     PTL_Injector.add_Combiner_Sim_Lens(.15, .03)
     PTL_Injector.end_Lattice()
 
-    model = Injection_Model(PTL_Ring, PTL_Injector)
+    model = StorageRingModel(PTL_Ring, PTL_Injector)
 
     assert model.floor_Plan_Cost() == 0  # no overlap between lenses
     model.swarmInjectorInitial.particles = model.swarmInjectorInitial.particles[:500]

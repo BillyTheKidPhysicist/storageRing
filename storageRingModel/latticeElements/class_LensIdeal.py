@@ -35,6 +35,8 @@ class LensIdeal(BaseElement):
         self.K = self.fieldFact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
+
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         self.fastFieldHelper = fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L, self.K, self.ap)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
