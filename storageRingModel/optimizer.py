@@ -32,6 +32,7 @@ def injected_Swarm_Cost(model) -> float:
     return swarmCost
 
 def build_Injector_And_Surrrogate(injectorParams):
+    assert len(injectorParams)==len(injectorParamsBoundsAny)
     surrogateParams = lockedDict(
         {'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
     paramsInjectorDict = {}
@@ -39,14 +40,19 @@ def build_Injector_And_Surrrogate(injectorParams):
         paramsInjectorDict[key] = val
     paramsInjectorDict = lockedDict(paramsInjectorDict)
     PTL_Injector = make_Injector_Version_Any(paramsInjectorDict)
-    PTL_Ring = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams)
-    return PTL_Ring, PTL_Injector
+    PTL_Ring_Surrogate = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams)
+    return PTL_Ring_Surrogate, PTL_Injector
 
 class Solver:
-    def __init__(self,system,ringParams):
+    def __init__(self,system,ringParams, useSolenoidField=False, useMagnetErrors=False,useCollisions=False,
+                 useEnergyCorrection=False,numParticles=1024):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system=system
         self.ringParams=ringParams
+        self.useCollisions=useCollisions
+        self.useEnergyCorrection=useEnergyCorrection
+        self.numParticles=numParticles
+        self.options = {'useSolenoidField': useSolenoidField,'useMagnetErrors': useMagnetErrors}
 
     def unpack_Params(self,params):
         ringParams,injectorParams=None,None
@@ -69,16 +75,13 @@ class Solver:
         if self.system=='injector_Surrogate_Ring':
             PTL_Ring,PTL_Injector=build_Injector_And_Surrrogate(injectorParams)
         else:
-            PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(ringParams)
+            PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(ringParams,options=self.options)
         return PTL_Ring, PTL_Injector
 
     def make_System_Model(self,params):
         PTL_Ring, PTL_Injector = self.build_Lattices(params)
-        energyCorrection = True
-        collisionDynamics = False
-        numParticles = 1024
-        model = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=collisionDynamics,
-                                 numParticlesSwarm=numParticles,energyCorrection=energyCorrection)
+        model = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=self.useCollisions,
+                                 numParticlesSwarm=self.numParticles,energyCorrection=self.useEnergyCorrection)
         return model
 
     def _solve(self,params: tuple[float, ...]) -> Solution:
@@ -166,15 +169,10 @@ def optimize(system,method,xi: tuple=None,ringParams: tuple=None,expandedBounds=
 
 
 def main():
-    xi = (0.1513998, 0.02959859, 0.12757497, 0.022621, 0.19413599, 0.03992811,
-          0.01606958, 0.20289069, 0.23274805, 0.17537412)
-    xRing=(0.01232265, 0.00998983, 0.03899118, 0.00796353, 0.10642821,0.4949227 )
-    solver=Solver('ring',None)
-    print(solver.solve(xRing))
 
-    xi=(*xRing,*xi)
-    solver=Solver('both',xRing)
-    print(solver.solve(xi))
+    xRing=(0.01232265, 0.00998983, 0.03899118, 0.00796353, 0.10642821,0.4949227 )
+    solver=Solver('ring',None,useSolenoidField=True)
+    print(solver.solve(xRing))
 
 if __name__ == '__main__':
     main()
