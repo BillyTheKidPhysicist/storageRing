@@ -119,11 +119,13 @@ class Particle:
         self._TList, self._VList = [], []
 
     def finished(self, currentEl: Optional[Element], qEl: np.ndarray, pEl: np.ndarray,
-                 totalLatticeLength: Optional[float] = None) -> None:
+                 totalLatticeLength: Optional[float] = None, clippedImmediately=False) -> None:
         # finish tracing with the particle, tie up loose ends
         # totalLaticeLength: total length of periodic lattice
         self.traced = True
         self.force = None
+        if clippedImmediately:
+            self.qf, self.pf = self.qi.copy(), self.pi.copy()
         if self.dataLogging:
             self.qArr = np.asarray(self._qList)
             self._qList = []  # save memory

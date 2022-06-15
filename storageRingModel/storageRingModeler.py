@@ -10,7 +10,8 @@ from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
-from floorPlanCheckerFunctions import does_Fit_In_Room
+from floorPlanCheckerFunctions import does_Fit_In_Room, plot_Floor_Plan_In_Lab
+from helperTools import full_Arctan
 from latticeElements.elements import HalbachLensSim, Drift
 
 list_array_tuple = Union[np.ndarray, tuple, list]
@@ -39,7 +40,8 @@ class StorageRingModel:
     maximumFloorPlanCost = 1.0
 
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
-                 numParticlesSwarm: int = 1024, collisionDynamics: bool = False,energyCorrection: bool=False):
+                 numParticlesSwarm: int = 1024, collisionDynamics: bool = False, energyCorrection: bool = False,
+                 bumperIncludedInInjector: bool = False):
         assert latticeRing.latticeType == 'storageRing' and latticeInjector.latticeType == 'injector'
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
@@ -60,8 +62,10 @@ class StorageRingModel:
 
         self.swarmInjectorInitial = None
 
+        self.isBumperIncluded = bumperIncludedInInjector
+
         self.collisionDynamics = collisionDynamics
-        self.energyCorrection=energyCorrection
+        self.energyCorrection = energyCorrection
         self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(
             numParticlesSwarm)
 
@@ -97,14 +101,15 @@ class StorageRingModel:
         :return: None if the particle has no logged coords, or a shapely line object in ring frame
         """
         assert particle.traced
-        if len(particle.elPhaseSpaceLog) == 0:
+        if len(particle.elPhaseSpaceLog) <= 1:
             return None
-        qList = []
-        for q, _ in particle.elPhaseSpaceLog:
-            qRingFrame_xy = self.convert_Pos_Injector_Frame_To_Ring_Frame(q)[:2]
-            qList.append(qRingFrame_xy)
-        line = LineString(qList)
-        return line
+        else:
+            qList = []
+            for q, _ in particle.elPhaseSpaceLog:
+                qRingFrame_xy = self.convert_Pos_Injector_Frame_To_Ring_Frame(q)[:2]
+                qList.append(qRingFrame_xy)
+            line = LineString(qList)
+            return line
 
     def does_Injector_Particle_Clip_On_Ring(self, particle: Particle) -> bool:
         """
@@ -115,7 +120,6 @@ class StorageRingModel:
         :return: True if particle clipped ring, False if it didn't
         """
 
-        assert len(particle.elPhaseSpaceLog) > 0
         line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
         if line is None:  # particle was clipped immediately, but in the injector not in the ring
             return False
@@ -137,7 +141,10 @@ class StorageRingModel:
     def get_Injector_Shapely_Objects_In_Lab_Frame(self, which: str) -> list[Polygon]:
         assert which in ('interior', 'exterior')
         shapelyObjectLabFrameList = []
-        rotationAngle = self.latticeInjector.combiner.ang + -self.latticeRing.combiner.ang
+        ne_Inj, ne_Ring = self.latticeInjector.combiner.ne, self.latticeRing.combiner.ne
+        angleInj = full_Arctan(ne_Inj[1], ne_Inj[0])
+        angleRing = full_Arctan(ne_Ring[1], ne_Ring[0])
+        rotationAngle = angleRing - angleInj
         r2Injector = self.latticeInjector.combiner.r2
         r2Ring = self.latticeRing.combiner.r2
         for el in self.latticeInjector:
@@ -182,7 +189,10 @@ class StorageRingModel:
         if not deferPltShow:
             plt.show()
 
-    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool=True, Tmax=1.0) -> None:
+    def show_System_Floor_Plan_In_Lab(self):
+        plot_Floor_Plan_In_Lab(self, self.isBumperIncluded)
+
+    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool = True, Tmax=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
 
         self.show_Floor_Plan(deferPltShow=True, trueAspect=trueAspectRatio, color='grey')
@@ -206,12 +216,12 @@ class StorageRingModel:
         for particleInj, particleRing in zip(swarmInjectorTraced, swarmRingTraced):
             assert not (particleInj.clipped and not particleRing.clipped)  # this wouldn't make sense
             color = 'r' if particleRing.clipped else 'g'
-            if particleInj.qArr is not None and len(particleInj.qArr) > 1:
-                qRingArr = np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in particleInj.qArr])
-                plt.plot(qRingArr[:, 0], qRingArr[:, 1], c=color, alpha=.3)
-                if particleInj.clipped:  # if clipped in injector, plot last location
-                    plt.scatter(qRingArr[-1, 0], qRingArr[-1, 1], marker='x', zorder=100, c=color)
-            if particleRing.qArr is not None and len(particleRing.qArr) > 1:
+            inj_qarr = particleInj.qArr if len(particleInj.qArr) != 0 else np.array([particleInj.qi])
+            qRingArr = np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in inj_qarr])
+            plt.plot(qRingArr[:, 0], qRingArr[:, 1], c=color, alpha=.3)
+            if particleInj.clipped:  # if clipped in injector, plot last location
+                plt.scatter(qRingArr[-1, 0], qRingArr[-1, 1], marker='x', zorder=100, c=color)
+            if particleRing.qArr is not None and len(particleRing.qArr) > 1:  # if made to ring
                 plt.plot(particleRing.qArr[:, 0], particleRing.qArr[:, 1], c=color, alpha=.3)
                 if not particleInj.clipped:  # if not clipped in injector plot last ring location
                     plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1], marker='x', zorder=100, c=color)
@@ -252,11 +262,10 @@ class StorageRingModel:
         for particle in swarmInjectorTraced:
             clipped = particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
             if not onlyUnclipped or not clipped:
-                qfRing = self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
-                pfRing = self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
-
+                qRing = self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
+                pRing = self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
                 particleRing = particle.copy() if copyParticles else particle
-                particleRing.qi, particleRing.pi = qfRing, pfRing
+                particleRing.qi, particleRing.pi = qRing, pRing
                 particleRing.reset()
                 particleRing.clipped = clipped
                 swarmRing.add(particleRing)
@@ -305,7 +314,7 @@ class StorageRingModel:
         overlap = self.floor_Plan_OverLap_mm()  # units of mm^2
         factor = 100  # units of mm^2
         costOverlap = 2 / (1 + np.exp(-overlap / factor)) - 1
-        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self) else costOverlap
+        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self, self.isBumperIncluded) else costOverlap
         assert 0.0 <= cost <= self.maximumFloorPlanCost
         return cost
 

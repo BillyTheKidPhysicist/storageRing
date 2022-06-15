@@ -174,7 +174,7 @@ class ParticleTracer:
         self.accelerated = accelerated
         if self.particle.clipped:  # some a particles may be clipped after initializing them because they were about
             # to become clipped
-            self.particle.finished(self.currentEl, self.qEl, self.pEl, totalLatticeLength=0)
+            self.particle.finished(self.currentEl, self.qEl, self.pEl, totalLatticeLength=0, clippedImmediately=True)
             return particle
         self.time_Step_Loop()
         self.forceLast = None  # reset last force to zero
