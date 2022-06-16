@@ -7,7 +7,7 @@ from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS, full_Arctan
 
-
+from fastNumbaMethodsAndClass import get_Bender_Ideal
 class BenderIdeal(BaseElement):
     """
         Element representing a bender/waveguide. Base class for other benders
@@ -58,7 +58,7 @@ class BenderIdeal(BaseElement):
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
-        self.fastFieldHelper = self.init_fastFieldHelper([self.ang, self.K, self.rp, self.rb, self.ap])
+        self.fastFieldHelper = get_Bender_Ideal([self.ang, self.K, self.rp, self.rb, self.ap])
 
     def fill_Post_Constrained_Parameters(self):
         self.fill_In_And_Out_Rotation_Matrices()

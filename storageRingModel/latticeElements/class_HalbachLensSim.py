@@ -3,6 +3,8 @@ from typing import Optional
 
 import numpy as np
 
+from fastNumbaMethodsAndClass import get_Halbach_Lens_Helper
+
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
 from helperTools import iscloseAll
@@ -14,6 +16,9 @@ from latticeElements.utilities import  MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
+    fringeFracInnerMin = 4.0  # if the total hard edge magnet length is longer than this value * rp, then it can
+
+    # can safely be modeled as a magnet "cap" with a 2D model of the interior
 
     def __init__(self, PTL, rpLayers: tuple, L: Optional[float], ap: Optional[float],
                  magnetWidths: Optional[tuple]):
@@ -21,38 +26,32 @@ class HalbachLensSim(LensIdeal):
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
         self.magnetWidths = self.set_Magnet_Widths(rpLayers, magnetWidths)
-        self.fringeFracInnerMin = 4.0  # if the total hard edge magnet length is longer than this value * rp, then it can
-        # can safely be modeled as a magnet "cap" with a 2D model of the interior
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
         assert self.fringeFracOuter == 1.5 and self.fringeFracInnerMin == 4.0, "May need to change numgrid points if " \
                                                                                "this changes"
-        rp = min(rpLayers)
+        self.rp = min(rpLayers)
         self.numGridPointsZ = make_Odd(round(21 * PTL.fieldDensityMultiplier))
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
-        self.apMaxGoodField = self.calculate_Maximum_Good_Field_Aperture(rp)
-        ap = self.apMaxGoodField - TINY_OFFSET if ap is None else ap
+        self.ap = self.maximum_Good_Field_Aperture() - TINY_OFFSET if ap is None else ap 
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
-        assert ap <= self.apMaxGoodField
-        assert ap > 5 * rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
-        super().__init__(PTL, L, None, rp, ap)
+        assert self.ap <= self.maximum_Good_Field_Aperture()
+        assert self.ap > 5 * self.rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
+        super().__init__(PTL, L, None, self.rp, self.ap)
         self.L = L
         self.Lo = None
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
 
-        self.effectiveLength: Optional[float] = None  # if the magnet is very long, to save simulation
-        # time use a smaller length that still captures the physics, and then model the inner portion as 2D
         self.Lcap: Optional[float] = None
         self.extraFieldLength: Optional[float] = None  # extra field added to end of lens to account misalignment
         self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
-        self.fieldFact = 1.0  # factor to multiply field values by for tunability
         self.individualMagnetLength: float = None
         # or down
 
-    def calculate_Maximum_Good_Field_Aperture(self, rp: float) -> float:
+    def maximum_Good_Field_Aperture(self) -> float:
         """ from geometric arguments of grid inside circle.
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
-        apMax = (rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
+        apMax = (self.rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 
     def fill_Pre_Constrained_Parameters(self):
@@ -75,12 +74,12 @@ class HalbachLensSim(LensIdeal):
         assert 0.0 <= tiltMax < .1  # small angle. Not sure if valid outside that range
         self.extraFieldLength = self.rp * tiltMax * 1.5  # safety factor for approximations
 
-    def set_Effective_Length(self):
+    def effective_Length(self)-> float:
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
         is effectively isotropic a sufficient depth inside. This is then modeled as a 2d slice, and the outer edges
         as 3D slice"""
 
-        self.effectiveLength = self.minLengthLongSymmetry if self.minLengthLongSymmetry < self.Lm else self.Lm
+        return self.minLengthLongSymmetry if self.minLengthLongSymmetry < self.Lm else self.Lm
 
     def set_Magnet_Widths(self, rpLayers: tuple[float, ...], magnetWidthsProposed: Optional[tuple[float, ...]]) \
             -> tuple[float, ...]:
@@ -93,7 +92,6 @@ class HalbachLensSim(LensIdeal):
             will be calculated based on geometry
         :return: tuple of transverse widths of magnets
         """
-
         maximumMagnetWidth = tuple(rp * np.tan(2 * np.pi / 24) * 2 for rp in rpLayers)
         magnetWidths = maximumMagnetWidth if magnetWidthsProposed is None else magnetWidthsProposed
         assert len(magnetWidths) == len(rpLayers)
@@ -114,8 +112,7 @@ class HalbachLensSim(LensIdeal):
             [(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm])  # this may get rounded
         # up later to satisfy that the total length is Lm
         self.Lo = self.L
-        self.set_Effective_Length()
-        self.Lcap = self.effectiveLength / 2 + self.fringeFracOuter * max(self.rpLayers)
+        self.Lcap = self.effective_Length() / 2 + self.fringeFracOuter * max(self.rpLayers)
         mountThickness = 1e-3  # outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth = max(self.rpLayers) + self.magnetWidths[np.argmax(self.rpLayers)] + mountThickness
 
@@ -192,8 +189,8 @@ class HalbachLensSim(LensIdeal):
                                                                            3)  # note that these coordinates can have
         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         # input coordinates will be shifted in a wrapper function
-        validXY = np.linalg.norm(volumeCoords[:, :2], axis=1) <= self.rp
-        validZ = volumeCoords[:, 2] >= self.Lm / 2
+        validXY = np.linalg.norm(volumeCoords[:, :2], axis=1) < self.rp
+        validZ = volumeCoords[:, 2] > self.Lm / 2
         validIndices = np.logical_or(validXY, validZ)
         BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
         BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices],
@@ -209,7 +206,7 @@ class HalbachLensSim(LensIdeal):
     def make_Field_Data(self, useSymmetry: bool, useStandardMagnetErrors: bool, extraFieldSources,
                         enforceGoodField: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
-        lensLength = self.effectiveLength if useSymmetry else self.Lm
+        lensLength = self.effective_Length() if useSymmetry else self.Lm
         numSlices = None if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
         lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
@@ -218,8 +215,8 @@ class HalbachLensSim(LensIdeal):
         fieldGenerator = billyHalbachCollectionWrapper(sources)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt((xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2 + (xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2)
-        if enforceGoodField == True:
-            assert self.rp - maxGridSep >= self.apMaxGoodField
+        if enforceGoodField: #Don't want to enforce when including perturbation effects
+            assert self.rp - maxGridSep >= self.maximum_Good_Field_Aperture()
         data2D = self.make_2D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant) if useSymmetry else None
         data3D = self.make_3D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant, zArr)
         return data2D, data3D
@@ -237,7 +234,7 @@ class HalbachLensSim(LensIdeal):
         fieldData = (
             xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn)
         fieldDataPerturbations = self.make_Field_Perturbation_Data(extraFieldSources)
-        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
+        self.fastFieldHelper = get_Halbach_Lens_Helper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
                                                           self.extraFieldLength])
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
@@ -273,14 +270,14 @@ class HalbachLensSim(LensIdeal):
     def update_Field_Fact(self, fieldStrengthFact: float) -> None:
         """Update value used to model magnet strength tunability. fieldFact multiplies force and magnetic potential to
         model increasing or reducing magnet strength """
-        self.fastFieldHelper.fieldFact = fieldStrengthFact
+        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
         self.fieldFact = fieldStrengthFact
 
     def get_Valid_Jitter_Amplitude(self, Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
         jitterAmpProposed = self.PTL.jitterAmp
         assert jitterAmpProposed >= 0.0
-        maxJitterAmp = self.apMaxGoodField - self.ap
+        maxJitterAmp = self.maximum_Good_Field_Aperture() - self.ap
         if maxJitterAmp == 0.0 and jitterAmpProposed != 0.0:
             print('Aperture is set to maximum, no room to misalign element')
         jitterAmp = maxJitterAmp if jitterAmpProposed > maxJitterAmp else jitterAmpProposed

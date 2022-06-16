@@ -53,12 +53,9 @@ def build_StorageRingModel(params,numParticlesSwarm: int = 1024, collisionDynami
     """Convenience function for building a StorageRingModel"""
     options={'useMagnetErrors': useMagnetErrors, 'useSolenoidField':useSolenoidField,'includeBumper':includeBumper}
     PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params,options=options)
-    PTL_Ring.show_Lattice()
-    PTL_Ring.show_Lattice()
     model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
                              numParticlesSwarm=numParticlesSwarm,collisionDynamics=collisionDynamics,
                              isBumperIncludedInInjector=includeBumper)
-    model.show_Floor_Plan()
     return model
 
 class StorageRingModel:

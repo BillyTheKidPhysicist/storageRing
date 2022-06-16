@@ -120,7 +120,7 @@ def characterize_CombinerSim(el: CombinerSim):
     def force_Func(q):
         if el.space < q[0] < el.Lm + el.space:
             assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
-        F = np.array(el.fastFieldHelper.force_Without_isInside_Check(*q))
+        F = np.array(el.fastFieldHelper.numbaJitClass.force_Without_isInside_Check(*q))
         F[2] = 0.0
         return F
 

@@ -1,5 +1,6 @@
 import numba
 import numpy as np
+from numba.experimental import jitclass
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 
@@ -7,6 +8,21 @@ from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 
 tupleOf3Floats = tuple[float, float, float]
 nanArr7Tuple = tuple([np.ones(1) * np.nan] * 7)
+
+class jitclass_Wrapper:
+    def __init__(self,initParams,Class,Spec):
+        self.numbaJitClass=jitclass(Spec)(Class)(*initParams)
+        self.Class=Class
+        self.Spec=Spec
+    def __getstate__(self):
+        jitClassStateParams=self.numbaJitClass.get_State_Params()
+        return jitClassStateParams[0],jitClassStateParams[1],self.Class,self.Spec
+    def __setstate__(self, state):
+        initParams,internalParams,Class,Spec=state
+        self.numbaJitClass = jitclass(Spec)(Class)(*initParams)
+        if len(internalParams)>0:
+            self.numbaJitClass.set_Internal_State(internalParams)
+
 
 @numba.njit()
 def combiner_Ideal_Force(x,y,z,LEnd,c1,c2)-> tuple[float,float,float]:
@@ -163,7 +179,7 @@ def full_Arctan2(y, x):
 
 from numba.experimental import jitclass
 
-spec = [
+spec_Base_Class = [
     ('shiftY', numba.float64),
     ('shiftZ', numba.float64),
     ('rotY', numba.float64),
@@ -173,7 +189,7 @@ spec = [
 ]
 
 
-@jitclass(spec)
+@jitclass(spec_Base_Class)
 class BaseClassFieldHelper_Numba:
     """
     Base jitclass helper class for elementPT objects to accelerate particel tracing
@@ -195,7 +211,7 @@ class BaseClassFieldHelper_Numba:
         self.fieldFact = 1.0
         self.shiftY, self.shiftZ, self.rotY, self.rotZ = (0.0, 0.0, 0.0, 0.0)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Jitclass can't be pickled, so it must be able to be rebuilt with its parameters if being pickled.
         Initialization parameters are externally with this method"""
         return self.dummyArg
@@ -291,17 +307,15 @@ class BaseClassFieldHelper_Numba:
         return Fx, Fy, Fz
 
 
-spec = [
+spec_Drift = [
     ('L', numba.float64),
     ('ap', numba.float64),
-    ('fieldFact', numba.float64),
     ('inputAngleTilt', numba.float64),
-    ('outputAngleTilt', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('outputAngleTilt', numba.float64)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class DriftFieldHelper_Numba:
     """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
 
@@ -309,21 +323,10 @@ class DriftFieldHelper_Numba:
         self.L = L
         self.ap = ap
         self.inputAngleTilt, self.outputAngleTilt = inputAngleTilt, outputAngleTilt
-        self.fieldFact = 1.0
-        self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt
-
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
-
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
+        return (self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt),()
 
     def magnetic_Potential(self, x, y, z):
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
@@ -364,22 +367,18 @@ class DriftFieldHelper_Numba:
                     else:
                         return False
 
-    def update_Element_Perturb_Params(self, shiftY, shiftZ, rotY, rotZ):
-        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
-        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
 
-spec = [
+spec_Ideal_Lens = [
     ('L', numba.float64),
     ('K', numba.float64),
     ('ap', numba.float64),
-    ('fieldFact', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('fieldFact', numba.float64)
 ]
 
 
-@jitclass(spec)
-class IdealLensFieldHelper_Numba:
+# @jitclass(spec_Ideal_Lens)
+class IdealLensFieldHelper:
     """Helper for elementPT.LensIdeal. Psuedo-inherits from BaseClassFieldHelper"""
 
     def __init__(self, L, K, ap):
@@ -387,24 +386,13 @@ class IdealLensFieldHelper_Numba:
         self.K = K
         self.ap = ap
         self.fieldFact = 1.0
-        self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.L, self.K, self.ap
+        return (self.L, self.K, self.ap), (self.fieldFact,)
 
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
-
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
-
-    def update_Element_Perturb_Params(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
-        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
-        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+    def set_Internal_State(self,params):
+        self.fieldFact=params[0]
 
     def is_Coord_Inside_Vacuum(self, x: float, y: float, z: float) -> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
@@ -416,7 +404,7 @@ class IdealLensFieldHelper_Numba:
     def magnetic_Potential(self, x: float, y: float, z: float) -> float:
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if self.is_Coord_Inside_Vacuum(x, y, z):
-            x, y, z = self.baseClass.misalign_Coords(x, y, z)
+            # x, y, z = self.baseClass.misalign_Coords(x, y, z)
             r = np.sqrt(y ** 2 + z ** 2)
             V0 = .5 * self.K * r ** 2
         else:
@@ -427,11 +415,11 @@ class IdealLensFieldHelper_Numba:
     def force(self, x: float, y: float, z: float) -> tuple:
         """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if self.is_Coord_Inside_Vacuum(x, y, z) == True:
-            x, y, z = self.baseClass.misalign_Coords(x, y, z)
+            # x, y, z = self.baseClass.misalign_Coords(x, y, z)
             Fx = 0.0
             Fy = -self.K * y
             Fz = -self.K * z
-            Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
+            # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
             Fx *= self.fieldFact
             Fy *= self.fieldFact
             Fz *= self.fieldFact
@@ -440,7 +428,7 @@ class IdealLensFieldHelper_Numba:
             return np.nan, np.nan, np.nan
 
 
-spec = [
+spec_Lens_Halbach = [
     ('xArrEnd', numba.float64[::1]),
     ('yArrEnd', numba.float64[::1]),
     ('zArrEnd', numba.float64[::1]),
@@ -460,11 +448,10 @@ spec = [
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
     ('useFieldPerturbations', numba.boolean),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('baseClass', BaseClassFieldHelper_Numba.class_type.instance_type)
 ]
 
-
-@jitclass(spec)
+# @jitclass(spec)
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
@@ -478,27 +465,17 @@ class LensHalbachFieldHelper_Numba:
         self.extraFieldLength = extraFieldLength
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
-        self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
                     self.xArrIn, self.yArrIn, self.FxArrIn, self.FyArrIn, self.VArrIn
         fieldPerturbationData = None if self.useFieldPerturbations == False else self.fieldPerturbationData
-        return fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength
+        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength),(self.fieldFact,)
 
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
+    def set_Internal_State(self,params):
+        self.fieldFact=params[0]
 
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
-
-    def update_Element_Perturb_Params(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
-        """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
-        self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
     def is_Coord_Inside_Vacuum(self, x: float, y: float, z: float) -> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
@@ -569,7 +546,7 @@ class LensHalbachFieldHelper_Numba:
         """
         if self.is_Coord_Inside_Vacuum(x, y, z) == False:
             return np.nan, np.nan, np.nan
-        x, y, z = self.baseClass.misalign_Coords(x, y, z)
+        # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
@@ -588,20 +565,21 @@ class LensHalbachFieldHelper_Numba:
         Fx = Fx * self.fieldFact
         Fy = Fy * FySymmetryFact * self.fieldFact
         Fz = Fz * FzSymmetryFact * self.fieldFact
-        Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
+        # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
         return Fx, Fy, Fz
 
     def _force_Field_Perturbations(self, x0: float, y0: float, z0: float) -> tupleOf3Floats:
         if self.is_Coord_Inside_Vacuum(x0, y0, z0) == False:
             return np.nan, np.nan, np.nan
-        x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+        # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+        x,y,z=x0,y0,z0
         x = x - self.L / 2
         Fx, Fy, Fz = self._force_Func_Outer(x, y, z,
                                             useImperfectInterp=True)  # being used to hold fields for entire lens
         Fx = Fx * self.fieldFact
         Fy = Fy * self.fieldFact
         Fz = Fz * self.fieldFact
-        Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
+        # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
         return Fx, Fy, Fz
 
     def magnetic_Potential(self, x: float, y: float, z: float) -> float:
@@ -630,7 +608,7 @@ class LensHalbachFieldHelper_Numba:
         """
         if self.is_Coord_Inside_Vacuum(x, y, z) == False:
             return np.nan
-        x, y, z = self.baseClass.misalign_Coords(x, y, z)
+        # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)
         z = abs(z)
         if -self.extraFieldLength <= x <= self.Lcap:
@@ -649,24 +627,24 @@ class LensHalbachFieldHelper_Numba:
     def _magnetic_Potential_Perturbations(self, x0: float, y0: float, z0: float) -> float:
         if self.is_Coord_Inside_Vacuum(x0, y0, z0) == False:
             return np.nan
-        x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+        # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+        x,y,z=x0,y0,z0
         x = x - self.L / 2
         V0 = self._magnetic_Potential_Func_Fringe(x, y, z, useImperfectInterp=True)
         return V0
 
 
-spec = [
+spec_Bender_Ideal = [
     ('ang', numba.float64),
     ('K', numba.float64),
     ('rp', numba.float64),
     ('rb', numba.float64),
     ('ap', numba.float64),
-    ('fieldFact', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('fieldFact', numba.float64)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class BenderIdealFieldHelper_Numba:
 
     def __init__(self, ang, K, rp, rb, ap):
@@ -676,20 +654,13 @@ class BenderIdealFieldHelper_Numba:
         self.rb = rb
         self.ap = ap
         self.fieldFact = 1.0
-        self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.ang, self.K, self.rp, self.rb, self.ap
+        return (self.ang, self.K, self.rp, self.rb, self.ap),(self.fieldFact,)
 
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
-
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
+    def set_Internal_State(self,params):
+        self.fieldFact=params[0]
 
     def magnetic_Potential(self, x, y, z):
         # potential energy at provided coordinates
@@ -741,7 +712,7 @@ class BenderIdealFieldHelper_Numba:
         raise NotImplementedError
 
 
-spec = [
+spec_Combiner_Ideal = [
     ('c1', numba.float64),
     ('c2', numba.float64),
     ('La', numba.float64),
@@ -751,11 +722,11 @@ spec = [
     ('apz', numba.float64),
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('baseClass', BaseClassFieldHelper_Numba.class_type.instance_type)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class CombinerIdealFieldHelper_Numba:
 
     def __init__(self, c1, c2, La, Lb, apL, apR, apz, ang):
@@ -770,9 +741,12 @@ class CombinerIdealFieldHelper_Numba:
         self.fieldFact = 1.0
         self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang
+        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang),(self.fieldFact,)
+
+    def set_Internal_State(self,params):
+        self.fieldFact=params[0]
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -833,7 +807,7 @@ class CombinerIdealFieldHelper_Numba:
                 return False
 
 
-spec = [
+spec_Combiner_Sim = [
     ('VArr', numba.float64[::1]),
     ('FxArr', numba.float64[::1]),
     ('FyArr', numba.float64[::1]),
@@ -849,12 +823,11 @@ spec = [
     ('apR', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
-    ('fieldFact', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('fieldFact', numba.float64)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class CombinerSimFieldHelper_Numba:
 
     def __init__(self, fieldData, La, Lb, Lm, space, apL, apR, apz, ang, fieldFact):
@@ -868,21 +841,11 @@ class CombinerSimFieldHelper_Numba:
         self.apz = apz
         self.ang = ang
         self.fieldFact = fieldFact
-        self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang, self.fieldFact
-
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
-
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
+        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang, self.fieldFact), ()
 
     def _force_Func(self, x, y, z):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -955,7 +918,7 @@ class CombinerSimFieldHelper_Numba:
                 return False
 
 
-spec = [
+spec_Combiner_Halbach = [
     ('VArr', numba.float64[::1]),
     ('FxArr', numba.float64[::1]),
     ('FyArr', numba.float64[::1]),
@@ -972,11 +935,11 @@ spec = [
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
     ('useSymmetry', numba.boolean),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None)))
+    ('baseClass', BaseClassFieldHelper_Numba.class_type.instance_type)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class CombinerHalbachLensSimFieldHelper_Numba:
 
     def __init__(self, fieldData, La, Lb, Lm, space, ap, ang, fieldFact, extraFieldLength, useSymmetry):
@@ -992,11 +955,10 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.useSymmetry = useSymmetry
         self.baseClass = self.baseClass = BaseClassFieldHelper_Numba(None)
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return fieldData, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact, \
-               self.extraFieldLength, self.useSymmetry
+        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact, self.extraFieldLength, self.useSymmetry), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -1107,7 +1069,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.baseClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
 
-spec = [
+spec_Bender_Halbach = [
     ('fieldDataSeg', numba.types.UniTuple(numba.float64[::1], 7)),
     ('fieldDataInternal', numba.types.UniTuple(numba.float64[::1], 7)),
     ('fieldDataCap', numba.types.UniTuple(numba.float64[::1], 7)),
@@ -1122,13 +1084,12 @@ spec = [
     ('RIn_Ang', numba.float64[:, ::1]),
     ('misalignmentCoeffArr', numba.float64[:, ::1]),
     ('fieldFact', numba.float64),
-    ('baseClass', numba.typeof(BaseClassFieldHelper_Numba(None))),
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('useFieldPerturbations', numba.boolean)
 ]
 
 
-@jitclass(spec)
+# @jitclass(spec)
 class SegmentedBenderSimFieldHelper_Numba:
 
     def __init__(self, fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData, ap, ang, ucAng, rb,
@@ -1146,26 +1107,20 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.Lcap = Lcap
         self.RIn_Ang = RIn_Ang
         self.fieldFact = 1.0
-        self.baseClass = BaseClassFieldHelper_Numba(None)
         self.misalignmentCoeffArr = 2.0 * (np.random.random_sample((numMagnets + 1, 12)) - .5)
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False  # apply magnet Perturbation data
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
 
-    def get_Init_Params(self):
+    def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldPerturbationData = None if self.useFieldPerturbations == False else self.fieldPerturbationData
-        return self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang, \
-               self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang
+        initParams=(self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang,
+                    self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang)
+        internalParams=(self.fieldFact,)
+        return initParams,internalParams
 
-    def get_Internal_Params(self):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, self.baseClass.get_Rotation_Params()
-
-    def set_Internal_Params(self, params):
-        """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-
-        self.fieldFact, alignmentParams = params
-        self.baseClass.set_Misalignment_Params(alignmentParams)
+    def set_Internal_State(self,params):
+        self.fieldFact=params[0]
 
     def cartesian_To_Center(self, x, y, z):
         """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
@@ -1422,6 +1377,24 @@ class SegmentedBenderSimFieldHelper_Numba:
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         raise NotImplementedError
 
+
+
+def get_Ideal_lens_Field_Helper(params):
+    return jitclass_Wrapper(params,IdealLensFieldHelper,spec_Ideal_Lens)
+def get_Drift_Field_Helper(params):
+    return jitclass_Wrapper(params, DriftFieldHelper_Numba, spec_Drift)
+def get_Combiner_Halbach_Field_Helper(params):
+    return jitclass_Wrapper(params, CombinerHalbachLensSimFieldHelper_Numba, spec_Combiner_Halbach)
+def get_Halbach_Lens_Helper(params):
+    return jitclass_Wrapper(params, LensHalbachFieldHelper_Numba, spec_Lens_Halbach)
+def get_Combiner_Ideal(params):
+    return jitclass_Wrapper(params, CombinerIdealFieldHelper_Numba, spec_Combiner_Ideal)
+def get_Combiner_Sim(params):
+    return jitclass_Wrapper(params, CombinerSimFieldHelper_Numba, spec_Combiner_Sim)
+def get_Halbach_Bender(params):
+    return jitclass_Wrapper(params, SegmentedBenderSimFieldHelper_Numba, spec_Bender_Halbach)
+def get_Bender_Ideal(params):
+    return jitclass_Wrapper(params, BenderIdealFieldHelper_Numba, spec_Bender_Ideal)
 # for genetic lens
 # @numba.njit()
 # def genetic_Lens_Force_NUMBA(x,y,z, L,ap,  force_Func):

@@ -10,6 +10,7 @@ from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even
 
+from fastNumbaMethodsAndClass import get_Combiner_Halbach_Field_Helper
 
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
@@ -97,13 +98,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def build_Fast_Field_Helper(self, extraSources):
         fieldData = self.make_Field_Data()
         self.set_extraFieldLength()
-        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
+        self.fastFieldHelper = get_Combiner_Halbach_Field_Helper([fieldData, self.La,
                                                           self.Lb, self.Lm, self.space, self.ap, self.ang,
                                                           self.fieldFact,
                                                           self.extraFieldLength, not self.PTL.standardMagnetErrors])
 
-        self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
-        self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
+        self.fastFieldHelper.numbaJitClass.force(1e-3, 1e-3, 1e-3)  # force compile
+        self.fastFieldHelper.numbaJitClass.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lm / 2 + self.space, self.ap / 2, .0])))
@@ -196,7 +197,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return inputAngle, inputOffset, trajectoryLength
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
-        self.fastFieldHelper.fieldFact = fieldStrengthFact
+        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
         self.fieldFact = fieldStrengthFact
 
     def get_Valid_Jitter_Amplitude(self, Print=False):
@@ -238,7 +239,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
             reductionFact = .95 * maxShift / totalShift  # safety factor
             print('proposed', totalShift, 'new', reductionFact * totalShift)
             shiftY, shiftZ, rotY, rotZ = [val * reductionFact for val in [shiftY, shiftZ, rotY, rotZ]]
-        self.fastFieldHelper.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+        self.fastFieldHelper.numbaJitClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
     def find_Ideal_Offset(self) -> float:
         """use newton's method to find where the vertical translation of the combiner wher the minimum seperation

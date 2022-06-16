@@ -72,41 +72,24 @@ class BaseElement:
             LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
         if type(self) is BaseElement:
             return fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba(*initParams)
-        elif type(self) is LensIdeal:
-            return fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(*initParams)
-        elif type(self) is Drift:
-            return fastNumbaMethodsAndClass.DriftFieldHelper_Numba(*initParams)
-        elif type(self) is CombinerIdeal:
-            return fastNumbaMethodsAndClass.CombinerIdealFieldHelper_Numba(*initParams)
-        elif type(self) is CombinerSim:
-            return fastNumbaMethodsAndClass.CombinerSimFieldHelper_Numba(*initParams)
-        elif type(self) is CombinerHalbachLensSim:
-            return fastNumbaMethodsAndClass.CombinerHalbachLensSimFieldHelper_Numba(*initParams)
-        elif type(self) is HalbachBenderSimSegmented:
-            return fastNumbaMethodsAndClass.SegmentedBenderSimFieldHelper_Numba(*initParams)
-        elif type(self) is BenderIdeal:
-            return fastNumbaMethodsAndClass.BenderIdealFieldHelper_Numba(*initParams)
-        elif type(self) is HalbachLensSim:
-            return fastNumbaMethodsAndClass.LensHalbachFieldHelper_Numba(*initParams)
-        else:
-            raise NotImplementedError
+        else: raise NotImplementedError
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         raise NotImplementedError
 
-    def __getstate__(self):
-        self._fastFieldHelperInitParams = self.fastFieldHelper.get_Init_Params()
-        self._fastFieldHelperInternalParam = self.fastFieldHelper.get_Internal_Params()
-        paramDict = {}
-        for key, val in self.__dict__.items():
-            if key != 'fastFieldHelper':
-                paramDict[key] = val
-        return paramDict
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        self.__dict__['fastFieldHelper'] = self.init_fastFieldHelper(self._fastFieldHelperInitParams)
-        self.fastFieldHelper.set_Internal_Params(self._fastFieldHelperInternalParam)
+    # def __getstate__(self):
+    #     self._fastFieldHelperInitParams = self.fastFieldHelper.get_Init_Params()
+    #     self._fastFieldHelperInternalParam = self.fastFieldHelper.get_Internal_Params()
+    #     paramDict = {}
+    #     for key, val in self.__dict__.items():
+    #         if key != 'fastFieldHelper':
+    #             paramDict[key] = val
+    #     return paramDict
+    #
+    # def __setstate__(self, d):
+    #     self.__dict__ = d
+    #     self.__dict__['fastFieldHelper'] = self.init_fastFieldHelper(self._fastFieldHelperInitParams)
+    #     self.fastFieldHelper.set_Internal_Params(self._fastFieldHelperInternalParam)
 
     def set_fieldFact(self, fieldFact: bool):
         assert fieldFact > 0.0
@@ -125,7 +108,7 @@ class BaseElement:
         :param rotZ: Rotation about z axis of the element
         :return:
         """
-        self.fastFieldHelper.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+        self.fastFieldHelper.numbaJitClass.numbaJitClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
 
     def magnetic_Potential(self, qEl: np.ndarray) -> float:
         """
@@ -138,7 +121,7 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
         """
-        return self.fastFieldHelper.magnetic_Potential(*qEl)  # will raise NotImplementedError if called
+        return self.fastFieldHelper.numbaJitClass.magnetic_Potential(*qEl)  # will raise NotImplementedError if called
 
     def force(self, qEl: np.ndarray) -> np.ndarray:
         """
@@ -152,7 +135,7 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
         :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
         """
-        return np.asarray(self.fastFieldHelper.force(*qEl))  # will raise NotImplementedError if called
+        return np.asarray(self.fastFieldHelper.numbaJitClass.force(*qEl))  # will raise NotImplementedError if called
 
     def transform_Element_Coords_Into_Global_Orbit_Frame(self, qEl: np.ndarray, cumulativeLength: float) -> np.ndarray:
         """
@@ -256,7 +239,7 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        return self.fastFieldHelper.is_Coord_Inside_Vacuum(*qEl)  # will raise NotImplementedError if called
+        return self.fastFieldHelper.numbaJitClass.is_Coord_Inside_Vacuum(*qEl)  # will raise NotImplementedError if called
 
     def fill_Pre_Constrained_Parameters(self):
         """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely

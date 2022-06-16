@@ -37,7 +37,7 @@ class LensIdeal(BaseElement):
             self.Lo = self.L
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = fastNumbaMethodsAndClass.IdealLensFieldHelper_Numba(self.L, self.K, self.ap)
+        self.fastFieldHelper = fastNumbaMethodsAndClass.get_Ideal_lens_Field_Helper([self.L, self.K, self.ap])
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""

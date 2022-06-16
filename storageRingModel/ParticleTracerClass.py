@@ -10,11 +10,11 @@ from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 from collisionPhysics import post_Collision_Momentum, get_Collision_Params
 from constants import GRAVITATIONAL_ACCELERATION
-from latticeElements.elements import LensIdeal, CombinerIdeal
+from latticeElements.elements import LensIdeal, CombinerIdeal,Element
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
-Element = None
+
 
 
 @numba.njit()
@@ -239,9 +239,9 @@ class ParticleTracer:
                 self.particle.clipped = self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self) -> None:
-        collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal)
-        results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h, self.currentEl.fastFieldHelper,
-                                          collisionParams, self.collisionDynamics)
+        collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if self.collisionDynamics else ()
+        results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h,
+                                self.currentEl.fastFieldHelper.numbaJitClass,collisionParams, self.collisionDynamics)
         qEl_n, self.qEl[:], self.pEl[:], self.T, particleOutside = results
         qEl_n = np.array(qEl_n)
         self.particle.T = self.T
@@ -330,7 +330,7 @@ class ParticleTracer:
 
         if self.accelerated:
             if self.energyCorrection:
-                pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper,
+                pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper.numbaJitClass,
                                                               'leaving')
             if self.logPhaseSpaceCoords:
                 qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(
@@ -345,7 +345,7 @@ class ParticleTracer:
             else:
                 if self.energyCorrection:
                     p_nextEl[:] += self.momentum_Correction_At_Bounday(self.E0, q_nextEl, p_nextEl,
-                                                                       nextEl.fastFieldHelper, 'entering')
+                                                                       nextEl.fastFieldHelper.numbaJitClass, 'entering')
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 self.currentEl = nextEl
                 self.particle.currentEl = nextEl
@@ -358,7 +358,7 @@ class ParticleTracer:
                 self.particle.clipped = True
             elif el is not self.currentEl:  # element has changed
                 if self.energyCorrection:
-                    pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper,
+                    pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper.numbaJitClass,
                                                                   'leaving')
                 nextEl = el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
@@ -378,7 +378,7 @@ class ParticleTracer:
                 self.elHasChanged = True
                 if self.energyCorrection:
                     self.pEl[:] += self.momentum_Correction_At_Bounday(self.E0, self.qEl, self.pEl,
-                                                                       nextEl.fastFieldHelper, 'entering')
+                                                                       nextEl.fastFieldHelper.numbaJitClass, 'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
                                 'interpolation extends into the magnetic material. Particle is also possibly frozen '

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from latticeElements.class_CombinerIdeal import CombinerIdeal
-
+from fastNumbaMethodsAndClass import get_Combiner_Sim
 
 class CombinerSim(CombinerIdeal):
 
@@ -41,7 +41,7 @@ class CombinerSim(CombinerIdeal):
         fieldData = self.shape_Field_Data_3D(data)
 
 
-        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, np.nan, self.Lb, self.Lm,
+        self.fastFieldHelper = get_Combiner_Sim([fieldData, np.nan, self.Lb, self.Lm,
                                                           self.space, self.apL, self.apR, self.apz, np.nan,
                                                           self.fieldFact])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
@@ -54,12 +54,12 @@ class CombinerSim(CombinerIdeal):
 
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La, self.Lb,
+        self.fastFieldHelper = get_Combiner_Sim([fieldData, self.La, self.Lb,
                                                           self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
                                                           self.fieldFact])
         self.update_Field_Fact(self.fieldFact)
 
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
-        self.fastFieldHelper.fieldFact = fieldStrengthFact
+        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
         self.fieldFact = fieldStrengthFact

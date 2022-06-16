@@ -5,6 +5,7 @@ import numpy as np
 from constants import VACUUM_TUBE_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
+from fastNumbaMethodsAndClass import get_Drift_Field_Helper
 
 # todo: this needs a good scrubbing and refactoring
 
@@ -32,7 +33,7 @@ class Drift(LensIdeal):
         assert self.outerHalfWidth > ap
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = self.init_fastFieldHelper([self.L, self.ap, self.inputTiltAngle, self.outputTiltAngle])
+        self.fastFieldHelper = get_Drift_Field_Helper([self.L, self.ap, self.inputTiltAngle, self.outputTiltAngle])
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""

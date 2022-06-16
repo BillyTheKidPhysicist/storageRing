@@ -2,6 +2,8 @@ from math import isclose
 from math import sqrt
 from typing import Optional
 
+from fastNumbaMethodsAndClass import get_Halbach_Bender
+
 import numpy as np
 import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
@@ -157,12 +159,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataCap = self.generate_Cap_Field_Data()
         fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else None
         assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[1] == fieldDataInternal[1])
-        self.fastFieldHelper = self.init_fastFieldHelper(
+        self.fastFieldHelper = get_Halbach_Bender(
             [fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation
                 , self.ap, self.ang,
              self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang])
-        self.fastFieldHelper.force(self.rb + 1e-3, 1e-3, 1e-3)  # force numba to compile
-        self.fastFieldHelper.magnetic_Potential(self.rb + 1e-3, 1e-3, 1e-3)  # force numba to compile
+        self.fastFieldHelper.numbaJitClass.force(self.rb + 1e-3, 1e-3, 1e-3)  # force numba to compile
+        self.fastFieldHelper.numbaJitClass.magnetic_Potential(self.rb + 1e-3, 1e-3, 1e-3)  # force numba to compile
 
     def make_Grid_Coords(self, xMin: float, xMax: float, zMin: float, zMax: float) -> np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.

@@ -4,6 +4,7 @@ import numpy as np
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
 
+from fastNumbaMethodsAndClass import get_Combiner_Ideal
 
 # from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
 
@@ -42,8 +43,8 @@ class CombinerIdeal(BaseElement):
                                                  (self.apR, self.apL, self.apz, self.Lm)]
         self.c1, self.c2 = self.c1 / self.sizeScale, self.c2 / self.sizeScale
         self.Lb = self.Lm  # length of segment after kink after the inlet
-        self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, np.nan, self.Lb,
-                                                          self.apL, self.apR, np.nan, np.nan])
+        # self.fastFieldHelper = get_Combiner_Ideal([self.c1, self.c2, np.nan, self.Lb,
+        #                                                   self.apL, self.apR, np.nan, np.nan])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerIdeal(self)
 
         self.Lo = trajectoryLength#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -52,7 +53,7 @@ class CombinerIdeal(BaseElement):
         self.La = .5 * (self.apR + self.apL) * np.sin(self.ang)
         self.L = self.La * np.cos(
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
-        self.fastFieldHelper = self.init_fastFieldHelper([self.c1, self.c2, self.La, self.Lb,
+        self.fastFieldHelper = get_Combiner_Ideal([self.c1, self.c2, self.La, self.Lb,
                                                           self.apL, self.apR, self.apz, self.ang])
 
     def compute_Trajectory_Length(self, qTracedArr: np.ndarray) -> float:
