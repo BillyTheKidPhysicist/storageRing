@@ -2,6 +2,7 @@ from typing import Union, Optional
 
 import numpy as np
 
+from KevinBumperClass import add_Kevin_Bumper_Elements
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
@@ -23,7 +24,8 @@ lst_arr_tple = Union[list, np.ndarray, tuple]
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 minTimeStepGap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
 InjectorModel = RingModel = ParticleTracerLattice
-DEFAULT_SYSTEM_OPTIONS = lockedDict({'useMagnetErrors': False, 'combinerSeed': None, 'useSolenoidField': False})
+DEFAULT_SYSTEM_OPTIONS = lockedDict({'useMagnetErrors': False, 'combinerSeed': None, 'useSolenoidField': False,
+                                     'includeBumper': False})
 
 
 def check_And_Add_Default_Values(options: Optional[dict]) -> lockedDict:
@@ -265,10 +267,11 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
         raise InjectorGeometryError
     if gap1 < constantsV1_2["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
-
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
                                 standardMagnetErrors=options['useMagnetErrors'],
                                 useSolenoidField=options['useSolenoidField'])
+    if options['includeBumper']:
+        add_Kevin_Bumper_Elements(PTL)
 
     # -----gap between source and first lens-----
 

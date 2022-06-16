@@ -6,13 +6,14 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import Polygon, LineString
 
+from KevinBumperClass import swarmShift_x
 from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_Fit_In_Room, plot_Floor_Plan_In_Lab
 from helperTools import full_Arctan
-from latticeElements.elements import HalbachLensSim, Drift
+from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim
 
 list_array_tuple = Union[np.ndarray, tuple, list]
 
@@ -34,6 +35,18 @@ class Solution:
         return string
 
 
+ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
+ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerHalbachLensSim)
+
+
+def injector_Is_Expected_Design(latticeInjector, isBumperIncluded):
+    expectedElements = (*ELEMENTS_BUMPER, *ELEMENTS_MODE_MATCHER) if isBumperIncluded else ELEMENTS_MODE_MATCHER
+    for el, elExpectedType in zip(latticeInjector.elList, expectedElements):
+        if not type(el) is elExpectedType:
+            return False
+    return True
+
+
 class StorageRingModel:
     maximumCost = 2.0
     maximumSwarmCost = 1.0
@@ -41,8 +54,9 @@ class StorageRingModel:
 
     def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
                  numParticlesSwarm: int = 1024, collisionDynamics: bool = False, energyCorrection: bool = False,
-                 bumperIncludedInInjector: bool = False):
+                 isBumperIncludedInInjector: bool = False):
         assert latticeRing.latticeType == 'storageRing' and latticeInjector.latticeType == 'injector'
+        assert injector_Is_Expected_Design(latticeInjector, isBumperIncludedInInjector)
         self.latticeRing = latticeRing
         self.latticeInjector = latticeInjector
         self.injectorLensIndices = [i for i, el in enumerate(self.latticeInjector) if type(el) is HalbachLensSim]
@@ -62,12 +76,18 @@ class StorageRingModel:
 
         self.swarmInjectorInitial = None
 
-        self.isBumperIncluded = bumperIncludedInInjector
+        self.isBumperIncluded = isBumperIncludedInInjector
 
         self.collisionDynamics = collisionDynamics
         self.energyCorrection = energyCorrection
-        self.swarmInjectorInitial = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(
-            numParticlesSwarm)
+        self.swarmInjectorInitial = self.generate_Swarm(numParticlesSwarm)
+
+    def generate_Swarm(self, numParticlesSwarm) -> Swarm:
+        """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
+        swarm = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(numParticlesSwarm)
+        if self.isBumperIncluded:
+            swarm = self.swarmTracerInjector.time_Step_Swarm_Distance_Along_x(swarm, swarmShift_x, holdPositionInX=True)
+        return swarm
 
     def convert_Pos_Injector_Frame_To_Ring_Frame(self, qLabInject: np.ndarray) -> np.ndarray:
         """
@@ -190,17 +210,18 @@ class StorageRingModel:
             plt.show()
 
     def show_System_Floor_Plan_In_Lab(self):
-        plot_Floor_Plan_In_Lab(self, self.isBumperIncluded)
+        plot_Floor_Plan_In_Lab(self)
 
     def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool = True, Tmax=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
 
         self.show_Floor_Plan(deferPltShow=True, trueAspect=trueAspectRatio, color='grey')
         self.show_Floor_Plan(which='interior', deferPltShow=True, trueAspect=trueAspectRatio, linestyle=':')
-        self.swarmInjectorInitial.particles = self.swarmInjectorInitial.particles[:100]
+        swarm = Swarm()
+        swarm.particles = self.swarmInjectorInitial.particles[:100]
         swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.quick_Copy(), self.h, 1.0, parallel=False,
-            fastMode=False, copySwarm=False, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
+            swarm, self.h, 1.0, parallel=False,
+            fastMode=False, copySwarm=True, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
             collisionDynamics=self.collisionDynamics)
         for particle in swarmInjectorTraced:
             particle.clipped = True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
@@ -227,7 +248,7 @@ class StorageRingModel:
                     plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1], marker='x', zorder=100, c=color)
         plt.show()
 
-    def mode_Match(self, floorPlanCostCutoff: float = np.inf) -> tuple[float, float]:
+    def mode_Match(self, floorPlanCostCutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         assert floorPlanCostCutoff >= 0
@@ -236,20 +257,21 @@ class StorageRingModel:
             cost = self.maximumSwarmCost + floorPlanCost
             fluxMultiplication = np.nan
         else:
-            swarmTraced = self.inject_And_Trace_Swarm()
+            swarmTraced = self.inject_And_Trace_Swarm(parallel)
             fluxMultiplication = self.compute_Flux_Multiplication(swarmTraced)
             swarmCost = self.swarm_Cost(swarmTraced)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= self.maximumCost
         return cost, fluxMultiplication
 
-    def inject_And_Trace_Swarm(self) -> Swarm:
+    def inject_And_Trace_Swarm(self, parallel: bool) -> Swarm:
 
         swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring()
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
                                                                        fastMode=True, accelerated=True, copySwarm=False,
                                                                        energyCorrection=self.energyCorrection,
-                                                                       collisionDynamics=self.collisionDynamics)
+                                                                       collisionDynamics=self.collisionDynamics,
+                                                                       parallel=parallel)
         return swarmTraced
 
     def transform_Swarm_From_Injector_Frame_To_Ring_Frame(self, swarmInjectorTraced: Swarm,
@@ -314,7 +336,7 @@ class StorageRingModel:
         overlap = self.floor_Plan_OverLap_mm()  # units of mm^2
         factor = 100  # units of mm^2
         costOverlap = 2 / (1 + np.exp(-overlap / factor)) - 1
-        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self, self.isBumperIncluded) else costOverlap
+        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self) else costOverlap
         assert 0.0 <= cost <= self.maximumFloorPlanCost
         return cost
 

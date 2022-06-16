@@ -29,8 +29,8 @@ FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(
     1 / 8)  # minimum thickness of a flat wall under vacuum with dimension less
 # than 1x1 foot
 MAGNET_WIRE_DIAM: float = 500e-6  # this thickness supports ~.5amp/mm^2 (no water cooling) for 5 gauss in a solenoid
-SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(1)  # field to prevent majorana splin flips
+SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(3)  # field to prevent majorana splin flips
 
-CUBIC_METER_TO_CUBIC_INCH = 61023.7 #conversion from cubic meters to cubic inches
+CUBIC_METER_TO_CUBIC_INCH = 61023.7  # conversion from cubic meters to cubic inches
 COST_PER_CUBIC_INCH_PERM_MAGNET: float = 26.19  # USD. Per K&J magnetics:
 # https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0

@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterable
 from typing import Union
 
@@ -8,7 +9,7 @@ from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import low_Discrepancy_Sample
-import os
+
 
 def lorentz_Function(x, gamma):
     # returns a value of 1.0 for x=0
@@ -51,6 +52,16 @@ class SwarmTracer:
             z[i] = (z[i - 1] + alpha) % 1
 
         return z
+
+    def time_Step_Swarm_Distance_Along_x(self, swarm, distance, holdPositionInX=False) -> Swarm:
+        """Particles are time stepped, forward or backward, to move 'distance' along the x axis"""
+        for particle in swarm:
+            t = distance / particle.pi[0]
+            if holdPositionInX:
+                particle.qi[1:] += t * particle.pi[1:]
+            else:
+                particle.qi += t * particle.pi
+        return swarm
 
     def initialize_Stablity_Testing_Swarm(self, qMax: float) -> Swarm:
         smallOffset = -1e-10  # this prevents setting a particle right at a boundary which is takes time to sort out

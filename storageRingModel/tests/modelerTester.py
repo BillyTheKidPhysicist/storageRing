@@ -1,10 +1,10 @@
 from storageRingModeler import StorageRingModel
+import storageRingModeler
 import numpy as np
 from shapely.geometry import LineString
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import iscloseAll
 from math import isclose
-import os
 
 
 def test_Modeler():
@@ -23,7 +23,7 @@ def test_Modeler():
     PTL_Injector.add_Drift(.12)
     PTL_Injector.add_Combiner_Sim_Lens(.15, .03)
     PTL_Injector.end_Lattice()
-
+    storageRingModeler.ELEMENTS_MODE_MATCHER=tuple([type(el) for el in PTL_Injector])
     model = StorageRingModel(PTL_Ring, PTL_Injector)
 
     assert model.floor_Plan_Cost() == 0  # no overlap between lenses

@@ -68,7 +68,7 @@ def include_Bumper_Guess(component):
     return component
 
 
-def make_Storage_Ring_System_Components(model, bumperIsInModel) -> shapelyList:
+def make_Storage_Ring_System_Components(model) -> shapelyList:
     """Make list of shapely objects representing outer dimensions of magnets and vacuum tubes of storage ring system.
     """
 
@@ -83,19 +83,19 @@ def make_Storage_Ring_System_Components(model, bumperIsInModel) -> shapelyList:
     for component in components_RingFrame:
         component = translate(component, -r1Ring[0], -r1Ring[1])
         component = rotate(component, rotAngle, use_radians=True, origin=(0, 0))
-        component = component if bumperIsInModel else include_Bumper_Guess(component)
+        component = component if model.isBumperIncluded else include_Bumper_Guess(component)
         components.append(component)
     return components
 
 
-def does_Fit_In_Room(model, bumperIsInModel) -> bool:
+def does_Fit_In_Room(model) -> bool:
     """Check if the arrangement of elements in 'model' is valid. This tests wether any elements extend to the right of
     the rightmost wall or below the bottom wall, or if any elements overlap with the chamber or the table"""
 
     _, structures = make_Walls_And_Structures_In_Room()
     wallRight_x, wallBottom_y = wall_Positions()
     isInValid = False
-    components = make_Storage_Ring_System_Components(model, bumperIsInModel)
+    components = make_Storage_Ring_System_Components(model)
     for component in components:
         x, y = component.exterior.xy
         x, y = np.array(x), np.array(y)
@@ -106,11 +106,11 @@ def does_Fit_In_Room(model, bumperIsInModel) -> bool:
     return isValid
 
 
-def plot_Floor_Plan_In_Lab(model, bumperIsInModel):
+def plot_Floor_Plan_In_Lab(model):
     """Plot the floorplan of the lab (walls, outer dimensions of magnets and vacuum tubes, optics table and chamber)
     """
 
-    components = make_Storage_Ring_System_Components(model, bumperIsInModel)
+    components = make_Storage_Ring_System_Components(model)
     walls, structures = make_Walls_And_Structures_In_Room()
     for shape in itertools.chain(components, walls, structures):
         if type(shape) is Polygon:
