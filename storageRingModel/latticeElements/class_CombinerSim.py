@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from latticeElements.class_CombinerIdeal import CombinerIdeal
-from fastNumbaMethodsAndClass import get_Combiner_Sim
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 class CombinerSim(CombinerIdeal):
 

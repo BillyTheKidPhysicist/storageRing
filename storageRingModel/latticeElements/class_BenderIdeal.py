@@ -7,7 +7,7 @@ from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS, full_Arctan
 
-from fastNumbaMethodsAndClass import get_Bender_Ideal
+from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
 class BenderIdeal(BaseElement):
     """
         Element representing a bender/waveguide. Base class for other benders

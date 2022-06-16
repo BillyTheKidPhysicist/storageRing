@@ -4,7 +4,7 @@ import numpy as np
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
 
-from fastNumbaMethodsAndClass import get_Combiner_Ideal
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 # from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
 

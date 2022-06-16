@@ -5,7 +5,7 @@ import numpy as np
 from constants import VACUUM_TUBE_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
-from fastNumbaMethodsAndClass import get_Drift_Field_Helper
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 # todo: this needs a good scrubbing and refactoring
 

@@ -153,6 +153,8 @@ class ParticleTracer:
         # h: timestep
         # T0: total tracing time
         # fastMode: wether to use the performance optimized versoin that doesn't track paramters
+        if collisionDynamics:
+            raise NotImplementedError #the heterogenous tuple was killing performance. Need a new method
         assert 0 < h < 1e-4 and T0 > 0.0  # reasonable ranges
         assert not (energyCorrection and collisionDynamics)
         self.collisionDynamics = collisionDynamics
@@ -239,9 +241,10 @@ class ParticleTracer:
                 self.particle.clipped = self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self) -> None:
-        collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if self.collisionDynamics else ()
+        # collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if \
+        #     self.collisionDynamics else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h,
-                                self.currentEl.fastFieldHelper.numbaJitClass,collisionParams, self.collisionDynamics)
+                                self.currentEl.fastFieldHelper.numbaJitClass)
         qEl_n, self.qEl[:], self.pEl[:], self.T, particleOutside = results
         qEl_n = np.array(qEl_n)
         self.particle.T = self.T
@@ -250,11 +253,10 @@ class ParticleTracer:
 
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper, collisionParams, applyCollisions):
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper):
         # pylint: disable = E, W, R, C
-        # copy the input arrays to prevent modifying them outside the function
         force = helper.force
-        collisionRate = 0.0 if not applyCollisions else collisionParams[1]
+        # collisionRate = 0.0 if np.isnan(collisionParams[0]) else collisionParams[1]
         x, y, z = qEln
         px, py, pz = pEln
         Fx, Fy, Fz = force(x, y, z)
@@ -287,8 +289,8 @@ class ParticleTracer:
             pz = pz + .5 * (Fz_n + Fz) * h
             Fx, Fy, Fz = Fx_n, Fy_n, Fz_n
             T += h
-            if np.random.rand() < h * collisionRate:
-                px, py, pz = post_Collision_Momentum((px, py, pz), (x, y, z), collisionParams)
+            # if collisionRate!=0.0 and np.random.rand() < h * collisionRate:
+            #     px, py, pz = post_Collision_Momentum((px, py, pz), (x, y, z), collisionParams)
 
     def time_Step_Verlet(self) -> None:
         # the velocity verlet time stepping algorithm. This version recycles the force from the previous step when

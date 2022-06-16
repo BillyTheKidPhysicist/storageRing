@@ -10,7 +10,7 @@ from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even
 
-from fastNumbaMethodsAndClass import get_Combiner_Halbach_Field_Helper
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5

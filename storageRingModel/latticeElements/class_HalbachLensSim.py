@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from fastNumbaMethodsAndClass import get_Halbach_Lens_Helper
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
@@ -32,7 +32,7 @@ class HalbachLensSim(LensIdeal):
         self.rp = min(rpLayers)
         self.numGridPointsZ = make_Odd(round(21 * PTL.fieldDensityMultiplier))
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
-        self.ap = self.maximum_Good_Field_Aperture() - TINY_OFFSET if ap is None else ap 
+        self.ap = self.maximum_Good_Field_Aperture() - TINY_OFFSET if ap is None else ap
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
         assert self.ap <= self.maximum_Good_Field_Aperture()
         assert self.ap > 5 * self.rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation

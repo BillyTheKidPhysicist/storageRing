@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 from shapely.geometry import Polygon
 
-import fastNumbaMethodsAndClass
+
 from constants import SIMULATION_MAGNETON
 
 
@@ -64,15 +64,6 @@ class BaseElement:
         self._fastFieldHelperInternalParam = None
         self.shape: Optional[str] = None
 
-    def init_fastFieldHelper(self, initParams):
-        """Because jitclass cannot be pickled, I need to do some gymnastics. An Element object must be able to fully
-        release references in __dict__ to the fastFieldHelper. Thus, each Element cannot carry around an uninitiliazed
-        class of fastFieldHelper. Instead, it must be initialized from the global namespace."""
-        from latticeElements.elements import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, \
-            LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
-        if type(self) is BaseElement:
-            return fastNumbaMethodsAndClass.BaseClassFieldHelper_Numba(*initParams)
-        else: raise NotImplementedError
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         raise NotImplementedError

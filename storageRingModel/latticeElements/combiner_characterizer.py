@@ -4,7 +4,7 @@ from typing import Callable
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
-from fastNumbaMethodsAndClass import combiner_Ideal_Force
+from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
 from helperTools import *
 from latticeElements.elements import CombinerIdeal, CombinerHalbachLensSim, CombinerSim
 

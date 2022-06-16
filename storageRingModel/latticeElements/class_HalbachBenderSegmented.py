@@ -2,7 +2,7 @@ from math import isclose
 from math import sqrt
 from typing import Optional
 
-from fastNumbaMethodsAndClass import get_Halbach_Bender
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 import numpy as np
 import scipy.optimize as spo

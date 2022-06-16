@@ -1,6 +1,7 @@
+from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 import numpy as np
 
-import fastNumbaMethodsAndClass
+
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import ELEMENT_PLOT_COLORS
@@ -37,7 +38,7 @@ class LensIdeal(BaseElement):
             self.Lo = self.L
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = fastNumbaMethodsAndClass.get_Ideal_lens_Field_Helper([self.L, self.K, self.ap])
+        self.fastFieldHelper = get_Ideal_lens_Field_Helper([self.L, self.K, self.ap])
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
