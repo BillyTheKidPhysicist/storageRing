@@ -36,8 +36,9 @@ def enablePrint():
 class PTL_Dummy:
     """fake class to just pass some args along"""
 
-    def __init__(self, fieldDensityMultiplier=1.0):
+    def __init__(self, fieldDensityMultiplier=1.0,standardMagnetErrors=False):
         self.fieldDensityMultiplier = fieldDensityMultiplier
+        self.standardMagnetErrors=standardMagnetErrors
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
@@ -192,18 +193,17 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         L = self.L * .5
         seed = int(time.time())
         tol = .025  # tolerance on the maximum value
-        magnetErrors = True
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0), (self.rp,), L, None,
-                                     (self.magnetWidth,), useStandardMagErrors=magnetErrors)
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0,standardMagnetErrors=True), (self.rp,), L, None,
+                                     (self.magnetWidth,))
         lensElement.fill_Pre_Constrained_Parameters()
         lensElement.fill_Post_Constrained_Parameters()
         lensElement.build_Fast_Field_Helper([])
         gridSpacing = lensElement.apMaxGoodField / lensElement.numGridPointsXY
         np.random.seed(seed)
-        numSlices = None if not magnetErrors else int(round(lensElement.Lm / lensElement.individualMagnetLength))
+        numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
-                                         applyMethodOfMoments=True, useStandardMagErrors=magnetErrors,
+                                         applyMethodOfMoments=True, useStandardMagErrors=True,
                                          numSlices=numSlices)
         rMax = .95 * lensElement.apMaxGoodField
         qMaxField = np.asarray([lensElement.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
@@ -350,10 +350,11 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         bender"""
 
         numMagnets = 15
-        PTL = PTL_Dummy(fieldDensityMultiplier=.75)
         np.random.seed(42)
-        elDeviation = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0, True)
-        elPerfect = HalbachBenderSimSegmented(PTL, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0, False)
+        PTL_Dev = PTL_Dummy(fieldDensityMultiplier=.75,standardMagnetErrors=True)
+        elDeviation = HalbachBenderSimSegmented(PTL_Dev, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0)
+        PTL_Perf = PTL_Dummy(fieldDensityMultiplier=.75)
+        elPerfect = HalbachBenderSimSegmented(PTL_Perf, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0)
         for el in [elDeviation,elPerfect]:
             el.fill_Pre_Constrained_Parameters()
             el.theta=0.0

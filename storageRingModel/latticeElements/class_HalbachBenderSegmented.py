@@ -36,8 +36,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     fringeFracOuter: float = 1.5  # multiple of bore radius to accomodate fringe field
 
     def __init__(self, PTL, Lm: float, rp: float, numMagnets: Optional[int], rb: float, ap: Optional[float],
-                 extraSpace: float,
-                 rOffsetFact: float, useStandardMagErrors: bool):
+                 extraSpace: float,rOffsetFact: float):
         assert all(val > 0 for val in (Lm, rp, rb, rOffsetFact))
         assert extraSpace >= 0
         assert rb > rp / 10  # this would be very dubious
@@ -71,7 +70,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.K_Func: Optional[
             callable] = None  # function that returns the spring constant as a function of bending radii. This is used in the
         # constraint solver
-        self.useStandardMagErrors = useStandardMagErrors
 
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
@@ -157,7 +155,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
-        fieldDataPerturbation = self.generate_Perturbation_Data() if self.useStandardMagErrors else None
+        fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else None
         assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[1] == fieldDataInternal[1])
         self.fastFieldHelper = self.init_fastFieldHelper(
             [fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation

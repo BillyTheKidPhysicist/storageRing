@@ -14,8 +14,7 @@ from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, Combiner
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
 
-    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, layers: int, ap: Optional[float], mode: str,
-                 useStandardMagErrors: bool):
+    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, layers: int, ap: Optional[float], mode: str):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # loadBeamOffset: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -47,7 +46,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.space = None
         self.extraFieldLength = 0.0
         self.apMaxGoodField = None
-        self.useStandardMagErrors = useStandardMagErrors
         self.extraLoadApFrac = 1.5
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
@@ -74,11 +72,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         individualMagnetLength = min(
             [(MAGNET_ASPECT_RATIO * min(magnetWidthList)), self.Lm])  # this will get rounded up
         # or down
-        numSlicesApprox = 1 if not self.useStandardMagErrors else round(self.Lm / individualMagnetLength)
+        numSlicesApprox = 1 if not self.PTL.standardMagnetErrors else round(self.Lm / individualMagnetLength)
         # print('combiner:',numSlicesApprox)
         self.lens = _HalbachLensFieldGenerator(tuple(rpList), tuple(magnetWidthList), self.Lm,
                                                applyMethodOfMoments=True,
-                                               useStandardMagErrors=self.useStandardMagErrors,
+                                               useStandardMagErrors=self.PTL.standardMagnetErrors,
                                                numSlices=numSlicesApprox,
                                                useSolenoidField=self.PTL.useSolenoidField)  # must reuse lens
         # because field values are computed twice from same lens. Otherwise, magnet errors would change
@@ -102,7 +100,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.fastFieldHelper = self.init_fastFieldHelper([fieldData, self.La,
                                                           self.Lb, self.Lm, self.space, self.ap, self.ang,
                                                           self.fieldFact,
-                                                          self.extraFieldLength, not self.useStandardMagErrors])
+                                                          self.extraFieldLength, not self.PTL.standardMagnetErrors])
 
         self.fastFieldHelper.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
@@ -121,18 +119,18 @@ class CombinerHalbachLensSim(CombinerIdeal):
         yMax = yMax if yMax > yMax_Minimum else yMax_Minimum
         yMax = np.clip(yMax, self.rp, np.inf)
         # yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
-        yMin = -TINY_OFFSET if not self.useStandardMagErrors else -yMax
+        yMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -yMax
         xMin = -(self.rp - TINY_OFFSET)
-        xMax = TINY_OFFSET if not self.useStandardMagErrors else -xMin
-        numY = self.numGridPointsXY if not self.useStandardMagErrors else make_Odd(
+        xMax = TINY_OFFSET if not self.PTL.standardMagnetErrors else -xMin
+        numY = self.numGridPointsXY if not self.PTL.standardMagnetErrors else make_Odd(
             round(.9 * (self.numGridPointsXY * 2 - 1)))
         # minus 1 ensures same grid spacing!!
         numX = make_Odd(round(self.numGridPointsXY * self.rp / yMax))
-        numX = numX if not self.useStandardMagErrors else make_Odd(round(.9 * (2 * numX - 1)))
-        numZ = self.numGridPointsZ if not self.useStandardMagErrors else make_Odd(
+        numX = numX if not self.PTL.standardMagnetErrors else make_Odd(round(.9 * (2 * numX - 1)))
+        numZ = self.numGridPointsZ if not self.PTL.standardMagnetErrors else make_Odd(
             round(1 * (self.numGridPointsZ * 2 - 1)))
         zMax = self.compute_Valid_zMax()
-        zMin = -TINY_OFFSET if not self.useStandardMagErrors else -zMax
+        zMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -zMax
 
         yArr_Quadrant = np.linspace(yMin, yMax, numY)  # this remains y in element frame
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change

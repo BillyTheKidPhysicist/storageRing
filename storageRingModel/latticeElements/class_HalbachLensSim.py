@@ -16,7 +16,7 @@ class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
 
     def __init__(self, PTL, rpLayers: tuple, L: Optional[float], ap: Optional[float],
-                 magnetWidths: Optional[tuple], useStandardMagErrors: bool):
+                 magnetWidths: Optional[tuple]):
         assert all(rp > 0 for rp in rpLayers)
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
@@ -36,8 +36,6 @@ class HalbachLensSim(LensIdeal):
         assert ap > 5 * rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
         super().__init__(PTL, L, None, rp, ap)
         self.L = L
-        self.methodOfMomentsHighPrecision = False
-        self.useStandardMagErrors = useStandardMagErrors
         self.Lo = None
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
 
@@ -253,7 +251,7 @@ class HalbachLensSim(LensIdeal):
         near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of ideal and
         perturbation interpolation"""
 
-        if self.useStandardMagErrors:
+        if self.PTL.standardMagnetErrors:
             data2D_1, data3D_NoPerturbations = self.make_Field_Data(False, False, extraFieldSources,
                                                                     enforceGoodField=False)
             data2D_2, data3D_Perturbations = self.make_Field_Data(False, True, extraFieldSources,

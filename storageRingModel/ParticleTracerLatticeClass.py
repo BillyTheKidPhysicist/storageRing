@@ -11,6 +11,7 @@ from ParticleTracerClass import ParticleTracer
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift
+from latticeElements.elements import Element
 from shapelyObjectBuilder import build_Shapely_Objects
 from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Elements_From_Floor_Plan
@@ -18,9 +19,7 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Eleme
 # todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 # people, I need to change that. This was before my cleaner code approach
 
-# todo: refactor!
 
-Element = None
 
 benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
@@ -59,49 +58,11 @@ class ParticleTracerLattice:
 
         self.useSolenoidField = useSolenoidField
 
-        self.elList: list = []  # to hold all the lattice elements
+        self.elList: list[Element] = []  # to hold all the lattice elements
 
     def __iter__(self) -> Iterable[Element]:
         return (element for element in self.elList)
 
-    def find_Optimal_Offset_Factor(self, rp: float, rb: float, Lm: float, parallel: bool = False) -> float:
-        # How far exactly to offset the bending segment from linear segments is exact for an ideal bender, but for an
-        # imperfect segmented bender it needs to be optimized.
-        raise NotImplementedError  # this doesn't do much with my updated approach, and needs to be reframed in terms
-        # of shifting the particle over to improve performance. It's also bloated. ALso, it's not accurate
-        assert rp < rb / 2.0  # geometry argument, and common mistake
-        numMagnetsHalfBend = int(np.pi * rb / Lm)
-        # todo: this should be self I think
-        PTL_Ring = ParticleTracerLattice(latticeType='injector')
-        PTL_Ring.add_Drift(.05)
-        PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnetsHalfBend, rb)
-        PTL_Ring.end_Lattice(enforceClosedLattice=False, constrain=False)
-
-        def errorFunc(offset):
-            h = 5e-6
-            particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.v0Nominal, 0.0, 0.0]))
-            particleTracer = ParticleTracer(PTL_Ring)
-            particle = particleTracer.trace(particle, h, 1.0, fastMode=False)
-            qoArr = particle.qoArr
-            particleAngEl = np.arctan2(qoArr[-1][1],
-                                       qoArr[-1][0])  # very close to zero, or negative, if particle made it to
-            # end
-            if particleAngEl < .01:
-                error = np.std(1e6 * particle.qoArr[:, 1])
-                return error
-            else:
-                return np.nan
-
-        outputOffsetFactArr = np.linspace(-3e-3, 3e-3, 100)
-
-        if parallel == True:
-            njobs = -1
-        else:
-            njobs = 1
-        errorArr = np.asarray(
-            Parallel(n_jobs=njobs)(delayed(errorFunc)(outputOffset) for outputOffset in outputOffsetFactArr))
-        rOffsetOptimal = self._find_rOptimal(outputOffsetFactArr, errorArr)
-        return rOffsetOptimal
 
     def _find_rOptimal(self, outputOffsetFactArr: np.ndarray, errorArr: np.ndarray) -> Optional[float]:
         test = errorArr.copy()[1:]
@@ -173,8 +134,7 @@ class ParticleTracerLattice:
 
         if seed is not None:
             np.random.seed(seed)
-        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType,
-                                    self.standardMagnetErrors)
+        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -208,7 +168,7 @@ class ParticleTracerLattice:
         """
         rpLayers = rp if isinstance(rp, tuple) else (rp,)
         magnetWidth = (magnetWidth,) if isinstance(magnetWidth, float) else magnetWidth
-        el = HalbachLensSim(self, rpLayers, L, ap, magnetWidth, self.standardMagnetErrors)
+        el = HalbachLensSim(self, rpLayers, L, ap, magnetWidth)
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
         if constrain == True: self.set_Constrained_Linear_Element(el)
@@ -234,14 +194,13 @@ class ParticleTracerLattice:
         :param rp: Bore/pole radius of lens
         :param ap: aperture of vacuum tube in magnet
         :param constrain:
-        :param bumpOffset:
         :return:
         """
 
         el = LensIdeal(self, L, Bp, rp, ap)  # create a lens element object
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
-        if constrain == True:
+        if constrain:
             self.set_Constrained_Linear_Element(el)
             print('not fully supported feature')
 
@@ -274,8 +233,7 @@ class ParticleTracerLattice:
         # Lcap: Length of element on the end/input of bender
         # outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm, rp, numMagnets, rb, ap, extraSpace, rOffsetFact,
-                                       self.standardMagnetErrors)
+        el = HalbachBenderSimSegmented(self, Lm, rp, numMagnets, rb, ap, extraSpace, rOffsetFact)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -426,30 +384,17 @@ class ParticleTracerLattice:
 
         def plot_Particle(particle, xMarkerSize=defaultMarkerSize):
             if particle.color is None:  # use default plotting behaviour
-                if particle.clipped == True:
-                    color = 'red'
-                elif particle.clipped == False:
-                    color = 'green'
-                else:  # if None
-                    color = 'blue'
+                color='red' if particle.clipped else 'green'
             else:  # else use the specified color
                 color = particle.color
-            if showMarkers == True:
-                try:
-                    if finalCoords == False:
-                        xy = particle.qi[:2]
-                    else:
-                        xy = particle.qf[:2]
-                except:  # the coords don't exist. Sometimes this is expected. try and fall back to another
-                    if particle.qi is not None:
-                        xy = particle.qi[:2]
-                    elif particle.qf is not None:
-                        xy = particle.qf[:2]
-                    else:
-                        raise ValueError
-                    color = 'yellow'
-                plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
-                plt.scatter(*xy, marker='o', s=10, c=color)
+            if showMarkers:
+                if particle.qf is not None:
+                    xy= particle.qf[:2] if finalCoords else particle.qi[:2]
+                    plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
+                    plt.scatter(*xy, marker='o', s=10, c=color)
+                else: #no final coords, then plot initial coords with different marker
+                    xy = particle.qi[:2]
+                    plt.scatter(*xy, marker='^', s=30, c='blue')
             if showTraceLines:
                 if particle.qArr is not None and len(particle.qArr) > 0:  # if there are lines to show
                     plt.plot(particle.qArr[:, 0], particle.qArr[:, 1], c=color, alpha=traceLineAlpha)
@@ -467,7 +412,7 @@ class ParticleTracerLattice:
             if len(particleCoords) == 3:  # if the 3d value is provided trim it to 2D
                 particleCoords = particleCoords[:2]
             # plot the particle as both a dot and a X
-            if showMarkers == True:
+            if showMarkers:
                 plt.scatter(*particleCoords, marker='x', s=1000, c='r')
                 plt.scatter(*particleCoords, marker='o', s=50, c='r')
         elif particle is not None:  # instead plot from provided particle
@@ -480,7 +425,7 @@ class ParticleTracerLattice:
                 revs = particle.revolutions
                 if revs is None:
                     revs = 0
-                if showRelativeSurvival == True:
+                if showRelativeSurvival:
                     plot_Particle(particle, xMarkerSize=1000 * revs / maxRevs)
                 else:
                     plot_Particle(particle)
@@ -491,7 +436,7 @@ class ParticleTracerLattice:
                 plt.plot(*object.coords.xy, linewidth=1, c='black')
 
         plt.grid()
-        if trueAspectRatio == True:
+        if trueAspectRatio:
             plt.gca().set_aspect('equal')
         plt.xlabel('meters')
         plt.ylabel('meters')

@@ -6,6 +6,7 @@ from latticeElements.class_Drift import Drift
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.class_HalbachBenderSegmented import HalbachBenderSimSegmented
 from latticeElements.class_HalbachLensSim import HalbachLensSim
+from typing import Union
 
-elements=[CombinerHalbachLensSim,BenderIdeal,CombinerIdeal,
+Element = Union[CombinerHalbachLensSim,BenderIdeal,CombinerIdeal,
           CombinerSim,Drift,LensIdeal,HalbachBenderSimSegmented,HalbachLensSim]
