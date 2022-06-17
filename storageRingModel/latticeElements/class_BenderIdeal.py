@@ -5,9 +5,10 @@ from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import  full_Arctan
-
+from latticeElements.utilities import full_Arctan
 from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
+
+
 class BenderIdeal(BaseElement):
     """
         Element representing a bender/waveguide. Base class for other benders

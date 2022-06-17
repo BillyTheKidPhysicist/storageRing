@@ -1,13 +1,9 @@
-import numba
-import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
-from constants import SIMULATION_MAGNETON,FLAT_WALL_VACUUM_THICKNESS
+from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 import numba
 import numpy as np
 
-
-
+from constants import FLAT_WALL_VACUUM_THICKNESS
+from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 
 spec_Combiner_Halbach = [
     ('VArr', numba.float64[::1]),
@@ -29,7 +25,6 @@ spec_Combiner_Halbach = [
 ]
 
 
-
 class CombinerHalbachLensSimFieldHelper_Numba:
 
     def __init__(self, fieldData, La, Lb, Lm, space, ap, ang, fieldFact, extraFieldLength, useSymmetry):
@@ -47,7 +42,8 @@ class CombinerHalbachLensSimFieldHelper_Numba:
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact, self.extraFieldLength, self.useSymmetry), ()
+        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact,
+                self.extraFieldLength, self.useSymmetry), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -73,7 +69,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
-        x,y,z=x0,y0,z0
+        x, y, z = x0, y0, z0
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
         if self.useSymmetry:
             FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry

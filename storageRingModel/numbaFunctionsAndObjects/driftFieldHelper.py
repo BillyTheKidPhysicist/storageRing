@@ -8,6 +8,7 @@ spec_Drift = [
     ('outputAngleTilt', numba.float64)
 ]
 
+
 class DriftFieldHelper_Numba:
     """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
 
@@ -18,7 +19,7 @@ class DriftFieldHelper_Numba:
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt),()
+        return (self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt), ()
 
     def magnetic_Potential(self, x, y, z):
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""

@@ -10,11 +10,10 @@ from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 from collisionPhysics import post_Collision_Momentum, get_Collision_Params
 from constants import GRAVITATIONAL_ACCELERATION
-from latticeElements.elements import LensIdeal, CombinerIdeal,Element,BenderIdeal,HalbachBenderSimSegmented,Drift,CombinerSim,CombinerHalbachLensSim
+from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, HalbachBenderSimSegmented, \
+    CombinerSim, CombinerHalbachLensSim
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
-
-
 
 
 @numba.njit()
@@ -99,15 +98,15 @@ class ParticleTracer:
             -> tuple[np.ndarray, np.ndarray]:
         el1 = self.currentEl
         el2 = nextEll
-        if type(el1) in (BenderIdeal,HalbachBenderSimSegmented):
+        if type(el1) in (BenderIdeal, HalbachBenderSimSegmented):
             r01 = el1.r0
-        elif type(el1) in (CombinerHalbachLensSim,CombinerSim,CombinerIdeal):
+        elif type(el1) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
             r01 = el1.r2
         else:
             r01 = el1.r1
-        if type(el2) in (BenderIdeal,HalbachBenderSimSegmented):
+        if type(el2) in (BenderIdeal, HalbachBenderSimSegmented):
             r02 = el2.r0
-        elif type(el2) in (CombinerHalbachLensSim,CombinerSim,CombinerIdeal):
+        elif type(el2) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
             r02 = el2.r2
         else:
             r02 = el2.r1
@@ -154,7 +153,7 @@ class ParticleTracer:
         # T0: total tracing time
         # fastMode: wether to use the performance optimized versoin that doesn't track paramters
         if collisionDynamics:
-            raise NotImplementedError #the heterogenous tuple was killing performance. Need a new method
+            raise NotImplementedError  # the heterogenous tuple was killing performance. Need a new method
         assert 0 < h < 1e-4 and T0 > 0.0  # reasonable ranges
         assert not (energyCorrection and collisionDynamics)
         self.collisionDynamics = collisionDynamics
@@ -244,7 +243,7 @@ class ParticleTracer:
         # collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if \
         #     self.collisionDynamics else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h,
-                                self.currentEl.fastFieldHelper.numbaJitClass)
+                                          self.currentEl.fastFieldHelper.numbaJitClass)
         qEl_n, self.qEl[:], self.pEl[:], self.T, particleOutside = results
         qEl_n = np.array(qEl_n)
         self.particle.T = self.T
@@ -332,7 +331,8 @@ class ParticleTracer:
 
         if self.accelerated:
             if self.energyCorrection:
-                pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper.numbaJitClass,
+                pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
+                                                              self.currentEl.fastFieldHelper.numbaJitClass,
                                                               'leaving')
             if self.logPhaseSpaceCoords:
                 qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(
@@ -360,7 +360,8 @@ class ParticleTracer:
                 self.particle.clipped = True
             elif el is not self.currentEl:  # element has changed
                 if self.energyCorrection:
-                    pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl, self.currentEl.fastFieldHelper.numbaJitClass,
+                    pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
+                                                                  self.currentEl.fastFieldHelper.numbaJitClass,
                                                                   'leaving')
                 nextEl = el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length

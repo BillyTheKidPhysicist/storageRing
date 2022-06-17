@@ -1,8 +1,8 @@
 import numba
 import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
+
 from constants import SIMULATION_MAGNETON
+from numbaFunctionsAndObjects.utilities import full_Arctan2
 
 spec_Bender_Ideal = [
     ('ang', numba.float64),
@@ -26,10 +26,10 @@ class BenderIdealFieldHelper_Numba:
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.ang, self.K, self.rp, self.rb, self.ap),(self.fieldFact,)
+        return (self.ang, self.K, self.rp, self.rb, self.ap), (self.fieldFact,)
 
-    def set_Internal_State(self,params):
-        self.fieldFact=params[0]
+    def set_Internal_State(self, params):
+        self.fieldFact = params[0]
 
     def magnetic_Potential(self, x, y, z):
         # potential energy at provided coordinates

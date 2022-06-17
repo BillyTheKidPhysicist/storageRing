@@ -1,12 +1,13 @@
+import os
+from typing import Optional
+
+import numpy as np
+from ringOptimizer import solution_From_Lattice
 
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import tool_Parallel_Process
-import numpy as np
-from typing import Optional
-import os
 from latticeElements.elements import CombinerHalbachLensSim, CombinerIdeal, CombinerSim, LensIdeal, HalbachLensSim
 from latticeModels import make_Ring_And_Injector_Version3
-from ringOptimizer import solution_From_Lattice
 
 combinerTypes = (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
 

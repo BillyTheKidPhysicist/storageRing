@@ -1,10 +1,8 @@
-from math import sqrt
-
 import numpy as np
+
 from latticeElements.class_BaseElement import BaseElement
+from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Ideal
 
-
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 # from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
 
@@ -13,11 +11,9 @@ class CombinerIdeal(BaseElement):
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
 
-    def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, mode: str,
-                 sizeScale: float):
+    def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, sizeScale: float):
         super().__init__(PTL)
-        assert mode in ('injector', 'storageRing')
-        self.fieldFact = -1.0 if mode == 'injector' else 1.0
+        self.fieldFact = -1.0 if self.PTL.latticeType == 'injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
         # use sizeScale=2.0
         self.apR = apR
@@ -47,7 +43,7 @@ class CombinerIdeal(BaseElement):
         #                                                   self.apL, self.apR, np.nan, np.nan])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerIdeal(self)
 
-        self.Lo = trajectoryLength#np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
         self.ang = inputAngle
         self.inputOffset = inputOffset
         self.La = .5 * (self.apR + self.apL) * np.sin(self.ang)

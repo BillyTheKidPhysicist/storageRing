@@ -3,17 +3,17 @@ from typing import Optional
 
 import numpy as np
 
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
-
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
 from helperTools import iscloseAll
-from latticeElements.class_LensIdeal import LensIdeal
 from helperTools import make_Odd
-from latticeElements.utilities import  MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
+from latticeElements.class_LensIdeal import LensIdeal
+from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
     ElementTooShortError
+from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Lens_Helper
 
-#todo: test somehow that changing the effective length doens't change results meaningfully
+
+# todo: test somehow that changing the effective length doens't change results meaningfully
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
@@ -37,19 +37,20 @@ class HalbachLensSim(LensIdeal):
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
         assert self.ap <= self.maximum_Good_Field_Aperture()
         assert self.ap > 5 * self.rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
-        super().__init__(PTL, L, None, self.rp, self.ap) #todo: there should be multiple inheritance here for geometries
+        super().__init__(PTL, L, None, self.rp,
+                         self.ap)  # todo: there should be multiple inheritance here for geometries
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
-        self.Lm=None
+        self.Lm = None
         self.Lcap: Optional[float] = None
         self.extraFieldLength: Optional[float] = None  # extra field added to end of lens to account misalignment
-        self.individualMagnetLength= None
+        self.individualMagnetLength = None
         # or down
 
     def maximum_Good_Field_Aperture(self) -> float:
         """ from geometric arguments of grid inside circle.
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
-        #todo: remove redundant SMALL_OFFSET thing
+        # todo: remove redundant SMALL_OFFSET thing
         apMax = (self.rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 
@@ -73,7 +74,7 @@ class HalbachLensSim(LensIdeal):
         assert 0.0 <= tiltMax < .1  # small angle. Not sure if valid outside that range
         self.extraFieldLength = self.rp * tiltMax * 1.5  # safety factor for approximations
 
-    def effective_Material_Length(self)-> float:
+    def effective_Material_Length(self) -> float:
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
         is effectively isotropic a sufficient depth inside. This is then modeled as a 2d slice, and the outer edges
         as 3D slice"""
@@ -102,7 +103,7 @@ class HalbachLensSim(LensIdeal):
 
     def fill_Geometric_Params(self) -> None:
         """Compute dependent geometric values"""
-        assert self.L is not None #must be initialized at this point
+        assert self.L is not None  # must be initialized at this point
         self.Lm = self.L - 2 * self.fringeFracOuter * max(self.rpLayers)  # hard edge length of magnet
         if self.Lm < .5 * self.rp:  # If less than zero, unphysical. If less than .5rp, this can screw up my assumption
             # about fringe fields
@@ -154,7 +155,7 @@ class HalbachLensSim(LensIdeal):
         :param yArr: Grid edge y values of quarter of plane
         :return: Either 2d array of field data, or None
         """
-        exploitVeryLongLens=True if self.effective_Material_Length()<self.Lm else False
+        exploitVeryLongLens = True if self.effective_Material_Length() < self.Lm else False
         if exploitVeryLongLens:
             # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
             # save resources
@@ -166,7 +167,7 @@ class HalbachLensSim(LensIdeal):
             data2D = np.column_stack((planeCoords[:, :2], BNormGrad[:, :2], BNorm))  # 2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
         else:
-            data2D=None
+            data2D = None
         return data2D
 
     def make_3D_Field_Data(self, fieldGenerator: billyHalbachCollectionWrapper, xArr: np.ndarray, yArr: np.ndarray,
@@ -215,7 +216,7 @@ class HalbachLensSim(LensIdeal):
         fieldGenerator = billyHalbachCollectionWrapper(sources)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt((xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2 + (xArr_Quadrant[1] - xArr_Quadrant[0]) ** 2)
-        if enforceGoodField: #Don't want to enforce when including perturbation effects
+        if enforceGoodField:  # Don't want to enforce when including perturbation effects
             assert self.rp - maxGridSep >= self.maximum_Good_Field_Aperture()
         data2D = self.make_2D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant) if useSymmetry else None
         data3D = self.make_3D_Field_Data(fieldGenerator, xArr_Quadrant, yArr_Quadrant, zArr)
@@ -235,7 +236,7 @@ class HalbachLensSim(LensIdeal):
             xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, xArrIn, yArrIn, FxArrIn, FyArrIn, VArrIn)
         fieldDataPerturbations = self.make_Field_Perturbation_Data(extraFieldSources)
         self.fastFieldHelper = get_Halbach_Lens_Helper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
-                                                          self.extraFieldLength])
+                                                        self.extraFieldLength])
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
         assert F_edge / F_center < .01

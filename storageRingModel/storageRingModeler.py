@@ -47,16 +47,18 @@ def injector_Is_Expected_Design(latticeInjector, isBumperIncluded):
             return False
     return True
 
-def build_StorageRingModel(params,numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
-                           energyCorrection: bool = False, useMagnetErrors: bool=False,
-                           useSolenoidField: bool=True,includeBumper: bool=False):
+
+def build_StorageRingModel(params, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
+                           energyCorrection: bool = False, useMagnetErrors: bool = False,
+                           useSolenoidField: bool = True, includeBumper: bool = False):
     """Convenience function for building a StorageRingModel"""
-    options={'useMagnetErrors': useMagnetErrors, 'useSolenoidField':useSolenoidField,'includeBumper':includeBumper}
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params,options=options)
+    options = {'useMagnetErrors': useMagnetErrors, 'useSolenoidField': useSolenoidField, 'includeBumper': includeBumper}
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params, options=options)
     model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
-                             numParticlesSwarm=numParticlesSwarm,collisionDynamics=collisionDynamics,
+                             numParticlesSwarm=numParticlesSwarm, collisionDynamics=collisionDynamics,
                              isBumperIncludedInInjector=includeBumper)
     return model
+
 
 class StorageRingModel:
     maximumCost = 2.0

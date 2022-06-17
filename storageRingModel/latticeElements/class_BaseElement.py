@@ -3,10 +3,10 @@ from typing import Optional
 import numpy as np
 from shapely.geometry import Polygon
 
-
 from constants import SIMULATION_MAGNETON
 
-#todo: a base geometry inheritance is most logical
+
+# todo: a base geometry inheritance is most logical
 class BaseElement:
     """
     Base class for other elements. Contains universal attributes and methods.
@@ -55,7 +55,6 @@ class BaseElement:
         # #lens combiner
         self.fieldFact: float = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper = None
-
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         raise NotImplementedError
@@ -208,7 +207,8 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        return self.fastFieldHelper.numbaJitClass.is_Coord_Inside_Vacuum(*qEl)  # will raise NotImplementedError if called
+        return self.fastFieldHelper.numbaJitClass.is_Coord_Inside_Vacuum(
+            *qEl)  # will raise NotImplementedError if called
 
     def fill_Pre_Constrained_Parameters(self):
         """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely

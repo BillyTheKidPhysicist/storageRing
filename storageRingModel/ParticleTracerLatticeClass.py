@@ -4,13 +4,10 @@ from typing import Iterable, Union, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate as spi
-from joblib import Parallel, delayed
 
-from ParticleClass import Particle
-from ParticleTracerClass import ParticleTracer
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
-    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift,ELEMENT_PLOT_COLORS
+    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
 from shapelyObjectBuilder import build_Shapely_Objects
 from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
@@ -20,7 +17,6 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_And_Place_Eleme
 # people, I need to change that. This was before my cleaner code approach
 
 
-
 benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
 
@@ -28,7 +24,7 @@ class ParticleTracerLattice:
 
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
-                 useSolenoidField: bool = False, initialLocation: tuple[float,float]=None, initialAngle=None):
+                 useSolenoidField: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -62,7 +58,6 @@ class ParticleTracerLattice:
 
     def __iter__(self) -> Iterable[Element]:
         return (element for element in self.elList)
-
 
     def _find_rOptimal(self, outputOffsetFactArr: np.ndarray, errorArr: np.ndarray) -> Optional[float]:
         test = errorArr.copy()[1:]
@@ -132,9 +127,7 @@ class ParticleTracerLattice:
         :return: None
         """
 
-        if seed is not None:
-            np.random.seed(seed)
-        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, self.latticeType)
+        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, seed)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -267,8 +260,7 @@ class ParticleTracerLattice:
         # if La<minLa:
         #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el = CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, self.latticeType,
-                           sizeScale)  # create a combiner element object
+        el = CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, sizeScale)  # create a combiner element object
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -383,15 +375,15 @@ class ParticleTracerLattice:
 
         def plot_Particle(particle, xMarkerSize=defaultMarkerSize):
             if particle.color is None:  # use default plotting behaviour
-                color='red' if particle.clipped else 'green'
+                color = 'red' if particle.clipped else 'green'
             else:  # else use the specified color
                 color = particle.color
             if showMarkers:
                 if particle.qf is not None:
-                    xy= particle.qf[:2] if finalCoords else particle.qi[:2]
+                    xy = particle.qf[:2] if finalCoords else particle.qi[:2]
                     plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
                     plt.scatter(*xy, marker='o', s=10, c=color)
-                else: #no final coords, then plot initial coords with different marker
+                else:  # no final coords, then plot initial coords with different marker
                     xy = particle.qi[:2]
                     plt.scatter(*xy, marker='^', s=30, c='blue')
             if showTraceLines:

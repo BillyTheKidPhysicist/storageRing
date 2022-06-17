@@ -1,12 +1,11 @@
 from math import isclose
-from typing import Callable
 
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
-from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
 from helperTools import *
 from latticeElements.elements import CombinerIdeal, CombinerHalbachLensSim, CombinerSim
+from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
 
 
 def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleOutputOffsetStart: float = 0.0,
@@ -61,7 +60,7 @@ def calculateTrajectory_Length(qTracedArr: np.ndarray) -> float:
 
 
 def make_Halbahc_Combiner_Force_Function(el) -> Callable:
-    lens = el.lens.copy()  # don't want to edit original
+    lens = el.make_Lens()
     assert all(val == 0.0 for val in [*lens.orientation.as_rotvec(), *lens.position])
     orientation = Rot.from_rotvec([0, np.pi / 2, 0.0])
     lens.rotate(orientation)

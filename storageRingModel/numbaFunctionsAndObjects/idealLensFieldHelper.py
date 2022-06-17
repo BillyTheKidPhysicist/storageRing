@@ -1,7 +1,6 @@
 import numba
 import numpy as np
 
-
 spec_Ideal_Lens = [
     ('L', numba.float64),
     ('K', numba.float64),
@@ -23,8 +22,8 @@ class IdealLensFieldHelper:
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return (self.L, self.K, self.ap), (self.fieldFact,)
 
-    def set_Internal_State(self,params):
-        self.fieldFact=params[0]
+    def set_Internal_State(self, params):
+        self.fieldFact = params[0]
 
     def is_Coord_Inside_Vacuum(self, x: float, y: float, z: float) -> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""

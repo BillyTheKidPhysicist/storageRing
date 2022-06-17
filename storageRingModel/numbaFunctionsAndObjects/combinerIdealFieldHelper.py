@@ -1,23 +1,17 @@
 import numba
 import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
+
 from constants import SIMULATION_MAGNETON
-import numba
-import numpy as np
+
 
 @numba.njit()
-def combiner_Ideal_Force(x,y,z,Lm,c1,c2)-> tuple[float,float,float]:
-
+def combiner_Ideal_Force(x, y, z, Lm, c1, c2) -> tuple[float, float, float]:
     Fx, Fy, Fz = 0.0, 0.0, 0.0
     if 0 < x < Lm:
         B0 = np.sqrt((c2 * z) ** 2 + (c1 + c2 * y) ** 2)
         Fy = SIMULATION_MAGNETON * c2 * (c1 + c2 * y) / B0
         Fz = SIMULATION_MAGNETON * c2 ** 2 * z / B0
-    return Fx,Fy,Fz
-
-
-
+    return Fx, Fy, Fz
 
 
 spec_Combiner_Ideal = [
@@ -31,6 +25,7 @@ spec_Combiner_Ideal = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64)
 ]
+
 
 class CombinerIdealFieldHelper_Numba:
 
@@ -47,10 +42,10 @@ class CombinerIdealFieldHelper_Numba:
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang),(self.fieldFact,)
+        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang), (self.fieldFact,)
 
-    def set_Internal_State(self,params):
-        self.fieldFact=params[0]
+    def set_Internal_State(self, params):
+        self.fieldFact = params[0]
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -65,7 +60,7 @@ class CombinerIdealFieldHelper_Numba:
     def force_Without_isInside_Check(self, x, y, z):
         # force at point q in element frame
         # q: particle's position in element frame
-        Fx, Fy, Fz = combiner_Ideal_Force(x,y,z,self.Lb,self.c1,self.c2)
+        Fx, Fy, Fz = combiner_Ideal_Force(x, y, z, self.Lb, self.c1, self.c2)
         Fx *= self.fieldFact
         Fy *= self.fieldFact
         Fz *= self.fieldFact

@@ -1,9 +1,8 @@
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 import numpy as np
-
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
+from numbaFunctionsAndObjects.fieldHelpers import get_Ideal_lens_Field_Helper
 
 
 class LensIdeal(BaseElement):

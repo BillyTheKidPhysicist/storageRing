@@ -2,11 +2,12 @@ import numpy as np
 import pandas as pd
 
 from latticeElements.class_CombinerIdeal import CombinerIdeal
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
+from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Sim
+
 
 class CombinerSim(CombinerIdeal):
 
-    def __init__(self, PTL, combinerFileName: str, mode: str, sizeScale: float = 1.0, build: bool = True):
+    def __init__(self, PTL, combinerFileName: str, mode: str, sizeScale: float = 1.0):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
         # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
@@ -20,7 +21,7 @@ class CombinerSim(CombinerIdeal):
         apL = .015
         apR = .025
         apZ = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, mode, sizeScale)
+        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, sizeScale)
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
 
@@ -43,13 +44,11 @@ class CombinerSim(CombinerIdeal):
         self.apR = self.apR * self.sizeScale
         self.apz = self.apz * self.sizeScale
 
-
-
         self.fastFieldHelper = get_Combiner_Sim([self.open_And_Shape_Field_Data(), np.nan, self.Lb, self.Lm,
-                                                          self.space, self.apL, self.apR, self.apz, np.nan,
-                                                          self.fieldFact])
+                                                 self.space, self.apL, self.apR, self.apz, np.nan,
+                                                 self.fieldFact])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
-        self.L=self.Lo=trajectoryLength
+        self.L = self.Lo = trajectoryLength
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space

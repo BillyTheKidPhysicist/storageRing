@@ -1,12 +1,7 @@
-import numpy as np
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracerClass import SwarmTracer
 from helperTools import *
-from shapely.geometry import Polygon, MultiPolygon
-from sklearn.neighbors import NearestNeighbors
-from latticeElements.elements import  HalbachLensSim
+from latticeElements.elements import HalbachLensSim
 
-assert HalbachLensSim.fringeFracOuter==1.5
+assert HalbachLensSim.fringeFracOuter == 1.5
 
 #  made 6/13/2022, after two rounds of optimizing.
 #  use KevinBumper.clone_bumper() to create an identical bumper without an end, so more elements can be added.
@@ -42,18 +37,20 @@ phi_norm = 0.2
 opt_norm = [0.53227244, 0.50382043, 0.78162133, -0.64865529, 0.34259073, 0.41882729, 0.17864541, 0.40304075]
 opt_p = [opt_norm[0] * r_norm, opt_norm[1] * l_norm, opt_norm[2] * d_norm, opt_norm[3] * L_norm - 0.00045,
          opt_norm[4] * phi_norm + 0.020, opt_norm[5] * r_norm, opt_norm[6] * l_norm, opt_norm[7] * d_norm]
-r1p1, l1, d1, L, phi, r2, l2, d2=opt_p
+r1p1, l1, d1, L, phi, r2, l2, d2 = opt_p
 start = y0_max(r1p1, 0.9)
 magwidth1 = r1p1 * np.tan(2 * np.pi / 24) * 2
 r1p2 = r1p1 + magwidth1
 magwidth2 = r1p2 * np.tan(2 * np.pi / 24) * 2
-swarmShift_x=1.5*r1p2
+swarmShift_x = 1.5 * r1p2
+
+
 # KevinBumper = Bumper(opt_p[0], opt_p[1], opt_p[2], opt_p[3], opt_p[4], opt_p[5], opt_p[6], opt_p[7], 0,
 #                      leftwards=True, long_off=0, trace=False)
 # KevinBumperOpen = KevinBumper.clone_bumper()
 
 def add_Kevin_Bumper_Elements(PTL):  # creates an identical bumper, but does not end the lattice
-    assert PTL.initialLocation[0]==0.0 and PTL.initialLocation[1]==0.0
+    assert PTL.initialLocation[0] == 0.0 and PTL.initialLocation[1] == 0.0
     delta_x = r2 * 1.5 * np.cos(phi)
     delta_y = r2 * 1.5 * np.sin(phi)
     a1 = np.tan((L - delta_y) / (d1 - r1p2 * 1.5 - delta_x))
@@ -62,8 +59,7 @@ def add_Kevin_Bumper_Elements(PTL):  # creates an identical bumper, but does not
     l1_plus_fringe = l1 + r1p2 * 3
     l2_plus_fringe = l2 + r2 * 3
 
-
-    PTL.initialLocation=(0.0, start)
+    PTL.initialLocation = (0.0, start)
     PTL.add_Halbach_Lens_Sim((r1p1, r1p2), l1_plus_fringe,
                              magnetWidth=(magwidth1, magwidth2))
     PTL.add_Drift(d_fix, .04, inputTiltAngle=-a1, outputTiltAngle=-a2)

@@ -1,9 +1,8 @@
-from typing import Union
+from math import atan2
 
 import numpy as np
 
-realNumber = (int, float)
-lst_tup_arr = Union[list, tuple, np.ndarray]
+from typeHints import FloatTuple, RealNumber
 
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
@@ -11,11 +10,25 @@ SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of ele
 MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
 
 
+def get_Halbach_Layers_Radii_And_Max_Magnet_Widths(rp: RealNumber, numConcentricLayers: int) -> \
+        tuple[FloatTuple, FloatTuple]:
+    """Given a starting bore radius, construct the maximum magnet widths to build the specified number of concentric
+    layers"""
+    assert rp > 0.0 and isinstance(numConcentricLayers, int)
+    rpLayers = []
+    magnetWidths = []
+    for _ in range(numConcentricLayers):
+        next_rpLayer = rp + sum(magnetWidths)
+        rpLayers.append(next_rpLayer)
+        nextMagnetWidth = next_rpLayer * np.tan(2 * np.pi / 24) * 2
+        magnetWidths.append(nextMagnetWidth)
+    return tuple(rpLayers), tuple(magnetWidths)
 
 
-def full_Arctan(q):
+def full_Arctan(q: np.ndarray):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
-    phi = np.arctan2(q[1], q[0])
+    assert len(q) == 3 and q.ndim == 1
+    phi = atan2(q[1], q[0])
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi
     return phi
@@ -23,12 +36,11 @@ def full_Arctan(q):
 
 def is_Even(x: int) -> bool:
     """Test if a number is even"""
-
     assert type(x) is int and x > 0
     return True if x % 2 == 0 else False
 
 
-def mirror_Across_Angle(x: float, y: float, ang: float) -> tuple[float, float]:
+def mirror_Across_Angle(x: RealNumber, y: RealNumber, ang: RealNumber) -> tuple[float, float]:
     """mirror_Across_Angle x and y across a line at angle "ang" that passes through the origin"""
     m = np.tan(ang)
     d = (x + y * m) / (1 + m ** 2)

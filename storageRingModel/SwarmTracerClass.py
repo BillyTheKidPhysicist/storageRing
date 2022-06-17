@@ -9,6 +9,7 @@ from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import low_Discrepancy_Sample
+from typeHints import RealNumber
 
 
 def lorentz_Function(x, gamma):
@@ -20,8 +21,7 @@ def normal(v, sigma, v0=0.0):
     return np.exp(-.5 * ((v - v0) / sigma) ** 2)
 
 
-realNumber = Union[float, int]
-tupleOrNum = Union[tuple[float, float], realNumber]
+tupleOrNum = Union[tuple[float, float], RealNumber]
 realNumbers = (int, float)
 
 
@@ -53,7 +53,7 @@ class SwarmTracer:
 
         return z
 
-    def time_Step_Swarm_Distance_Along_x(self, swarm, distance, holdPositionInX=False) -> Swarm:
+    def time_Step_Swarm_Distance_Along_x(self, swarm, distance: RealNumber, holdPositionInX: bool = False) -> Swarm:
         """Particles are time stepped, forward or backward, to move 'distance' along the x axis"""
         for particle in swarm:
             t = distance / particle.pi[0]
@@ -63,7 +63,7 @@ class SwarmTracer:
                 particle.qi += t * particle.pi
         return swarm
 
-    def initialize_Stablity_Testing_Swarm(self, qMax: float) -> Swarm:
+    def initialize_Stablity_Testing_Swarm(self, qMax: RealNumber) -> Swarm:
         smallOffset = -1e-10  # this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
         swarmTest.add_New_Particle(qi=np.asarray([smallOffset, 0.0, 0.0]))
@@ -121,7 +121,6 @@ class SwarmTracer:
 
     def initialize_Observed_Collector_Swarm_Probability_Weighted(self, captureDiam: float, collectorOutputAngle: float,
                                                                  numParticles: float, gammaSpace: float = 3.5e-3,
-                                                                 temperature: float = .003,
                                                                  sameSeed: bool = False, upperSymmetry: bool = False,
                                                                  probabilityMin: float = 0.01) -> Swarm:
         # this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
@@ -168,7 +167,7 @@ class SwarmTracer:
         return swarmObserved
 
     def _make_PseudoRandom_Swarm_Bounds_List(self, qTBounds: tupleOrNum, pTBounds: tupleOrNum, pxBounds: tupleOrNum,
-                                             upperSymmetry: bool = False):
+                                             upperSymmetry: bool = False) -> list:
 
         if isinstance(qTBounds, realNumbers):
             assert qTBounds > 0.0
@@ -192,7 +191,7 @@ class SwarmTracer:
                                                     pxBounds: tupleOrNum, numParticles: int,
                                                     upperSymmetry: bool = False,
                                                     sameSeed: bool = False, circular: bool = True,
-                                                    smallXOffset: bool = True):
+                                                    smallXOffset: bool = True) -> Swarm:
         # return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
         # and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
         # get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at

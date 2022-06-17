@@ -2,8 +2,6 @@ from math import isclose
 from math import sqrt
 from typing import Optional
 
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
-
 import numpy as np
 import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
@@ -11,11 +9,12 @@ from shapely.geometry import Polygon
 
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS
+from helperTools import make_Odd
 from helperTools import max_Tube_Radius_In_Segmented_Bend, arr_Product
 from latticeElements.class_BenderIdeal import BenderIdeal
-from helperTools import make_Odd
-from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan, \
-    lst_tup_arr
+from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan
+from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
+from typeHints import lst_tup_arr
 
 
 class HalbachBenderSimSegmented(BenderIdeal):
@@ -38,7 +37,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     fringeFracOuter: float = 1.5  # multiple of bore radius to accomodate fringe field
 
     def __init__(self, PTL, Lm: float, rp: float, numMagnets: Optional[int], rb: float, ap: Optional[float],
-                 extraSpace: float,rOffsetFact: float):
+                 extraSpace: float, rOffsetFact: float):
         assert all(val > 0 for val in (Lm, rp, rb, rOffsetFact))
         assert extraSpace >= 0
         assert rb > rp / 10  # this would be very dubious

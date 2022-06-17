@@ -7,7 +7,6 @@ used for:
 """
 import copy
 from math import pi, tan
-from typing import Union
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
@@ -16,14 +15,14 @@ from shapely.geometry import Polygon
 from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
 from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
     HalbachBenderSimSegmented, CombinerHalbachLensSim, CombinerSim
-from typeHints import element
+from latticeElements.elements import Element
+from typeHints import RealNumber
 
 BENDER_POINTS = 250  # how many points to represent the bender with along each curve
-realNum = Union[float, int]
 SMALL_NUMBER = 1e-16
 
 
-def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
+def make_Halbach_Lens_Outer_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach lens. Overall shape is
     a rectangle overlayd on a shorter but wider rectangle. This represents the width of the magnets"""
     assert type(el) is HalbachLensSim
@@ -44,7 +43,7 @@ def make_Halbach_Lens_Outer_Points(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Hexapole_Bender_Caps_Outer_Points(el: element) -> tuple[list[np.ndarray], list[np.ndarray]]:
+def make_Hexapole_Bender_Caps_Outer_Points(el: Element) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Make points that describe the shape of the input and outputs of the hexapole bender. They have
     a stepped shape from the width of the magnets. Output cap points along -y and is easy to specify the
     coordinates and is then mirrored to produce the input cap as well."""
@@ -67,7 +66,7 @@ def make_Hexapole_Bender_Caps_Outer_Points(el: element) -> tuple[list[np.ndarray
     return pointsCapStart, pointsCapEnd
 
 
-def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
+def make_Hexapole_Bender_Outer_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a hexapole bending section.
     Shape is a toroid with short straight section at input/ouput, with another wider but shorter toroid ontop """
 
@@ -95,7 +94,7 @@ def make_Hexapole_Bender_Outer_Points(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
+def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach combiner. Very similiar
     to halbach lens geometry, but with tiled input and enlarged input"""
     # pylint: disable=too-many-locals
@@ -127,12 +126,12 @@ def make_Hexapole_Combiner_Outer_Points(el: element) -> list[np.ndarray]:
     return pointsOuter
 
 
-def make_Any_Combiner_Inner_Points(el: element) -> list[np.ndarray]:
+def make_Any_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the inner (vacuum tube) geometry of a halbach combiner.
     Basically a rectangle with a wider tilted rectangle coming off one end (the input)"""
     assert type(el) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
     LbVac = el.Lb if type(el) is CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
-    apR, apL = (el.apR, el.apL) if type(el) in (CombinerIdeal,CombinerSim) else (el.ap, el.ap)
+    apR, apL = (el.apR, el.apL) if type(el) in (CombinerIdeal, CombinerSim) else (el.ap, el.ap)
     extraFact = 1.5 if type(el) is CombinerHalbachLensSim else 1.0
     q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
     q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0
@@ -159,7 +158,7 @@ def make_Rectangle(L: float, halfWidth: float) -> list[np.ndarray]:
     return [q1Inner, q2Inner, q3Inner, q4Inner]
 
 
-def make_Lens_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
+def make_Lens_Shapely_Objects(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of lens elements and drift
     region. Drift regions are just vacuum tubes between elements"""
     assert type(el) in (LensIdeal, HalbachLensSim)
@@ -173,7 +172,8 @@ def make_Lens_Shapely_Objects(el: element) -> tuple[Polygon, Polygon]:
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
-def is_Drift_Input_Output_Tilt_Valid(L: realNum, halfWidth: realNum, theta1: realNum, theta2: realNum) -> bool:
+def is_Drift_Input_Output_Tilt_Valid(L: RealNumber, halfWidth: RealNumber, theta1: RealNumber,
+                                     theta2: RealNumber) -> bool:
     """Check that te drift region, a trapezoid shape, is concave. theta1 and theta2 can violate this condition
     depending on their value"""
     m1, m2 = tan(pi / 2 + theta1), tan(pi / 2 + theta2)
@@ -201,7 +201,7 @@ def make_Drift_Shapely_Objects(el: Drift):
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
-def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+def make_Bender_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of bender elements"""
 
     assert type(el) in (BenderIdeal, HalbachBenderSimSegmented)
@@ -236,7 +236,7 @@ def make_Bender_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
-def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+def make_Combiner_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of combiner elements"""
     assert type(el) in (CombinerIdeal, CombinerSim, CombinerHalbachLensSim)
     pointsInner = make_Any_Combiner_Inner_Points(el)
@@ -249,7 +249,7 @@ def make_Combiner_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
-def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
+def make_Element_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of elementPT objects such
     as lenses, drifts, benders and combiners"""
     if type(el) in (HalbachLensSim, LensIdeal):
@@ -267,7 +267,7 @@ def make_Element_Shapely_Object(el: element) -> tuple[Polygon, Polygon]:
     return shapelyOuter, shapelyInner
 
 
-def build_Shapely_Objects(elementList: list[element]) -> None:
+def build_Shapely_Objects(elementList: list[Element]) -> None:
     """Build the inner and outer shapely obejcts that represent the 2D geometries of the each element. This is the
     projection of an element onto the horizontal plane that bisects it. Inner geometry repsents vacuum, and outer
      the eternal profile. Ideal elements have to out profile"""

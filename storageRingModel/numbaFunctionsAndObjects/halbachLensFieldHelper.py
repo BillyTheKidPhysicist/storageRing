@@ -1,10 +1,8 @@
 import numba
 import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
-from constants import SIMULATION_MAGNETON
-import numba
-import numpy as np
+
+from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, interp2D, scalar_interp3D
+from numbaFunctionsAndObjects.utilities import tupleOf3Floats, nanArr7Tuple
 
 spec_Lens_Halbach = [
     ('xArrEnd', numba.float64[::1]),
@@ -28,6 +26,7 @@ spec_Lens_Halbach = [
     ('useFieldPerturbations', numba.boolean)
 ]
 
+
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
@@ -47,11 +46,10 @@ class LensHalbachFieldHelper_Numba:
         fieldData = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
                     self.xArrIn, self.yArrIn, self.FxArrIn, self.FyArrIn, self.VArrIn
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
-        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength),(self.fieldFact,)
+        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength), (self.fieldFact,)
 
-    def set_Internal_State(self,params):
-        self.fieldFact=params[0]
-
+    def set_Internal_State(self, params):
+        self.fieldFact = params[0]
 
     def is_Coord_Inside_Vacuum(self, x: float, y: float, z: float) -> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
@@ -148,7 +146,7 @@ class LensHalbachFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan, np.nan, np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
-        x,y,z=x0,y0,z0
+        x, y, z = x0, y0, z0
         x = x - self.L / 2
         Fx, Fy, Fz = self._force_Func_Outer(x, y, z,
                                             useImperfectInterp=True)  # being used to hold fields for entire lens
@@ -204,7 +202,7 @@ class LensHalbachFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
-        x,y,z=x0,y0,z0
+        x, y, z = x0, y0, z0
         x = x - self.L / 2
         V0 = self._magnetic_Potential_Func_Fringe(x, y, z, useImperfectInterp=True)
         return V0

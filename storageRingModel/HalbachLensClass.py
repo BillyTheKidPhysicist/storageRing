@@ -455,8 +455,8 @@ class HalbachLens(billyHalbachCollectionWrapper):
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
          if the lens is composed of slices"""
         LArr = np.ones(self.numDisks) * self.length / self.numDisks
-        zArr = np.cumsum(LArr) - .5*self.length  - .5 * self.length / self.numDisks
-        assert within_Tol(np.sum(LArr), self.length) and within_Tol(np.mean(zArr),0.0)
+        zArr = np.cumsum(LArr) - .5 * self.length - .5 * self.length / self.numDisks
+        assert within_Tol(np.sum(LArr), self.length) and within_Tol(np.mean(zArr), 0.0)
         return zArr, LArr
 
     def add_Solenoid_Coils(self) -> None:

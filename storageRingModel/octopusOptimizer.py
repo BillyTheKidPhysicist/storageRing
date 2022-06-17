@@ -25,7 +25,7 @@ class Octopus:
             accepted by func
         :param xInitial: initial location of search. Becomes the position of the octopus
         """
-        processes = round(1.5*mp.cpu_count()) if processes == -1 else processes
+        processes = round(1.5 * mp.cpu_count()) if processes == -1 else processes
         bounds = np.array(globalBounds) if isinstance(globalBounds, (list, tuple)) else globalBounds
         xInitial = np.array(xInitial) if isinstance(xInitial, (list, tuple)) else xInitial
         assert isinstance(xInitial, np.ndarray) and isinstance(bounds, np.ndarray)
@@ -66,12 +66,12 @@ class Octopus:
         data is present"""
 
         tentacleBounds = self.make_Tentacle_Bounds()
-        numSmartMin=5
-        if self.numTentacles<numSmartMin:
-            numSmart=self.numTentacles
+        numSmartMin = 5
+        if self.numTentacles < numSmartMin:
+            numSmart = self.numTentacles
         else:
             fractionSmart = .1
-            numSmart = round(fractionSmart * (self.numTentacles-numSmartMin))+numSmartMin
+            numSmart = round(fractionSmart * (self.numTentacles - numSmartMin)) + numSmartMin
         numRandom = self.numTentacles - numSmart
         randTentaclePositions = self.random_Tentacle_Positions(tentacleBounds, numRandom)
         smartTentaclePositions = self.smart_Tentacle_Positions(tentacleBounds, numSmart)
@@ -116,9 +116,9 @@ class Octopus:
 
         assert not np.any(np.isnan(results)) and not np.any(np.abs(results) == np.inf)
         if np.min(results) > self.get_Cost_Min():
-            message='didnt find food'
+            message = 'didnt find food'
         else:
-            message='found food'
+            message = 'found food'
             self.octopusLocation = self.tentaclePositions[np.argmin(results)]  # octopus gets moved
         if disp:
             print(message)

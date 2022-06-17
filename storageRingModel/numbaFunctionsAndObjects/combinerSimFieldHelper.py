@@ -1,14 +1,7 @@
 import numba
 import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
-from constants import SIMULATION_MAGNETON
-import numba
-import numpy as np
 
-
-
-
+from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 
 spec_Combiner_Sim = [
     ('VArr', numba.float64[::1]),
@@ -48,7 +41,8 @@ class CombinerSimFieldHelper_Numba:
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang, self.fieldFact), ()
+        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
+                self.fieldFact), ()
 
     def _force_Func(self, x, y, z):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""

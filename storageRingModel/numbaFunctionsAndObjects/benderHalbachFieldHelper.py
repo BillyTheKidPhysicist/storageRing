@@ -1,10 +1,8 @@
 import numba
 import numpy as np
-from numbaFunctionsAndObjects.interpFunctions import vec_interp3D,interp2D,scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats,nanArr7Tuple,full_Arctan2
 
-
-
+from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
+from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_Arctan2
 
 spec_Bender_Halbach = [
     ('fieldDataSeg', numba.types.UniTuple(numba.float64[::1], 7)),
@@ -23,6 +21,7 @@ spec_Bender_Halbach = [
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('useFieldPerturbations', numba.boolean)
 ]
+
 
 class SegmentedBenderSimFieldHelper_Numba:
 
@@ -47,13 +46,14 @@ class SegmentedBenderSimFieldHelper_Numba:
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
-        initParams=(self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang,
-                    self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang)
-        internalParams=(self.fieldFact,)
-        return initParams,internalParams
+        initParams = (
+        self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang,
+        self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang)
+        internalParams = (self.fieldFact,)
+        return initParams, internalParams
 
-    def set_Internal_State(self,params):
-        self.fieldFact=params[0]
+    def set_Internal_State(self, params):
+        self.fieldFact = params[0]
 
     def cartesian_To_Center(self, x, y, z):
         """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
@@ -152,7 +152,6 @@ class SegmentedBenderSimFieldHelper_Numba:
     def force(self, x0, y0, z0):
         # force at point q in element frame
         # q: particle's position in element frame
-
 
         x, y, z = x0, y0, z0
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0

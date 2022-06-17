@@ -4,27 +4,29 @@ from typing import Optional
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS,VACUUM_TUBE_THICKNESS
+from constants import MIN_MAGNET_MOUNT_THICKNESS, VACUUM_TUBE_THICKNESS
 from helperTools import make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even
+from latticeElements.utilities import get_Halbach_Layers_Radii_And_Max_Magnet_Widths
+from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Halbach_Field_Helper
 
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
+DEFAULT_SEED = 42
+
 
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
 
-    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, layers: int, ap: Optional[float], mode: str):
+    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, layers: int, ap: Optional[float], seed):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # loadBeamOffset: Expected diameter of loading beam. Used to set the maximum combiner bending
         # layers: Number of concentric layers
         # mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
-        assert mode in ('storageRing', 'injector')
         assert all(val > 0 for val in (Lm, rp, loadBeamOffset, layers))
         assert ap < rp if ap is not None else True
-        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, mode, 1.0)
+        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0)
 
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
         assert self.outerFringeFrac == 1.5, "May need to change numgrid points if this changes"
@@ -38,14 +40,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.Lm = Lm
         self.rp = rp
         self.layers = layers
-        self.ap = min([.9 * rp,rp - VACUUM_TUBE_THICKNESS]) if ap is None else ap
+        self.ap = min([.9 * rp, rp - VACUUM_TUBE_THICKNESS]) if ap is None else ap
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
         self.magnetWidths = None
-        self.fieldFact: float = -1.0 if mode == 'injector' else 1.0
+        self.fieldFact: float = -1.0 if PTL.latticeType == 'injector' else 1.0
         self.space = None
         self.extraFieldLength = 0.0
-        self.apMaxGoodField = None
         self.extraLoadApFrac = 1.5
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
@@ -55,30 +56,17 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.shape: str = 'COMBINER_CIRCULAR'
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
-        self.lens = None
+
+        self.seed = seed
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
-        rpList = []
-        magnetWidthList = []
-        for _ in range(self.layers):
-            rpList.append(self.rp + sum(magnetWidthList))
-            nextMagnetWidth = (self.rp + sum(magnetWidthList)) * np.tan(2 * np.pi / 24) * 2
-            magnetWidthList.append(nextMagnetWidth)
-        self.magnetWidths = tuple(magnetWidthList)
-        self.space = max(rpList) * self.outerFringeFrac
+        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Max_Magnet_Widths(self.rp, self.layers)
+        self.magnetWidths = magnetWidths
+        self.space = max(rpLayers) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
-        individualMagnetLength = min(
-            [(MAGNET_ASPECT_RATIO * min(magnetWidthList)), self.Lm])  # this will get rounded up
         # or down
-        numSlicesApprox = 1 if not self.PTL.standardMagnetErrors else round(self.Lm / individualMagnetLength)
-        # print('combiner:',numSlicesApprox)
-        self.lens = _HalbachLensFieldGenerator(tuple(rpList), tuple(magnetWidthList), self.Lm,
-                                               applyMethodOfMoments=True,
-                                               useStandardMagErrors=self.PTL.standardMagnetErrors,
-                                               numDisks=numSlicesApprox,
-                                               useSolenoidField=self.PTL.useSolenoidField)  # must reuse lens
         # because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
         self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
@@ -90,17 +78,36 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        self.outerHalfWidth = max(rpList) + max(magnetWidthList) + MIN_MAGNET_MOUNT_THICKNESS
-        if self.ap >=self.max_Ap_Good_Field():
+        self.outerHalfWidth = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
+        if self.ap >= self.max_Ap_Good_Field():
             raise CombinerDimensionError
+
+    def make_Lens(self) -> _HalbachLensFieldGenerator:
+        """Make field generating lens. A seed is required to reproduce the same magnet if magnet errors are being
+        used because this is called multiple times."""
+        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Max_Magnet_Widths(self.rp, self.layers)
+        individualMagnetLengthApprox = min([(MAGNET_ASPECT_RATIO * min(magnetWidths)), self.Lm])
+        numDisks = 1 if not self.PTL.standardMagnetErrors else round(self.Lm / individualMagnetLengthApprox)
+
+        seed = DEFAULT_SEED if self.seed is None else self.seed
+        state = np.random.get_state()
+        np.random.seed(seed)
+        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm,
+                                          applyMethodOfMoments=True,
+                                          useStandardMagErrors=self.PTL.standardMagnetErrors,
+                                          numDisks=numDisks,
+                                          useSolenoidField=self.PTL.useSolenoidField)  # must reuse lens
+        np.random.set_state(state)
+        return lens
 
     def build_Fast_Field_Helper(self, extraSources):
         fieldData = self.make_Field_Data()
         self.set_extraFieldLength()
         self.fastFieldHelper = get_Combiner_Halbach_Field_Helper([fieldData, self.La,
-                                                          self.Lb, self.Lm, self.space, self.ap, self.ang,
-                                                          self.fieldFact,
-                                                          self.extraFieldLength, not self.PTL.standardMagnetErrors])
+                                                                  self.Lb, self.Lm, self.space, self.ap, self.ang,
+                                                                  self.fieldFact,
+                                                                  self.extraFieldLength,
+                                                                  not self.PTL.standardMagnetErrors])
 
         self.fastFieldHelper.numbaJitClass.force(1e-3, 1e-3, 1e-3)  # force compile
         self.fastFieldHelper.numbaJitClass.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
@@ -175,8 +182,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         BNormGrad, BNorm = np.zeros((len(volumeCoords), 3)) * np.nan, np.zeros(len(volumeCoords)) * np.nan
         validIndices = np.logical_or(np.linalg.norm(volumeCoords[:, :2], axis=1) <= self.rp,
                                      volumeCoords[:, 2] >= self.Lm / 2)  # tricky
-        BNormGrad[validIndices], BNorm[validIndices] = self.lens.BNorm_Gradient(volumeCoords[validIndices],
-                                                                                returnNorm=True)
+        BNormGrad[validIndices], BNorm[validIndices] = self.make_Lens().BNorm_Gradient(volumeCoords[validIndices],
+                                                                                       returnNorm=True)
         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
         fieldData = self.shape_Field_Data_3D(data3D)
         return fieldData
@@ -223,7 +230,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float) -> None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
-        raise NotImplementedError #need to reimplement the accomodate jitter stuff
+        raise NotImplementedError  # need to reimplement the accomodate jitter stuff
 
         assert abs(rotZ) < .05 and abs(rotZ) < .05  # small angle
         totalShiftY = shiftY + np.tan(rotZ) * self.L
