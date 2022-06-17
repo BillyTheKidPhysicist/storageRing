@@ -13,7 +13,7 @@ from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even,
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Lens_Helper
 
 
-# todo: test somehow that changing the effective length doens't change results meaningfully
+
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5

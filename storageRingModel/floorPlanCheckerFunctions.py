@@ -10,8 +10,10 @@ from typing import Union
 
 from shapely.affinity import translate, rotate
 from shapely.geometry import box, LineString, Polygon
+import numpy as np
+import matplotlib.pyplot as plt
+import itertools
 
-from helperTools import np, plt, itertools
 
 shapelyObject = Union[box, LineString, Polygon]
 shapelyList = list[shapelyObject]

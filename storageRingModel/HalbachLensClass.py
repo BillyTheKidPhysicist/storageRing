@@ -1,5 +1,7 @@
 import copy
 from numbers import Number
+import numba
+import numpy as np
 
 import magpylib.current
 from magpylib import Collection
@@ -11,7 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD
 from demag_functions import apply_demag
-from helperTools import numba, np, Union, Optional, math, inch_To_Meter, radians, within_Tol, \
+from helperTools import Union, Optional, math, inch_To_Meter, radians, within_Tol, \
     time, max_Tube_Radius_In_Segmented_Bend
 
 M_Default = 1.018E6  # default magnetization value, SI. Magnetization for N48 grade
