@@ -42,7 +42,7 @@ def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> C
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
     lengthSegment, Lcap, radius, numMagnets = bender.Lseg, bender.Lcap, bender.ro, bender.numMagnets
-    magnetDepth = bender.rp + bender.yokeWidth + bender.outputOffset
+    magnetDepth = bender.rp + bender.magnetWidth + bender.outputOffset #todo: why does this have outputOffset??
     return CappedSlicedBend(lengthSegment, numMagnets, magnetDepth, Lcap, radius)
 
 

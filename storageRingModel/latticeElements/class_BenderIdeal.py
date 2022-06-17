@@ -48,7 +48,6 @@ class BenderIdeal(BaseElement):
         self.K = None
         self.shape = 'BEND'
         self.ro = None  # bending radius of orbit, ie rb + rOffset.
-        self.segmented = False  # wether the element is made up of discrete segments, or is continuous
         self.r0 = None  # coordinates of center of bender, minus any caps
 
     def fill_Pre_Constrained_Parameters(self) -> None:

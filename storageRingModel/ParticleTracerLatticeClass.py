@@ -324,8 +324,8 @@ class ParticleTracerLattice:
                 bender1, benderi = self.elList[self.benderIndices[0]], self.elList[i]
                 if not type(bender1) is type(benderi):
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
-                if not bender1.Lseg == benderi.Lseg or bender1.yokeWidth != benderi.yokeWidth:
-                    raise Exception('SEGMENT LENGTHS AND YOKEWIDTHS MUST BE EQUAL BETWEEN BENDERS')
+                if not bender1.Lseg == benderi.Lseg or bender1.magnetWidth != benderi.magnetWidth:
+                    raise Exception('SEGMENT LENGTHS AND MAGNET WIDTHS MUST BE EQUAL BETWEEN BENDERS')
             if self.combiner is None:
                 raise Exception('COMBINER MUST BE PRESENT')
 

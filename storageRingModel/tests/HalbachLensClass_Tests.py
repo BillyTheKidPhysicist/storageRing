@@ -3,14 +3,15 @@ from HalbachLensClass import Layer, HalbachLens, Sphere, SegmentedBenderHalbach
 import scipy.optimize as spo
 import multiprocess as mp
 import itertools
-from helperTools import iscloseAll,tool_Parallel_Process,realNumType,arr_Product
+from helperTools import iscloseAll,tool_Parallel_Process,arr_Product
+from typeHints import RealNumber
 import math
 import numpy as np
 
 numericTol = 1e-14  # my working numeric tolerance
 
 
-def within_Tol(a: realNumType, b: realNumType):
+def within_Tol(a: RealNumber, b: RealNumber):
     return math.isclose(a, b, abs_tol=numericTol, rel_tol=0.0)
 
 

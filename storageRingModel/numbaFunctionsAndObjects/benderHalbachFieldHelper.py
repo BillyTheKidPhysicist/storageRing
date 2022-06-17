@@ -17,6 +17,8 @@ spec_Bender_Halbach = [
     ('M_ang', numba.float64[:, ::1]),
     ('Lcap', numba.float64),
     ('RIn_Ang', numba.float64[:, ::1]),
+    ('M_uc', numba.float64[:, ::1]),
+    ('M_ang', numba.float64[:, ::1]),
     ('fieldFact', numba.float64),
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('useFieldPerturbations', numba.boolean)
@@ -26,7 +28,7 @@ spec_Bender_Halbach = [
 class SegmentedBenderSimFieldHelper_Numba:
 
     def __init__(self, fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData, ap, ang, ucAng, rb,
-                 numMagnets, Lcap, M_uc, M_ang, RIn_Ang):
+                 numMagnets, Lcap):
         self.fieldDataSeg = fieldDataSeg
         self.fieldDataInternal = fieldDataInternal
         self.fieldDataCap = fieldDataCap
@@ -35,10 +37,12 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.ucAng = ucAng
         self.rb = rb
         self.numMagnets = numMagnets
-        self.M_uc = M_uc
-        self.M_ang = M_ang
+        m = np.tan(self.ucAng)
+        self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        m = np.tan(self.ang / 2)
+        self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.Lcap = Lcap
-        self.RIn_Ang = RIn_Ang
+        self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
         self.fieldFact = 1.0
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False  # apply magnet Perturbation data
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
@@ -48,7 +52,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
         initParams = (
         self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang,
-        self.ucAng, self.rb, self.numMagnets, self.Lcap, self.M_uc, self.M_ang, self.RIn_Ang)
+        self.ucAng, self.rb, self.numMagnets, self.Lcap)
         internalParams = (self.fieldFact,)
         return initParams, internalParams
 
@@ -130,11 +134,8 @@ class SegmentedBenderSimFieldHelper_Numba:
         # or leaving the element interface as mirror images of each other.
         # FNew: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
-        phi = np.arctan2(y, x)  # the anglular displacement from output of bender to the particle. I use
-        # output instead of input because the unit cell is conceptually located at the output so it's easier to visualize
-        if phi < 0:  # restrict range to between 0 and 2pi
-            phi += 2 * np.pi
-        cellNum = int(phi // self.ucAng) + 1  # cell number that particle is in, starts at one
+        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+        cellNum = int(phi / self.ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
             rotAngle = 2 * (cellNum // 2) * self.ucAng
         else:  # otherwise it needs to be reflected. This is the algorithm for reflections
@@ -156,14 +157,12 @@ class SegmentedBenderSimFieldHelper_Numba:
         x, y, z = x0, y0, z0
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         z = abs(z)
-        phi = np.arctan2(y, x)
-        if phi < 0:  # restrict range to between 0 and 2pi
-            phi += 2 * np.pi
+        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
         if phi <= self.ang:  # if particle is inside bending angle region
             rXYPlane = np.sqrt(x ** 2 + y ** 2)  # radius in xy plane
             if np.sqrt((rXYPlane - self.rb) ** 2 + z ** 2) < self.ap:
                 psi = self.ang - phi
-                revs = int(psi // self.ucAng)  # number of revolutions through unit cell
+                revs = int(psi / self.ucAng)  # number of revolutions through unit cell
                 if revs == 0 or revs == 1:
                     position = 'FIRST'
                 elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:
@@ -217,11 +216,8 @@ class SegmentedBenderSimFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def transform_Element_Coords_Into_Unit_Cell_Frame(self, x, y, z):
-        angle = np.arctan2(y, x)
-        if angle < 0:  # restrict range to between 0 and 2pi
-            angle += 2 * np.pi
-        phi = self.ang - angle
-        revs = int(phi // self.ucAng)  # number of revolutions through unit cell
+        phi = self.ang - full_Arctan2(y, x)
+        revs = int(phi / self.ucAng)  # number of revolutions through unit cell
         if revs % 2 == 0:  # if even
             theta = phi - self.ucAng * revs
         else:  # if odd
@@ -234,10 +230,7 @@ class SegmentedBenderSimFieldHelper_Numba:
     def is_Coord_Inside_Vacuum(self, x, y, z):
         phi = full_Arctan2(y, x)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
-            if (np.sqrt(x ** 2 + y ** 2) - self.rb) ** 2 + z ** 2 < self.ap ** 2:
-                return True
-            else:
-                return False
+            return (np.sqrt(x ** 2 + y ** 2) - self.rb) ** 2 + z ** 2 < self.ap ** 2
         else:  # if outside bender's angle range
             if (x - self.rb) ** 2 + z ** 2 <= self.ap ** 2 and (0 >= y >= -self.Lcap):  # If inside the cap on
                 # eastward side
@@ -245,11 +238,8 @@ class SegmentedBenderSimFieldHelper_Numba:
             else:
                 qTestx = self.RIn_Ang[0, 0] * x + self.RIn_Ang[0, 1] * y
                 qTesty = self.RIn_Ang[1, 0] * x + self.RIn_Ang[1, 1] * y
-                if (qTestx - self.rb) ** 2 + z ** 2 <= self.ap ** 2 and (
-                        self.Lcap >= qTesty >= 0):  # if on the westwards side
-                    return True
-                else:  # if not in either cap, then outside the bender
-                    return False
+                return (qTestx - self.rb) ** 2 + z ** 2 <= self.ap ** 2 and (self.Lcap >= qTesty >= 0)
+                # if on the westwards side
 
     def magnetic_Potential(self, x0, y0, z0):
         # magnetic potential at point q in element frame
@@ -260,7 +250,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         z = abs(z)
         phi = full_Arctan2(y, x)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
-            revs = int((self.ang - phi) // self.ucAng)  # number of revolutions through unit cell
+            revs = int((self.ang - phi) / self.ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
             elif revs == self.numMagnets * 2 - 1 or revs == self.numMagnets * 2 - 2:

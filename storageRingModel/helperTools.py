@@ -7,9 +7,8 @@ from typing import Optional, Union, Callable, Any
 import multiprocess as mp
 import numpy as np
 from scipy.stats.qmc import Sobol
-
+from typeHints import RealNumber
 lst_tup_arr_type = Union[list, tuple, np.ndarray]
-realNumType = Union[int, float]
 
 
 def tool_Parallel_Process(
@@ -109,7 +108,7 @@ def iscloseAll(a: lst_tup_arr_type, b: lst_tup_arr_type, abstol: float) -> bool:
     return np.all(np.isclose(a, b, atol=abstol, equal_nan=False))
 
 
-def within_Tol(a: realNumType, b: realNumType, tol: realNumType = 1e-12):
+def within_Tol(a: RealNumber, b: RealNumber, tol: RealNumber = 1e-12):
     return math.isclose(a, b, abs_tol=tol, rel_tol=0.0)
 
 
@@ -142,19 +141,12 @@ def full_Arctan(y, x):
     return phi
 
 
-def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallThickness: float) -> float:
-    """What is the maximum size that will fit in a segmented bender and respect the geometry"""
-    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 < tubeWallThickness < rp
-    radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
-    maximumTubeRadius = rb - radiusCorner - tubeWallThickness
-    assert maximumTubeRadius > 0.0
-    return maximumTubeRadius
-
-
 def make_Odd(num: int) -> int:
     assert isinstance(num, int) and num != 0 and not num < 0  # i didn't verify this on negative numbers
     return num + (num + 1) % 2
 
+def round_And_Make_Odd(num:RealNumber) -> int:
+    return make_Odd(round(num))
 
 def low_Discrepancy_Sample(bounds: lst_tup_arr_type, num: int, seed=None) -> np.ndarray:
     """

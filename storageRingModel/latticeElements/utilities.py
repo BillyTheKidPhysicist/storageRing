@@ -9,6 +9,9 @@ TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of elem
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
 MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
 
+def maximum_Halbach_Magnet_Width(rp: RealNumber)-> RealNumber:
+    assert rp>0.0
+    return  rp * np.tan(2 * np.pi / 24) * 2
 
 def get_Halbach_Layers_Radii_And_Max_Magnet_Widths(rp: RealNumber, numConcentricLayers: int) -> \
         tuple[FloatTuple, FloatTuple]:
@@ -20,10 +23,17 @@ def get_Halbach_Layers_Radii_And_Max_Magnet_Widths(rp: RealNumber, numConcentric
     for _ in range(numConcentricLayers):
         next_rpLayer = rp + sum(magnetWidths)
         rpLayers.append(next_rpLayer)
-        nextMagnetWidth = next_rpLayer * np.tan(2 * np.pi / 24) * 2
+        nextMagnetWidth = maximum_Halbach_Magnet_Width(next_rpLayer)
         magnetWidths.append(nextMagnetWidth)
     return tuple(rpLayers), tuple(magnetWidths)
 
+def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallThickness: float) -> float:
+    """What is the maximum size that will fit in a segmented bender and respect the geometry"""
+    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 < tubeWallThickness < rp
+    radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
+    maximumTubeRadius = rb - radiusCorner - tubeWallThickness
+    assert maximumTubeRadius > 0.0
+    return maximumTubeRadius
 
 def full_Arctan(q: np.ndarray):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
