@@ -4,7 +4,6 @@ import numpy as np
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import ELEMENT_PLOT_COLORS
 
 
 class LensIdeal(BaseElement):
@@ -15,7 +14,7 @@ class LensIdeal(BaseElement):
     forward velocity. Interior vacuum tube is a cylinder
     """
 
-    def __init__(self, PTL, L: float, Bp: float, rp: float, ap: float, build=True):
+    def __init__(self, PTL, L: float, Bp: float, rp: float, ap: float):
         """
         :param PTL: Instance of ParticleTracerLatticeClass
         :param L: Total length of element and lens, m. Not always the same because of need to contain fringe fields
@@ -24,11 +23,10 @@ class LensIdeal(BaseElement):
         :param ap: Aperture of bore, m. Typically is the radius of the vacuum tube
         """
         # fillParams is used to avoid filling the parameters in inherited classes
-        super().__init__(PTL, ELEMENT_PLOT_COLORS['lens'], L=L)
+        super().__init__(PTL, L=L)
         self.Bp = Bp
         self.rp = rp
         self.ap = rp if ap is None else ap  # size of apeture radially
-        self.shape = 'STRAIGHT'  # The element's geometry
         self.K = None
 
     def fill_Pre_Constrained_Parameters(self) -> None:

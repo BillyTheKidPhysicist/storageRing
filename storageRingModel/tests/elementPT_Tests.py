@@ -204,7 +204,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
                                          applyMethodOfMoments=True, useStandardMagErrors=True,
-                                         numSlices=numSlices)
+                                         numDisks=numSlices)
         rMax = .95 * lensElement.maximum_Good_Field_Aperture()
         qMaxField = np.asarray([lensElement.L / 2, rMax / np.sqrt(2), rMax / np.sqrt(2)])
         FMax = np.linalg.norm(lensElement.force(qMaxField))

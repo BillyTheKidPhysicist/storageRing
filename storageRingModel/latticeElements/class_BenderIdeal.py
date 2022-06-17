@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import ELEMENT_PLOT_COLORS, full_Arctan
+from latticeElements.utilities import  full_Arctan
 
 from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
 class BenderIdeal(BaseElement):
@@ -39,7 +39,7 @@ class BenderIdeal(BaseElement):
         """
 
     def __init__(self, PTL, ang: float, Bp: float, rp: float, rb: float, ap: float):
-        super().__init__(PTL, ELEMENT_PLOT_COLORS['bender'], ang=ang)
+        super().__init__(PTL, ang=ang)
         self.Bp = Bp
         self.rp = rp
         self.ap = self.rp if ap is None else ap
@@ -48,6 +48,7 @@ class BenderIdeal(BaseElement):
         self.shape = 'BEND'
         self.ro = None  # bending radius of orbit, ie rb + rOffset.
         self.segmented = False  # wether the element is made up of discrete segments, or is continuous
+        self.r0 = None  # coordinates of center of bender, minus any caps
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
@@ -58,6 +59,8 @@ class BenderIdeal(BaseElement):
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
+
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         self.fastFieldHelper = get_Bender_Ideal([self.ang, self.K, self.rp, self.rb, self.ap])
 
     def fill_Post_Constrained_Parameters(self):

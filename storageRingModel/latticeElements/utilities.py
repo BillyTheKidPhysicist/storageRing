@@ -10,7 +10,7 @@ TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of elem
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
 MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
 
-ELEMENT_PLOT_COLORS: dict[str] = {'drift': 'grey', 'lens': 'magenta', 'combiner': 'blue', 'bender': 'black'}
+
 
 
 def full_Arctan(q):

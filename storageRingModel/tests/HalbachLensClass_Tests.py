@@ -195,7 +195,7 @@ class HalbachLenstestHelper:
         # test that slices of the lens results in same field values without magnetostatic method of moments, and the
         # length and coordinates work
         lensSingle = HalbachLens(self.rp, self.magnetWidth, self.length)
-        lensSliced = HalbachLens(self.rp, self.magnetWidth, self.length, numSlices=10)
+        lensSliced = HalbachLens(self.rp, self.magnetWidth, self.length, numDisks=10)
         lengthCounted = sum(layer.length for layer in lensSliced.layerList)
         assert within_Tol(lensSliced.length, lengthCounted) and within_Tol(lensSliced.length, lensSliced.length)
         zCenter = sum(layer.position[2] for layer in lensSliced.layerList) / lensSliced.numSlices
@@ -211,21 +211,21 @@ class HalbachLenstestHelper:
         np.random.seed(42)
         lensError = HalbachLens(self.rp, self.magnetWidth, self.length, useStandardMagErrors=True)
         np.random.seed(42)
-        lensErrorSliced = HalbachLens(self.rp, self.magnetWidth, self.length, useStandardMagErrors=True, numSlices=10)
+        lensErrorSliced = HalbachLens(self.rp, self.magnetWidth, self.length, useStandardMagErrors=True, numDisks=10)
         self.test_All_Three_Are_Different(lensPerfect, lensError, lensErrorSliced)
 
     def test7(self):
         # test that magnetostatic method of moments (MOM) changes field values
         lensNaive = HalbachLens(self.rp, self.magnetWidth, self.length)
         lensMOM = HalbachLens(self.rp, self.magnetWidth, self.length, applyMethodOfMoments=True)
-        lensMOMSliced = HalbachLens(self.rp, self.magnetWidth, self.length, applyMethodOfMoments=True, numSlices=10)
+        lensMOMSliced = HalbachLens(self.rp, self.magnetWidth, self.length, applyMethodOfMoments=True, numDisks=10)
         self.test_All_Three_Are_Different(lensNaive, lensMOM, lensMOMSliced)
 
     def test8(self):
         """For systems with many magnets and/or many coordinates I split up the coords into smaller chunks to prevent
         memory overflow"""
 
-        lens = HalbachLens(.05, .025, .1, numSlices=10)
+        lens = HalbachLens(.05, .025, .1, numDisks=10)
         xArr = np.linspace(.01, .01, 10)
         coords = arr_Product(xArr, xArr, xArr)
         BVals_Unsplit = lens.BNorm_Gradient(coords)

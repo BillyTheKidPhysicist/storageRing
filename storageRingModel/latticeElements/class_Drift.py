@@ -4,7 +4,6 @@ import numpy as np
 
 from constants import VACUUM_TUBE_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
-from latticeElements.utilities import ELEMENT_PLOT_COLORS
 from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
 # todo: this needs a good scrubbing and refactoring
@@ -27,7 +26,6 @@ class Drift(LensIdeal):
     def __init__(self, PTL, L: float, ap: float, outerHalfWidth: Optional[float],
                  inputTiltAngle: float, outputTiltAngle: float):
         super().__init__(PTL, L, 0, np.inf, ap)  # set Bp to zero and bore radius to infinite
-        self.plotColor = ELEMENT_PLOT_COLORS['drift']
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
         self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth > ap

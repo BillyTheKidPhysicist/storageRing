@@ -27,8 +27,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, mode, 1.0)
 
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
-        assert self.maxCombinerAng == .2 and self.outerFringeFrac == 1.5, "May need to change " \
-                                                                          "numgrid points if this changes"
+        assert self.outerFringeFrac == 1.5, "May need to change numgrid points if this changes"
         pointPerBoreRadZ = 2
         self.numGridPointsZ: int = make_Odd(
             max([round(pointPerBoreRadZ * (Lm + 2 * self.outerFringeFrac * rp) / rp), 10]))
@@ -78,7 +77,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.lens = _HalbachLensFieldGenerator(tuple(rpList), tuple(magnetWidthList), self.Lm,
                                                applyMethodOfMoments=True,
                                                useStandardMagErrors=self.PTL.standardMagnetErrors,
-                                               numSlices=numSlicesApprox,
+                                               numDisks=numSlicesApprox,
                                                useSolenoidField=self.PTL.useSolenoidField)  # must reuse lens
         # because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
@@ -191,7 +190,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
         inputAngle, inputOffset, trajectoryLength, minBeamLensSep = characterize_CombinerHalbach(self, atomState,
                                                                                                  particleOffset=self.outputOffset)
-        assert np.abs(inputAngle) < self.maxCombinerAng  # tilt can't be too large or it exceeds field region.
         assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
         # Sometimes this can happen because the lens is to long so an oscilattory behaviour is required by injector
         return inputAngle, inputOffset, trajectoryLength

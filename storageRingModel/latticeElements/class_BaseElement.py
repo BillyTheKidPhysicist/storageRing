@@ -6,7 +6,7 @@ from shapely.geometry import Polygon
 
 from constants import SIMULATION_MAGNETON
 
-
+#todo: a base geometry inheritance is most logical
 class BaseElement:
     """
     Base class for other elements. Contains universal attributes and methods.
@@ -18,7 +18,7 @@ class BaseElement:
     and construct itself, which is not always trivial.
     """
 
-    def __init__(self, PTL, plotColor: str, ang: float = 0.0, L=None):
+    def __init__(self, PTL, ang: float = 0.0, L=None):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
         # SEE EACH ELEMENT FOR MORE DETAILS
         # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
@@ -34,7 +34,7 @@ class BaseElement:
         self.PTL = PTL  # particle tracer lattice object. Used for various constants
         self.nb: Optional[np.ndarray] = None  # normal vector to beginning (clockwise sense) of element.
         self.ne: Optional[np.ndarray] = None  # normal vector to end (clockwise sense) of element
-        self.r0: Optional[np.ndarray] = None  # coordinates of center of bender, minus any caps
+
         self.ROut: Optional[np.ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
         self.RIn: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
         self.r1: Optional[np.ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
@@ -47,40 +47,18 @@ class BaseElement:
             float] = None  # outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
-        self.plotColor = plotColor
         self.L: Optional[float] = L
-        self.Lm: Optional[float] = None  # hard edge length of magnet
         self.index: Optional[int] = None
         self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the
         # length. This is a nominal value because for segmented benders the path length is not simple to compute
-        self.bumpVector = np.zeros(3)  # positoin vector of the bump displacement. zero vector for no bump amount
         self.outputOffset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
         self.fieldFact: float = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper = None
-        self.maxCombinerAng: float = .2  # because the field value is a right rectangular prism, it must extend to past the
-        # #end of the tilted combiner. This maximum value is used to set that extra extent, and can't be exceede by ang
-        self._fastFieldHelperInitParams = None  # variable to assist in workaround for jitclass pickling issue
-        self._fastFieldHelperInternalParam = None
-        self.shape: Optional[str] = None
 
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         raise NotImplementedError
-
-    # def __getstate__(self):
-    #     self._fastFieldHelperInitParams = self.fastFieldHelper.get_Init_Params()
-    #     self._fastFieldHelperInternalParam = self.fastFieldHelper.get_Internal_Params()
-    #     paramDict = {}
-    #     for key, val in self.__dict__.items():
-    #         if key != 'fastFieldHelper':
-    #             paramDict[key] = val
-    #     return paramDict
-    #
-    # def __setstate__(self, d):
-    #     self.__dict__ = d
-    #     self.__dict__['fastFieldHelper'] = self.init_fastFieldHelper(self._fastFieldHelperInitParams)
-    #     self.fastFieldHelper.set_Internal_Params(self._fastFieldHelperInternalParam)
 
     def set_fieldFact(self, fieldFact: bool):
         assert fieldFact > 0.0

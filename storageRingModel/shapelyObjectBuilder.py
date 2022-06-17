@@ -132,7 +132,7 @@ def make_Any_Combiner_Inner_Points(el: element) -> list[np.ndarray]:
     Basically a rectangle with a wider tilted rectangle coming off one end (the input)"""
     assert type(el) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
     LbVac = el.Lb if type(el) is CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
-    apR, apL = (el.apR, el.apL) if el.shape == 'COMBINER_SQUARE' else (el.ap, el.ap)
+    apR, apL = (el.apR, el.apL) if type(el) in (CombinerIdeal,CombinerSim) else (el.ap, el.ap)
     extraFact = 1.5 if type(el) is CombinerHalbachLensSim else 1.0
     q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
     q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0

@@ -24,13 +24,7 @@ class CombinerSim(CombinerIdeal):
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
-        """Overrides abstract method from Element"""
-        from latticeElements.combiner_characterizer import characterize_CombinerSim
-        self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
-        self.apL = self.apL * self.sizeScale
-        self.apR = self.apR * self.sizeScale
-        self.apz = self.apz * self.sizeScale
+    def open_And_Shape_Field_Data(self):
         data = np.asarray(pd.read_csv(self.combinerFileName, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
@@ -39,9 +33,19 @@ class CombinerSim(CombinerIdeal):
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
         fieldData = self.shape_Field_Data_3D(data)
+        return fieldData
+
+    def fill_Pre_Constrained_Parameters(self) -> None:
+        """Overrides abstract method from Element"""
+        from latticeElements.combiner_characterizer import characterize_CombinerSim
+        self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
+        self.apL = self.apL * self.sizeScale
+        self.apR = self.apR * self.sizeScale
+        self.apz = self.apz * self.sizeScale
 
 
-        self.fastFieldHelper = get_Combiner_Sim([fieldData, np.nan, self.Lb, self.Lm,
+
+        self.fastFieldHelper = get_Combiner_Sim([self.open_And_Shape_Field_Data(), np.nan, self.Lb, self.Lm,
                                                           self.space, self.apL, self.apR, self.apz, np.nan,
                                                           self.fieldFact])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
@@ -54,11 +58,13 @@ class CombinerSim(CombinerIdeal):
 
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        self.fastFieldHelper = get_Combiner_Sim([fieldData, self.La, self.Lb,
-                                                          self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
-                                                          self.fieldFact])
+
         self.update_Field_Fact(self.fieldFact)
 
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+        self.fastFieldHelper = get_Combiner_Sim([self.open_And_Shape_Field_Data(), self.La, self.Lb,
+                                                 self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
+                                                 self.fieldFact])
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
         self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact

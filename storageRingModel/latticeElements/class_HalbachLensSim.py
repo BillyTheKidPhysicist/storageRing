@@ -13,6 +13,7 @@ from helperTools import make_Odd
 from latticeElements.utilities import  MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
     ElementTooShortError
 
+#todo: test somehow that changing the effective length doens't change results meaningfully
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
@@ -36,21 +37,19 @@ class HalbachLensSim(LensIdeal):
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
         assert self.ap <= self.maximum_Good_Field_Aperture()
         assert self.ap > 5 * self.rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
-        super().__init__(PTL, L, None, self.rp, self.ap)
-        self.L = L
-        self.Lo = None
+        super().__init__(PTL, L, None, self.rp, self.ap) #todo: there should be multiple inheritance here for geometries
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
-
+        self.Lm=None
         self.Lcap: Optional[float] = None
         self.extraFieldLength: Optional[float] = None  # extra field added to end of lens to account misalignment
-        self.minLengthLongSymmetry = self.fringeFracInnerMin * max(self.rpLayers)
-        self.individualMagnetLength: float = None
+        self.individualMagnetLength= None
         # or down
 
     def maximum_Good_Field_Aperture(self) -> float:
         """ from geometric arguments of grid inside circle.
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
+        #todo: remove redundant SMALL_OFFSET thing
         apMax = (self.rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 
@@ -74,12 +73,12 @@ class HalbachLensSim(LensIdeal):
         assert 0.0 <= tiltMax < .1  # small angle. Not sure if valid outside that range
         self.extraFieldLength = self.rp * tiltMax * 1.5  # safety factor for approximations
 
-    def effective_Length(self)-> float:
+    def effective_Material_Length(self)-> float:
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
         is effectively isotropic a sufficient depth inside. This is then modeled as a 2d slice, and the outer edges
         as 3D slice"""
-
-        return self.minLengthLongSymmetry if self.minLengthLongSymmetry < self.Lm else self.Lm
+        minimumEffectiveMaterialLength = self.fringeFracInnerMin * max(self.rpLayers)
+        return minimumEffectiveMaterialLength if minimumEffectiveMaterialLength < self.Lm else self.Lm
 
     def set_Magnet_Widths(self, rpLayers: tuple[float, ...], magnetWidthsProposed: Optional[tuple[float, ...]]) \
             -> tuple[float, ...]:
@@ -103,7 +102,7 @@ class HalbachLensSim(LensIdeal):
 
     def fill_Geometric_Params(self) -> None:
         """Compute dependent geometric values"""
-
+        assert self.L is not None #must be initialized at this point
         self.Lm = self.L - 2 * self.fringeFracOuter * max(self.rpLayers)  # hard edge length of magnet
         if self.Lm < .5 * self.rp:  # If less than zero, unphysical. If less than .5rp, this can screw up my assumption
             # about fringe fields
@@ -112,7 +111,7 @@ class HalbachLensSim(LensIdeal):
             [(MAGNET_ASPECT_RATIO * min(self.magnetWidths)), self.Lm])  # this may get rounded
         # up later to satisfy that the total length is Lm
         self.Lo = self.L
-        self.Lcap = self.effective_Length() / 2 + self.fringeFracOuter * max(self.rpLayers)
+        self.Lcap = self.effective_Material_Length() / 2 + self.fringeFracOuter * max(self.rpLayers)
         mountThickness = 1e-3  # outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outerHalfWidth = max(self.rpLayers) + self.magnetWidths[np.argmax(self.rpLayers)] + mountThickness
 
@@ -155,9 +154,8 @@ class HalbachLensSim(LensIdeal):
         :param yArr: Grid edge y values of quarter of plane
         :return: Either 2d array of field data, or None
         """
-        if self.Lm < self.minLengthLongSymmetry:
-            data2D = None
-        else:
+        exploitVeryLongLens=True if self.effective_Material_Length()<self.Lm else False
+        if exploitVeryLongLens:
             # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
             # save resources
             planeCoords = np.asarray(np.meshgrid(xArr, yArr, 0)).T.reshape(-1, 3)
@@ -167,6 +165,8 @@ class HalbachLensSim(LensIdeal):
                                                                                          returnNorm=True)
             data2D = np.column_stack((planeCoords[:, :2], BNormGrad[:, :2], BNorm))  # 2D is formated as
             # [[x,y,z,B0Gx,B0Gy,B0],..]
+        else:
+            data2D=None
         return data2D
 
     def make_3D_Field_Data(self, fieldGenerator: billyHalbachCollectionWrapper, xArr: np.ndarray, yArr: np.ndarray,
@@ -190,7 +190,7 @@ class HalbachLensSim(LensIdeal):
         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         # input coordinates will be shifted in a wrapper function
         validXY = np.linalg.norm(volumeCoords[:, :2], axis=1) < self.rp
-        validZ = volumeCoords[:, 2] > self.Lm / 2
+        validZ = volumeCoords[:, 2] > self.effective_Material_Length() / 2
         validIndices = np.logical_or(validXY, validZ)
         BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
         BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices],
@@ -206,11 +206,11 @@ class HalbachLensSim(LensIdeal):
     def make_Field_Data(self, useSymmetry: bool, useStandardMagnetErrors: bool, extraFieldSources,
                         enforceGoodField: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
-        lensLength = self.effective_Length() if useSymmetry else self.Lm
-        numSlices = None if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
+        lensLength = self.effective_Material_Length() if useSymmetry else self.Lm
+        numDisks = 1 if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
         lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
-                                          numSlices=numSlices, useSolenoidField=self.PTL.useSolenoidField)
+                                          numDisks=numDisks, useSolenoidField=self.PTL.useSolenoidField)
         sources = [src.copy() for src in [*lens.sources_all, *extraFieldSources]]
         fieldGenerator = billyHalbachCollectionWrapper(sources)
         xArr_Quadrant, yArr_Quadrant, zArr = self.make_Grid_Coord_Arrays(useSymmetry)

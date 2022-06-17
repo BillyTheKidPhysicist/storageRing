@@ -370,13 +370,13 @@ class HalbachLens(billyHalbachCollectionWrapper):
 
     def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float,
                  position: list_tuple_arr = None, orientation: Rotation = None,
-                 M: float = M_Default, numSlices: Optional[int] = 1, applyMethodOfMoments=False,
+                 M: float = M_Default, numDisks: int = 1, applyMethodOfMoments=False,
                  useStandardMagErrors=False, useSolenoidField: bool = False,
                  sameSeed=False):
         # todo: Better seeding system
         super().__init__()
         assert length > 0.0 and M > 0.0
-        assert (isinstance(numSlices, int) and numSlices >= 1) if numSlices is not None else numSlices is None
+        assert (isinstance(numDisks, int) and numDisks >= 1)
         assert isinstance(orientation, (type(None), Rotation))
         assert isinstance(rp, (float, tuple)) and isinstance(magnetWidth, (float, tuple))
         position = (0.0, 0.0, 0.0) if position is None else position
@@ -394,7 +394,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
             raise Exception
         self.sameSeed: bool = sameSeed
         self.M: float = M
-        self.numSlices = numSlices
+        self.numDisks = numDisks
         self.numLayers = len(self.rp)
         self.useSolenoidField = useSolenoidField
         self.mur = 1.05
@@ -454,13 +454,9 @@ class HalbachLens(billyHalbachCollectionWrapper):
     def subdivide_Lens(self) -> tuple[np.ndarray, np.ndarray]:
         """To improve accuracu of magnetostatic method of moments, divide the layers into smaller layers. Also used
          if the lens is composed of slices"""
-        if self.numSlices is None:
-            LArr, zArr = np.array([self.length]), np.zeros(1)
-        else:
-            LArr = np.ones(self.numSlices) * self.length / self.numSlices
-            zArr = np.cumsum(LArr) - self.length / 2 - .5 * self.length / self.numSlices
-        assert within_Tol(np.sum(LArr), self.length) and within_Tol(np.mean(zArr),
-                                                                    0.0)  # length adds up and centered on 0
+        LArr = np.ones(self.numDisks) * self.length / self.numDisks
+        zArr = np.cumsum(LArr) - .5*self.length  - .5 * self.length / self.numDisks
+        assert within_Tol(np.sum(LArr), self.length) and within_Tol(np.mean(zArr),0.0)
         return zArr, LArr
 
     def add_Solenoid_Coils(self) -> None:

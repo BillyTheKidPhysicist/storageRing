@@ -2,7 +2,7 @@ from math import sqrt
 
 import numpy as np
 from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import ELEMENT_PLOT_COLORS
+
 
 from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper,get_Ideal_lens_Field_Helper,get_Halbach_Lens_Helper,get_Combiner_Halbach_Field_Helper,get_Combiner_Ideal,get_Combiner_Sim,get_Halbach_Bender,get_Bender_Ideal
 
@@ -15,7 +15,7 @@ class CombinerIdeal(BaseElement):
 
     def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, mode: str,
                  sizeScale: float):
-        super().__init__(PTL, ELEMENT_PLOT_COLORS['combiner'])
+        super().__init__(PTL)
         assert mode in ('injector', 'storageRing')
         self.fieldFact = -1.0 if mode == 'injector' else 1.0
         self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
@@ -53,8 +53,10 @@ class CombinerIdeal(BaseElement):
         self.La = .5 * (self.apR + self.apL) * np.sin(self.ang)
         self.L = self.La * np.cos(
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
+
+    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         self.fastFieldHelper = get_Combiner_Ideal([self.c1, self.c2, self.La, self.Lb,
-                                                          self.apL, self.apR, self.apz, self.ang])
+                                                   self.apL, self.apR, self.apz, self.ang])
 
     def compute_Trajectory_Length(self, qTracedArr: np.ndarray) -> float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their

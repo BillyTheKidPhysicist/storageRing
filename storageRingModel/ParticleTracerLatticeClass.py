@@ -10,7 +10,7 @@ from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
-    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift
+    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift,ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
 from shapelyObjectBuilder import build_Shapely_Objects
 from storageRingConstraintSolver import is_Particle_Tracer_Lattice_Closed
@@ -293,8 +293,7 @@ class ParticleTracerLattice:
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
             if buildFieldHelper:
-                if type(el) in (HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim,Drift,LensIdeal):
-                    el.build_Fast_Field_Helper([])
+                el.build_Fast_Field_Helper([])
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
@@ -403,10 +402,10 @@ class ParticleTracerLattice:
             if plotInner:
                 elPlotPoints = el.SO.exterior.xy
                 linestyle = ':' if plotOuter else '-'  # dashed inner if plotting iner
-                plt.plot(*elPlotPoints, c=el.plotColor, linestyle=linestyle)
+                plt.plot(*elPlotPoints, c=ELEMENT_PLOT_COLORS[type(el)], linestyle=linestyle)
             if plotOuter:
                 elPlotPoints = el.SO_Outer.exterior.xy
-                plt.plot(*elPlotPoints, c=el.plotColor)
+                plt.plot(*elPlotPoints, c=ELEMENT_PLOT_COLORS[type(el)])
 
         if particleCoords is not None:  # plot from the provided particle coordinate
             if len(particleCoords) == 3:  # if the 3d value is provided trim it to 2D

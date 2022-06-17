@@ -10,3 +10,6 @@ from typing import Union
 
 Element = Union[CombinerHalbachLensSim,BenderIdeal,CombinerIdeal,
           CombinerSim,Drift,LensIdeal,HalbachBenderSimSegmented,HalbachLensSim]
+
+ELEMENT_PLOT_COLORS = {Drift: 'grey', LensIdeal: 'magenta',HalbachLensSim: 'magenta', CombinerIdeal: 'blue',
+        CombinerSim: 'blue',CombinerHalbachLensSim: 'blue', HalbachBenderSimSegmented: 'black',BenderIdeal: 'black'}
