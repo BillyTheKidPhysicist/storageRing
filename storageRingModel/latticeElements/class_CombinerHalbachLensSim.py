@@ -92,7 +92,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         seed = DEFAULT_SEED if self.seed is None else self.seed
         state = np.random.get_state()
         np.random.seed(seed)
-        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm,
+        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm,self.PTL.magnetGrade,
                                           applyMethodOfMoments=True,
                                           useStandardMagErrors=self.PTL.standardMagnetErrors,
                                           numDisks=numDisks,

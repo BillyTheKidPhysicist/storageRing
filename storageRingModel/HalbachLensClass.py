@@ -11,12 +11,11 @@ from magpylib.magnet import Cuboid as _Cuboid
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 
-from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD
+from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD,GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_To_Meter, radians, within_Tol, time
 from latticeElements.utilities import max_Tube_Radius_In_Segmented_Bend
 
-M_Default = 1.018E6  # default magnetization value, SI. Magnetization for N48 grade
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 tuple3Float = tuple[float, float, float]
@@ -43,7 +42,7 @@ def B_NUMBA(r: np.ndarray, r0: np.ndarray, m: np.ndarray) -> np.ndarray:
 
 class Sphere:
 
-    def __init__(self, radius: float, M: float = M_Default):
+    def __init__(self, radius: float, magnetGrade: str='legacy'):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         # M: magnetization
@@ -51,7 +50,7 @@ class Sphere:
         self.angle: Optional[float] = None  # angular location of the magnet
         self.radius: float = radius
         self.volume: float = (4 * np.pi / 3) * self.radius ** 3  # m^3
-        self.m0: float = M * self.volume  # dipole moment
+        self.m0: float = MAGNETIC_PERMEABILITY[magnetGrade] * self.volume  # dipole moment
         self.r0: Optional[np.ndarray] = None  # location of sphere
         self.n: Optional[np.ndarray] = None  # orientation
         self.m: Optional[np.ndarray] = None  # vector sphere moment
@@ -268,12 +267,12 @@ class Layer(billyHalbachCollectionWrapper):
 
     numMagnetsInLayer = 12
 
-    def __init__(self, rp: float, magnetWidth: float, length: float, position: tuple3Float = None,
-                 orientation: Rotation = None, M: float = M_Default, mur: float = 1.05,
+    def __init__(self, rp: float, magnetWidth: float, length: float, magnetGrade:str,position: tuple3Float = None,
+                 orientation: Rotation = None, mur: float = 1.05,
                  rMagnetShift=None, thetaShift=None, phiShift=None, M_NormShiftRelative=None, dimShift=None,
                  M_AngleShift=None, applyMethodOfMoments=False):
         super().__init__()
-        assert magnetWidth > 0.0 and length > 0.0 and M > 0.0
+        assert magnetWidth > 0.0 and length > 0.0
         assert isinstance(orientation, (type(None), Rotation))
         position = (0.0, 0.0, 0.0) if position is None else position
         self.rMagnetShift: np.ndarray = self.make_Arr_If_None_Else_Copy(rMagnetShift)
@@ -289,7 +288,7 @@ class Layer(billyHalbachCollectionWrapper):
         self.magnetWidth: float = magnetWidth
         self.length: float = length
         self.applyMethodOfMoments = applyMethodOfMoments
-        self.M: float = M
+        self.M: float = GRADE_MAGNETIZATION[magnetGrade]
         self.build()
 
     def make_Arr_If_None_Else_Copy(self, variable: Optional[list_tuple_arr], numParams=1) -> np.ndarray:
@@ -370,14 +369,13 @@ class Layer(billyHalbachCollectionWrapper):
 class HalbachLens(billyHalbachCollectionWrapper):
     numMagnetsInLayer = 12
 
-    def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float,
+    def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float, magnetGrade: str,
                  position: list_tuple_arr = None, orientation: Rotation = None,
-                 M: float = M_Default, numDisks: int = 1, applyMethodOfMoments=False,
-                 useStandardMagErrors=False, useSolenoidField: bool = False,
-                 sameSeed=False):
+                 numDisks: int = 1, applyMethodOfMoments=False,useStandardMagErrors=False,
+                 useSolenoidField: bool = False,sameSeed=False):
         # todo: Better seeding system
         super().__init__()
-        assert length > 0.0 and M > 0.0
+        assert length > 0.0
         assert (isinstance(numDisks, int) and numDisks >= 1)
         assert isinstance(orientation, (type(None), Rotation))
         assert isinstance(rp, (float, tuple)) and isinstance(magnetWidth, (float, tuple))
@@ -395,7 +393,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         if sameSeed is True:
             raise Exception
         self.sameSeed: bool = sameSeed
-        self.M: float = M
+        self.magnetGrade=magnetGrade
         self.numDisks = numDisks
         self.numLayers = len(self.rp)
         self.useSolenoidField = useSolenoidField
@@ -413,7 +411,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                 else:
                     dimVariation, magVecAngleVariation, magNormVariation = np.zeros((12, 3)), np.zeros(
                         (12, 2)), np.zeros((12, 1))
-                layer = Layer(radiusLayer, widthLayer, length, M=self.M, position=(0, 0, zLayer),
+                layer = Layer(radiusLayer, widthLayer, length, magnetGrade=self.magnetGrade, position=(0, 0, zLayer),
                               M_AngleShift=magVecAngleVariation, dimShift=dimVariation,
                               M_NormShiftRelative=magNormVariation, mur=self.mur)
                 self.add(layer)
@@ -481,9 +479,9 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 
-    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, numLenses: int = 3,
-                 M: float = M_Default, positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False,
-                 useMagnetError: bool = False, useHalfCapEnd: tuple = None, useSolenoidField: bool = False):
+    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnetGrade: str,numLenses,useHalfCapEnd: tuple[bool,bool],
+                positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False,useMagnetError: bool = False,
+                  useSolenoidField: bool = False):
         # todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(numLenses, int)
@@ -494,7 +492,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # is called the unit cell because obviously one only needs to use half the magnet and can use symmetry to
         # solve the rest
         self.Lm: float = Lm  # length of single magnet
-        self.M: float = M  # magnetization, SI
+        self.magnetGrade=magnetGrade
         self.useSolenoidField = useSolenoidField
         self.positiveAngleMagnetsOnly: bool = positiveAngleMagnetsOnly  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
@@ -538,7 +536,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def _build(self) -> None:
         for Lm, angle in self.lens_Length_And_Angle_Iter():
-            lens = HalbachLens(self.rp, self.magnetWidth, Lm, M=self.M, position=(self.rb, 0.0, 0.0),
+            lens = HalbachLens(self.rp, self.magnetWidth, Lm, magnetGrade=self.magnetGrade, position=(self.rb, 0.0, 0.0),
                                useStandardMagErrors=self.useStandardMagnetErrors,
                                applyMethodOfMoments=False)
             R = Rotation.from_rotvec([0.0, -angle, 0.0])

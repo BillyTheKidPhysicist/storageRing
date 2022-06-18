@@ -91,7 +91,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
         m = 1  # in simulation units mass is 1kg
         ucAngApprox = self.get_Unit_Cell_Angle()  # this will be different if the bore radius changes
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, numLenses=5,
+        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, self.PTL.magnetGrade,5,(False,False),
                                             applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
         thetaArr = np.linspace(-ucAngApprox, ucAngApprox, 100)
         yArr = np.zeros(len(thetaArr))
@@ -209,16 +209,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     def generate_Perturbation_Data(self) -> tuple[np.ndarray, ...]:
         coordsCenter, coordsCartesian = self.make_Perturbation_Data_Coords()
-        lensMisaligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                      numLenses=self.numMagnets, positiveAngleMagnetsOnly=True,
-                                                      useMagnetError=True, useHalfCapEnd=(True, True),
-                                                      applyMethodOfMoments=False,
-                                                      useSolenoidField=self.PTL.useSolenoidField)
-        lensAligned = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                   numLenses=self.numMagnets, positiveAngleMagnetsOnly=True,
-                                                   useMagnetError=False, useHalfCapEnd=(True, True),
-                                                   applyMethodOfMoments=False,
-                                                   useSolenoidField=self.PTL.useSolenoidField)
+        lensMisaligned=self.build_Lens(True,(True,True),methodOfMoments=False,numLenses=self.numMagnets,useMagnetErrors=True)
+        lensAligned=self.build_Lens(True,(True,True),methodOfMoments=False,numLenses=self.numMagnets)
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices = rCenterArr < self.rp
         valsMisaligned = np.column_stack(self.compute_Valid_Field_Vals(lensMisaligned, coordsCartesian, validIndices))
@@ -238,10 +230,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         zMax = TINY_STEP
         fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
         validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 1] ** 2) < self.rp
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                            numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,
-                                            applyMethodOfMoments=True, useHalfCapEnd=(True, False),
-                                            useSolenoidField=self.PTL.useSolenoidField)
+        lens=self.build_Lens(True,(True,False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def is_Valid_Internal_Fringe(self, coord0: np.ndarray) -> bool:
@@ -264,10 +253,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         zMax = np.tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_STEP
         fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
         validIndices = [self.is_Valid_Internal_Fringe(coord) for coord in fieldCoords]
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                            numLenses=self.numModelLenses, positiveAngleMagnetsOnly=True,
-                                            applyMethodOfMoments=True, useHalfCapEnd=(True, False),
-                                            useSolenoidField=self.PTL.useSolenoidField)
+        lens = self.build_Lens(True,(True, False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def generate_Segment_Field_Data(self) -> tuple[np.ndarray, ...]:
@@ -280,9 +266,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
         validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 1] ** 2) < self.rp
         assert not is_Even(self.numModelLenses)  # must be odd so magnet is centered at z=0
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                            numLenses=self.numModelLenses, applyMethodOfMoments=True,
-                                            positiveAngleMagnetsOnly=False, useSolenoidField=self.PTL.useSolenoidField)
+        lens=self.build_Lens(False,(False,False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def compute_Valid_Field_Vals(self, lens: _HalbachBenderFieldGenerator, fieldCoords: np.ndarray,
@@ -297,6 +281,13 @@ class HalbachBenderSimSegmented(BenderIdeal):
         BNormGradArr, BNormArr = self.compute_Valid_Field_Vals(lens, fieldCoords, validIndices)
         fieldDataUnshaped = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
         return self.shape_Field_Data_3D(fieldDataUnshaped)
+
+    def build_Lens(self,positiveAngleOnly: bool,useHalfCapEnd: tuple[bool,bool],methodOfMoments: bool=True,
+                   numLenses: int=None,useMagnetErrors: bool =False):
+        numLenses=self.numModelLenses if numLenses is None else numLenses
+        return _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, self.PTL.magnetGrade,
+                                     numLenses,useHalfCapEnd, applyMethodOfMoments=methodOfMoments,
+                        positiveAngleMagnetsOnly=positiveAngleOnly, useSolenoidField=self.PTL.useSolenoidField,useMagnetError=useMagnetErrors)
 
     def in_Which_Section_Of_Bender(self, qEl: np.ndarray) -> str:
         """Find which section of the bender qEl is in. options are:

@@ -209,7 +209,7 @@ class HalbachLensSim(LensIdeal):
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength = self.effective_Material_Length() if useSymmetry else self.Lm
         numDisks = 1 if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
-        lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,
+        lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,self.PTL.magnetGrade,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
                                           numDisks=numDisks, useSolenoidField=self.PTL.useSolenoidField)
         sources = [src.copy() for src in [*lens.sources_all, *extraFieldSources]]

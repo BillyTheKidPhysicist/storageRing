@@ -42,6 +42,7 @@ class PTL_Dummy:
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
+        self.magnetGrade='legacy'
 
 
 class ElementTestHelper:
@@ -202,7 +203,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsXY
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
-        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,
+        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,'legacy',
                                          applyMethodOfMoments=True, useStandardMagErrors=True,
                                          numDisks=numSlices)
         rMax = .95 * lensElement.maximum_Good_Field_Aperture()
@@ -363,15 +364,15 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         np.random.seed(42)
-        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,
-                                           numLenses=numMagnets, applyMethodOfMoments=False,
+        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,'legacy',numMagnets,
+                                           (True,True),applyMethodOfMoments=False,
                                            positiveAngleMagnetsOnly=True, useMagnetError=False,
-                                           useHalfCapEnd=(True, True))
+                                           )
         np.random.seed(42)
-        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,
-                                              numLenses=numMagnets, applyMethodOfMoments=False,
-                                              positiveAngleMagnetsOnly=True, useMagnetError=True,
-                                              useHalfCapEnd=(True, True))
+        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,'legacy',numMagnets,
+                                           (True,True),
+                                               applyMethodOfMoments=False,
+                                              positiveAngleMagnetsOnly=True, useMagnetError=True)
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian) - 1)
 
         @given(testStrategy)
