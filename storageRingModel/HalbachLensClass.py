@@ -1,9 +1,9 @@
 import copy
 from numbers import Number
-import numba
-import numpy as np
 
 import magpylib.current
+import numba
+import numpy as np
 from magpylib import Collection
 from magpylib._src.fields.field_wrap_BH_level2 import getBH_level2
 from magpylib._src.obj_classes.class_BaseTransform import apply_move
@@ -11,11 +11,10 @@ from magpylib.magnet import Cuboid as _Cuboid
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 
-from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD,GRADE_MAGNETIZATION
+from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_To_Meter, radians, within_Tol, time
-from latticeElements.utilities import max_Tube_Radius_In_Segmented_Bend
-
+from latticeElements.utilities import max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 tuple3Float = tuple[float, float, float]
@@ -42,11 +41,11 @@ def B_NUMBA(r: np.ndarray, r0: np.ndarray, m: np.ndarray) -> np.ndarray:
 
 class Sphere:
 
-    def __init__(self, radius: float, magnetGrade: str='legacy'):
+    def __init__(self, radius: float, magnetGrade: str = 'legacy'):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         # M: magnetization
-        assert radius > 0 and M > 0
+        assert radius > 0
         self.angle: Optional[float] = None  # angular location of the magnet
         self.radius: float = radius
         self.volume: float = (4 * np.pi / 3) * self.radius ** 3  # m^3
@@ -267,7 +266,7 @@ class Layer(billyHalbachCollectionWrapper):
 
     numMagnetsInLayer = 12
 
-    def __init__(self, rp: float, magnetWidth: float, length: float, magnetGrade:str,position: tuple3Float = None,
+    def __init__(self, rp: float, magnetWidth: float, length: float, magnetGrade: str, position: tuple3Float = None,
                  orientation: Rotation = None, mur: float = 1.05,
                  rMagnetShift=None, thetaShift=None, phiShift=None, M_NormShiftRelative=None, dimShift=None,
                  M_AngleShift=None, applyMethodOfMoments=False):
@@ -371,8 +370,8 @@ class HalbachLens(billyHalbachCollectionWrapper):
 
     def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float, magnetGrade: str,
                  position: list_tuple_arr = None, orientation: Rotation = None,
-                 numDisks: int = 1, applyMethodOfMoments=False,useStandardMagErrors=False,
-                 useSolenoidField: bool = False,sameSeed=False):
+                 numDisks: int = 1, applyMethodOfMoments=False, useStandardMagErrors=False,
+                 useSolenoidField: bool = False, sameSeed=False):
         # todo: Better seeding system
         super().__init__()
         assert length > 0.0
@@ -393,7 +392,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         if sameSeed is True:
             raise Exception
         self.sameSeed: bool = sameSeed
-        self.magnetGrade=magnetGrade
+        self.magnetGrade = magnetGrade
         self.numDisks = numDisks
         self.numLayers = len(self.rp)
         self.useSolenoidField = useSolenoidField
@@ -479,9 +478,10 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 
-    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnetGrade: str,numLenses,useHalfCapEnd: tuple[bool,bool],
-                positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False,useMagnetError: bool = False,
-                  useSolenoidField: bool = False):
+    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnetGrade: str, numLenses,
+                 useHalfCapEnd: tuple[bool, bool],
+                 positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False, useMagnetError: bool = False,
+                 useSolenoidField: bool = False, magnetWidth: float = None):
         # todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(numLenses, int)
@@ -492,12 +492,12 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # is called the unit cell because obviously one only needs to use half the magnet and can use symmetry to
         # solve the rest
         self.Lm: float = Lm  # length of single magnet
-        self.magnetGrade=magnetGrade
+        self.magnetGrade = magnetGrade
         self.useSolenoidField = useSolenoidField
         self.positiveAngleMagnetsOnly: bool = positiveAngleMagnetsOnly  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
-        self.magnetWidth: float = rp * np.tan(2 * np.pi / 24) * 2  # set to size that exactly fits
+        self.magnetWidth: float = halbach_Magnet_Width(rp, magnetSeparation=0.0) if magnetWidth is None else magnetWidth
         assert np.tan(.5 * Lm / (rb - self.magnetWidth)) <= UCAngle  # magnets should not overlap!
         self.numLenses: int = numLenses  # number of lenses in the model
         self.lensList: list[HalbachLens] = []  # list to hold lenses
@@ -536,7 +536,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def _build(self) -> None:
         for Lm, angle in self.lens_Length_And_Angle_Iter():
-            lens = HalbachLens(self.rp, self.magnetWidth, Lm, magnetGrade=self.magnetGrade, position=(self.rb, 0.0, 0.0),
+            lens = HalbachLens(self.rp, self.magnetWidth, Lm, magnetGrade=self.magnetGrade,
+                               position=(self.rb, 0.0, 0.0),
                                useStandardMagErrors=self.useStandardMagnetErrors,
                                applyMethodOfMoments=False)
             R = Rotation.from_rotvec([0.0, -angle, 0.0])

@@ -9,10 +9,8 @@ from helperTools import iscloseAll
 from helperTools import make_Odd
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
-    ElementTooShortError
+    ElementTooShortError, halbach_Magnet_Width
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Lens_Helper
-
-
 
 
 class HalbachLensSim(LensIdeal):
@@ -92,10 +90,10 @@ class HalbachLensSim(LensIdeal):
             will be calculated based on geometry
         :return: tuple of transverse widths of magnets
         """
-        maximumMagnetWidth = tuple(rp * np.tan(2 * np.pi / 24) * 2 for rp in rpLayers)
-        magnetWidths = maximumMagnetWidth if magnetWidthsProposed is None else magnetWidthsProposed
+        defaultMagnetWidths = tuple(halbach_Magnet_Width(rp) for rp in rpLayers)
+        magnetWidths = defaultMagnetWidths if magnetWidthsProposed is None else magnetWidthsProposed
         assert len(magnetWidths) == len(rpLayers)
-        assert all(width <= maxWidth for width, maxWidth in zip(magnetWidths, maximumMagnetWidth))
+        assert all(width <= maxWidth for width, maxWidth in zip(magnetWidths, defaultMagnetWidths))
         if len(rpLayers) > 1:
             for indexPrev, rp in enumerate(rpLayers[1:]):
                 assert rp >= rpLayers[indexPrev] + magnetWidths[indexPrev] - 1e-12
@@ -209,7 +207,7 @@ class HalbachLensSim(LensIdeal):
         """Make 2D and 3D field data. 2D may be None if lens is to short for symmetry."""
         lensLength = self.effective_Material_Length() if useSymmetry else self.Lm
         numDisks = 1 if not useStandardMagnetErrors else self.get_Num_Lens_Slices()
-        lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength,self.PTL.magnetGrade,
+        lens = _HalbachLensFieldGenerator(self.rpLayers, self.magnetWidths, lensLength, self.PTL.magnetGrade,
                                           applyMethodOfMoments=True, useStandardMagErrors=useStandardMagnetErrors,
                                           numDisks=numDisks, useSolenoidField=self.PTL.useSolenoidField)
         sources = [src.copy() for src in [*lens.sources_all, *extraFieldSources]]

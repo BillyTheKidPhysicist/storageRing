@@ -8,6 +8,26 @@ from math import isclose
 
 testDataFolderPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'testData')
 
+#reoptimize
+"""
+    def cost(X):
+        rb=X[0]
+        Lm, rp, numMagnets = .05, .01, 62
+        PTL = ParticleTracerLattice(fieldDensityMultiplier=.5)
+        PTL.add_Drift(1.0)
+        PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnets, rb)
+        PTL.add_Drift(1.0)
+        PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnets, rb)
+        PTL.end_Lattice()
+        floorPlan = solve_Floor_Plan(PTL,False)
+        posSep, normSep = floorPlan.get_End_Separation_Vectors()
+        _cost=np.linalg.norm(posSep)+np.linalg.norm(normSep)
+        print(rb,_cost)
+        return _cost
+    from scipy.optimize import minimize
+    sol = minimize(cost, [1.0], bounds=[(.9, 1.1)], method='Nelder-Mead', options={'ftol': 1e-14})
+    print(sol)
+"""
 
 def _make_Lattice_1():
     PTL = ParticleTracerLattice()
@@ -22,10 +42,9 @@ def _make_Lattice_1():
 
 
 def _make_Lattice_2():
-    rb = 1.0019084934446032  # this was found by minimizing abs(angle-np.pi) as a functino of bending radus combined
+    rb = 1.0016496743948662 # this was found by minimizing abs(angle-np.pi) as a functino of bending radus combined
     # with tweaking numMagnets
     Lm, rp, numMagnets = .05, .01, 62
-    # sol=minimize(ang,[1.0],bounds=[(.9,1.1)], method='Nelder-Mead',options={'ftol':1e-14} )
     PTL = ParticleTracerLattice(fieldDensityMultiplier=.5)
     PTL.add_Drift(1.0)
     PTL.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnets, rb)
@@ -42,7 +61,7 @@ def _test_Storage_Ring_Constraint_1():
     for PTL in PTL_List:
         floorPlan = solve_Floor_Plan(PTL,False)
         posSep, normSep = floorPlan.get_End_Separation_Vectors()
-        assert iscloseAll(posSep, normSep, 1e-10)
+        assert iscloseAll(posSep, np.zeros(2), 1e-9) and iscloseAll(normSep, np.zeros(2), 1e-9)
 
 
 def _test_Storage_Ring_Constraint_2():

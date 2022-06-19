@@ -25,7 +25,7 @@ class ParticleTracerLattice:
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
                  useSolenoidField: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
-                 magnetGrade: str='legacy'):
+                 magnetGrade: str = 'N52'):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -52,7 +52,7 @@ class ParticleTracerLattice:
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
         self.isClosed = None  # is the lattice closed, ie end and beginning are smoothly connected?
-        self.magnetGrade=magnetGrade
+        self.magnetGrade = magnetGrade
         self.useSolenoidField = useSolenoidField
 
         self.elList: list[Element] = []  # to hold all the lattice elements

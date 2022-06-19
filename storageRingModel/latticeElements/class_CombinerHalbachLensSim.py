@@ -9,7 +9,7 @@ from helperTools import make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even
-from latticeElements.utilities import get_Halbach_Layers_Radii_And_Max_Magnet_Widths
+from latticeElements.utilities import get_Halbach_Layers_Radii_And_Magnet_Widths
 from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Halbach_Field_Helper
 
 DEFAULT_SEED = 42
@@ -18,13 +18,13 @@ DEFAULT_SEED = 42
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
 
-    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, layers: int, ap: Optional[float], seed):
+    def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, numLayers: int, ap: Optional[float], seed):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # loadBeamOffset: Expected diameter of loading beam. Used to set the maximum combiner bending
         # layers: Number of concentric layers
         # mode: wether storage ring or injector. Injector uses high field seeking, storage ring used low field seeking
-        assert all(val > 0 for val in (Lm, rp, loadBeamOffset, layers))
+        assert all(val > 0 for val in (Lm, rp, loadBeamOffset, numLayers))
         assert ap < rp if ap is not None else True
         CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0)
 
@@ -39,7 +39,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
         self.Lm = Lm
         self.rp = rp
-        self.layers = layers
+        self.numLayers = numLayers
         self.ap = min([.9 * rp, rp - VACUUM_TUBE_THICKNESS]) if ap is None else ap
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
@@ -61,7 +61,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
-        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Max_Magnet_Widths(self.rp, self.layers)
+        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers)
         self.magnetWidths = magnetWidths
         self.space = max(rpLayers) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
@@ -85,14 +85,14 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def make_Lens(self) -> _HalbachLensFieldGenerator:
         """Make field generating lens. A seed is required to reproduce the same magnet if magnet errors are being
         used because this is called multiple times."""
-        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Max_Magnet_Widths(self.rp, self.layers)
+        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers)
         individualMagnetLengthApprox = min([(MAGNET_ASPECT_RATIO * min(magnetWidths)), self.Lm])
         numDisks = 1 if not self.PTL.standardMagnetErrors else round(self.Lm / individualMagnetLengthApprox)
 
         seed = DEFAULT_SEED if self.seed is None else self.seed
         state = np.random.get_state()
         np.random.seed(seed)
-        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm,self.PTL.magnetGrade,
+        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm, self.PTL.magnetGrade,
                                           applyMethodOfMoments=True,
                                           useStandardMagErrors=self.PTL.standardMagnetErrors,
                                           numDisks=numDisks,

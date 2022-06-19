@@ -11,6 +11,7 @@ import sys
 import pytest
 from latticeElements.elements import  BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
     HalbachBenderSimSegmented, HalbachLensSim,Element
+from latticeElements.utilities import halbach_Magnet_Width
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from ParticleTracerClass import ParticleTracer
 from ParticleClass import Particle
@@ -42,7 +43,7 @@ class PTL_Dummy:
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
-        self.magnetGrade='legacy'
+        self.magnetGrade='N52'
 
 
 class ElementTestHelper:
@@ -177,8 +178,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnetWidth = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.13132158088021298, 0.005449978510930973, -0.008573858031929796])
-        pf0 = np.array([-201.18865808223083, -2.9780591461212036, 3.695121970829412])
+        qf0 = np.array([-0.13128157981281258 ,  0.005179464489541285,-0.00816744955197204 ])
+        pf0 = np.array([-201.14938782672996 ,   -3.791800050228535,    4.929317603651907])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -203,7 +204,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsXY
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
-        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,'legacy',
+        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,'N52',
                                          applyMethodOfMoments=True, useStandardMagErrors=True,
                                          numDisks=numSlices)
         rMax = .95 * lensElement.maximum_Good_Field_Aperture()
@@ -322,8 +323,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.numMagnets * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2741721073688994e-01, 1.8271263884343085e+00, 1.2264783539487748e-03])
-        pf0 = np.array([159.51941155704313, -122.21312727101619, 4.557126606780754])
+        qf0 = np.array([6.262410307854535e-01, 1.826210807730381e+00,5.132746656403178e-04])
+        pf0 = np.array([ 156.16828847684712 , -126.47441748337376 ,   -4.340329448157571])
         super().__init__(HalbachBenderSimSegmented, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -363,15 +364,16 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             el.build_Fast_Field_Helper([])
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
+        magnetWidth= halbach_Magnet_Width(self.rp)
         np.random.seed(42)
-        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,'legacy',numMagnets,
+        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,'N52',numMagnets,
                                            (True,True),applyMethodOfMoments=False,
-                                           positiveAngleMagnetsOnly=True, useMagnetError=False,
+                                           positiveAngleMagnetsOnly=True, useMagnetError=False,magnetWidth=magnetWidth
                                            )
         np.random.seed(42)
-        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,'legacy',numMagnets,
+        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,'N52',numMagnets,
                                            (True,True),
-                                               applyMethodOfMoments=False,
+                                               applyMethodOfMoments=False,magnetWidth=magnetWidth,
                                               positiveAngleMagnetsOnly=True, useMagnetError=True)
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian) - 1)
 
@@ -434,8 +436,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0123749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-0.20689117957599978  , -0.005641559187628872 ,0.0038662499935709295])
-        pf0 = np.array([-200.39850089004324 ,  -13.133632232494739,   10.249421297183858])
+        qf0 = np.array([-0.20576190116502344 , -0.006286179840176073,0.004116342447995729])
+        pf0 = np.array([-200.4922770093567  ,  -12.289815876558258,    9.356086023409535])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -610,8 +612,8 @@ class ElementTestRunner:
             qf, pf = particle.qf, particle.pf
             np.set_printoptions(precision=100)
             if iscloseAll(qf, qf0, absTol) == False or iscloseAll(pf, pf0, absTol) == False:
-                # print(repr(qf), repr(pf))
-                # print(repr(qf0), repr(pf0))
+                print(repr(qf), repr(pf))
+                print(repr(qf0), repr(pf0))
                 raise ValueError("particle test mismatch")
 
     def is_Inside_Shapely(self, qEl_2D):

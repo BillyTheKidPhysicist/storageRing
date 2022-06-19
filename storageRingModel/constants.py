@@ -25,16 +25,21 @@ SIMULATION_MAGNETON: float = BHOR_MAGNETON / MASS_LITHIUM_7  # Simulation units 
 VACUUM_TUBE_THICKNESS: float = _inch_To_Meter(.05)  # minimum weldable thickness of a vacuum tube, m
 DEFAULT_ATOM_SPEED: float = 210.0  # default speed of atoms, m/s
 MIN_MAGNET_MOUNT_THICKNESS: float = 1e-3  # Nominal minimum material thickness for magnet mount, m. At thinnest point
-FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(
-    1 / 8)  # minimum thickness of a flat wall under vacuum with dimension less
-# than 1x1 foot
+FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(1 / 8)  # minimum thickness of a flat wall under vacuum with
+# dimension less  than 1x1 foot
+
+SPACE_BETWEEN_MAGNETS_IN_MOUNT = .25e-3  # space between inside edges of neighboring magnets in hexapole mount
+# configuration. Smaller than this and assembly could be infeasible because of magnet/machining tolerances
+
 MAGNET_WIRE_DIAM: float = 500e-6  # this thickness supports ~.5amp/mm^2 (no water cooling) for 5 gauss in a solenoid
 SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(3)  # field to prevent majorana splin flips
 
 CUBIC_METER_TO_CUBIC_INCH = 61023.7  # conversion from cubic meters to cubic inches
-COST_PER_CUBIC_INCH_PERM_MAGNET: float = 26.19  # USD. Per K&J magnetics:
-# https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0
-GRADE_MAGNETIZATION={'N52':1.465/MAGNETIC_PERMEABILITY,'N50':1.43/MAGNETIC_PERMEABILITY,
-                     'N48':1.40/MAGNETIC_PERMEABILITY,'N45':1.35/MAGNETIC_PERMEABILITY,
-                     'N42':1.31/MAGNETIC_PERMEABILITY,'N40':1.275/MAGNETIC_PERMEABILITY,
-                     'legacy':1.018E6}
+COST_PER_CUBIC_INCH_PERM_MAGNET: float = 34.76  # USD. Per K&J magnetics for N52:
+# https://www.kjmagnetics.com/proddetail.asp?prod=BX0X0X0-N52&cat=168
+
+GRADE_MAGNETIZATION = {'N52': 1.465 / MAGNETIC_PERMEABILITY, 'N50': 1.43 / MAGNETIC_PERMEABILITY,
+                       'N48': 1.40 / MAGNETIC_PERMEABILITY, 'N45': 1.35 / MAGNETIC_PERMEABILITY,
+                       'N42': 1.31 / MAGNETIC_PERMEABILITY, 'N40': 1.275 / MAGNETIC_PERMEABILITY,
+                       'legacy': 1.018E6}
+# from, https://www.kjmagnetics.com/specs.asp
