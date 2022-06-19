@@ -4,6 +4,7 @@ from typing import Union, Optional
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from latticeElements.utilities import get_Unit_Cell_Angle
 lst_arr_tple = Union[list, np.ndarray, tuple]
 
 
@@ -160,15 +161,11 @@ class SlicedBend(Bend):
         self.bendingAngle = self.get_Arc_Angle() if numMagnets is not None else None
         super().__init__(radius, self.bendingAngle)
 
-    def get_Unit_Cell_Angle(self) -> float:
-        """Get the arc angle associate with a single unit cell. Each magnet contains two unit cells."""
-
-        return np.arctan(.5 * self.lengthSegment / (self.radius - self.magnetDepth))  # radians
 
     def get_Arc_Angle(self) -> float:
         """Get arc angle (bending angle) of bender"""
 
-        unitCellAngle = self.get_Unit_Cell_Angle()  # radians
+        unitCellAngle = get_Unit_Cell_Angle(self.lengthSegment,self.radius,self.magnetDepth)
         bendingAngle = 2 * unitCellAngle * self.numMagnets
         assert 0 < bendingAngle < 2 * np.pi
         return bendingAngle

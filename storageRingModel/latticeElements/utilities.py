@@ -38,7 +38,7 @@ def get_Halbach_Layers_Radii_And_Magnet_Widths(rp_first: RealNumber, numConcentr
 
 def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallThickness: float) -> float:
     """What is the maximum size that will fit in a segmented bender and respect the geometry"""
-    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 < tubeWallThickness < rp
+    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tubeWallThickness < rp
     radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
     maximumTubeRadius = rb - radiusCorner - tubeWallThickness
     assert maximumTubeRadius > 0.0
@@ -53,6 +53,10 @@ def full_Arctan(q: np.ndarray):
         phi += 2 * np.pi
     return phi
 
+def get_Unit_Cell_Angle(lengthSegment:float,radius:float,segmentWidth: float) -> float:
+    """Get the arc angle associate with a single unit cell. Each lens contains two unit cells."""
+    assert lengthSegment>0.0 and radius >0.0 and radius>segmentWidth>=0.0
+    return np.arctan(.5 * lengthSegment / (radius - segmentWidth))  # radians
 
 def is_Even(x: int) -> bool:
     """Test if a number is even"""

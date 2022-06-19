@@ -323,8 +323,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.numMagnets * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.262410307854535e-01, 1.826210807730381e+00,5.132746656403178e-04])
-        pf0 = np.array([ 156.16828847684712 , -126.47441748337376 ,   -4.340329448157571])
+        qf0 = np.array([6.2561370063535038e-01, 1.8269439902184796e+00,5.4374713920287863e-04])
+        pf0 = np.array([ 156.50972054637663 , -126.05211562611713 ,   -4.325494849877396])
         super().__init__(HalbachBenderSimSegmented, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -354,9 +354,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         numMagnets = 15
         np.random.seed(42)
         PTL_Dev = PTL_Dummy(fieldDensityMultiplier=.75,standardMagnetErrors=True)
-        elDeviation = HalbachBenderSimSegmented(PTL_Dev, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0)
+        elDeviation = HalbachBenderSimSegmented(PTL_Dev, self.Lm, self.rp, numMagnets, self.rb, None, 1.0)
         PTL_Perf = PTL_Dummy(fieldDensityMultiplier=.75)
-        elPerfect = HalbachBenderSimSegmented(PTL_Perf, self.Lm, self.rp, numMagnets, self.rb, None, 1e-3, 1.0)
+        elPerfect = HalbachBenderSimSegmented(PTL_Perf, self.Lm, self.rp, numMagnets, self.rb, None, 1.0)
         for el in [elDeviation,elPerfect]:
             el.fill_Pre_Constrained_Parameters()
             el.theta=0.0

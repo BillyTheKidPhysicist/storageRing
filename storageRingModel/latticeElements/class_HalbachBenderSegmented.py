@@ -12,7 +12,7 @@ from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, VACUUM_TU
 from helperTools import arr_Product, round_And_Make_Odd
 from latticeElements.class_BenderIdeal import BenderIdeal
 from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan, \
-    max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width
+    max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
 from typeHints import lst_tup_arr
 
@@ -42,17 +42,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
     numPointsBoreApDefault = 25
 
     def __init__(self, PTL, Lm: float, rp: float, numMagnets: Optional[int], rb: float, ap: Optional[float],
-                 extraSpace: float, rOffsetFact: float):
+                rOffsetFact: float):
         assert all(val > 0 for val in (Lm, rp, rb, rOffsetFact))
-        assert extraSpace >= 0
         assert rb > rp / 10  # this would be very dubious
         super().__init__(PTL, None, None, rp, rb, None)
         self.rb = rb
-        self.space = extraSpace
         self.Lm = Lm
         self.rp = rp
         self.ap = ap
-        self.Lseg: float = self.Lm + self.space * 2
         self.magnetWidth = halbach_Magnet_Width(rp)
         self.ucAng: Optional[float] = None
         self.rOffsetFact = rOffsetFact  # factor to times the theoretic optimal bending radius by
@@ -91,27 +88,28 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
         m = 1  # in simulation units mass is 1kg
         ucAngApprox = self.get_Unit_Cell_Angle()  # this will be different if the bore radius changes
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, self.PTL.magnetGrade, 5,
-                                            (False, False),
+        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, self.PTL.magnetGrade, 10,
+                                            (False, False),positiveAngleMagnetsOnly=False,magnetWidth=self.magnetWidth,
                                             applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
-        thetaArr = np.linspace(-ucAngApprox, ucAngApprox, 100)
+        thetaArr = np.linspace(0.0, 2*ucAngApprox, 100)
         yArr = np.zeros(len(thetaArr))
 
         def offset_Error(rOffset):
             assert abs(rOffset) < self.rp
-            xArr = (self.rb + rOffset) * np.cos(thetaArr)
-            zArr = (self.rb + rOffset) * np.sin(thetaArr)
+            r=self.rb+rOffset
+            xArr = r * np.cos(thetaArr)
+            zArr = r * np.sin(thetaArr)
             coords = np.column_stack((xArr, yArr, zArr))
             F = lens.BNorm_Gradient(coords) * SIMULATION_MAGNETON
             Fr = np.linalg.norm(F[:, [0, 2]], axis=1)
-            FrMean = np.mean(Fr)
-            FCen = m * self.PTL.v0Nominal ** 2 / (self.rb + rOffset)
-            return (FCen - FrMean) ** 2
-
+            FCen = np.ones(len(coords))*m * self.PTL.v0Nominal ** 2 / r
+            FCen[coords[:,2]<0.0]=0.0
+            error=np.sum((Fr-FCen)**2)
+            return error
         rOffsetMax = .9 * self.rp
         bounds = [(0.0, rOffsetMax)]
-        sol = spo.minimize(offset_Error, np.array([self.rp / 2.0]), bounds=bounds, method='Nelder-Mead',
-                           options={'xatol': 1e-6})
+        sol = spo.minimize(offset_Error, np.array([self.rp / 3.0]), bounds=bounds, method='Nelder-Mead',
+                           options={'xatol': 1e-5})
         rOffsetOptimal = sol.x[0]
         if isclose(rOffsetOptimal, rOffsetMax, abs_tol=1e-6):
             raise Exception("The bending bore radius is too large to accomodate a reasonable solution")
@@ -120,9 +118,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def get_Unit_Cell_Angle(self) -> float:
         """Get the angle that a single unit cell spans. Each magnet is composed of two unit cells because of symmetry.
         The unit cell includes half of the magnet and half the gap between the two"""
-
-        ucAng = np.arctan(.5 * self.Lseg / (self.rb - self.rp - self.magnetWidth))
-        return ucAng
+        return get_Unit_Cell_Angle(self.Lm,self.rb,self.rp+self.magnetWidth)
 
     def fill_Post_Constrained_Parameters(self) -> None:
         self.ap = self.ap if self.ap is not None else self.compute_Maximum_Aperture()

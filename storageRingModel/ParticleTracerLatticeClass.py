@@ -221,13 +221,12 @@ class ParticleTracerLattice:
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
-    def add_Halbach_Bender_Sim_Segmented(self, Lm: float, rp: float, numMagnets: Optional[int], rb: float,
-                                         extraSpace: float = 0.0, rOffsetFact: float = 1.0, ap: float = None) -> None:
+    def add_Halbach_Bender_Sim_Segmented(self, Lm: float, rp: float, numMagnets: Optional[int], rb: float,rOffsetFact: float = 1.0, ap: float = None) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # Lcap: Length of element on the end/input of bender
         # outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm, rp, numMagnets, rb, ap, extraSpace, rOffsetFact)
+        el = HalbachBenderSimSegmented(self, Lm, rp, numMagnets, rb, ap, rOffsetFact)
         el.index = len(self.elList)  # where the element is in the lattice
         self.benderIndices.append(el.index)
         self.elList.append(el)
@@ -325,7 +324,7 @@ class ParticleTracerLattice:
                 bender1, benderi = self.elList[self.benderIndices[0]], self.elList[i]
                 if not type(bender1) is type(benderi):
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
-                if not bender1.Lseg == benderi.Lseg or bender1.magnetWidth != benderi.magnetWidth:
+                if not bender1.Lm == benderi.Lm or bender1.magnetWidth != benderi.magnetWidth:
                     raise Exception('SEGMENT LENGTHS AND MAGNET WIDTHS MUST BE EQUAL BETWEEN BENDERS')
             if self.combiner is None:
                 raise Exception('COMBINER MUST BE PRESENT')

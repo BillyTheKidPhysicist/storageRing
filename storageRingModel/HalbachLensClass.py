@@ -663,7 +663,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
         coilDiam = METER_TO_mm * 2 * max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm,
                                                                        tubeWallThickness=MAGNET_WIRE_DIAM)
-        angleStart, angleEnd = self.lensAnglesArr[0] - self.UCAngle, self.lensAnglesArr[-1] + self.UCAngle,
+        angleStart= self.lensAnglesArr[0] if self.useHalfCapEnd[0] else self.lensAnglesArr[0]-self.UCAngle
+        angleEnd=self.lensAnglesArr[-1] if self.useHalfCapEnd[1] else self.lensAnglesArr[-1]+self.UCAngle
         circumference = self.rb * (angleEnd - angleStart)
         numCoils = max([round(COILS_PER_RADIUS * circumference / self.rp), 1])
         B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * circumference  # amperes law

@@ -41,7 +41,7 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
 def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
-    lengthSegment, Lcap, radius, numMagnets = bender.Lseg, bender.Lcap, bender.ro, bender.numMagnets
+    lengthSegment, Lcap, radius, numMagnets = bender.Lm, bender.Lcap, bender.ro, bender.numMagnets
     magnetDepth = bender.rp + bender.magnetWidth + bender.outputOffset #todo: why does this have outputOffset??
     return CappedSlicedBend(lengthSegment, numMagnets, magnetDepth, Lcap, radius)
 
