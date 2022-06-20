@@ -14,27 +14,11 @@ from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_Fit_In_Room, plot_Floor_Plan_In_Lab
 from helperTools import full_Arctan
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim
-from latticeModels import make_Ring_And_Injector_Version3
+from latticeModels import make_Ring_And_Injector
 
 list_array_tuple = Union[np.ndarray, tuple, list]
 
 Element = None
-
-
-class Solution:
-    """class to hold onto results of each solution"""
-
-    def __init__(self, params, fluxMultiplication, cost):
-        self.params, self.fluxMultiplication, self.cost = params, fluxMultiplication, cost
-
-    def __str__(self) -> str:  # method that gets called when you do print(Solution())
-        string = '----------Solution-----------   \n'
-        string += 'parameters: ' + repr(self.params) + '\n'
-        string += 'cost: ' + str(self.cost) + '\n'
-        string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
-        string += '----------------------------'
-        return string
-
 
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
 ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerHalbachLensSim)
@@ -48,12 +32,12 @@ def injector_Is_Expected_Design(latticeInjector, isBumperIncluded):
     return True
 
 
-def build_StorageRingModel(params, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
+def build_StorageRingModel(params, version: str, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
                            energyCorrection: bool = False, useMagnetErrors: bool = False,
                            useSolenoidField: bool = True, includeBumper: bool = False):
     """Convenience function for building a StorageRingModel"""
     options = {'useMagnetErrors': useMagnetErrors, 'useSolenoidField': useSolenoidField, 'includeBumper': includeBumper}
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params, options=options)
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector(params, version, options=options)
     model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
                              numParticlesSwarm=numParticlesSwarm, collisionDynamics=collisionDynamics,
                              isBumperIncludedInInjector=includeBumper)
@@ -277,7 +261,7 @@ class StorageRingModel:
         assert 0.0 <= cost <= self.maximumCost
         return cost, fluxMultiplication
 
-    def inject_And_Trace_Swarm(self, parallel: bool) -> Swarm:
+    def inject_And_Trace_Swarm(self, parallel: bool = False) -> Swarm:
 
         swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring()
         swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,

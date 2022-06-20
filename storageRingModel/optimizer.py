@@ -4,13 +4,32 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
 from typing import Callable
 from octopusOptimizer import octopus_Optimize
-from storageRingModeler import StorageRingModel, Solution
+from storageRingModeler import StorageRingModel
 from latticeElements.utilities import ElementTooShortError, CombinerDimensionError
-from latticeModels import make_Ring_And_Injector_Version3, RingGeometryError, InjectorGeometryError, \
+from latticeModels import make_Ring_And_Injector, RingGeometryError, InjectorGeometryError, \
     make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorParamsOptimalAny, \
     injectorRingConstraintsV1, lockedDict
 from asyncDE import solve_Async
+
+
+class Solution:
+    """class to hold onto results of each solution"""
+
+    def __init__(self, params, cost, fluxMultiplication=None, survival=None):
+        self.params, self.fluxMultiplication, self.cost, self.survival = params, fluxMultiplication, cost, survival
+        assert not (fluxMultiplication is None and survival is None)
+
+    def __str__(self) -> str:  # method that gets called when you do print(Solution())
+        string = '----------Solution-----------   \n'
+        string += 'parameters: ' + repr(self.params) + '\n'
+        string += 'cost: ' + str(self.cost) + '\n'
+        if self.fluxMultiplication is not None:
+            string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
+        else:
+            string += 'injection survival: ' + str(self.survival) + '\n'
+        string += '----------------------------'
+        return string
 
 
 def update_Injector_Params_Dictionary(injectorParams):
@@ -61,6 +80,7 @@ class Solver:
         ringParams, injectorParams = None, None
         if self.system == 'ring':
             ringParams = params
+            injectorParams = tuple(injectorParamsOptimalAny.values())
         elif self.system == 'injector_Surrogate_Ring':
             injectorParams = params
         elif self.system == 'injector_Actual_Ring':
@@ -73,12 +93,11 @@ class Solver:
 
     def build_Lattices(self, params):
         ringParams, injectorParams = self.unpack_Params(params)
-        if injectorParams is not None:
-            update_Injector_Params_Dictionary(injectorParams)
         if self.system == 'injector_Surrogate_Ring':
             PTL_Ring, PTL_Injector = build_Injector_And_Surrrogate(injectorParams)
         else:
-            PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(ringParams, options=self.options)
+            systemParams = (ringParams, injectorParams)
+            PTL_Ring, PTL_Injector = make_Ring_And_Injector(systemParams, '3', options=self.options)
         return PTL_Ring, PTL_Injector
 
     def make_System_Model(self, params):
@@ -91,12 +110,13 @@ class Solver:
         model = self.make_System_Model(params)
         if self.system == 'injector_Surrogate_Ring':
             swarmCost = injected_Swarm_Cost(model)
+            survival = 1e2 * (1.0 - swarmCost)
             floorPlanCost = model.floor_Plan_Cost_With_Tunability()
             cost = swarmCost + floorPlanCost
-            sol = Solution(params, 1.0 - swarmCost, cost)
+            sol = Solution(params, cost, survival=survival)
         else:
             cost, fluxMultiplication = model.mode_Match(floorPlanCostCutoff=.05)
-            sol = Solution(params, fluxMultiplication, cost)
+            sol = Solution(params, cost, fluxMultiplication=fluxMultiplication)
         return sol
 
     def solve(self, params: tuple[float, ...]) -> Solution:
@@ -154,8 +174,7 @@ def get_Cost_Function(system: float, ringParams: tuple) -> Callable[[tuple], flo
 
 
 def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expandedBounds=False, globalTol=.005,
-             disp=True,
-             processes=10):
+             disp=True, processes=10):
     assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
@@ -175,20 +194,15 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 
 def main():
-    xRing = (0.01232265, 0.00998983, 0.03899118, 0.00796353, 0.10642821, 0.4949227)
+    # xRing = (0.01232265, 0.00998983, 0.03899118,
+    #             0.00796353, 0.10642821,0.4949227 )
     # solver = Solver('ring', None)
+    # params=tuple(injectorParamsOptimalAny.values())
     # print(solver.solve(xRing))
-    xi = (*xRing, *list(injectorParamsOptimalAny.values()))
-    optimize('both', 'local', xi=xi)
+    # xi = (*xRing, *list(injectorParamsOptimalAny.values()))
+    # optimize('both', 'local', xi=xi)
+    print(optimize('injector_Surrogate_Ring', 'global', globalTol=.01))
 
 
 if __name__ == '__main__':
     main()
-
-"""
-----------Solution-----------   
-parameters: (0.1513998, 0.02959859, 0.12757497, 0.022621, 0.19413599, 0.03992811, 0.01606958, 0.20289069, 0.23274805, 0.17537412)
-cost: 0.6938718845512213
-flux multiplication: 96.19201217596292
-----------------------------
-"""

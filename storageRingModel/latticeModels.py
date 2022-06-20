@@ -7,8 +7,8 @@ from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBenderSimSegmented
-from latticeModels_Parameters import constantsV1_2, constantsV3, injectorParamsOptimalAny, optimizerBounds_V1_3, \
-    optimizerBounds_V2, lockedDict, atomCharacteristic
+from latticeModels_Parameters import system_constants, injectorParamsOptimalAny, optimizerBounds_V1_3, \
+    optimizerBounds_V2, lockedDict, atomCharacteristic, injectorParamsBoundsAny
 
 
 class RingGeometryError(Exception):
@@ -83,16 +83,16 @@ def add_Drift_If_Needed(PTL: ParticleTracerLattice, gapLength: float, elBeforeNa
 def add_Bend_Version_1_2(PTL: ParticleTracerLattice, rpBend: float) -> None:
     """Single bender element"""
 
-    PTL.add_Halbach_Bender_Sim_Segmented(constantsV1_2['Lm'], rpBend, None, constantsV1_2['rbTarget'])
+    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rpBend, None, system_constants['rbTarget'])
 
 
 def add_Bend_Version_3(PTL: ParticleTracerLattice, rpBend: float) -> None:
     """Two bender elements possibly separated by a drift region for pumping between end/beginning of benders. If fringe
     field region is long enough, no drift region is add"""
 
-    PTL.add_Halbach_Bender_Sim_Segmented(constantsV3['Lm'], rpBend, None, constantsV3['rbTarget'])
-    add_Drift_If_Needed(PTL, constantsV3['bendApexGap'], 'bender', 'bender', rpBend, rpBend)
-    PTL.add_Halbach_Bender_Sim_Segmented(constantsV3['Lm'], rpBend, None, constantsV3['rbTarget'])
+    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rpBend, None, system_constants['rbTarget'])
+    add_Drift_If_Needed(PTL, system_constants['bendApexGap'], 'bender', 'bender', rpBend, rpBend)
+    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rpBend, None, system_constants['rbTarget'])
 
 
 def add_Bender(PTL: ParticleTracerLattice, rpBend: float, whichVersion: str) -> None:
@@ -124,7 +124,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamOffset, rpLensBefor
     """Add gap for vacuum + combiner + gap for optical pumping. Elements before and after must be a lens. """
 
     # gap between combiner and previous lens
-    add_Drift_If_Needed(PTL, constantsV1_2["gap2Min"], 'lens', 'combiner', rpLensBefore, rpCombiner)
+    add_Drift_If_Needed(PTL, system_constants["gap2Min"], 'lens', 'combiner', rpLensBefore, rpCombiner)
 
     # -------combiner-------
 
@@ -134,12 +134,12 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamOffset, rpLensBefor
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
     # as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
     # without it being a new drift region
-    OP_Gap = constantsV1_2["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
-                                             + el_Fringe_Space('lens', rpLensAfter))
+    OP_Gap = system_constants["OP_MagWidth"] - (el_Fringe_Space('combiner', rpCombiner)
+                                                + el_Fringe_Space('lens', rpLensAfter))
     OP_Gap = round_Up_If_Below_Min_Time_Step_Gap(OP_Gap)
-    OP_Gap = OP_Gap if OP_Gap > constantsV1_2["OP_PumpingRegionLength"] else \
-        constantsV1_2["OP_PumpingRegionLength"]
-    PTL.add_Drift(OP_Gap, ap=constantsV1_2["OP_MagAp_" + whichOP_Ap])
+    OP_Gap = OP_Gap if OP_Gap > system_constants["OP_PumpingRegionLength"] else \
+        system_constants["OP_PumpingRegionLength"]
+    PTL.add_Drift(OP_Gap, ap=system_constants["OP_MagAp_" + whichOP_Ap])
 
 
 def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringParams: lockedDict,
@@ -199,20 +199,20 @@ def add_Second_Racetrack_Straight_Version_Any(PTL: ParticleTracerLattice, rpLens
 
     # ---------gap 5-----  bender->lens
 
-    add_Drift_If_Needed(PTL, constantsV1_2["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
+    add_Drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
 
     # -------lens 3-----------
     PTL.add_Halbach_Lens_Sim(rpLens3_4, None, constrain=True)
 
     # ---------gap 6------ lens -> lens
-    add_Drift_If_Needed(PTL, constantsV1_2["observationGap"], 'lens', 'lens', rpLens3_4, rpLens3_4)
+    add_Drift_If_Needed(PTL, system_constants["observationGap"], 'lens', 'lens', rpLens3_4, rpLens3_4)
 
     # ---------lens 4-------
     PTL.add_Halbach_Lens_Sim(rpLens3_4, None, constrain=True)
 
     # ------gap 7------ lens-> bender
 
-    add_Drift_If_Needed(PTL, constantsV1_2["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
+    add_Drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rpLens3_4, rpBend)
 
 
 def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]) -> RingModel:
@@ -263,9 +263,9 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
     gap3 = injectorParams["gap3"]
     gap1 -= el_Fringe_Space('lens', injectorParams["rp1"])
     gap2 -= el_Fringe_Space('lens', injectorParams["rp1"]) + el_Fringe_Space('lens', injectorParams["rp2"])
-    if gap2 < constantsV1_2["lens1ToLens2_Inject_Gap"]:
+    if gap2 < system_constants["lens1ToLens2_Inject_Gap"]:
         raise InjectorGeometryError
-    if gap1 < constantsV1_2["sourceToLens1_Inject_Gap"]:
+    if gap1 < system_constants["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
                                 standardMagnetErrors=options['useMagnetErrors'],
@@ -283,13 +283,13 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
 
     # -----gap with valve--------------
 
-    gapValve = constantsV1_2["lens1ToLens2_Valve_Length"]
+    gapValve = system_constants["lens1ToLens2_Valve_Length"]
     gap2 = gap2 - gapValve
     if gap2 < 0:  # this is approximately true. I am ignoring that there is space in the fringe fields
         raise InjectorGeometryError
     PTL.add_Drift(gap2, ap=injectorParams["rp1"])
-    PTL.add_Drift(gapValve, ap=constantsV1_2["lens1ToLens2_Valve_Ap"],
-                  outerHalfWidth=constantsV1_2["lens1ToLens2_Inject_Valve_OD"] / 2)
+    PTL.add_Drift(gapValve, ap=system_constants["lens1ToLens2_Valve_Ap"],
+                  outerHalfWidth=system_constants["lens1ToLens2_Inject_Valve_OD"] / 2)
 
     # ---------------------
 
@@ -297,7 +297,8 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
 
     PTL.add_Drift(gap3, ap=injectorParams["rp2"])
 
-    add_Combiner(PTL, injectorParams["LmCombiner"], injectorParams["rpCombiner"], injectorParams["loadBeamOffset"],
+    add_Combiner(PTL, injectorParams["LmCombiner"], system_constants["rpCombiner"], injectorParams["loadBeamOffset"],
+                 # todo: update constants to be more sane
                  options['combinerSeed'])
 
     PTL.end_Lattice(constrain=False)
@@ -316,7 +317,8 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
 
     options = check_And_Add_Default_Values(options)
 
-    raceTrackParams = lockedDict({'rpCombiner': injectorParams['rpCombiner'],
+    raceTrackParams = lockedDict({'rpCombiner': system_constants['rpCombiner'],
+                                  # todo: update constants stuff to be more sane
                                   'LmCombiner': injectorParams['LmCombiner'],
                                   'loadBeamOffset': injectorParams['loadBeamOffset'],
                                   'rpLens1': surrogateParamsDict['rpLens1'],
@@ -333,32 +335,35 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
     return PTL
 
 
-def make_ringParams_Dict(variableParams: list[float], whichVersion: str) -> lockedDict:
+def make_ringParams_Dict(ringParams_tuple: tuple, whichVersion: str) -> lockedDict:
     """Take parameters values list and construct dictionary of variable ring parameters. For version1, all tunable
     variables (lens length, radius, etc) describe the ring only. Injector is optimized entirely independenly before"""
 
     assert whichVersion in ('1', '2', '3')
 
-    ringParams = {"LmCombiner": injectorParamsOptimalAny["LmCombiner"],
-                  "rpCombiner": injectorParamsOptimalAny["rpCombiner"],
-                  "loadBeamOffset": injectorParamsOptimalAny["loadBeamOffset"]}
+    ringParamsDict = {"LmCombiner": injectorParamsOptimalAny["LmCombiner"],
+                      "rpCombiner": system_constants["rpCombiner"],  # todo: update version stuff here
+                      "loadBeamOffset": injectorParamsOptimalAny["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
-        assert len(variableParams) == 6
-        for variableKey, value in zip(optimizerBounds_V1_3.keys(), variableParams):
-            ringParams[variableKey] = value
+        assert len(ringParams_tuple) == 6
+        for variableKey, value in zip(optimizerBounds_V1_3.keys(), ringParams_tuple):
+            ringParamsDict[variableKey] = value
     else:
-        assert len(variableParams) == 10
-        for variableKey, value in zip(optimizerBounds_V2.keys(), variableParams):
-            ringParams[variableKey] = value
-    ringParams = lockedDict(ringParams)
-    return ringParams
+        assert len(ringParams_tuple) == 10
+        for variableKey, value in zip(optimizerBounds_V2.keys(), ringParams_tuple):
+            ringParamsDict[variableKey] = value
+    ringParamsDict = lockedDict(ringParamsDict)
+    return ringParamsDict
 
 
-def make_injectorParams_Dict_Version_Any(variableParams: list[float]) -> lockedDict:
-    """For now, all parameters of injector are constant"""
-
-    return injectorParamsOptimalAny
+def make_injectorParams_Dict_Version_Any(injectorParams_tuple: tuple) -> lockedDict:
+    # todo: add documentation
+    injectorParamsDict = {}  # todo: make this one line
+    for variableKey, value in zip(injectorParamsBoundsAny.keys(), injectorParams_tuple):
+        injectorParamsDict[variableKey] = value
+    injectorParamsDict = lockedDict(injectorParamsDict)
+    return injectorParamsDict
 
 
 def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: ParticleTracerLattice) -> None:
@@ -366,16 +371,17 @@ def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: Par
     parameters"""
 
     assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
+    print(PTL_Injector.combiner.outputOffset, PTL_Ring.combiner.outputOffset)
     assert PTL_Injector.combiner.ang < 0 < PTL_Ring.combiner.ang
 
 
-def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str, options: Optional[dict]) \
+def _make_Ring_And_Injector(systemParams: tuple[tuple, tuple], whichVersion: str, options: Optional[dict]) \
         -> tuple[RingModel, InjectorModel]:
     """
     Make ParticleTracerLattice models of ring and injector system. Combiner must be the same, though in low
     field seeking configuration for ring, and high field seeking for injector
 
-    :param variableParams: Non constant parameters to construct lens.
+    :param systemParams: Non constant parameters to construct lens.
     :param whichVersion: which version of the ring/injector system to use
     :param options: dictionary of parameters that affect the full system such as wether to use magnet errors, solenoid
         field, etc.
@@ -383,17 +389,18 @@ def _make_Ring_And_Injector(variableParams: lst_arr_tple, whichVersion: str, opt
     """
 
     assert whichVersion in ('1', '2', '3')
-    assert all(val > 0 for val in variableParams)
-
-    injectorParams = make_injectorParams_Dict_Version_Any(variableParams)
-    ringParams = make_ringParams_Dict(variableParams, whichVersion)
+    ringParams_tuple, injectorParams_tuple = systemParams
+    injectorParams = make_injectorParams_Dict_Version_Any(injectorParams_tuple)
+    ringParams = make_ringParams_Dict(ringParams_tuple, whichVersion)
+    print(injectorParams)
+    print(ringParams)
     PTL_Ring = make_Ring(ringParams, whichVersion, options)
     PTL_Injector = make_Injector_Version_Any(injectorParams, options=options)
     assert_Combiners_Are_Same(PTL_Injector, PTL_Ring)
     return PTL_Ring, PTL_Injector
 
 
-def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple, options: dict = None) -> tuple[
+def make_Ring_And_Injector(systemParams: tuple[tuple, tuple], version, options: dict = None) -> tuple[
     RingModel, InjectorModel]:
     """
     Make ParticleTraceLattice objects that represents storage ring and injector systems
@@ -401,34 +408,13 @@ def make_Ring_And_Injector_Version1(variableParams: lst_arr_tple, options: dict 
     Version 1: in clockwise order starting at 0,0 and going in -x direction elements are [lens, combiner, lens, bender,
     lens,lens,bender] with drift regions as neccesary to fill in gaps for pumping and obsercation. This is a simple
     design
-    """
 
-    version = '1'
-    return _make_Ring_And_Injector(variableParams, version, options)
-
-
-def make_Ring_And_Injector_Version2(variableParams: lst_arr_tple, options: dict = None) -> tuple[
-    RingModel, InjectorModel]:
-    """
-    Make ParticleTraceLattice objects that represents storage ring and injector systems
-
-    Version 2: in clockwise order starting at 0,0 and going in -x direction elements are [lens,lens, combiner,lens, 
+    Version 2: in clockwise order starting at 0,0 and going in -x direction elements are [lens,lens, combiner,lens,
     lens, bender, lens,lens,bender] with drift regions as neccesary to fill in gaps for pumping and obsercation. The
     idea of this version is that having double lenses flanking the combiner can improve mode matching
-    """
-
-    version = '2'
-    return _make_Ring_And_Injector(variableParams, version, options)
-
-
-def make_Ring_And_Injector_Version3(variableParams: lst_arr_tple, options: dict = None) -> tuple[
-    RingModel, InjectorModel]:
-    """
-    Make ParticleTraceLattice objects that represents storage ring and injector systems
 
     Version 3: Same as Version 1, but instead with the bending sections split into to bending elements so pumping
     can be applied at apex
     """
 
-    version = '3'
-    return _make_Ring_And_Injector(variableParams, version, options)
+    return _make_Ring_And_Injector(systemParams, version, options)

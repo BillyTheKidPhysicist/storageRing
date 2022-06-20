@@ -1,12 +1,12 @@
 from math import isclose
-from math import sin, sqrt, cos, atan,tan
+from math import sin, sqrt, cos, atan, tan
 from typing import Optional
 
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_VACUUM_TUBE_THICKNESS
-from helperTools import round_And_Make_Odd,make_Odd
+from helperTools import round_And_Make_Odd, make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths
@@ -17,8 +17,8 @@ DEFAULT_SEED = 42
 
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
-    numGridPointsX: int =30
-    numGridPointsY: int =100
+    numGridPointsX: int = 30
+    numGridPointsY: int = 100
 
     def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, numLayers: int, ap: Optional[float], seed):
         # PTL: object of ParticleTracerLatticeClass
@@ -124,11 +124,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
         yMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -yMax
         xMin = -(self.rp - TINY_OFFSET)
         xMax = TINY_OFFSET if not self.PTL.standardMagnetErrors else -xMin
-        numY = numGridPointsY if not self.PTL.standardMagnetErrors else round_And_Make_Odd(.9 * (numGridPointsY * 2 - 1))
+        numY = numGridPointsY if not self.PTL.standardMagnetErrors else round_And_Make_Odd(
+            .9 * (numGridPointsY * 2 - 1))
         # minus 1 ensures same grid spacing!!
         numX = round_And_Make_Odd(numGridPointsX * self.rp / yMax)
         numX = numX if not self.PTL.standardMagnetErrors else round_And_Make_Odd(.9 * (2 * numX - 1))
-        numZ = self.numGridPointsZ if not self.PTL.standardMagnetErrors else round_And_Make_Odd(1 * (self.numGridPointsZ * 2 - 1))
+        numZ = self.numGridPointsZ if not self.PTL.standardMagnetErrors else round_And_Make_Odd(
+            1 * (self.numGridPointsZ * 2 - 1))
         zMax = self.compute_Valid_zMax()
         zMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -zMax
 
@@ -244,7 +246,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         Can possibly error out from modeling magnet or assembly error"""
         from latticeElements.combiner_characterizer import characterize_CombinerHalbach
 
-        if self.loadBeamOffset / 2 > self.rp * .9:  # beam doens't fit in combiner
+        if self.loadBeamOffset >= self.ap:  # beam doens't fit in combiner
             raise CombinerDimensionError
         yInitial = self.ap / 10.0
         try:
@@ -255,11 +257,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert inputAngle < 0  # loading beam enters from y<0, if positive then this is circulating beam
         gradientInitial = (seperationInitial - self.ap) / (yInitial - 0.0)
         y = yInitial
-        seperation = seperationInitial  # initial value of lens/atom seperation. This should be equal to input deam diamter/2 eventuall
+        seperation = seperationInitial  # initial value of lens/atom seperation.
         gradient = gradientInitial
-        i, iterMax = 0, 10  # to prevent possibility of ifnitne loop
+        i, iterMax = 0, 20  # to prevent possibility of ifnitne loop
         tolAbsolute = 1e-6  # m
-        targetSep = self.loadBeamOffset / 2
+        targetSep = self.loadBeamOffset
         while not isclose(seperation, targetSep, abs_tol=tolAbsolute):
             deltaX = -(seperation - targetSep) / gradient  # I like to use a little damping
             deltaX = -y / 2 if y + deltaX < 0 else deltaX  # restrict deltax to allow value

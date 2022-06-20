@@ -1,3 +1,4 @@
+import warnings
 from math import isclose, tan, cos, sin, sqrt, atan, pi
 from typing import Optional
 
@@ -13,7 +14,7 @@ from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Ac
     max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
 from typeHints import lst_tup_arr
-import warnings
+
 
 class HalbachBenderSimSegmented(BenderIdeal):
     # magnet
@@ -60,11 +61,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
         apMaxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, VACUUM_TUBE_THICKNESS)
+        # todo: revisit this, I am doubtful of how correct this is
         safetyFactor = .95
         apMaxGoodField = safetyFactor * self.numPointsBoreAp * self.rp / (self.numPointsBoreAp + sqrt(2))
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
-        if apMaxGoodField > apMaxGeom:  # for now, I want this to be the case
+        if apMaxGoodField < apMaxGeom:  # for now, I want this to be the case
             warnings.warn("bender aperture being limited by the good field region")
         apMax = min([apMaxGeom, apMaxGoodField])
         assert apMax < self.rp
