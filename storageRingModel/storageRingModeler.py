@@ -354,11 +354,12 @@ class StorageRingModel:
         cost = [self.floor_Plan_Cost()]
 
         driftAfterLens.set_Length(L0 + -self.injectorTunabilityLength)  # move lens away from combiner
-        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)
+        self.latticeInjector.build_Lattice(False, buildFieldHelper=False) #don't waste time building field helpers
         cost.append(self.floor_Plan_Cost())
 
         driftAfterLens.set_Length(L0)  # reset
-        self.latticeInjector.build_Lattice(False)
+        self.latticeInjector.build_Lattice(False,buildFieldHelper=False) #don't waste time building field helpers,
+            #previous helpers are still saved
         floorPlanCost = max(cost)
         assert 0.0 <= floorPlanCost <= 1.0
         return floorPlanCost

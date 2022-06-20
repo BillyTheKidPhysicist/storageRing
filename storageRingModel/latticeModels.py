@@ -298,7 +298,6 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
     PTL.add_Drift(gap3, ap=injectorParams["rp2"])
 
     add_Combiner(PTL, injectorParams["LmCombiner"], system_constants["rpCombiner"], injectorParams["loadBeamOffset"],
-                 # todo: update constants to be more sane
                  options['combinerSeed'])
 
     PTL.end_Lattice(constrain=False)
@@ -318,7 +317,6 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
     options = check_And_Add_Default_Values(options)
 
     raceTrackParams = lockedDict({'rpCombiner': system_constants['rpCombiner'],
-                                  # todo: update constants stuff to be more sane
                                   'LmCombiner': injectorParams['LmCombiner'],
                                   'loadBeamOffset': injectorParams['loadBeamOffset'],
                                   'rpLens1': surrogateParamsDict['rpLens1'],
@@ -342,7 +340,7 @@ def make_ringParams_Dict(ringParams_tuple: tuple, whichVersion: str) -> lockedDi
     assert whichVersion in ('1', '2', '3')
 
     ringParamsDict = {"LmCombiner": injectorParamsOptimalAny["LmCombiner"],
-                      "rpCombiner": system_constants["rpCombiner"],  # todo: update version stuff here
+                      "rpCombiner": system_constants["rpCombiner"],
                       "loadBeamOffset": injectorParamsOptimalAny["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
@@ -358,11 +356,7 @@ def make_ringParams_Dict(ringParams_tuple: tuple, whichVersion: str) -> lockedDi
 
 
 def make_injectorParams_Dict_Version_Any(injectorParams_tuple: tuple) -> lockedDict:
-    # todo: add documentation
-    injectorParamsDict = {}  # todo: make this one line
-    for variableKey, value in zip(injectorParamsBoundsAny.keys(), injectorParams_tuple):
-        injectorParamsDict[variableKey] = value
-    injectorParamsDict = lockedDict(injectorParamsDict)
+    injectorParamsDict = lockedDict(dict(zip(injectorParamsBoundsAny.keys(), injectorParams_tuple)))
     return injectorParamsDict
 
 
@@ -371,7 +365,6 @@ def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: Par
     parameters"""
 
     assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
-    print(PTL_Injector.combiner.outputOffset, PTL_Ring.combiner.outputOffset)
     assert PTL_Injector.combiner.ang < 0 < PTL_Ring.combiner.ang
 
 
@@ -392,8 +385,6 @@ def _make_Ring_And_Injector(systemParams: tuple[tuple, tuple], whichVersion: str
     ringParams_tuple, injectorParams_tuple = systemParams
     injectorParams = make_injectorParams_Dict_Version_Any(injectorParams_tuple)
     ringParams = make_ringParams_Dict(ringParams_tuple, whichVersion)
-    print(injectorParams)
-    print(ringParams)
     PTL_Ring = make_Ring(ringParams, whichVersion, options)
     PTL_Injector = make_Injector_Version_Any(injectorParams, options=options)
     assert_Combiners_Are_Same(PTL_Injector, PTL_Ring)

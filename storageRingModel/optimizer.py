@@ -18,7 +18,6 @@ class Solution:
 
     def __init__(self, params, cost, fluxMultiplication=None, survival=None):
         self.params, self.fluxMultiplication, self.cost, self.survival = params, fluxMultiplication, cost, survival
-        assert not (fluxMultiplication is None and survival is None)
 
     def __str__(self) -> str:  # method that gets called when you do print(Solution())
         string = '----------Solution-----------   \n'
@@ -26,7 +25,7 @@ class Solution:
         string += 'cost: ' + str(self.cost) + '\n'
         if self.fluxMultiplication is not None:
             string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
-        else:
+        elif self.survival is not None:
             string += 'injection survival: ' + str(self.survival) + '\n'
         string += '----------------------------'
         return string
@@ -39,7 +38,7 @@ def update_Injector_Params_Dictionary(injectorParams):
 
 
 def invalid_Solution(params):
-    sol = Solution(params, None, StorageRingModel.maximumCost)
+    sol = Solution(params, StorageRingModel.maximumCost )
     return sol
 
 
@@ -196,7 +195,10 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 def main():
     # xRing = (0.01232265, 0.00998983, 0.03899118,
     #             0.00796353, 0.10642821,0.4949227 )
-    # solver = Solver('ring', None)
+    # X=(0.10819867923855782 , 0.027481201887130734, 0.08641841933131218 ,
+    #    0.020982728004455567, 0.1253290954232216  , 0.009318250715732574,
+    #    0.2627452790737152  , 0.07075788751244545 , 0.11012332066893578 )
+    # solver = Solver('injector_Surrogate_Ring', xRing).solve(X)
     # params=tuple(injectorParamsOptimalAny.values())
     # print(solver.solve(xRing))
     # xi = (*xRing, *list(injectorParamsOptimalAny.values()))

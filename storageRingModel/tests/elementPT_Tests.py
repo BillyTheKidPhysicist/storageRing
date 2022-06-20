@@ -481,7 +481,7 @@ class ElementTestRunner:
         el = self.elTestHelper.el
 
         @given(*self.elTestHelper.coordTestRules)
-        @settings(max_examples=1_000, deadline=None)
+        @settings(max_examples=2_000, deadline=None)
         def is_Inside_Consistency(x1: float, x2: float, x3: float):
             qEl = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
             F = el.force(qEl)
@@ -652,3 +652,4 @@ def test_Elements(parallel=True):
 
     processes = -1 if parallel == True else 1
     tool_Parallel_Process(run_Tester, testersToRun, processes=processes)
+poop_Elements(parallel=False)
