@@ -50,6 +50,7 @@ class HalbachLensSim(LensIdeal):
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
         # todo: remove redundant SMALL_OFFSET thing
+        #todo: why is this so different from the combiner version?
         apMax = (self.rp - SMALL_OFFSET) * (1 - sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 

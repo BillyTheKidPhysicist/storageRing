@@ -436,8 +436,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0123749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-0.20576190116502344 , -0.006286179840176073,0.004116342447995729])
-        pf0 = np.array([-200.4922770093567  ,  -12.289815876558258,    9.356086023409535])
+        qf0 = np.array([-0.20578209294016095 , -0.006235114028404287,0.004118171366119246])
+        pf0 = np.array([-200.46831176820064 ,  -12.641968567760296,    9.396922242105385])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):

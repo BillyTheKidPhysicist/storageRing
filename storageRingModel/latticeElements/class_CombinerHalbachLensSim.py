@@ -1,12 +1,12 @@
 from math import isclose
-from math import sin, sqrt, cos, atan
+from math import sin, sqrt, cos, atan,tan
 from typing import Optional
 
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS, VACUUM_TUBE_THICKNESS
-from helperTools import make_Odd
+from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_VACUUM_TUBE_THICKNESS
+from helperTools import round_And_Make_Odd,make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
     CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths
@@ -17,6 +17,8 @@ DEFAULT_SEED = 42
 
 class CombinerHalbachLensSim(CombinerIdeal):
     outerFringeFrac: float = 1.5
+    numGridPointsX: int =30
+    numGridPointsY: int =100
 
     def __init__(self, PTL, Lm: float, rp: float, loadBeamOffset: float, numLayers: int, ap: Optional[float], seed):
         # PTL: object of ParticleTracerLatticeClass
@@ -32,15 +34,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert self.outerFringeFrac == 1.5, "May need to change numgrid points if this changes"
         pointPerBoreRadZ = 2
         self.numGridPointsZ: int = make_Odd(
-            max([round(pointPerBoreRadZ * (Lm + 2 * self.outerFringeFrac * rp) / rp), 10]))
-        # less than 10 and maybe my model to find optimal value doesn't work so well
-        self.numGridPointsZ = make_Odd(round(self.numGridPointsZ * PTL.fieldDensityMultiplier))
-        self.numGridPointsXY: int = make_Odd(round(30 * PTL.fieldDensityMultiplier))
+            max([round(pointPerBoreRadZ * (Lm + 2 * self.outerFringeFrac * rp) / rp), 15]))
+        self.numGridPointsZ = round_And_Make_Odd(self.numGridPointsZ * PTL.fieldDensityMultiplier)
 
         self.Lm = Lm
         self.rp = rp
         self.numLayers = numLayers
-        self.ap = min([.9 * rp, rp - VACUUM_TUBE_THICKNESS]) if ap is None else ap
+        self.ap = rp - COMBINER_VACUUM_TUBE_THICKNESS if ap is None else ap
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
         self.magnetWidths = None
@@ -74,13 +74,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space
-        theta = inputAngle
-        self.La = (y0 + x0 / np.tan(theta)) / (sin(theta) + cos(theta) ** 2 / sin(theta))
-        self.inputOffset = inputOffset - np.tan(
+        self.La = (y0 + x0 / tan(inputAngle)) / (sin(inputAngle) + cos(inputAngle) ** 2 / sin(inputAngle))
+        self.inputOffset = inputOffset - tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
-        if self.ap >= self.max_Ap_Good_Field():
-            raise CombinerDimensionError
+        assert self.ap <= self.max_Ap_Good_Field()
 
     def make_Lens(self) -> _HalbachLensFieldGenerator:
         """Make field generating lens. A seed is required to reproduce the same magnet if magnet errors are being
@@ -101,8 +99,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return lens
 
     def build_Fast_Field_Helper(self, extraSources):
-        fieldData = self.make_Field_Data()
         self.set_extraFieldLength()
+        fieldData = self.make_Field_Data()
         self.fastFieldHelper = get_Combiner_Halbach_Field_Helper([fieldData, self.La,
                                                                   self.Lb, self.Lm, self.space, self.ap, self.ang,
                                                                   self.fieldFact,
@@ -117,22 +115,20 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-
+        numGridPointsX: int = round_And_Make_Odd(self.numGridPointsX * self.PTL.fieldDensityMultiplier)
+        numGridPointsY: int = round_And_Make_Odd(self.numGridPointsY * self.PTL.fieldDensityMultiplier)
         yMax = self.rp + (self.La + self.rp * sin(abs(self.ang))) * sin(abs(self.ang))
         yMax_Minimum = self.rp * 1.5 * 1.1
         yMax = yMax if yMax > yMax_Minimum else yMax_Minimum
-        yMax = np.clip(yMax, self.rp, np.inf)
         # yMax=yMax if not accomodateJitter else yMax+self.PTL.jitterAmp
         yMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -yMax
         xMin = -(self.rp - TINY_OFFSET)
         xMax = TINY_OFFSET if not self.PTL.standardMagnetErrors else -xMin
-        numY = self.numGridPointsXY if not self.PTL.standardMagnetErrors else make_Odd(
-            round(.9 * (self.numGridPointsXY * 2 - 1)))
+        numY = numGridPointsY if not self.PTL.standardMagnetErrors else round_And_Make_Odd(.9 * (numGridPointsY * 2 - 1))
         # minus 1 ensures same grid spacing!!
-        numX = make_Odd(round(self.numGridPointsXY * self.rp / yMax))
-        numX = numX if not self.PTL.standardMagnetErrors else make_Odd(round(.9 * (2 * numX - 1)))
-        numZ = self.numGridPointsZ if not self.PTL.standardMagnetErrors else make_Odd(
-            round(1 * (self.numGridPointsZ * 2 - 1)))
+        numX = round_And_Make_Odd(numGridPointsX * self.rp / yMax)
+        numX = numX if not self.PTL.standardMagnetErrors else round_And_Make_Odd(.9 * (2 * numX - 1))
+        numZ = self.numGridPointsZ if not self.PTL.standardMagnetErrors else round_And_Make_Odd(1 * (self.numGridPointsZ * 2 - 1))
         zMax = self.compute_Valid_zMax()
         zMin = -TINY_OFFSET if not self.PTL.standardMagnetErrors else -zMax
 
@@ -140,9 +136,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
         xArr_Quadrant = np.linspace(xMin, xMax, numX)  # this becomes z in element frame, with sign change
         zArr = np.linspace(zMin, zMax, numZ)  # this becomes x in element frame
         assert not is_Even(len(xArr_Quadrant)) and not is_Even(len(yArr_Quadrant)) and not is_Even(len(zArr))
-        assert not np.any(np.isnan(xArr_Quadrant))
-        assert not np.any(np.isnan(yArr_Quadrant))
-        assert not np.any(np.isnan(zArr))
         return xArr_Quadrant, yArr_Quadrant, zArr
 
     def compute_Valid_zMax(self) -> float:
@@ -192,10 +185,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.outputOffset = self.find_Ideal_Offset()
         atomState = 'HIGH_FIELD_SEEKING' if self.fieldFact == -1 else 'LOW_FIELD_SEEKING'
 
-        inputAngle, inputOffset, trajectoryLength, minBeamLensSep = characterize_CombinerHalbach(self, atomState,
-                                                                                                 particleOffset=self.outputOffset)
+        inputAngle, inputOffset, trajectoryLength, _ = characterize_CombinerHalbach(self, atomState,
+                                                                                    particleOffset=self.outputOffset)
         assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
-        # Sometimes this can happen because the lens is to long so an oscilattory behaviour is required by injector
+        # Sometimes this can be triggered because the lens is to long so an oscilattory behaviour is required by
+        # injector
         return inputAngle, inputOffset, trajectoryLength
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
