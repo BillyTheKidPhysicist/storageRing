@@ -1,4 +1,4 @@
-from math import sqrt
+from math import sqrt, sin, cos
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
@@ -101,8 +101,8 @@ class BenderIdeal(BaseElement):
         raise NotImplementedError  # there is an error here with yo
         xo, yo, zo = qOrbit
         phi = self.ang - xo / self.ro
-        xLab = self.ro * np.cos(phi)
-        yLab = self.ro * np.sin(phi)
+        xLab = self.ro * cos(phi)
+        yLab = self.ro * sin(phi)
         zLab = zo
         qLab = np.asarray([xLab, yLab, zLab])
         qLab[:2] = self.ROut @ qLab[:2]
@@ -114,7 +114,7 @@ class BenderIdeal(BaseElement):
 
         x, y = qEl[:2]
         xDot, yDot, zDot = pEl
-        r = np.sqrt(x ** 2 + y ** 2)
+        r = sqrt(x ** 2 + y ** 2)
         rDot = (x * xDot + y * yDot) / r
         thetaDot = (x * yDot - xDot * y) / r ** 2
         velocityTangent = -r * thetaDot

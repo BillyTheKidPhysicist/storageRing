@@ -53,10 +53,12 @@ def full_Arctan(q: np.ndarray):
         phi += 2 * np.pi
     return phi
 
-def get_Unit_Cell_Angle(lengthSegment:float,radius:float,segmentWidth: float) -> float:
+
+def get_Unit_Cell_Angle(lengthSegment: float, radius: float, segmentWidth: float) -> float:
     """Get the arc angle associate with a single unit cell. Each lens contains two unit cells."""
-    assert lengthSegment>0.0 and radius >0.0 and radius>segmentWidth>=0.0
+    assert lengthSegment > 0.0 and radius > 0.0 and radius > segmentWidth >= 0.0
     return np.arctan(.5 * lengthSegment / (radius - segmentWidth))  # radians
+
 
 def is_Even(x: int) -> bool:
     """Test if a number is even"""

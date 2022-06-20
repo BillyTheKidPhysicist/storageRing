@@ -1,4 +1,4 @@
-from math import isclose
+from math import isclose, sqrt, pi
 
 from scipy.spatial.transform import Rotation as Rot
 
@@ -62,13 +62,13 @@ def calculateTrajectory_Length(qTracedArr: np.ndarray) -> float:
 def make_Halbahc_Combiner_Force_Function(el) -> Callable:
     lens = el.make_Lens()
     assert all(val == 0.0 for val in [*lens.orientation.as_rotvec(), *lens.position])
-    orientation = Rot.from_rotvec([0, np.pi / 2, 0.0])
+    orientation = Rot.from_rotvec([0, pi / 2, 0.0])
     lens.rotate(orientation)
     lens.move((el.space + el.Lm / 2, 0, 0))
 
     def force_Func(q):
         if el.space < q[0] < el.Lm + el.space:
-            assert np.sqrt(q[1] ** 2 + q[2] ** 2) < el.ap
+            assert sqrt(q[1] ** 2 + q[2] ** 2) < el.ap
         F = -SIMULATION_MAGNETON * lens.BNorm_Gradient(q)
         F[2] = 0.0
         return F

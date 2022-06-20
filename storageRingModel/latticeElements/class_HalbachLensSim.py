@@ -1,4 +1,5 @@
 import warnings
+from math import tan, sqrt
 from typing import Optional
 
 import numpy as np
@@ -49,7 +50,7 @@ class HalbachLensSim(LensIdeal):
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
         # todo: remove redundant SMALL_OFFSET thing
-        apMax = (self.rp - SMALL_OFFSET) * (1 - np.sqrt(2) / (self.numGridPointsXY - 1))
+        apMax = (self.rp - SMALL_OFFSET) * (1 - sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 
     def fill_Pre_Constrained_Parameters(self):
@@ -293,9 +294,9 @@ class HalbachLensSim(LensIdeal):
         if self.PTL.jitterAmp == 0.0 and self.PTL.jitterAmp != 0.0:
             warnings.warn("No jittering was accomodated for, so their will be no effect")
         assert abs(rotZ) < .05 and abs(rotZ) < .05  # small angle
-        totalShiftY = shiftY + np.tan(rotZ) * self.L
-        totalShiftZ = shiftZ + np.tan(rotY) * self.L
-        totalShift = np.sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
+        totalShiftY = shiftY + tan(rotZ) * self.L
+        totalShiftZ = shiftZ + tan(rotY) * self.L
+        totalShift = sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
         maxShift = self.get_Valid_Jitter_Amplitude()
         if totalShift > maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')

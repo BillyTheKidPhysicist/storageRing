@@ -1,4 +1,5 @@
 from math import isclose
+from math import sin, sqrt, cos, atan
 from typing import Optional
 
 import numpy as np
@@ -8,8 +9,7 @@ from constants import MIN_MAGNET_MOUNT_THICKNESS, VACUUM_TUBE_THICKNESS
 from helperTools import make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
-    CombinerIterExceededError, is_Even
-from latticeElements.utilities import get_Halbach_Layers_Radii_And_Magnet_Widths
+    CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths
 from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Halbach_Field_Helper
 
 DEFAULT_SEED = 42
@@ -69,13 +69,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # or down
         # because field values are computed twice from same lens. Otherwise, magnet errors would change
         inputAngle, inputOffset, trajectoryLength = self.compute_Input_Orbit_Characteristics()
-        self.Lo = trajectoryLength  # np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1)))
+        self.Lo = trajectoryLength
         self.L = self.Lo
         self.ang = inputAngle
         y0 = inputOffset
         x0 = self.space
         theta = inputAngle
-        self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
+        self.La = (y0 + x0 / np.tan(theta)) / (sin(theta) + cos(theta) ** 2 / sin(theta))
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
@@ -109,9 +109,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
                                                                   self.extraFieldLength,
                                                                   not self.PTL.standardMagnetErrors])
 
-        self.fastFieldHelper.numbaJitClass.force(1e-3, 1e-3, 1e-3)  # force compile
-        self.fastFieldHelper.numbaJitClass.magnetic_Potential(1e-3, 1e-3, 1e-3)  # force compile
-
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lm / 2 + self.space, self.ap / 2, .0])))
         assert F_edge / F_center < .01
@@ -121,7 +118,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
-        yMax = self.rp + (self.La + self.rp * np.sin(abs(self.ang))) * np.sin(abs(self.ang))
+        yMax = self.rp + (self.La + self.rp * sin(abs(self.ang))) * sin(abs(self.ang))
         yMax_Minimum = self.rp * 1.5 * 1.1
         yMax = yMax if yMax > yMax_Minimum else yMax_Minimum
         yMax = np.clip(yMax, self.rp, np.inf)
@@ -155,7 +152,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         respect that. See fastNumbaMethodsAndClasses.CombinerHalbachLensSimFieldHelper_Numba.is_Coord_Inside_Vacuum"""
 
         firstValidPointSpacing = 1e-6
-        maxLength = (self.Lb + (self.La + self.rp * np.sin(abs(self.ang))) * np.cos(abs(self.ang)))
+        maxLength = (self.Lb + (self.La + self.rp * sin(abs(self.ang))) * cos(abs(self.ang)))
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location. See how force is computed
         zMax = maxLength - symmetryPlaneX  # subtle. The interpolation must extend to long enough to account for the
         # combiner not being symmetric, but the interpolation field being symmetric. See how force symmetry is handled
@@ -222,7 +219,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         is too large for good field region, extra length is clipped. Misalignment is a translational and/or rotational,
         so extra length needs to be accounted for in the case of rotational."""
         jitterAmp = self.get_Valid_Jitter_Amplitude(Print=True)
-        tiltMax1D = np.arctan(jitterAmp / self.L)  # Tilt in x,y can be higher but I only need to consider 1D
+        tiltMax1D = atan(jitterAmp / self.L)  # Tilt in x,y can be higher but I only need to consider 1D
         # because interpolation grid is square
         assert tiltMax1D < .05  # insist small angle approx
         self.extraFieldLength = self.rp * np.tan(tiltMax1D) * 1.5  # safety factor
@@ -235,7 +232,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert abs(rotZ) < .05 and abs(rotZ) < .05  # small angle
         totalShiftY = shiftY + np.tan(rotZ) * self.L
         totalShiftZ = shiftZ + np.tan(rotY) * self.L
-        totalShift = np.sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
+        totalShift = sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
         maxShift = self.get_Valid_Jitter_Amplitude()
         if maxShift == 0.0 and self.PTL.jitterAmp != 0.0:
             warnings.warn("No jittering was accomodated for, so their will be no effect")
