@@ -652,4 +652,3 @@ def test_Elements(parallel=True):
 
     processes = -1 if parallel == True else 1
     tool_Parallel_Process(run_Tester, testersToRun, processes=processes)
-poop_Elements(parallel=False)

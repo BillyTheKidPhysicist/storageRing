@@ -7,7 +7,7 @@ from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBenderSimSegmented
-from latticeModels_Parameters import system_constants, injectorParamsOptimalAny, optimizerBounds_V1_3, \
+from latticeModels_Parameters import system_constants, optimizerBounds_V1_3, \
     optimizerBounds_V2, lockedDict, atomCharacteristic, injectorParamsBoundsAny
 
 
@@ -152,7 +152,7 @@ def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ringPara
     PTL.add_Halbach_Lens_Sim(ringParams['rpLens1'], ringParams['L_Lens1'])
 
     # ---combiner + OP magnet-----
-    add_Combiner_And_OP(PTL, ringParams['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamOffset'],
+    add_Combiner_And_OP(PTL, system_constants['rpCombiner'], ringParams['LmCombiner'], ringParams['loadBeamOffset'],
                         ringParams['rpLens1'], ringParams['rpLens2'], options, whichOP_Ap=whichOP_Ap)
 
     # ---from OP to bender input---
@@ -333,15 +333,14 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
     return PTL
 
 
-def make_ringParams_Dict(ringParams_tuple: tuple, whichVersion: str) -> lockedDict:
+def make_ringParams_Dict(ringParams_tuple: tuple, injectorParams: dict, whichVersion: str) -> dict:
     """Take parameters values list and construct dictionary of variable ring parameters. For version1, all tunable
     variables (lens length, radius, etc) describe the ring only. Injector is optimized entirely independenly before"""
 
     assert whichVersion in ('1', '2', '3')
 
-    ringParamsDict = {"LmCombiner": injectorParamsOptimalAny["LmCombiner"],
-                      "rpCombiner": system_constants["rpCombiner"],
-                      "loadBeamOffset": injectorParamsOptimalAny["loadBeamOffset"]}
+    ringParamsDict = {"LmCombiner": injectorParams["LmCombiner"],
+                      "loadBeamOffset": injectorParams["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
         assert len(ringParams_tuple) == 6
@@ -351,12 +350,11 @@ def make_ringParams_Dict(ringParams_tuple: tuple, whichVersion: str) -> lockedDi
         assert len(ringParams_tuple) == 10
         for variableKey, value in zip(optimizerBounds_V2.keys(), ringParams_tuple):
             ringParamsDict[variableKey] = value
-    ringParamsDict = lockedDict(ringParamsDict)
     return ringParamsDict
 
 
-def make_injectorParams_Dict_Version_Any(injectorParams_tuple: tuple) -> lockedDict:
-    injectorParamsDict = lockedDict(dict(zip(injectorParamsBoundsAny.keys(), injectorParams_tuple)))
+def make_injectorParams_Dict_Version_Any(injectorParams_tuple: tuple) -> dict:
+    injectorParamsDict = dict(zip(injectorParamsBoundsAny.keys(), injectorParams_tuple))
     return injectorParamsDict
 
 
@@ -366,6 +364,16 @@ def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: Par
 
     assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
     assert PTL_Injector.combiner.ang < 0 < PTL_Ring.combiner.ang
+
+
+def _make_Ring_And_Injector_Params_Locked_Dicts(systemParams: tuple[tuple, tuple], whichVersion) \
+        -> tuple[lockedDict, lockedDict]:
+    """Given system parameters of (ring_params,injector_params) construct the lockedDicts for each"""
+    ringParams_tuple, injectorParams_tuple = systemParams
+    injectorParams = make_injectorParams_Dict_Version_Any(injectorParams_tuple)
+    ringParams = make_ringParams_Dict(ringParams_tuple, injectorParams, whichVersion)
+    # make locked dicts after so the item access counters start at 0
+    return lockedDict(ringParams), lockedDict(injectorParams)
 
 
 def _make_Ring_And_Injector(systemParams: tuple[tuple, tuple], whichVersion: str, options: Optional[dict]) \
@@ -382,9 +390,7 @@ def _make_Ring_And_Injector(systemParams: tuple[tuple, tuple], whichVersion: str
     """
 
     assert whichVersion in ('1', '2', '3')
-    ringParams_tuple, injectorParams_tuple = systemParams
-    injectorParams = make_injectorParams_Dict_Version_Any(injectorParams_tuple)
-    ringParams = make_ringParams_Dict(ringParams_tuple, whichVersion)
+    ringParams, injectorParams = _make_Ring_And_Injector_Params_Locked_Dicts(systemParams, whichVersion)
     PTL_Ring = make_Ring(ringParams, whichVersion, options)
     PTL_Injector = make_Injector_Version_Any(injectorParams, options=options)
     assert_Combiners_Are_Same(PTL_Injector, PTL_Ring)

@@ -54,22 +54,22 @@ class lockedDict(dict):
 
 # optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
-    "L1": 0.1513998,  # length of first lens
-    "rp1": 0.02959859,  # bore radius of first lens
-    "L2": 0.12757497,  # length of first lens
-    "rp2": 0.022621,  # bore radius of first lens
-    "LmCombiner": 0.19413599,  # hard edge length of combiner
-    "loadBeamOffset": 0.01606958,  # offset of incoming beam into combiner
-    "gap1": 0.20289069,  # separation between source and first lens
-    "gap2": 0.23274805,  # separation between two lenses
-    "gap3": 0.17537412  ##separation between final lens and input to combiner
+    "L1": 0.09622282605012868,  # length of first lens
+    "rp1": 0.01,  # bore radius of first lens
+    "L2": 0.24155344028683254,  # length of first lens
+    "rp2": 0.03,  # bore radius of first lens
+    "LmCombiner": 0.17047182734978528,  # hard edge length of combiner
+    "loadBeamOffset": 0.007187101087953732,  # offset of incoming beam into combiner
+    "gap1": 0.06778754563396035,  # separation between source and first lens
+    "gap2": 0.2709792520743716,  # separation between two lenses
+    "gap3": 0.2293989213563593  ##separation between final lens and input to combiner
 })
 
 injectorParamsBoundsAny: lockedDict = lockedDict({
     "L1": (.05, .3),  # length of first lens
     "rp1": (.01, .03),  # bore radius of first lens
-    "L2": (.05, .3),  # length of first lens
-    "rp2": (.01, .03),  # bore radius of first lens
+    "L2": (.05, .3),  # length of second lens
+    "rp2": (.01, .03),  # bore radius of second lens
     "LmCombiner": (.02, .25),  # hard edge length of combiner
     "loadBeamOffset": (5e-3, 30e-3),  # assumed diameter of incoming beam
     "gap1": (.05, .3),  # separation between source and first lens
@@ -145,4 +145,14 @@ optimizerBounds_V2: lockedDict = lockedDict({
     'L_Lens2': (.1, .4),
     'L_Lens3': (.1, .4),
     'L_Lens4': (.1, .4)
+})
+
+# as of June 23, solution 6
+ringParamsOptimal_V3 = lockedDict({
+    'rpLens3_4': 0.02102425839849725,
+    'rpLens1': .01,
+    'rpLens2': 0.038773002120334694,
+    'rpBend': 0.00759624174653381,
+    'L_Lens1': 0.441164241347491,
+    'L_Lens2': 0.46839105549798354
 })

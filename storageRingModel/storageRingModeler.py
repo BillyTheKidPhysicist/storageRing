@@ -15,10 +15,9 @@ from floorPlanCheckerFunctions import does_Fit_In_Room, plot_Floor_Plan_In_Lab
 from helperTools import full_Arctan
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim
 from latticeModels import make_Ring_And_Injector
+from latticeModels_Parameters import injectorParamsOptimalAny, ringParamsOptimal_V3
 
 list_array_tuple = Union[np.ndarray, tuple, list]
-
-Element = None
 
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
 ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerHalbachLensSim)
@@ -30,18 +29,6 @@ def injector_Is_Expected_Design(latticeInjector, isBumperIncluded):
         if not type(el) is elExpectedType:
             return False
     return True
-
-
-def build_StorageRingModel(params, version: str, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
-                           energyCorrection: bool = False, useMagnetErrors: bool = False,
-                           useSolenoidField: bool = True, includeBumper: bool = False):
-    """Convenience function for building a StorageRingModel"""
-    options = {'useMagnetErrors': useMagnetErrors, 'useSolenoidField': useSolenoidField, 'includeBumper': includeBumper}
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector(params, version, options=options)
-    model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
-                             numParticlesSwarm=numParticlesSwarm, collisionDynamics=collisionDynamics,
-                             isBumperIncludedInInjector=includeBumper)
-    return model
 
 
 class StorageRingModel:
@@ -79,7 +66,7 @@ class StorageRingModel:
         self.energyCorrection = energyCorrection
         self.swarmInjectorInitial = self.generate_Swarm(numParticlesSwarm)
 
-    def generate_Swarm(self, numParticlesSwarm) -> Swarm:
+    def generate_Swarm(self, numParticlesSwarm: int) -> Swarm:
         """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
         swarm = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(numParticlesSwarm)
         if self.isBumperIncluded:
@@ -180,18 +167,19 @@ class StorageRingModel:
         return shapelyObjectList
 
     def floor_Plan_OverLap_mm(self) -> float:
-        """Find the area overlap between the element before the second injector lens, and the lenses between combiner
-        input and adjacent bender output
+        """Find the area overlap between the elements before the last injector lens, and the lenses between combiner
+        input and adjacent bender output. Overlap of the element after the last injector lens is handled later by
+        clipping particles on it
         """
         lensesBeforeCombiner = self.get_Lenses_Before_Combiner_Ring()
+        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
+        injectorShapelyObjectsToTest = injectorShapelyObjects[:self.injectorLensIndices[-1] + 1]
         assert all(type(lens) is HalbachLensSim for lens in lensesBeforeCombiner)
         convertAreaTo_mm = 1e3 ** 2
         area = 0.0
         for lens in lensesBeforeCombiner:
-            firstLensRingShapely = lens.SO_Outer
-            injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
-            for i in range(self.injectorLensIndices[-1] + 1):  # don't forget to add 1
-                area += firstLensRingShapely.intersection(injectorShapelyObjects[i]).area * convertAreaTo_mm
+            for shape in injectorShapelyObjectsToTest:  # don't forget to add 1
+                area += lens.SO_Outer.intersection(shape).area * convertAreaTo_mm
         return area
 
     def show_Floor_Plan(self, which: str = 'exterior', deferPltShow=False, trueAspect=True,
@@ -206,7 +194,7 @@ class StorageRingModel:
         if not deferPltShow:
             plt.show()
 
-    def show_System_Floor_Plan_In_Lab(self):
+    def show_System_Floor_Plan_In_Lab(self) -> None:
         plot_Floor_Plan_In_Lab(self)
 
     def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool = True, Tmax=1.0) -> None:
@@ -337,8 +325,8 @@ class StorageRingModel:
         assert 0.0 <= cost <= self.maximumFloorPlanCost
         return cost
 
-    def get_Drift_After_Second_Lens_Injector(self) -> Drift:
-        """Get drift element which comes immediately after second lens in injector"""
+    def get_Drift_After_Last_Lens_Injector(self) -> Drift:
+        """Get drift element which comes immediately after last lens in injector"""
 
         drift = self.latticeInjector.elList[self.injectorLensIndices[-1] + 1]
         assert type(drift) is Drift
@@ -348,18 +336,17 @@ class StorageRingModel:
         """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
         Return the largest value of the three. This is used to punish the system when the injector lens is no longer
         tunable because it is so close to the ring"""
-
-        driftAfterLens = self.get_Drift_After_Second_Lens_Injector()
+        driftAfterLens = self.get_Drift_After_Last_Lens_Injector()
         L0 = driftAfterLens.L  # value before tuning
         cost = [self.floor_Plan_Cost()]
 
         driftAfterLens.set_Length(L0 + -self.injectorTunabilityLength)  # move lens away from combiner
-        self.latticeInjector.build_Lattice(False, buildFieldHelper=False) #don't waste time building field helpers
+        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)  # don't waste time building field helpers
         cost.append(self.floor_Plan_Cost())
 
         driftAfterLens.set_Length(L0)  # reset
-        self.latticeInjector.build_Lattice(False,buildFieldHelper=False) #don't waste time building field helpers,
-            #previous helpers are still saved
+        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)  # don't waste time building field helpers,
+        # previous helpers are still saved
         floorPlanCost = max(cost)
         assert 0.0 <= floorPlanCost <= 1.0
         return floorPlanCost
@@ -370,3 +357,25 @@ class StorageRingModel:
         swarmCost = (100.0 - fluxMultPerc) / 100.0
         assert 0.0 <= swarmCost <= self.maximumSwarmCost
         return swarmCost
+
+
+def build_StorageRingModel(params, version: str, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
+                           energyCorrection: bool = False, useMagnetErrors: bool = False,
+                           useSolenoidField: bool = True, includeBumper: bool = False):
+    """Convenience function for building a StorageRingModel"""
+    options = {'useMagnetErrors': useMagnetErrors, 'useSolenoidField': useSolenoidField, 'includeBumper': includeBumper}
+    PTL_Ring, PTL_Injector = make_Ring_And_Injector(params, version, options=options)
+    model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
+                             numParticlesSwarm=numParticlesSwarm, collisionDynamics=collisionDynamics,
+                             isBumperIncludedInInjector=includeBumper)
+    return model
+
+
+def make_Optimal_Solution_Model(includeBumper: bool = True, useSolenoidField: bool = True) -> StorageRingModel:
+    """Build the current optimal model. A convenienve function"""
+    ringParams = tuple(ringParamsOptimal_V3.values())
+    injectorParams = tuple(injectorParamsOptimalAny.values())
+    X = (ringParams, injectorParams)
+    model = build_StorageRingModel(X, '3', includeBumper=includeBumper, useSolenoidField=useSolenoidField)
+    model.show_Floor_Plan()
+    return model

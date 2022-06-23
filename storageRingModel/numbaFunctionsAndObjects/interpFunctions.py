@@ -1,7 +1,8 @@
 import numba
 
-
-@numba.njit()
+args=numba.float64(numba.float64,numba.float64,numba.float64,numba.float64[:],
+                                numba.float64[:],numba.float64[:],numba.float64[:])
+@numba.njit(args,cache=True)
 def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
     X, Y, Z = len(xCoords), len(yCoords), len(zCoords)
     assert 2 < X and 2 < Y and 2 < Z, "need at least 2 points to interpolate"
@@ -46,8 +47,9 @@ def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
 
     return c
 
-
-@numba.njit()
+args=numba.types.UniTuple(numba.float64,3)(numba.float64,numba.float64,numba.float64,numba.float64[:],
+                                numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:],numba.float64[:])
+@numba.njit(args,cache=True)
 def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
     X, Y, Z = len(xCoords), len(yCoords), len(zCoords)
     assert 2 < X and 2 < Y and 2 < Z, "need at least 2 points to interpolate"
@@ -108,8 +110,9 @@ def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
         raise Exception('out of bounds')
     return c_x, c_y, c_z
 
-
-@numba.njit()
+args=numba.float64(numba.float64,numba.float64,numba.float64[:],
+                                numba.float64[:],numba.float64[:])
+@numba.njit(args,cache=True)
 def interp2D(xLoc, yLoc, xCoords, yCoords, v_c):
     X, Y = len(xCoords), len(yCoords)
     min_x, max_x = xCoords[0], xCoords[-1]

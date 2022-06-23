@@ -16,12 +16,12 @@ from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderId
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 
-@numba.njit()
+@numba.njit(numba.float64(numba.float64[:]))
 def norm_3D(vec):
     return sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)
 
 
-@numba.njit()
+@numba.njit(numba.float64(numba.float64[:], numba.float64[:]))
 def dot_Prod_3D(veca, vecb):
     return veca[0] * vecb[0] + veca[1] * vecb[1] + veca[2] * vecb[2]
 

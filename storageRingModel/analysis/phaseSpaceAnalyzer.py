@@ -10,6 +10,8 @@ from ParticleClass import Swarm
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 
+from helperTools import tool_Parallel_Process
+
 cmap = plt.get_cmap('viridis')
 
 
@@ -45,38 +47,46 @@ class Particle(ParticleBase):
 
 
 class SwarmSnapShot:
-    def __init__(self, swarm: Swarm, xSnapShot):
-        assert xSnapShot >= 0.0  # orbit coordinates, not real coordinates
+    def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0,parallel=False):
+        assert xSnapShot > 0.0  # orbit coordinates, not real coordinates
         for particle in swarm: assert particle.dataLogging == True
-        self.particles: list[Particle] = []
-        self._take_SnapShot(swarm, xSnapShot)
+        self.particles: list[Particle] = None
+        self.xSnapShot=xSnapShot
+        self.swarm=swarm
+        self.min_Survival_T=min_Survival_T
+        self._take_SnapShot(parallel)
 
-    def _take_SnapShot(self, swarm, xSnapShot):
-        for particle in swarm:
-            particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
-            particleSnapShot.probability = particle.probability
-            if self._check_If_Particle_Can_Be_Interpolated(particle, xSnapShot) == False:
-                particleSnapShot.qo = particle.qoArr[-1].copy()
-                particleSnapShot.po = particle.pArr[-1].copy()
-                particleSnapShot.pf = particle.pf.copy()
-                particleSnapShot.qf = particle.qf.copy()
-                particleSnapShot.E = particle.EArr[-1].copy()
-                particleSnapShot.deltaE = particleSnapShot.E - particle.EArr[0]
-                particleSnapShot.clipped = True
-            else:
-                E, qo, po = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, xSnapShot)
-                particleSnapShot.E = E
-                particleSnapShot.deltaE = E - particle.EArr[0].copy()
-                particleSnapShot.qo = qo
-                particleSnapShot.po = po
-                particleSnapShot.clipped = False
-            self.particles.append(particleSnapShot)
+    def _take_Particle_Snapshot(self,particle):
+        particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
+        particleSnapShot.probability = particle.probability
+        if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
+            E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
+            particleSnapShot.E = E
+            particleSnapShot.deltaE = E - particle.EArr[0].copy()
+            particleSnapShot.qo = qo
+            particleSnapShot.po = po
+            particleSnapShot.qf=q
+            particleSnapShot.pf=p
+            particleSnapShot.clipped = False
+        else:
+            particleSnapShot.qo = particle.qoArr[-1].copy()
+            particleSnapShot.po = particle.pArr[-1].copy()
+            particleSnapShot.pf = particle.pf.copy()
+            particleSnapShot.qf = particle.qf.copy()
+            particleSnapShot.E = particle.EArr[-1].copy()
+            particleSnapShot.deltaE = particleSnapShot.E - particle.EArr[0]
+            particleSnapShot.clipped = True
+        return particleSnapShot
+
+    def _take_SnapShot(self,parallel):
+        processes= 1 if not parallel else -1
+        self.particles=tool_Parallel_Process(self._take_Particle_Snapshot,self.swarm.particles,processes=processes)
         if self.num_Surviving() == 0:
             warnings.warn("There are no particles that survived to the snapshot position")
 
     def _check_If_Particle_Can_Be_Interpolated(self, particle, x):
         # this assumes orbit coordinates
-        if len(particle.qoArr) == 0:
+        if len(particle.qoArr) == 0 or particle.T<=self.min_Survival_T:
             return False  # clipped immediately probably
         elif particle.qoArr[-1, 0] > x > particle.qoArr[0, 0]:
             return True
@@ -89,17 +99,19 @@ class SwarmSnapShot:
 
     def _get_Phase_Space_Coords_And_Energy_SnapShot(self, particle, xSnapShot):
         qoArr = particle.qoArr  # position in orbit coordinates
-        poArr = particle.pArr
+        poArr = particle.poArr
         EArr = particle.EArr
         assert xSnapShot < qoArr[-1, 0]
         indexBefore = np.argmax(qoArr[:, 0] > xSnapShot) - 1
         qo1 = qoArr[indexBefore]
         qo2 = qoArr[indexBefore + 1]
         stepFraction = (xSnapShot - qo1[0]) / (qo2[0] - qo1[0])
-        qSnapShot = self._interpolate_Array(qoArr, indexBefore, stepFraction)
-        pSnapShot = self._interpolate_Array(poArr, indexBefore, stepFraction)
+        qoSnapShot = self._interpolate_Array(qoArr, indexBefore, stepFraction)
+        poSnapShot = self._interpolate_Array(poArr, indexBefore, stepFraction)
         ESnapShot = self._interpolate_Array(EArr, indexBefore, stepFraction)
-        return ESnapShot, qSnapShot, pSnapShot
+        qLabSnapShot=self._interpolate_Array(particle.qArr, indexBefore, stepFraction)
+        pLabSnapShot=self._interpolate_Array(particle.pArr, indexBefore, stepFraction)
+        return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
     def _interpolate_Array(self, arr, indexBegin, stepFraction):
         # v1: bounding vector before
@@ -108,6 +120,9 @@ class SwarmSnapShot:
         assert 0.0 <= stepFraction <= 1.0
         v = arr[indexBegin] + (arr[indexBegin + 1] - arr[indexBegin]) * stepFraction
         return v
+
+    def get_Surviving_Particles(self):
+        return [particle for particle in self.particles if not particle.clipped]
 
     def get_Surviving_Particle_PhaseSpace_Coords(self):
         # get coordinates of surviving particles
@@ -475,3 +490,4 @@ class PhaseSpaceAnalyzer:
         plt.xlabel('Distance along lattice, m')
         plt.ylim([0.0, rmsArr.max() * meterToMM])
         plt.show()
+

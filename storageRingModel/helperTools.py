@@ -3,6 +3,7 @@ import math
 import time
 import warnings
 from typing import Optional, Union, Callable, Any
+import matplotlib.pyplot as plt
 
 import multiprocess as mp
 import numpy as np

@@ -6,14 +6,13 @@ perpindicular to the hall and alongside the optics table is the "bottom wall". T
 storage ring.
 """
 
+import itertools
 from typing import Union
 
+import matplotlib.pyplot as plt
+import numpy as np
 from shapely.affinity import translate, rotate
 from shapely.geometry import box, LineString, Polygon
-import numpy as np
-import matplotlib.pyplot as plt
-import itertools
-
 
 shapelyObject = Union[box, LineString, Polygon]
 shapelyList = list[shapelyObject]
@@ -96,15 +95,18 @@ def does_Fit_In_Room(model) -> bool:
 
     _, structures = make_Walls_And_Structures_In_Room()
     wallRight_x, wallBottom_y = wall_Positions()
-    isInValid = False
+    isValid = True
+    minAreaOverlapInvalid = 1e-10  # I check are overlap to determine in a configuration is invalid, but I don't want false
+    # positives if there is effectively no overlap, but it isn't zero
     components = make_Storage_Ring_System_Components(model)
-    for component in components:
+    for component, structure in itertools.product(components, structures):
         x, y = component.exterior.xy
         x, y = np.array(x), np.array(y)
-        isInValid = np.any(x > wallRight_x) or np.any(y < wallBottom_y) or isInValid
-        for structure in structures:
-            isInValid = structure.intersects(component) or isInValid
-    isValid = not isInValid
+        isOutSideWall = np.any(x > wallRight_x) or np.any(y < wallBottom_y)
+        isOverlapping = structure.intersection(component).area > minAreaOverlapInvalid
+        if isOutSideWall or isOverlapping:
+            isValid = False
+            break
     return isValid
 
 
