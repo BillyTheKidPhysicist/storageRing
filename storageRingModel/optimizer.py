@@ -227,7 +227,8 @@ def main():
     from latticeModels_Parameters import ringParamsOptimal_V3
     xInj = tuple(injectorParamsOptimalAny.values())
     xRing = tuple(ringParamsOptimal_V3.values())
-    print(Solver('injector_Actual_Ring', ringParams=xRing).solve(xInj))
+    xi=(*xRing,*xInj)
+    print(Solver('both',useBumper=True).solve(xi))
 
 
 if __name__ == '__main__':

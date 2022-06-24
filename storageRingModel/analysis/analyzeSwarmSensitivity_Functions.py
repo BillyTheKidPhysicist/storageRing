@@ -29,15 +29,28 @@ def rotate_Swarm_Momentum(swarm: Swarm, angleY: float, angleZ: float):
         particle.pi = Rz @ particle.pi
         particle.pi = Ry @ particle.pi
 
+class JitteredSwarmModel:
+    def __init__(self,model,dx,dy,dz,angleY,angleZ):
+        self.model,self.dx,self.dy,self.dz,self.angleY,self.angleZ=model,dx,dy,dz,angleY,angleZ
+        self.swarmOriginal=self.model.swarmInjectorInitial.copy() #copy original swarm so it can be reset
+    def __enter__(self)-> StorageRingModel:
+        displace_Swarm(self.model.swarmInjectorInitial, self.dx, self.dy, self.dz)
+        rotate_Swarm_Momentum(self.model.swarmInjectorInitial, self.angleY, self.angleZ)
+        return self.model
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.model.swarmInjectorInitial=self.swarmOriginal #put back original swarm
+        
+
 
 def solve_With_Jittered_Swarm(model: StorageRingModel, dx: float, dy: float, dz: float, angleY: float, angleZ: float) \
         -> tuple[float, float]:
-    swarmOriginal=model.swarmInjectorInitial.copy() #copy original swarm so it can be reset
-    displace_Swarm(model.swarmInjectorInitial, dx, dy, dz)
-    rotate_Swarm_Momentum(model.swarmInjectorInitial, angleY, angleZ)
-    results= model.mode_Match()
-    model.swarmInjectorInitial=swarmOriginal #put back original swarm
+    with JitteredSwarmModel(model,dx,dy,dz,angleY,angleZ) as jitteredModel:
+        results= jitteredModel.mode_Match()
     return results
+
+def plot_Trajectories_With_Jittered_Swarm(model: StorageRingModel, dx: float, dy: float, dz: float, angleY: float, angleZ: float):
+    with JitteredSwarmModel(model,dx,dy,dz,angleY,angleZ) as jitteredModel:
+        jitteredModel.show_Floor_Plan_And_Trajectories()
 
 
 def make_Increasing_3D_Arr_Along_Axis(amplitude: float, num: int, axis: int) -> np.ndarray:

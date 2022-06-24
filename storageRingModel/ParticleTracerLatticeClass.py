@@ -356,7 +356,7 @@ class ParticleTracerLattice:
         return xLab, yLab
 
     def show_Lattice(self, particleCoords=None, particle=None, swarm=None, showRelativeSurvival=True,
-                     showTraceLines=True,
+                     showTraceLines=True,showImmediately=True,
                      showMarkers=True, traceLineAlpha=1.0, trueAspectRatio=True, extraObjects=None, finalCoords=True,
                      saveTitle=None, dpi=150, defaultMarkerSize=1000, plotOuter: bool = False, plotInner: bool = True):
         # plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
@@ -434,4 +434,5 @@ class ParticleTracerLattice:
         plt.ylabel('meters')
         if saveTitle is not None:
             plt.savefig(saveTitle, dpi=dpi)
-        plt.show()
+        if showImmediately:
+            plt.show()

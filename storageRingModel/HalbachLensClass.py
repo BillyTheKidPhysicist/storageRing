@@ -429,7 +429,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         if self.sameSeed:
             np.random.seed(42)
         dimTol = inch_To_Meter(.004)  # dimension variation,inch to meter, +/- meters
-        MagVecAngleTol = radians(1.5)  # magnetization vector angle tolerane,degree to radian,, +/- radians
+        MagVecAngleTol = radians(2)  # magnetization vector angle tolerane,degree to radian,, +/- radians
         MagNormTol = .0125  # magnetization value tolerance, +/- fraction
         dimVariation = self.make_Base_Error_Arr_Cartesian(numParams=3) * dimTol
         MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * MagVecAngleTol

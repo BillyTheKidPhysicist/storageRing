@@ -8,8 +8,7 @@ import numpy as np
 import numpy.linalg as npl
 
 from constants import DEFAULT_ATOM_SPEED
-
-Element = None
+from latticeElements.elements import Element
 
 
 class Particle:
@@ -24,6 +23,8 @@ class Particle:
         if pi is None:
             pi = np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0])
         assert len(qi) == 3 and len(pi) == 3 and 0.0 <= probability <= 1.0
+        if probability != 1.0:
+            raise NotImplementedError  # i'm not' sure how correct the methods depending on this are anymore
         self.qi = qi.copy()  # initial position, lab frame, meters
         self.pi = pi.copy()  # initial momentu, lab frame, meters*kg/s, where mass=1
         self.qf = None  # final position

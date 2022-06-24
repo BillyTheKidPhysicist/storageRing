@@ -47,14 +47,14 @@ class Particle(ParticleBase):
 
 
 class SwarmSnapShot:
-    def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0,parallel=False):
+    def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0):
         assert xSnapShot > 0.0  # orbit coordinates, not real coordinates
         for particle in swarm: assert particle.dataLogging == True
         self.particles: list[Particle] = None
         self.xSnapShot=xSnapShot
         self.swarm=swarm
         self.min_Survival_T=min_Survival_T
-        self._take_SnapShot(parallel)
+        self._take_SnapShot()
 
     def _take_Particle_Snapshot(self,particle):
         particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
@@ -78,9 +78,8 @@ class SwarmSnapShot:
             particleSnapShot.clipped = True
         return particleSnapShot
 
-    def _take_SnapShot(self,parallel):
-        processes= 1 if not parallel else -1
-        self.particles=tool_Parallel_Process(self._take_Particle_Snapshot,self.swarm.particles,processes=processes)
+    def _take_SnapShot(self):
+        self.particles=[self._take_Particle_Snapshot(particle) for particle in self.swarm.particles]
         if self.num_Surviving() == 0:
             warnings.warn("There are no particles that survived to the snapshot position")
 

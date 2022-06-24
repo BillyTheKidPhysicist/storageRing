@@ -211,8 +211,7 @@ class StorageRingModel:
         for particle in swarmInjectorTraced:
             particle.clipped = True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                                  copyParticles=True,
-                                                                                  onlyUnclipped=False)
+                                                                                  copyParticles=True)
         swarmRingTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial, self.h, Tmax,
                                                                            fastMode=False,
                                                                            parallel=False, energyCorrection=True,
@@ -243,7 +242,7 @@ class StorageRingModel:
             fluxMultiplication = np.nan
         else:
             swarmTraced = self.inject_And_Trace_Swarm(parallel)
-            fluxMultiplication = self.compute_Flux_Multiplication(swarmTraced)
+            fluxMultiplication = swarmTraced.weighted_Flux_Multiplication()
             swarmCost = self.swarm_Cost(swarmTraced)
             cost = swarmCost + floorPlanCost
         assert 0.0 <= cost <= self.maximumCost
@@ -260,22 +259,20 @@ class StorageRingModel:
         return swarmTraced
 
     def transform_Swarm_From_Injector_Frame_To_Ring_Frame(self, swarmInjectorTraced: Swarm,
-                                                          copyParticles: bool = False,
-                                                          onlyUnclipped: bool = True) -> Swarm:
+                                                          copyParticles: bool = False) -> Swarm:
         # identify particles that survived to combiner end and move them assuming the combiner's output (r2)
         # was moved to the origin
 
         swarmRing = Swarm()
         for particle in swarmInjectorTraced:
             clipped = particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
-            if not onlyUnclipped or not clipped:
-                qRing = self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
-                pRing = self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
-                particleRing = particle.copy() if copyParticles else particle
-                particleRing.qi, particleRing.pi = qRing, pRing
-                particleRing.reset()
-                particleRing.clipped = clipped
-                swarmRing.add(particleRing)
+            qRing = self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
+            pRing = self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
+            particleRing = particle.copy() if copyParticles else particle
+            particleRing.qi, particleRing.pi = qRing, pRing
+            particleRing.reset()
+            particleRing.clipped = clipped
+            swarmRing.add(particleRing)
         return swarmRing
 
     def trace_Through_Injector_And_Transform_To_Ring(self) -> Swarm:
@@ -284,26 +281,13 @@ class StorageRingModel:
             self.swarmInjectorInitial.copy(), self.h, 1.0, fastMode=True, copySwarm=False,
             logPhaseSpaceCoords=True, accelerated=True, collisionDynamics=self.collisionDynamics)
         swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                                  copyParticles=True)
+                                                                    copyParticles=True)
         return swarmRingInitial
-
-    def compute_Flux_Multiplication(self, swarmTraced: Swarm) -> float:
-        """Return the multiplcation of flux expected in the ring. """
-
-        assert all([particle.traced for particle in swarmTraced.particles])
-        if swarmTraced.num_Particles() == 0:
-            return 0.0
-        else:
-            weightedFluxMultInjectedSwarm = swarmTraced.weighted_Flux_Multiplication()
-            injectionSurvivalFrac = swarmTraced.num_Particles(weighted=True) / \
-                                    self.swarmInjectorInitial.num_Particles(weighted=True)
-            totalFluxMult = injectionSurvivalFrac * weightedFluxMultInjectedSwarm
-            return totalFluxMult
 
     def compute_Swarm_Flux_Mult_Percent(self, swarmTraced: Swarm) -> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         # all particles survived through the lattice.
-        totalFluxMult = self.compute_Flux_Multiplication(swarmTraced)
+        totalFluxMult = swarmTraced.weighted_Flux_Multiplication()
         weightedFluxMultMax = self.maximum_Weighted_Flux_Multiplication()
         fluxMultPerc = 1e2 * totalFluxMult / weightedFluxMultMax
         assert 0.0 <= fluxMultPerc <= 100.0
@@ -377,5 +361,4 @@ def make_Optimal_Solution_Model(includeBumper: bool = True, useSolenoidField: bo
     injectorParams = tuple(injectorParamsOptimalAny.values())
     X = (ringParams, injectorParams)
     model = build_StorageRingModel(X, '3', includeBumper=includeBumper, useSolenoidField=useSolenoidField)
-    model.show_Floor_Plan()
     return model

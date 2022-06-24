@@ -32,7 +32,7 @@ def test_Modeler():
         model.swarmInjectorInitial.quick_Copy(), 1e-5, 1.0,
         fastMode=False, copySwarm=False, logPhaseSpaceCoords=True, accelerated=True)
     swarmRingInitial = model.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                               copyParticles=True, onlyUnclipped=False)
+                                                                               copyParticles=True)
     swarmRingTraced = model.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial, 1e-5, 1, fastMode=False,
                                                                         accelerated=True)
 
