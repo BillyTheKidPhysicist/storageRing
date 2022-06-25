@@ -45,6 +45,11 @@ def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallT
     return maximumTubeRadius
 
 
+def min_Bore_Radius_From_Tube_OD(OD: float, rb: float, Lm: float) -> float:
+    rp = rb - np.sqrt((rb - OD) ** 2 - (Lm / 2) ** 2)
+    return rp
+
+
 def full_Arctan(q: np.ndarray):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
     assert len(q) == 3 and q.ndim == 1

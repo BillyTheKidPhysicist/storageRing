@@ -185,10 +185,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         from latticeElements.combiner_characterizer import characterize_CombinerHalbach
 
         self.outputOffset = self.find_Ideal_Offset()
-        atomState = 'HIGH_FIELD_SEEKING' if self.fieldFact == -1 else 'LOW_FIELD_SEEKING'
 
-        inputAngle, inputOffset, trajectoryLength, _ = characterize_CombinerHalbach(self, atomState,
-                                                                                    particleOffset=self.outputOffset)
+        inputAngle, inputOffset, trajectoryLength, _ = characterize_CombinerHalbach(self)
         assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
         # Sometimes this can be triggered because the lens is to long so an oscilattory behaviour is required by
         # injector
@@ -250,7 +248,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
             raise CombinerDimensionError
         yInitial = self.ap / 10.0
         try:
-            inputAngle, _, _, seperationInitial = characterize_CombinerHalbach(self, 'HIGH_FIELD_SEEKING',
+            inputAngle, _, _, seperationInitial = characterize_CombinerHalbach(self, atomState='HIGH_FIELD_SEEKING',
                                                                                particleOffset=yInitial)
         except:
             raise CombinerDimensionError
@@ -266,7 +264,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
             deltaX = -(seperation - targetSep) / gradient  # I like to use a little damping
             deltaX = -y / 2 if y + deltaX < 0 else deltaX  # restrict deltax to allow value
             y = y + deltaX
-            inputAngle, _, _, seperationNew = characterize_CombinerHalbach(self, 'HIGH_FIELD_SEEKING', particleOffset=y)
+            inputAngle, _, _, seperationNew = characterize_CombinerHalbach(self, atomState='HIGH_FIELD_SEEKING',
+                                                                           particleOffset=y)
             assert inputAngle < 0  # loading beam enters from y<0, if positive then this is circulating beam
             gradient = (seperationNew - seperation) / deltaX
             seperation = seperationNew

@@ -224,11 +224,7 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 
 def main():
-    from latticeModels_Parameters import ringParamsOptimal_V3
-    xInj = tuple(injectorParamsOptimalAny.values())
-    xRing = tuple(ringParamsOptimal_V3.values())
-    xi=(*xRing,*xInj)
-    print(Solver('both',useBumper=True).solve(xi))
+    optimize('ring','global')
 
 
 if __name__ == '__main__':

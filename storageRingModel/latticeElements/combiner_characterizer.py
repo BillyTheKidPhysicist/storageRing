@@ -102,7 +102,9 @@ def characterize_CombinerIdeal(el: CombinerIdeal):
     return inputAngle, inputOffset, trajectoryLength
 
 
-def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState, particleOffset=0.0):
+def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, particleOffset=None):
+    atomState=('HIGH_FIELD_SEEKING' if el.fieldFact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
+    particleOffset=el.outputOffset if particleOffset is None else particleOffset
     force_Func = make_Halbahc_Combiner_Force_Function(el)
     qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.v0Nominal, 0.0, 2 * el.space + el.Lm,
                                              particleOutputOffsetStart=particleOffset, atomState=atomState)

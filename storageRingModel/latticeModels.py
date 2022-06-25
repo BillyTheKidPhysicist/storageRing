@@ -9,6 +9,7 @@ from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBenderSimSegmented
 from latticeModels_Parameters import system_constants, optimizerBounds_V1_3, \
     optimizerBounds_V2, lockedDict, atomCharacteristic, injectorParamsBoundsAny
+from latticeElements.utilities import min_Bore_Radius_From_Tube_OD
 
 
 class RingGeometryError(Exception):
@@ -236,15 +237,17 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]
 
     add_First_Racetrack_Straight(PTL, ringParams, whichVersion, options)
 
+    rpBend=min_Bore_Radius_From_Tube_OD(system_constants["bendTubeODMax"],system_constants['rbTarget'],system_constants['Lm'])
+
     # -------bender 1------
-    add_Bender(PTL, ringParams['rpBend'], whichVersion)
+    add_Bender(PTL,rpBend, whichVersion)
 
     # -----starting at gap 5r through gap 7r-----
 
-    add_Second_Racetrack_Straight_Version_Any(PTL, ringParams['rpLens3_4'], ringParams['rpBend'])
+    add_Second_Racetrack_Straight_Version_Any(PTL, ringParams['rpLens3_4'], system_constants["bendTubeODMax"])
 
     # ------bender 2--------
-    add_Bender(PTL, ringParams['rpBend'], whichVersion)
+    add_Bender(PTL, rpBend, whichVersion)
 
     # ----done---
     PTL.end_Lattice(constrain=True)
@@ -343,7 +346,7 @@ def make_ringParams_Dict(ringParams_tuple: tuple, injectorParams: dict, whichVer
                       "loadBeamOffset": injectorParams["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
-        assert len(ringParams_tuple) == 6
+        assert len(ringParams_tuple) == 5
         for variableKey, value in zip(optimizerBounds_V1_3.keys(), ringParams_tuple):
             ringParamsDict[variableKey] = value
     else:
