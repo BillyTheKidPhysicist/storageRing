@@ -45,8 +45,9 @@ def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallT
     return maximumTubeRadius
 
 
-def min_Bore_Radius_From_Tube_OD(OD: float, rb: float, Lm: float) -> float:
-    rp = rb - np.sqrt((rb - OD) ** 2 - (Lm / 2) ** 2)
+def min_Bore_Radius_From_Tube_OD(tube_OD: float, rb: float, Lm: float) -> float:
+    rp = rb - np.sqrt((rb - tube_OD/2.0) ** 2 - (Lm / 2) ** 2) #geometry of beinding radius minus radius of corner of
+    #magnet
     return rp
 
 
