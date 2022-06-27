@@ -1,15 +1,14 @@
-from math import isclose
-from math import sin, sqrt, cos, atan, tan
+from math import sin, sqrt, cos, atan, tan, inf, isclose
 from typing import Optional
 
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_VACUUM_TUBE_THICKNESS
+from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
 from helperTools import round_And_Make_Odd, make_Odd
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, CombinerDimensionError, \
-    CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths
+    CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths, round_down_to_nearest_valid_tube_OD
 from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Halbach_Field_Helper
 
 DEFAULT_SEED = 42
@@ -40,7 +39,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.Lm = Lm
         self.rp = rp
         self.numLayers = numLayers
-        self.ap = rp - COMBINER_VACUUM_TUBE_THICKNESS if ap is None else ap
+        self.ap = self.get_valid_aperture() if ap is None else ap
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
         self.magnetWidths = None
@@ -61,7 +60,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
-        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers)
+        rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers, use_standard_sizes=
+        self.PTL.standard_mag_sizes)
         self.magnetWidths = magnetWidths
         self.space = max(rpLayers) * self.outerFringeFrac
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
@@ -78,7 +78,15 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.inputOffset = inputOffset - tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
         self.outerHalfWidth = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
-        assert self.ap <= self.max_Ap_Good_Field()
+        assert self.ap <= self.max_Ap_Good_Field() and self.ap<=self.rp
+
+    def get_valid_aperture(self):
+        # todo: I am not taking advantasge of the full aperture here because of the field interpolation goofiness.
+        # todo: goofiness with the implicit nature of the aperture size and coordinate spcing is causing an issue
+        # here
+        boreOD = 2 * self.rp
+        apLargestTube = round_down_to_nearest_valid_tube_OD(boreOD) / 2.0 - COMBINER_TUBE_WALL_THICKNESS
+        return apLargestTube
 
     def make_Lens(self) -> _HalbachLensFieldGenerator:
         """Make field generating lens. A seed is required to reproduce the same magnet if magnet errors are being

@@ -25,7 +25,7 @@ class ParticleTracerLattice:
     def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
                  useSolenoidField: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
-                 magnetGrade: str = 'N52'):
+                 magnetGrade: str = 'N52', standard_mag_sizes: bool=False, standard_tube_ODs: bool =False):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -46,6 +46,8 @@ class ParticleTracerLattice:
         self.jitterAmp = jitterAmp
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.standardMagnetErrors = standardMagnetErrors
+        self.standard_tube_ODs=standard_tube_ODs
+        self.standard_mag_sizes=standard_mag_sizes
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linearElementsToConstraint: list[HalbachLensSim] = []  # elements whos length will be changed when the

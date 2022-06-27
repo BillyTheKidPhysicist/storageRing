@@ -12,7 +12,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Polygon
 
-from constants import FLAT_WALL_VACUUM_THICKNESS, VACUUM_TUBE_THICKNESS
+from constants import FLAT_WALL_VACUUM_THICKNESS, TUBE_WALL_THICKNESS
 from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
     HalbachBenderSimSegmented, CombinerHalbachLensSim, CombinerSim
 from latticeElements.elements import Element
@@ -27,7 +27,7 @@ def make_Halbach_Lens_Outer_Points(el: Element) -> list[np.ndarray]:
     a rectangle overlayd on a shorter but wider rectangle. This represents the width of the magnets"""
     assert type(el) is HalbachLensSim
     halfWidth = el.outerHalfWidth
-    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+    vacuumTubeOuterWidth = el.ap + TUBE_WALL_THICKNESS
     fringeLength = el.fringeFieldLength
     point1 = np.asarray([0.0, vacuumTubeOuterWidth])
     point2 = np.asarray([fringeLength, vacuumTubeOuterWidth])
@@ -48,7 +48,7 @@ def make_Hexapole_Bender_Caps_Outer_Points(el: Element) -> tuple[list[np.ndarray
     a stepped shape from the width of the magnets. Output cap points along -y and is easy to specify the
     coordinates and is then mirrored to produce the input cap as well."""
 
-    vacuumTubeOuterWidth = el.ap + VACUUM_TUBE_THICKNESS
+    vacuumTubeOuterWidth = el.ap + TUBE_WALL_THICKNESS
     pointsCapStart = [np.array([el.rb - el.outerHalfWidth, -el.Lm / 2.0]),
                       np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0]),
                       np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap]),
@@ -102,23 +102,23 @@ def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
     apR, apL = el.ap, el.ap
     extraFact = 1.5
     halfWidth = el.outerHalfWidth
-    point1 = np.array([0, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
-    point2 = np.array([el.space, apR + VACUUM_TUBE_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point1 = np.array([0, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
+    point2 = np.array([el.space, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
     point3 = np.array([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
     point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
-    point5 = np.array([el.Lb, apR + VACUUM_TUBE_THICKNESS])  # top middle when theta=0
-    point6 = np.array([el.Lb + (el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       (apR + VACUUM_TUBE_THICKNESS) + (
-                               el.La - (apR + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
-    point7 = np.array([el.Lb + (el.La + extraFact * (apL + VACUUM_TUBE_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       -extraFact * (apL + VACUUM_TUBE_THICKNESS) + ((el.La + VACUUM_TUBE_THICKNESS) + extraFact *
-                                                                     (apL + VACUUM_TUBE_THICKNESS)
+    point5 = np.array([el.Lb, apR + TUBE_WALL_THICKNESS])  # top middle when theta=0
+    point6 = np.array([el.Lb + (el.La - (apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       (apR + TUBE_WALL_THICKNESS) + (
+                               el.La - (apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
+    point7 = np.array([el.Lb + (el.La + extraFact * (apL + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       -extraFact * (apL + TUBE_WALL_THICKNESS) + ((el.La + TUBE_WALL_THICKNESS) + extraFact *
+                                                                     (apL + TUBE_WALL_THICKNESS)
                                                                      * np.sin(el.ang)) * np.sin(el.ang)])
-    point8 = np.array([el.Lb, -extraFact * (apL + VACUUM_TUBE_THICKNESS)])  # bottom middle when theta=0
+    point8 = np.array([el.Lb, -extraFact * (apL + TUBE_WALL_THICKNESS)])  # bottom middle when theta=0
     point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
     point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
-    point11 = np.array([el.space, -apL - VACUUM_TUBE_THICKNESS])  # bottom middle when theta=0
-    point12 = np.array([0, -apL - VACUUM_TUBE_THICKNESS])  # bottom left when theta=0
+    point11 = np.array([el.space, -apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
+    point12 = np.array([0, -apL - TUBE_WALL_THICKNESS])  # bottom left when theta=0
     pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
                    point12]
     for i, point in enumerate(pointsOuter):
@@ -271,6 +271,9 @@ def build_Shapely_Objects(elementList: list[Element]) -> None:
     """Build the inner and outer shapely obejcts that represent the 2D geometries of the each element. This is the
     projection of an element onto the horizontal plane that bisects it. Inner geometry repsents vacuum, and outer
      the eternal profile. Ideal elements have to out profile"""
+
+    #todo: there is a mild disagreement here between shapely and is inside method with the combiner
+
     for el in elementList:
         shapelyObject_Outer, shapelyObject_Inner = make_Element_Shapely_Object(el)
         el.SO = shapelyObject_Inner

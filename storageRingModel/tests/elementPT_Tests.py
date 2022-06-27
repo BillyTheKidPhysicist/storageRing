@@ -44,6 +44,8 @@ class PTL_Dummy:
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
         self.magnetGrade='N52'
+        self.standard_tube_ODs=False
+        self.standard_mag_sizes=False
 
 
 class ElementTestHelper:
@@ -436,8 +438,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5204562918599765e-01,  6.9285586339181623e-03,-2.1720711484761863e-04])
-        pf0 = np.array([-200.9378919335364   ,    1.0818747228105854,7.7059405588758345])
+        qf0 = np.array([-2.5204557576771858e-01,  6.8628614241624062e-03,-2.1727070075901097e-04])
+        pf0 = np.array([-200.938541366968    ,    0.9562560708055862,7.70572965448006  ])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -634,6 +636,21 @@ class ElementTestRunner:
             # if consistent for both its not a weird situation of being
             # right on the edge, so go ahead and check
             isInside_Fast = self.elTestHelper.el.is_Coord_Inside(np.append(qEl_2D, 0))
+            if not isInside2DShapely == isInside_Fast:
+                print(qEl_2D)
+                print(isInside2DShapely,isInside2DShapelyPadded,isInside2DShapelyNegPadded)
+                el = self.elTestHelper.el
+                qLab_2D = el.transform_Element_Coords_Into_Lab_Frame(np.append(qEl_2D, 0))
+                isInsideUnpadded = el.SO.contains(Point(qLab_2D))
+                SO_Padded = el.SO.buffer(2e-9)  # add padding to avoid issues of point right on edge
+                isInsidePadded = SO_Padded.contains(Point(qLab_2D))
+                SO_NegPadded = el.SO.buffer(-2e-9)  # add padding to avoid issues of point right on edge
+                isInsideNegPadded = SO_NegPadded.contains(Point(qLab_2D))
+                import matplotlib.pyplot as plt
+                plt.scatter(qLab_2D[0],qLab_2D[1])
+                plt.plot(*SO_Padded.exterior.xy)
+                plt.plot(*SO_NegPadded.exterior.xy)
+                plt.show()
             assert isInside2DShapely == isInside_Fast  # this can be falsely triggered by circles in shapely!!
 
 

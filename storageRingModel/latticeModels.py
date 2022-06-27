@@ -230,14 +230,14 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]
     assert whichVersion in ('1', '2', '3')
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                standardMagnetErrors=options['useMagnetErrors'],
-                                useSolenoidField=options['useSolenoidField'])
+                        standardMagnetErrors=options['useMagnetErrors'],useSolenoidField=options['useSolenoidField'],
+                                standard_tube_ODs=True,standard_mag_sizes=True)
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
 
     add_First_Racetrack_Straight(PTL, ringParams, whichVersion, options)
 
-    rpBend=min_Bore_Radius_From_Tube_OD(system_constants["bendTubeODMax"],system_constants['rbTarget'],system_constants['Lm'])
+    rpBend=ringParams['rpBend']
 
     # -------bender 1------
     add_Bender(PTL,rpBend, whichVersion)
@@ -271,8 +271,8 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
     if gap1 < system_constants["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
-                                standardMagnetErrors=options['useMagnetErrors'],
-                                useSolenoidField=options['useSolenoidField'])
+                        standardMagnetErrors=options['useMagnetErrors'],useSolenoidField=options['useSolenoidField'],
+                        standard_tube_ODs=True,standard_mag_sizes=True)
     if options['includeBumper']:
         add_Kevin_Bumper_Elements(PTL)
 
@@ -319,8 +319,7 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
 
     options = check_And_Add_Default_Values(options)
 
-    raceTrackParams = lockedDict({'rpCombiner': system_constants['rpCombiner'],
-                                  'LmCombiner': injectorParams['LmCombiner'],
+    raceTrackParams = lockedDict({'LmCombiner': injectorParams['LmCombiner'],
                                   'loadBeamOffset': injectorParams['loadBeamOffset'],
                                   'rpLens1': surrogateParamsDict['rpLens1'],
                                   'L_Lens1': surrogateParamsDict['L_Lens'],
@@ -328,7 +327,8 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
                                   'L_Lens2': surrogateParamsDict['L_Lens']})
 
     PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                useSolenoidField=options['useSolenoidField'])
+                                useSolenoidField=options['useSolenoidField'],
+                                standard_tube_ODs=True,standard_mag_sizes=True)
 
     add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, options, whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()
@@ -346,7 +346,7 @@ def make_ringParams_Dict(ringParams_tuple: tuple, injectorParams: dict, whichVer
                       "loadBeamOffset": injectorParams["loadBeamOffset"]}
 
     if whichVersion in ('1', '3'):
-        assert len(ringParams_tuple) == 5
+        assert len(ringParams_tuple) == 6
         for variableKey, value in zip(optimizerBounds_V1_3.keys(), ringParams_tuple):
             ringParamsDict[variableKey] = value
     else:

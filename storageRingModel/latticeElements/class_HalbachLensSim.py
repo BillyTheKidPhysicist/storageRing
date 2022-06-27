@@ -1,16 +1,17 @@
 import warnings
-from math import tan, sqrt
+from math import tan, sqrt, inf
 from typing import Optional
 
 import numpy as np
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
+from constants import TUBE_WALL_THICKNESS
 from helperTools import iscloseAll
 from helperTools import make_Odd
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
-    ElementTooShortError, halbach_Magnet_Width
+    ElementTooShortError, halbach_Magnet_Width, round_down_to_nearest_valid_tube_OD
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Lens_Helper
 
 
@@ -25,19 +26,19 @@ class HalbachLensSim(LensIdeal):
         assert all(rp > 0 for rp in rpLayers)
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
-        self.magnetWidths = self.set_Magnet_Widths(rpLayers, magnetWidths)
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
         assert self.fringeFracOuter == 1.5 and self.fringeFracInnerMin == 4.0, "May need to change numgrid points if " \
                                                                                "this changes"
         self.rp = min(rpLayers)
         self.numGridPointsZ = make_Odd(round(21 * PTL.fieldDensityMultiplier))
         self.numGridPointsXY = make_Odd(round(25 * PTL.fieldDensityMultiplier))
-        self.ap = self.maximum_Good_Field_Aperture() - TINY_OFFSET if ap is None else ap
         self.fringeFieldLength = max(rpLayers) * self.fringeFracOuter
+        super().__init__(PTL, L, None, self.rp,
+                         None)  # todo: there should be multiple inheritance here for geometries
+        self.magnetWidths = self.set_Magnet_Widths(rpLayers, magnetWidths)
+        self.ap = self.valid_Aperture() if ap is None else ap
         assert self.ap <= self.maximum_Good_Field_Aperture()
         assert self.ap > 5 * self.rp / self.numGridPointsXY  # ap shouldn't be too small. Value below may be dubiuos from interpolation
-        super().__init__(PTL, L, None, self.rp,
-                         self.ap)  # todo: there should be multiple inheritance here for geometries
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
         self.Lm = None
         self.Lcap: Optional[float] = None
@@ -50,7 +51,7 @@ class HalbachLensSim(LensIdeal):
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
         # todo: remove redundant SMALL_OFFSET thing
-        #todo: why is this so different from the combiner version?
+        # todo: why is this so different from the combiner version?
         apMax = (self.rp - SMALL_OFFSET) * (1 - sqrt(2) / (self.numGridPointsXY - 1))
         return apMax
 
@@ -64,6 +65,18 @@ class HalbachLensSim(LensIdeal):
     def set_Length(self, L: float) -> None:
         assert L > 0.0
         self.L = L
+
+    def valid_Aperture(self):
+        """Get a valid magnet aperture. This is either limited by the good field region, or the available dimensions
+        of standard vacuum tubes if specified"""
+
+        #todo: this may give results which are not limited by aperture, but by interpolation region validity
+        boreOD = 2 * self.rp
+        apLargestTube = round_down_to_nearest_valid_tube_OD(
+            boreOD) / 2.0 - TUBE_WALL_THICKNESS if self.PTL.standard_tube_ODs else inf
+        apLargestInterp = self.maximum_Good_Field_Aperture()
+        ap_valid=apLargestTube if apLargestTube < apLargestInterp else apLargestInterp
+        return ap_valid
 
     def set_extraFieldLength(self) -> None:
         """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
@@ -92,13 +105,17 @@ class HalbachLensSim(LensIdeal):
             will be calculated based on geometry
         :return: tuple of transverse widths of magnets
         """
-        defaultMagnetWidths = tuple(halbach_Magnet_Width(rp) for rp in rpLayers)
-        magnetWidths = defaultMagnetWidths if magnetWidthsProposed is None else magnetWidthsProposed
-        assert len(magnetWidths) == len(rpLayers)
-        assert all(width <= maxWidth for width, maxWidth in zip(magnetWidths, defaultMagnetWidths))
-        if len(rpLayers) > 1:
-            for indexPrev, rp in enumerate(rpLayers[1:]):
-                assert rp >= rpLayers[indexPrev] + magnetWidths[indexPrev] - 1e-12
+        if magnetWidthsProposed is None:
+            magnetWidths = tuple(halbach_Magnet_Width(rp, use_standard_sizes=self.PTL.standard_mag_sizes) for
+                                 rp in rpLayers)
+        else:
+            assert len(magnetWidthsProposed) == len(rpLayers)
+            maxMagnetWidths = tuple(halbach_Magnet_Width(rp, magnetSeparation=0.0) for rp in rpLayers)
+            assert all(width <= maxWidth for width, maxWidth in zip(magnetWidthsProposed, maxMagnetWidths))
+            if len(rpLayers) > 1:
+                for indexPrev, rp in enumerate(rpLayers[1:]):
+                    assert rp >= rpLayers[indexPrev] + magnetWidthsProposed[indexPrev] - 1e-12
+            magnetWidths = magnetWidthsProposed
         return magnetWidths
 
     def fill_Geometric_Params(self) -> None:

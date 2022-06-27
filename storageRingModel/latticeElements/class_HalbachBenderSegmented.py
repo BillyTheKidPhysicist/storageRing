@@ -7,7 +7,7 @@ import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
-from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, VACUUM_TUBE_THICKNESS
+from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
 from helperTools import arr_Product, round_And_Make_Odd
 from latticeElements.class_BenderIdeal import BenderIdeal
 from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan, \
@@ -49,7 +49,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lm = Lm
         self.rp = rp
         self.ap = ap
-        self.magnetWidth = halbach_Magnet_Width(rp)
+        self.magnetWidth = halbach_Magnet_Width(rp, use_standard_sizes=PTL.standard_mag_sizes)
         self.ucAng: Optional[float] = None
         self.rOffsetFact = rOffsetFact  # factor to times the theoretic optimal bending radius by
         self.Lcap = self.fringeFracOuter * self.rp
@@ -60,7 +60,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        apMaxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, VACUUM_TUBE_THICKNESS)
+        apMaxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
+                                                      use_standard_sizes=self.PTL.standard_mag_sizes)
         # todo: revisit this, I am doubtful of how correct this is
         safetyFactor = .95
         apMaxGoodField = safetyFactor * self.numPointsBoreAp * self.rp / (self.numPointsBoreAp + sqrt(2))

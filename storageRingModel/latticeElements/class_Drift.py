@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from constants import VACUUM_TUBE_THICKNESS
+from constants import TUBE_WALL_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
 from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper
 
@@ -27,7 +27,7 @@ class Drift(LensIdeal):
                  inputTiltAngle: float, outputTiltAngle: float):
         super().__init__(PTL, L, 0, np.inf, ap)  # set Bp to zero and bore radius to infinite
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
-        self.outerHalfWidth = ap + VACUUM_TUBE_THICKNESS if outerHalfWidth is None else outerHalfWidth
+        self.outerHalfWidth = ap + TUBE_WALL_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth > ap
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:

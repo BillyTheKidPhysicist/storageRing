@@ -224,8 +224,11 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 
 def main():
-    optimize('ring','global')
-
+    pass
+    # optimize('ring','global',globalTol=.0001)
+    # from storageRingModeler import make_Optimal_Solution_Model
+    # model=make_Optimal_Solution_Model()
+    # model.show_Floor_Plan_And_Trajectories()
 
 if __name__ == '__main__':
     main()
