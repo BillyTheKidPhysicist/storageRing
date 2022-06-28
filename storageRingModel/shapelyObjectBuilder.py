@@ -97,24 +97,30 @@ def make_Hexapole_Bender_Outer_Points(el: Element) -> list[np.ndarray]:
 def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach combiner. Very similiar
     to halbach lens geometry, but with tiled input and enlarged input"""
+
+    #todo: the tube wall stuff here is wrong, need to use combienr tube wall stuff
+
+    #todo: these equations should be condensed into a single function because they are used so much. It has caused
+    #alot of trouble. I'm raelly violating DRY here and abstraction here
+
     # pylint: disable=too-many-locals
     assert type(el) is CombinerHalbachLensSim
     apR, apL = el.ap, el.ap
-    extraFact = 1.5
+    extraFact = el.acceptance_width/el.ap
     halfWidth = el.outerHalfWidth
     point1 = np.array([0, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
     point2 = np.array([el.space, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
     point3 = np.array([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
     point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
-    point5 = np.array([el.Lb, apR + TUBE_WALL_THICKNESS])  # top middle when theta=0
-    point6 = np.array([el.Lb + (el.La - (apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       (apR + TUBE_WALL_THICKNESS) + (
-                               el.La - (apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
-    point7 = np.array([el.Lb + (el.La + extraFact * (apL + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       -extraFact * (apL + TUBE_WALL_THICKNESS) + ((el.La + TUBE_WALL_THICKNESS) + extraFact *
-                                                                     (apL + TUBE_WALL_THICKNESS)
+    point5 = np.array([el.Lb, extraFact*apR + TUBE_WALL_THICKNESS])  # top middle when theta=0
+    point6 = np.array([el.Lb + (el.La - (extraFact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       (extraFact*apR + TUBE_WALL_THICKNESS) + (
+                               el.La - (extraFact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
+    point7 = np.array([el.Lb + (el.La +( extraFact * apL + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       -( extraFact * apL + TUBE_WALL_THICKNESS) + (el.La  +
+                                                                     ( extraFact * apL + TUBE_WALL_THICKNESS)
                                                                      * np.sin(el.ang)) * np.sin(el.ang)])
-    point8 = np.array([el.Lb, -extraFact * (apL + TUBE_WALL_THICKNESS)])  # bottom middle when theta=0
+    point8 = np.array([el.Lb, -extraFact * apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
     point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
     point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
     point11 = np.array([el.space, -apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
@@ -125,25 +131,63 @@ def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
         pointsOuter[i] = el.ROut @ point + el.r2[:2]
     return pointsOuter
 
+def make_Halbach_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
+    assert type(el) is CombinerHalbachLensSim
+    LbVac = el.Lb if type(el) is CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
+    ap,acceptance_width=el.ap,el.acceptance_width
+    
+    m = np.tan(el.ang)
+    assert type(el) is CombinerHalbachLensSim
+    yT = lambda x: m * x + (el.acceptance_width - m * el.Lb)  # upper limit
+    YR = lambda x: (-1 / m) * x + el.La * np.sin(el.ang) + (el.Lb + el.La * np.cos(el.ang)) / m
+    YB = lambda x: m * x + (-el.acceptance_width - m * el.Lb)
 
-def make_Any_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
+    q1Inner = np.asarray([0, ap])  # top left ( in standard xy plane) when theta=0
+    q2Inner = np.asarray([LbVac, ap])  # top middle when theta=0
+
+    q3Inner = np.asarray([LbVac, yT(LbVac)])  # top middle when theta=0
+
+    q4Inner = np.asarray([el.Lb + (el.La - acceptance_width * np.sin(el.ang)) * np.cos(el.ang),
+                          acceptance_width + (el.La - acceptance_width * np.sin(el.ang)) * np.sin(
+                              el.ang)])  # top right when theta=0
+
+    q5Inner = np.asarray([el.Lb + (el.La + acceptance_width * np.sin(el.ang)) * np.cos(el.ang),
+                          -acceptance_width + (el.La + acceptance_width * np.sin(el.ang)) * np.sin(
+                              el.ang)])  # bottom right when theta=0
+
+    q6Inner = np.asarray([LbVac, YB(LbVac)])  # bottom middle when theta=0
+
+    q7Inner = np.asarray([LbVac, -ap])  # bottom middle when theta=0
+    q8Inner = np.asarray([0, -ap])  # bottom left when theta=0
+    pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner, q7Inner, q8Inner]
+    for point in pointsInner:
+        point[:] = el.ROut @ point + el.r2[:2]
+    return pointsInner
+
+def make_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the inner (vacuum tube) geometry of a halbach combiner.
     Basically a rectangle with a wider tilted rectangle coming off one end (the input)"""
-    assert type(el) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
-    LbVac = el.Lb if type(el) is CombinerIdeal else el.Lb + FLAT_WALL_VACUUM_THICKNESS
-    apR, apL = (el.apR, el.apL) if type(el) in (CombinerIdeal, CombinerSim) else (el.ap, el.ap)
-    extraFact = 1.5 if type(el) is CombinerHalbachLensSim else 1.0
+
+    #todo: this doesn't work with combiner ideal or sim
+    
+
+    assert type(el) in (CombinerIdeal, CombinerSim)
+    
+    apR, apL = el.apR, el.apL
+    
+    
+
     q1Inner = np.asarray([0, apR])  # top left ( in standard xy plane) when theta=0
-    q2Inner = np.asarray([LbVac, apR])  # top middle when theta=0
+    q2Inner = np.asarray([el.Lb, apR])  # top middle when theta=0
     q3Inner = np.asarray([el.Lb + (el.La - apR * np.sin(el.ang)) * np.cos(el.ang),
                           apR + (el.La - apR * np.sin(el.ang)) * np.sin(el.ang)])  # top right when theta=0
-    q4Inner = np.asarray([el.Lb + (el.La + extraFact * apL * np.sin(el.ang)) * np.cos(el.ang),
-                          -extraFact * apL + (el.La + extraFact * apL * np.sin(el.ang)) * np.sin(
+
+    q4Inner = np.asarray([el.Lb + (el.La +  apL * np.sin(el.ang)) * np.cos(el.ang),
+                          - apL + (el.La +  apL * np.sin(el.ang)) * np.sin(
                               el.ang)])  # bottom right when theta=0
-    q5Inner = np.asarray([LbVac, -extraFact * apL])  # bottom middle when theta=0
-    q6Inner = np.asarray([LbVac, -apL])  # bottom middle when theta=0
-    q7Inner = np.asarray([0, -apL])  # bottom left when theta=0
-    pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner, q7Inner]
+    q5Inner = np.asarray([el.Lb, -apL])  # bottom middle when theta=0
+    q6Inner = np.asarray([0, -apL])  # bottom left when theta=0
+    pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner]
     for point in pointsInner:
         point[:] = el.ROut @ point + el.r2[:2]
     return pointsInner
@@ -239,10 +283,12 @@ def make_Bender_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
 def make_Combiner_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of combiner elements"""
     assert type(el) in (CombinerIdeal, CombinerSim, CombinerHalbachLensSim)
-    pointsInner = make_Any_Combiner_Inner_Points(el)
+
     if type(el) in (CombinerIdeal, CombinerSim):
+        pointsInner=make_Combiner_Inner_Points(el)
         pointsOuter = copy.deepcopy(pointsInner)
     elif type(el) is CombinerHalbachLensSim:
+        pointsInner=make_Halbach_Combiner_Inner_Points(el)
         pointsOuter = make_Hexapole_Combiner_Outer_Points(el)
     else:
         raise NotImplementedError

@@ -107,6 +107,7 @@ def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
         print(xCoords.min(), xCoords.max())
         print(yCoords.min(), yCoords.max())
         print(zCoords.min(), zCoords.max())
+        print(zCoords.min()<zLoc,zLoc<zCoords.max())
         raise Exception('out of bounds')
     return c_x, c_y, c_z
 

@@ -16,13 +16,14 @@ spec_Combiner_Halbach = [
     ('ang', numba.float64),
     ('fieldFact', numba.float64),
     ('extraFieldLength', numba.float64),
-    ('useSymmetry', numba.boolean)
+    ('useSymmetry', numba.boolean),
+    ('acceptance_width', numba.float64)
 ]
 
 
 class CombinerHalbachLensSimFieldHelper_Numba:
 
-    def __init__(self, fieldDataInternal, fieldDataExternal,La, Lb, Lm, space, ap, ang, fieldFact, extraFieldLength, useSymmetry):
+    def __init__(self, fieldDataInternal, fieldDataExternal,La, Lb, Lm, space, ap, ang, fieldFact, extraFieldLength, useSymmetry,acceptance_width):
         self.fieldDataInternal = fieldDataInternal
         self.fieldDataExternal=fieldDataExternal
         self.La = La
@@ -34,11 +35,12 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.fieldFact = fieldFact
         self.extraFieldLength = extraFieldLength
         self.useSymmetry = useSymmetry
+        self.acceptance_width=acceptance_width
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return (self.fieldDataInternal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact,
-                self.extraFieldLength, self.useSymmetry), ()
+                self.extraFieldLength, self.useSymmetry,self.acceptance_width), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
@@ -87,6 +89,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             z = abs(z)
 
             if -self.extraFieldLength <= x <= self.space:
+                # print(x,y,z,self.Lm,self.space)
                 x = symmetryPlaneX - x
                 Fx, Fy, Fz = self._force_Func_External(x, y, z)
                 Fx = -Fx
@@ -158,11 +161,11 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         elif x < 0:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-            # todo: For now a square aperture, update to circular. Use a simple rotation
+            #todo: these should be in functions if they are used elsewhere
             m = np.tan(self.ang)
-            Y1 = m * x + (self.ap - m * self.Lb)  # upper limit
+            Y1 = m * x + (self.acceptance_width - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * x + (-1.5 * self.ap - m * self.Lb)
+            Y3 = m * x + (-self.acceptance_width - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 return True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'
