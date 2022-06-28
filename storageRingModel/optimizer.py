@@ -225,7 +225,9 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 def main():
     pass
-    # optimize('ring','global',globalTol=.0001)
+    optimize('injector_Surrogate_Ring','global',globalTol=.02)
+    optimize('injector_Surrogate_Ring','global',globalTol=.02)
+    optimize('injector_Surrogate_Ring','global',globalTol=.02)
     # from storageRingModeler import make_Optimal_Solution_Model
     # model=make_Optimal_Solution_Model()
     # model.show_Floor_Plan_And_Trajectories()
@@ -234,10 +236,13 @@ if __name__ == '__main__':
     main()
 
 """
-----------Solution-----------   
-parameters: array([0.09622282605012868 , 0.01                , 0.23955344028683254 ,
-       0.03                , 0.17147182734978528 , 0.007187101087953732,
-       0.06778754563396035 , 0.2699792520743716  , 0.2303989213563593  ])
-cost: 0.7433064505146747
-flux multiplication: 80.6586124942679
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.06334723697415356  , 0.016513174212619705 ,
+       0.1539352263797151   , 0.02332449434679998  ,
+       0.1445659535054458   , 0.0069330308636660854,
+       0.11480348572253843  , 0.2804688026474986   ,
+       0.21212107962654167  ])
+cost: 0.15503466993328052
+
 """

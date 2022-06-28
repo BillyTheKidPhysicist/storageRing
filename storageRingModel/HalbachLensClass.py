@@ -229,7 +229,7 @@ class billyHalbachCollectionWrapper(Collection):
         return evalCoordsShaped
 
     def BNorm_Gradient(self, evalCoords: np.ndarray, returnNorm: bool = False, differenceMethod='forward',
-                       useApprox: bool = False) -> Union[np.ndarray, tuple]:
+                       useApprox: bool = False, dx: float = 1e-7) -> Union[np.ndarray, tuple]:
         # Return the gradient of the norm of the B field. use forward difference theorom
         # r: (N,3) vector of coordinates or (3) vector of coordinates.
         # returnNorm: Wether to return the norm as well as the gradient.
@@ -239,8 +239,8 @@ class billyHalbachCollectionWrapper(Collection):
         evalCoordsShaped = self.shape_Eval_Coords(evalCoords)
 
         assert differenceMethod in ('central', 'forward')
-        results = self.central_Difference(evalCoordsShaped, returnNorm, useApprox) if differenceMethod == 'central' else \
-            self.forward_Difference(evalCoordsShaped, returnNorm, useApprox)
+        results = self.central_Difference(evalCoordsShaped, returnNorm, useApprox,dx=dx) if\
+        differenceMethod == 'central' else self.forward_Difference(evalCoordsShaped, returnNorm, useApprox,dx=dx)
         if len(evalCoords.shape) == 1:
             if returnNorm:
                 [[Bgradx, Bgrady, Bgradz]], [B0] = results

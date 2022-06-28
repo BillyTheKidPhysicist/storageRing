@@ -7,6 +7,10 @@ from constants import SIMULATION_MAGNETON
 
 
 # todo: a base geometry inheritance is most logical
+
+#todo: there is unphysicality with the field derivative calculation and the location of interpolating points near
+#magnet material
+
 class BaseElement:
     """
     Base class for other elements. Contains universal attributes and methods.
