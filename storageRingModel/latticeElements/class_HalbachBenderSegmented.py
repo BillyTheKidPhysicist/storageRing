@@ -91,17 +91,18 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                             (False, False), positiveAngleMagnetsOnly=False,
                                             magnetWidth=self.magnetWidth,
                                             applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
+        lens.rotate(Rot.from_rotvec([np.pi/2,0,0]))
         thetaArr = np.linspace(0.0, 2 * ucAngApprox, 100)
-        yArr = np.zeros(len(thetaArr))
+        zArr = np.zeros(len(thetaArr))
 
         def offset_Error(rOffset):
             assert abs(rOffset) < self.rp
             r = self.rb + rOffset
             xArr = r * np.cos(thetaArr)
-            zArr = r * np.sin(thetaArr)
+            yArr = r * np.sin(thetaArr)
             coords = np.column_stack((xArr, yArr, zArr))
             F = lens.BNorm_Gradient(coords) * SIMULATION_MAGNETON
-            Fr = np.linalg.norm(F[:, [0, 2]], axis=1)
+            Fr = np.linalg.norm(F[:, :2], axis=1)
             FCen = np.ones(len(coords)) * m * self.PTL.v0Nominal ** 2 / r
             FCen[coords[:, 2] < 0.0] = 0.0
             error = np.sum((Fr - FCen) ** 2)
@@ -139,22 +140,22 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
         fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else None
-        assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[1] == fieldDataInternal[1])
+        assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[2] == fieldDataInternal[2])
         self.fastFieldHelper = get_Halbach_Bender(
             [fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation
                 , self.ap, self.ang, self.ucAng, self.rb, self.numMagnets, self.Lcap])
 
-    def make_Grid_Coords(self, xMin: float, xMax: float, zMin: float, zMax: float) -> np.ndarray:
+    def make_Grid_Coords(self, xMin: float, xMax: float, yMin: float, yMax: float) -> np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
         assert not is_Even(self.numPointsBoreAp)  # points should be odd to there is a point at zero field, if possible
         longitudinalCoordSpacing: float = (.8 * self.rp / 10.0) / self.PTL.fieldDensityMultiplier  # Spacing
         # through unit cell. .8 was carefully chosen
         numPointsX = round_And_Make_Odd(self.numPointsBoreAp * (xMax - xMin) / self.ap)
-        yMin, yMax = -(self.ap + TINY_STEP), TINY_STEP  # same for every part of bender
-        numPointsY = self.numPointsBoreAp
-        numPointsZ = round_And_Make_Odd((zMax - zMin) / longitudinalCoordSpacing)
-        assert (numPointsX + 1) / numPointsY >= (xMax - xMin) / (yMax - yMin)  # should be at least this ratio
+        zMin, zMax = -TINY_STEP,(self.ap + TINY_STEP)  # same for every part of bender
+        numPointsZ = self.numPointsBoreAp
+        numPointsY = round_And_Make_Odd((yMax - yMin) / longitudinalCoordSpacing)
+        assert (numPointsX + 1) / numPointsZ >= (xMax - xMin) / (zMax - zMin)  # should be at least this ratio
         xArrArgs, yArrArgs, zArrArgs = (xMin, xMax, numPointsX), (yMin, yMax, numPointsY), (zMin, zMax, numPointsZ)
         coordArrList = [np.linspace(arrArgs[0], arrArgs[1], arrArgs[2]) for arrArgs in (xArrArgs, yArrArgs, zArrArgs)]
         gridCoords = np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1, 3)
@@ -164,18 +165,18 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""
 
         if -TINY_OFFSET <= s < self.Lcap:
-            x, y, z = self.rb + xc, yc, s - self.Lcap
+            x, y, z = self.rb + xc,s - self.Lcap,yc
         elif self.Lcap <= s < self.Lcap + self.ang * self.rb:
             theta = (s - self.Lcap) / self.rb
             r = self.rb + xc
-            x, y, z = cos(theta) * r, yc, sin(theta) * r
+            x, y, z = cos(theta) * r, sin(theta) * r,yc
         elif self.Lcap + self.ang * self.rb <= s <= self.ang * self.rb + 2 * self.Lcap + TINY_OFFSET:
             theta = self.ang
             r = self.rb + xc
-            x0, z0 = cos(theta) * r, sin(theta) * r
+            x0, y0 = cos(theta) * r, sin(theta) * r
             deltaS = s - (self.ang * self.rb + self.Lcap)
             thetaPerp = pi + atan(-1 / tan(theta))
-            x, y, z = x0 + cos(thetaPerp) * deltaS, yc, z0 + sin(thetaPerp) * deltaS
+            x, y, z = x0 + cos(thetaPerp) * deltaS, y0 + sin(thetaPerp) * deltaS, yc
         else:
             raise ValueError
         return x, y, z
@@ -188,7 +189,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         and going clockwise in +y. This needs to be converted to cartesian coordinates to actually evaluate the field
         value"""
 
-        # todo: have not checked this over again
 
         Ls = 2 * self.Lcap + self.ang * self.rb
         numS = round_And_Make_Odd(5 * (self.numMagnets + 2))  # carefully measured
@@ -225,10 +225,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
         # x and y bounds should match with internal fringe bounds
         xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_STEP
         xMax = self.rb + self.ap + TINY_STEP
-        zMin = -self.Lcap - TINY_STEP
-        zMax = TINY_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
-        validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 1] ** 2) < self.rp
+        yMin =-self.Lcap - TINY_STEP
+        yMax = TINY_STEP
+        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
+        validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 2] ** 2) < self.rp
         lens = self.build_Bender(True, (True, False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
@@ -238,9 +238,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         # x and y bounds should match with cap bounds
         xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_STEP  # inward enough to account for the tilt
         xMax = self.rb + self.ap + TINY_STEP
-        zMin = -TINY_STEP
-        zMax = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
+        yMin = -TINY_STEP
+        yMax = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_STEP
+        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
         lens = self.build_Bender(True, (True, False))
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 3)
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
@@ -249,10 +249,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """Check that the coordinates x,y,z are valid for a lens in the bender. The lens is centered on (self.rb,0,0)
         aligned with the z axis. If the coordinates are outside the double unit cell containing the lens, or inside
         the toirodal cylinder enveloping the magnet material, the coordinate is invalid"""
-        zUC_Line = tan(self.ucAng) * x
-        if abs(z) <= self.Lm / 2.0 and self.rp < sqrt((x - self.rb) ** 2 + y ** 2) < self.rp + self.magnetWidth:
+        yUC_Line = tan(self.ucAng) * x
+        if abs(y) <= self.Lm / 2.0 and self.rp < sqrt((x - self.rb) ** 2 + z ** 2) < self.rp + self.magnetWidth:
             return False
-        elif abs(z) <= zUC_Line:
+        elif abs(y) <= yUC_Line:
             return True
         else:
             return False
@@ -260,7 +260,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def get_Valid_Indices_Internal(self, coords: np.ndarray, maxRotations: int) -> list[bool]:
         """Check if coords are not in the magnetic material region of the bender. Check up to maxRotations of the
         coords going counterclockwise about y axis by rotating coords"""
-        R = Rot.from_rotvec([0, self.ucAng, 0]).as_matrix()
+        R = Rot.from_rotvec([0, 0, -self.ucAng]).as_matrix()
         validIndices = []
         for [x, y, z] in coords:
             if self.is_Valid_In_Lens_Of_Bender(x, y, z):
@@ -282,9 +282,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         z axis, with its bottom face at z=0 alinged with the xy plane. In magnet frame coordinates"""
         xMin = (self.rb - self.ap) * cos(self.ucAng) - TINY_STEP
         xMax = self.rb + self.ap + TINY_STEP
-        zMin = -TINY_STEP
-        zMax = tan(self.ucAng) * (self.rb + self.ap) + TINY_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, zMin, zMax)
+        yMin = -TINY_STEP
+        yMax = tan(self.ucAng) * (self.rb + self.ap) + TINY_STEP
+        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
 
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 1)
         lens = self.build_Bender(False, (False, False))
@@ -313,6 +313,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                                             useSolenoidField=self.PTL.useSolenoidField,
                                                             useMagnetError=useMagnetErrors,
                                                             magnetWidth=self.magnetWidth)
+        benderFieldGenerator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return benderFieldGenerator
 
     def in_Which_Section_Of_Bender(self, qEl: np.ndarray) -> str:

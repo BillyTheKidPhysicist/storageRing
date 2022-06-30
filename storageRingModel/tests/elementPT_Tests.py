@@ -1,25 +1,25 @@
+import itertools
+import os
+import sys
 import time
+from math import isclose,isnan
+from typing import Optional
 
 import numpy as np
-
-from helperTools import iscloseAll,tool_Parallel_Process
-import itertools
-import math
-import os
-from typing import Optional
-import sys
 import pytest
-from latticeElements.elements import  BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
-    HalbachBenderSimSegmented, HalbachLensSim,Element
-from latticeElements.utilities import halbach_Magnet_Width
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from ParticleTracerClass import ParticleTracer
-from ParticleClass import Particle
 from hypothesis import given, settings, strategies as st
-from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
+from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Point
-from math import isclose
+
 from HalbachLensClass import HalbachLens, SegmentedBenderHalbach
+from ParticleClass import Particle
+from ParticleTracerClass import ParticleTracer
+from ParticleTracerLatticeClass import ParticleTracerLattice
+from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
+from helperTools import iscloseAll, tool_Parallel_Process
+from latticeElements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
+    HalbachBenderSimSegmented, HalbachLensSim, Element
+from latticeElements.utilities import halbach_Magnet_Width
 
 
 def absDif(x1, x2):
@@ -37,22 +37,22 @@ def enablePrint():
 class PTL_Dummy:
     """fake class to just pass some args along"""
 
-    def __init__(self, fieldDensityMultiplier=1.0,standardMagnetErrors=False):
+    def __init__(self, fieldDensityMultiplier=1.0, standardMagnetErrors=False):
         self.fieldDensityMultiplier = fieldDensityMultiplier
-        self.standardMagnetErrors=standardMagnetErrors
+        self.standardMagnetErrors = standardMagnetErrors
         self.jitterAmp = 0.0
         self.v0Nominal = DEFAULT_ATOM_SPEED
         self.useSolenoidField = False
-        self.magnetGrade='N52'
-        self.standard_tube_ODs=False
-        self.standard_mag_sizes=False
+        self.magnetGrade = 'N52'
+        self.standard_tube_ODs = False
+        self.standard_mag_sizes = False
 
 
 class ElementTestHelper:
     ElementBaseClass = type(Element)
 
     def __init__(self, elType: ElementBaseClass, particle0: Optional[Particle], qf0: Optional[np.ndarray],
-                 pf0: Optional[np.ndarray],useShapelyTest: bool, testMisalignment: bool, testMagnetErrors: bool):
+                 pf0: Optional[np.ndarray], useShapelyTest: bool, testMisalignment: bool, testMagnetErrors: bool):
         self.elType = elType
         self.PTL = self.make_Latice()
         self.el = self.get_Element(self.PTL)
@@ -143,14 +143,14 @@ class DriftTestHelper(ElementTestHelper):
         assert isclose(slopey, slopeyTrace, abs_tol=tol) and isclose(slopez_final, slopezTrace, abs_tol=tol)
         assert abs(yf - yfTrace) < tol and abs(zf - zfTrace) < tol
 
+
 class _TiltedDriftTester(ElementTestHelper):
 
-    def __init__(self,inputAngle,outputAngle):
+    def __init__(self, inputAngle, outputAngle):
         self.L, self.ap = .15432, .0392
-        self.inputAngle=inputAngle
-        self.outputAngle=outputAngle
+        self.inputAngle = inputAngle
+        self.outputAngle = outputAngle
         super().__init__(Drift, None, None, None, True, False, False)
-
 
     def make_coordTestRules(self):
         floatyz = st.floats(min_value=-1.5 * self.ap, max_value=1.5 * self.ap)
@@ -159,18 +159,19 @@ class _TiltedDriftTester(ElementTestHelper):
 
     def make_Latice(self, magnetErrors=False, jitterAmp=0.0):
         PTL = ParticleTracerLattice(v0Nominal=200.0, standardMagnetErrors=magnetErrors, jitterAmp=jitterAmp)
-        PTL.add_Drift(self.L, self.ap,inputTiltAngle=self.inputAngle,outputTiltAngle=self.outputAngle)
+        PTL.add_Drift(self.L, self.ap, inputTiltAngle=self.inputAngle, outputTiltAngle=self.outputAngle)
         PTL.end_Lattice(constrain=False)
         return PTL
+
 
 class TiltedDriftTestHelper:
     def __init__(self):
         pass
 
     def run_Tests(self):
-        anglesToTest=[-.1,0.0,.1]
-        for inputAngle,outputAngle in itertools.product(anglesToTest,anglesToTest):
-            _TiltedDriftTester(inputAngle,outputAngle).run_Tests()
+        anglesToTest = [-.1, 0.0, .1]
+        for inputAngle, outputAngle in itertools.product(anglesToTest, anglesToTest):
+            _TiltedDriftTester(inputAngle, outputAngle).run_Tests()
 
 
 class HexapoleLensSimTestHelper(ElementTestHelper):
@@ -180,8 +181,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnetWidth = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.13128157877558538 ,  0.00517946432396945 ,-0.008167403810543808])
-        pf0 = np.array([-201.14938364174705 ,   -3.791801437312995,    4.929453944688048])
+        qf0 = np.array([-0.13128157877558538, 0.00517946432396945, -0.008167403810543808])
+        pf0 = np.array([-201.14938364174705, -3.791801437312995, 4.929453944688048])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -198,7 +199,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         seed = int(time.time())
         tol = .025  # tolerance on the maximum value
         np.random.seed(seed)
-        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0,standardMagnetErrors=True), (self.rp,), L, None,
+        lensElement = HalbachLensSim(PTL_Dummy(fieldDensityMultiplier=2.0, standardMagnetErrors=True), (self.rp,), L,
+                                     None,
                                      (self.magnetWidth,))
         lensElement.fill_Pre_Constrained_Parameters()
         lensElement.fill_Post_Constrained_Parameters()
@@ -206,7 +208,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsR
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
-        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,'N52',
+        lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm, 'N52',
                                          applyMethodOfMoments=True, useStandardMagErrors=True,
                                          numDisks=numSlices)
         rMax = .95 * lensElement.maximum_Good_Field_Aperture()
@@ -325,8 +327,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.numMagnets * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2561370063535038e-01, 1.8269439902184796e+00,5.4374713920287863e-04])
-        pf0 = np.array([ 156.50972054637663 , -126.05211562611713 ,   -4.325494849877396])
+        qf0 = np.array([6.2561370975097663e-01, 1.8269440099514407e+00, 5.4064501964317801e-04])
+        pf0 = np.array([156.5096982216614, -126.05201899522474, -4.329484519847585])
         super().__init__(HalbachBenderSimSegmented, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -355,28 +357,30 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
 
         numMagnets = 15
         np.random.seed(42)
-        PTL_Dev = PTL_Dummy(fieldDensityMultiplier=.75,standardMagnetErrors=True)
+        PTL_Dev = PTL_Dummy(fieldDensityMultiplier=.75, standardMagnetErrors=True)
         elDeviation = HalbachBenderSimSegmented(PTL_Dev, self.Lm, self.rp, numMagnets, self.rb, None, 1.0)
         PTL_Perf = PTL_Dummy(fieldDensityMultiplier=.75)
         elPerfect = HalbachBenderSimSegmented(PTL_Perf, self.Lm, self.rp, numMagnets, self.rb, None, 1.0)
-        for el in [elDeviation,elPerfect]:
+        for el in [elDeviation, elPerfect]:
             el.fill_Pre_Constrained_Parameters()
-            el.theta=0.0
+            el.theta = 0.0
             el.fill_Post_Constrained_Parameters()
             el.build_Fast_Field_Helper([])
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
-        magnetWidth= halbach_Magnet_Width(self.rp)
+        magnetWidth = halbach_Magnet_Width(self.rp)
         np.random.seed(42)
-        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm,'N52',numMagnets,
-                                           (True,True),applyMethodOfMoments=False,
-                                           positiveAngleMagnetsOnly=True, useMagnetError=False,magnetWidth=magnetWidth
-                                           )
+        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm, 'N52', numMagnets,
+                                           (True, True), applyMethodOfMoments=False,
+                                           positiveAngleMagnetsOnly=True, useMagnetError=False, magnetWidth=magnetWidth)
+        lensIdeal.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         np.random.seed(42)
-        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,'N52',numMagnets,
-                                           (True,True),
-                                               applyMethodOfMoments=False,magnetWidth=magnetWidth,
+        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm, 'N52',
+                                              numMagnets,
+                                              (True, True),
+                                              applyMethodOfMoments=False, magnetWidth=magnetWidth,
                                               positiveAngleMagnetsOnly=True, useMagnetError=True)
+        lensDeviated.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         testStrategy = st.integers(min_value=0, max_value=len(coordsCartesian) - 1)
 
         @given(testStrategy)
@@ -393,11 +397,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             valsDeviated = np.array([Bgradx, Bgrady, Bgradz, B0])
             vals = valsDeviated - valsIdeal
             Fx, Fy, Fz = -vals[:3] * SIMULATION_MAGNETON
-            Fy, Fz = Fz, -Fy
             deltaV_Direct = vals[-1] * SIMULATION_MAGNETON
             deltaF_Direct = np.asarray([Fx, Fy, Fz])
             x, y, z = coordsCartesian[index]
-            x, y, z = x, z, -y
             qEl = np.asarray([x, y, z])
             deltaF_el = elDeviation.force(qEl) - elPerfect.force(qEl)
             assert iscloseAll(deltaF_el, deltaF_Direct, abstol=1e-6)
@@ -413,8 +415,8 @@ class CombinerIdealTestHelper(ElementTestHelper):
         self.Lm = .218734921
         self.ap = .014832794
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 0.0, 0.0]))
-        qf0 = np.array([-0.22328507641728806 ,  0.009988699191880843,-0.002341300261489336])
-        pf0 = np.array([-199.53548090705544  ,   16.878732582305176 ,-0.6778345463513105])
+        qf0 = np.array([-0.22328507641728806, 0.009988699191880843, -0.002341300261489336])
+        pf0 = np.array([-199.53548090705544, 16.878732582305176, -0.6778345463513105])
         super().__init__(CombinerIdeal, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
@@ -438,8 +440,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5204597494293890e-01,  6.8636676018827072e-03,-2.1571715050122588e-04])
-        pf0 = np.array([-200.93862846202646  ,    0.9500953643236834,7.710006564527125 ])
+        qf0 = np.array([-2.5204597494293890e-01, 6.8636676018827072e-03, -2.1571715050122588e-04])
+        pf0 = np.array([-200.93862846202646, 0.9500953643236834, 7.710006564527125])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -464,7 +466,7 @@ class ElementTestRunner:
         self.numericTol = 1e-12
 
     def run_Tests(self):
-        #todo: reenable these tests
+        # todo: reenable these tests
         self.test_Tracing()
         self.test_Coord_Consistency()
         self.test_Coord_Conversions()
@@ -496,7 +498,7 @@ class ElementTestRunner:
             isInsideList.append(isInsideFull3D)
             # todo: clean this up
             if isInsideFull3D == False:
-                assert math.isnan(F[0]) == True and math.isnan(V) == True, str(F) + ',' + str(V)
+                assert isnan(F[0]) == True and isnan(V) == True, str(F) + ',' + str(V)
             else:
                 assert np.any(np.isnan(F)) == False and np.isnan(V) == False, str(F) + ',' + str(V) + ',' + str(
                     isInsideFull3D)
@@ -588,7 +590,7 @@ class ElementTestRunner:
                 F = el.force(coord)
                 V = el.magnetic_Potential(coord)
                 isInside = el.is_Coord_Inside(coord)
-                assert (not math.isnan(F[0])) == isInside and (not math.isnan(V)) == isInside
+                assert (not isnan(F[0])) == isInside and (not isnan(V)) == isInside
 
             test_Geometry_And_Fields()
 
@@ -606,7 +608,7 @@ class ElementTestRunner:
                 if self.elTestHelper.particle0 is not None:
                     particleList.append(
                         PT.trace(self.elTestHelper.particle0.copy(), self.timeStepTracing, 1.0, fastMode=fastMode,
-                             accelerated=accelerated))
+                                 accelerated=accelerated))
         return particleList
 
     def assert_Particle_List_Is_Expected(self, particleList: list[Particle], qf0: np.ndarray, pf0: np.ndarray,
@@ -639,7 +641,7 @@ class ElementTestRunner:
             isInside_Fast = self.elTestHelper.el.is_Coord_Inside(np.append(qEl_2D, 0))
             if not isInside2DShapely == isInside_Fast:
                 print(qEl_2D)
-                print(isInside2DShapely,isInside2DShapelyPadded,isInside2DShapelyNegPadded,isInside_Fast)
+                print(isInside2DShapely, isInside2DShapelyPadded, isInside2DShapelyNegPadded, isInside_Fast)
                 el = self.elTestHelper.el
                 qLab_2D = el.transform_Element_Coords_Into_Lab_Frame(np.append(qEl_2D, 0))
                 isInsideUnpadded = el.SO.contains(Point(qLab_2D))
@@ -648,7 +650,7 @@ class ElementTestRunner:
                 SO_NegPadded = el.SO.buffer(-2e-9)  # add padding to avoid issues of point right on edge
                 isInsideNegPadded = SO_NegPadded.contains(Point(qLab_2D))
                 import matplotlib.pyplot as plt
-                plt.scatter(qLab_2D[0],qLab_2D[1])
+                plt.scatter(qLab_2D[0], qLab_2D[1])
                 plt.plot(*SO_Padded.exterior.xy)
                 plt.plot(*SO_NegPadded.exterior.xy)
                 plt.show()
@@ -665,8 +667,3 @@ def test_Elements(parallel=True):
                     HexapoleLensSimTestHelper,
                     HexapoleSegmentedBenderTestHelper]
 
-    def run_Tester(tester):
-        tester().run_Tests()
-
-    processes = -1 if parallel == True else 1
-    tool_Parallel_Process(run_Tester, testersToRun, processes=processes)

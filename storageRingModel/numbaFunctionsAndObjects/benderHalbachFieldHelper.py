@@ -63,23 +63,24 @@ class SegmentedBenderSimFieldHelper_Numba:
         """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
         evaluation by interpolator"""
 
-        if x > 0.0 and -self.Lcap <= z <= 0.0:
-            s = self.Lcap + z
+
+        if x > 0.0 and -self.Lcap <= y <= 0.0:
+            s = self.Lcap + y
             xc = x - self.rb
-            yc = y
+            yc = z
         else:
-            theta = full_Arctan2(z, x)
+            theta = full_Arctan2(y, x)
             if theta <= self.ang:
                 s = theta * self.rb + self.Lcap
-                xc = np.sqrt(x ** 2 + z ** 2) - self.rb
-                yc = y
+                xc = np.sqrt(x ** 2 + y ** 2) - self.rb
+                yc = z
             elif self.ang < theta <= 2 * np.pi:  # i'm being lazy here and not limiting the real end
-                x0, z0 = np.cos(self.ang) * self.rb, np.sin(self.ang) * self.rb
+                x0, y0 = np.cos(self.ang) * self.rb, np.sin(self.ang) * self.rb
                 thetaEndPerp = np.pi - np.arctan(-1 / np.tan(self.ang))
-                x, z = x - x0, z - z0
-                deltaS, xc = np.cos(thetaEndPerp) * x + np.sin(-thetaEndPerp) * z, np.sin(thetaEndPerp) * x + np.cos(
-                    thetaEndPerp) * z
-                yc = y
+                x, y = x - x0, y - y0
+                deltaS, xc = np.cos(thetaEndPerp) * x + np.sin(-thetaEndPerp) * y, np.sin(thetaEndPerp) * x + np.cos(
+                    thetaEndPerp) * y
+                yc = z
                 xc = -xc
                 s = (self.ang * self.rb + self.Lcap) + deltaS
             else:
@@ -87,45 +88,33 @@ class SegmentedBenderSimFieldHelper_Numba:
         return s, xc, yc
 
     def _force_Func_Seg(self, x, y, z):
-        Fx0, Fy0, Fz0 = vec_interp3D(x, -z, y, *self.fieldDataSeg[:6])
-        Fx = Fx0
-        Fy = Fz0
-        Fz = -Fy0
+        Fx, Fy, Fz = vec_interp3D(x, y, z, *self.fieldDataSeg[:6])
         return Fx, Fy, Fz
 
     def _force_Func_Internal_Fringe(self, x, y, z):
-        Fx0, Fy0, Fz0 = vec_interp3D(x, -z, y, *self.fieldDataInternal[:6])
-        Fx = Fx0
-        Fy = Fz0
-        Fz = -Fy0
+        Fx, Fy, Fz = vec_interp3D(x, y, z, *self.fieldDataInternal[:6])
         return Fx, Fy, Fz
 
     def _force_Func_Perturbation(self, x, y, z):
-        s, xc, yc = self.cartesian_To_Center(x, -z, y)
-        Fx0, Fy0, Fz0 = vec_interp3D(s, xc, yc, *self.fieldPerturbationData[:6])
-        Fx = Fx0
-        Fy = Fz0
-        Fz = -Fy0
+        s, xc, yc = self.cartesian_To_Center(x, y, z)
+        Fx, Fy, Fz = vec_interp3D(s, xc, yc, *self.fieldPerturbationData[:6])
         return Fx, Fy, Fz
 
     def _Force_Func_Cap(self, x, y, z):
-        Fx0, Fy0, Fz0 = vec_interp3D(x, -z, y, *self.fieldDataCap[:6])
-        Fx = Fx0
-        Fy = Fz0
-        Fz = -Fy0
+        Fx, Fy, Fz = vec_interp3D(x, y, z, *self.fieldDataCap[:6])
         return Fx, Fy, Fz
 
     def _magnetic_Potential_Func_Seg(self, x, y, z):
-        return scalar_interp3D(x, -z, y, *self.fieldDataSeg[:3], self.fieldDataSeg[-1])
+        return scalar_interp3D(x, y, z, *self.fieldDataSeg[:3], self.fieldDataSeg[-1])
 
     def _magnetic_Potential_Func_Internal_Fringe(self, x, y, z):
-        return scalar_interp3D(x, -z, y, *self.fieldDataInternal[:3], self.fieldDataInternal[-1])
+        return scalar_interp3D(x, y, z, *self.fieldDataInternal[:3], self.fieldDataInternal[-1])
 
     def _magnetic_Potential_Func_Cap(self, x, y, z):
-        return scalar_interp3D(x, -z, y, *self.fieldDataCap[:3], self.fieldDataCap[-1])
+        return scalar_interp3D(x, y, z, *self.fieldDataCap[:3], self.fieldDataCap[-1])
 
     def _magnetic_Potential_Func_Perturbation(self, x, y, z):
-        s, xc, yc = self.cartesian_To_Center(x, -z, y)
+        s, xc, yc = self.cartesian_To_Center(x, y, z)
         return scalar_interp3D(s, xc, yc, *self.fieldPerturbationData[:3], self.fieldPerturbationData[-1])
 
     def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(self, Fx, Fy, Fz, x, y):
@@ -156,6 +145,7 @@ class SegmentedBenderSimFieldHelper_Numba:
 
         x, y, z = x0, y0, z0
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
+        #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
         z = abs(z)
         phi = full_Arctan2(y, x)  # calling a fast numba version that is global
         if phi <= self.ang:  # if particle is inside bending angle region
