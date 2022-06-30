@@ -372,6 +372,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
                  position: list_tuple_arr = None, orientation: Rotation = None,
                  numDisks: int = 1, applyMethodOfMoments=False, useStandardMagErrors=False,
                  useSolenoidField: bool = False, sameSeed=False):
+        #todo: why does initializing with non zero position indicate zero position still
         # todo: Better seeding system
         super().__init__()
         assert length > 0.0

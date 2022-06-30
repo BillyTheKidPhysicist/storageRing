@@ -180,8 +180,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnetWidth = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.13128157981281258 ,  0.005179464489541285,-0.00816744955197204 ])
-        pf0 = np.array([-201.14938782672996 ,   -3.791800050228535,    4.929317603651907])
+        qf0 = np.array([-0.13128157877558538 ,  0.00517946432396945 ,-0.008167403810543808])
+        pf0 = np.array([-201.14938364174705 ,   -3.791801437312995,    4.929453944688048])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -203,7 +203,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         lensElement.fill_Pre_Constrained_Parameters()
         lensElement.fill_Post_Constrained_Parameters()
         lensElement.build_Fast_Field_Helper([])
-        gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsXY
+        gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsR
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
         lensFieldGenerator = HalbachLens(self.rp, self.magnetWidth, lensElement.Lm,'N52',

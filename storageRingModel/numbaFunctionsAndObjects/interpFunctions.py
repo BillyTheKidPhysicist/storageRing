@@ -3,7 +3,7 @@ import numba
 args=numba.float64(numba.float64,numba.float64,numba.float64,numba.float64[:],
                                 numba.float64[:],numba.float64[:],numba.float64[:])
 @numba.njit(args,cache=True)
-def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
+def scalar_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vec):
     X, Y, Z = len(xCoords), len(yCoords), len(zCoords)
     assert 2 < X and 2 < Y and 2 < Z, "need at least 2 points to interpolate"
     min_x, max_x = xCoords[0], xCoords[-1]
@@ -13,9 +13,9 @@ def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
     delta_y = (max_y - min_y) / (yCoords.shape[0] - 1)
     delta_z = (max_z - min_z) / (zCoords.shape[0] - 1)
 
-    x = (x - min_x) / delta_x
-    y = (y - min_y) / delta_y
-    z = (z - min_z) / delta_z
+    x = (xLoc - min_x) / delta_x
+    y = (yLoc - min_y) / delta_y
+    z = (zLoc - min_z) / delta_z
     x0 = int(x)
     x1 = x0 + 1
     y0 = int(y)
@@ -43,6 +43,10 @@ def scalar_interp3D(x, y, z, xCoords, yCoords, zCoords, vec):
         c1 = c01 * (1 - yd) + c11 * yd
         c = c0 * (1 - zd) + c1 * zd
     else:
+        print(xLoc, yLoc, zLoc)
+        print(xCoords.min(), xCoords.max())
+        print(yCoords.min(), yCoords.max())
+        print(zCoords.min(), zCoords.max())
         raise Exception('out of bounds')
 
     return c
@@ -107,7 +111,6 @@ def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
         print(xCoords.min(), xCoords.max())
         print(yCoords.min(), yCoords.max())
         print(zCoords.min(), zCoords.max())
-        print(zCoords.min()<zLoc,zLoc<zCoords.max())
         raise Exception('out of bounds')
     return c_x, c_y, c_z
 

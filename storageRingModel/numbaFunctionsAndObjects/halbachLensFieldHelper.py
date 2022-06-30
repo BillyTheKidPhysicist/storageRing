@@ -12,10 +12,10 @@ spec_Lens_Halbach = [
     ('FyArrEnd', numba.float64[::1]),
     ('FzArrEnd', numba.float64[::1]),
     ('VArrEnd', numba.float64[::1]),
-    ('xArrIn', numba.float64[::1]),
     ('yArrIn', numba.float64[::1]),
-    ('FxArrIn', numba.float64[::1]),
+    ('zArrIn', numba.float64[::1]),
     ('FyArrIn', numba.float64[::1]),
+    ('FzArrIn', numba.float64[::1]),
     ('VArrIn', numba.float64[::1]),
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('L', numba.float64),
@@ -31,8 +31,8 @@ class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
     def __init__(self, fieldData, fieldPerturbationData, L, Lcap, ap, extraFieldLength):
-        self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, self.xArrIn, \
-        self.yArrIn, self.FxArrIn, self.FyArrIn, self.VArrIn = fieldData
+        self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, self.yArrIn, \
+        self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn = fieldData
         self.L = L
         self.Lcap = Lcap
         self.ap = ap
@@ -44,7 +44,7 @@ class LensHalbachFieldHelper_Numba:
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
-                    self.xArrIn, self.yArrIn, self.FxArrIn, self.FyArrIn, self.VArrIn
+                    self.yArrIn, self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
         return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength), (self.fieldFact,)
 
@@ -58,35 +58,32 @@ class LensHalbachFieldHelper_Numba:
     def _magnetic_Potential_Func_Fringe(self, x: float, y: float, z: float, useImperfectInterp: bool = False) -> float:
         """Wrapper for interpolation of magnetic fields at ends of lens. see self.magnetic_Potential"""
         if not useImperfectInterp:
-            V = scalar_interp3D(-z, y, x, self.xArrEnd, self.yArrEnd, self.zArrEnd, self.VArrEnd)
+            V = scalar_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd, self.VArrEnd)
         else:
             xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
-            V = scalar_interp3D(-z, y, x, xArr, yArr, zArr, VArr)
+            V = scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
         return V
 
     def _magnetic_Potential_Func_Inner(self, x: float, y: float, z: float) -> float:
         """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_Potential"""
-        V = interp2D(-z, y, self.xArrIn, self.yArrIn, self.VArrIn)
+        V = interp2D(y, z, self.yArrIn, self.zArrIn, self.VArrIn)
         return V
 
     def _force_Func_Outer(self, x, y, z, useImperfectInterp=False) -> tupleOf3Floats:
         """Wrapper for interpolation of force fields at ends of lens. see self.force"""
         if not useImperfectInterp:
-            Fx0, Fy0, Fz0 = vec_interp3D(-z, y, x, self.xArrEnd, self.yArrEnd, self.zArrEnd,
+            Fx, Fy, Fz = vec_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd,
                                          self.FxArrEnd, self.FyArrEnd, self.FzArrEnd)
         else:
             xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
-            Fx0, Fy0, Fz0 = vec_interp3D(-z, y, x, xArr, yArr, zArr, FxArr, FyArr, FzArr)
-        Fx = Fz0
-        Fy = Fy0
-        Fz = -Fx0
+            Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _force_Func_Inner(self, y: float, z: float) -> tupleOf3Floats:
         """Wrapper for interpolation of force fields of plane at center lens. see self.force"""
         Fx = 0.0
-        Fy = interp2D(-z, y, self.xArrIn, self.yArrIn, self.FyArrIn)
-        Fz = -interp2D(-z, y, self.xArrIn, self.yArrIn, self.FxArrIn)
+        Fy = interp2D(y, z, self.yArrIn, self.zArrIn, self.FyArrIn)
+        Fz = interp2D(y, z, self.yArrIn, self.zArrIn, self.FzArrIn)
         return Fx, Fy, Fz
 
     def force(self, x: float, y: float, z: float) -> tupleOf3Floats:
@@ -123,14 +120,13 @@ class LensHalbachFieldHelper_Numba:
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         if -self.extraFieldLength <= x <= self.Lcap:  # at beginning of lens
-            x = self.Lcap - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
-            Fx = -Fx
         elif self.Lcap < x <= self.L - self.Lcap:  # if long enough, model interior as uniform in x
             Fx, Fy, Fz = self._force_Func_Inner(y, z)
         elif self.L - self.Lcap <= x <= self.L + self.extraFieldLength:  # at end of lens
-            x = self.Lcap - (self.L - x)
+            x = self.L - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
+            Fx=-Fx
         else:
             raise Exception("Particle outside field region")  # this may be triggered when itentionally misligned
         Fx *= self.fieldFact
@@ -144,7 +140,6 @@ class LensHalbachFieldHelper_Numba:
             return np.nan, np.nan, np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
-        x = x - self.L / 2
         Fx, Fy, Fz = self._force_Func_Outer(x, y, z,
                                             useImperfectInterp=True)  # being used to hold fields for entire lens
         Fx = Fx * self.fieldFact
@@ -183,12 +178,11 @@ class LensHalbachFieldHelper_Numba:
         y = abs(y)
         z = abs(z)
         if -self.extraFieldLength <= x <= self.Lcap:
-            x = self.Lcap - x
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         elif self.Lcap < x <= self.L - self.Lcap:
             V0 = self._magnetic_Potential_Func_Inner(x, y, z)
         elif 0 <= x <= self.L + self.extraFieldLength:
-            x = self.Lcap - (self.L - x)
+            x = self.L - x
             V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
         else:
             raise Exception("Particle outside field region")
@@ -200,6 +194,5 @@ class LensHalbachFieldHelper_Numba:
             return np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
-        x = x - self.L / 2
         V0 = self._magnetic_Potential_Func_Fringe(x, y, z, useImperfectInterp=True)
         return V0
