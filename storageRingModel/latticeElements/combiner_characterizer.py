@@ -1,6 +1,4 @@
-from math import isclose, sqrt, pi
-
-from scipy.spatial.transform import Rotation as Rot
+from math import isclose, sqrt
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 from helperTools import *
@@ -61,10 +59,6 @@ def calculateTrajectory_Length(qTracedArr: np.ndarray) -> float:
 
 def make_Halbahc_Combiner_Force_Function(el) -> Callable:
     lens = el.make_Lens()
-    assert all(val == 0.0 for val in [*lens.orientation.as_rotvec(), *lens.position])
-    orientation = Rot.from_rotvec([0, pi / 2, 0.0])
-    lens.rotate(orientation)
-    lens.move((el.space + el.Lm / 2, 0, 0))
 
     def force_Func(q):
         if el.space < q[0] < el.Lm + el.space:
@@ -103,8 +97,9 @@ def characterize_CombinerIdeal(el: CombinerIdeal):
 
 
 def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, particleOffset=None):
-    atomState=('HIGH_FIELD_SEEKING' if el.fieldFact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
-    particleOffset=el.outputOffset if particleOffset is None else particleOffset
+    atomState = (
+        'HIGH_FIELD_SEEKING' if el.fieldFact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
+    particleOffset = el.outputOffset if particleOffset is None else particleOffset
     force_Func = make_Halbahc_Combiner_Force_Function(el)
     qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.v0Nominal, 0.0, 2 * el.space + el.Lm,
                                              particleOutputOffsetStart=particleOffset, atomState=atomState)
