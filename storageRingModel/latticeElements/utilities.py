@@ -11,6 +11,9 @@ TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of elem
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
 MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
 
+B_GRAD_STEP_SIZE = 1e-7
+INTERP_MAGNET_OFFSET = 1.5 * B_GRAD_STEP_SIZE
+TINY_INTERP_STEP = 1e-12
 
 def round_Down_To_Imperial(value: RealNumber) -> float:
     """Round 'value' down to its nearest imperial multiple of 1/16 inch"""
