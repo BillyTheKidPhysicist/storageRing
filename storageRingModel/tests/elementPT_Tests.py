@@ -440,8 +440,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5204597494293890e-01, 6.8636676018827072e-03, -2.1571715050122588e-04])
-        pf0 = np.array([-200.93862846202646, 0.9500953643236834, 7.710006564527125])
+        qf0 = np.array([-2.5204645419831156e-01,  6.8635825924903363e-03,-2.1576054971051266e-04])
+        pf0 = np.array([-200.93881251111716  ,    0.9501974939593306,7.709981221306242 ])
         super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
 
     def make_coordTestRules(self):
@@ -545,7 +545,6 @@ class ElementTestRunner:
                         if np.isnan(F0[0]) == False and y != 0 and z != 0:
                             FSym = np.abs(el.force(np.array([coord[0], y, z])))
                             np.set_printoptions(precision=100)
-                            print(F0,FSym)
                             assert iscloseAll(F0, FSym, 1e-10) == False  # assert there is no symmetry
 
             test_Magnetic_Imperfection_Field_Symmetry()

@@ -10,8 +10,9 @@ from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenera
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
 from helperTools import arr_Product, round_And_Make_Odd
 from latticeElements.class_BenderIdeal import BenderIdeal
-from latticeElements.utilities import TINY_OFFSET, is_Even, TINY_STEP, mirror_Across_Angle, full_Arctan, \
-    max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle
+from latticeElements.utilities import TINY_OFFSET, is_Even, mirror_Across_Angle, full_Arctan, \
+    max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle, B_GRAD_STEP_SIZE, \
+    INTERP_MAGNET_OFFSET, TINY_INTERP_STEP
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
 from typeHints import lst_tup_arr
 
@@ -64,7 +65,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                                       use_standard_sizes=self.PTL.standard_mag_sizes)
         # todo: revisit this, I am doubtful of how correct this is
         safetyFactor = .95
-        apMaxGoodField = safetyFactor * self.numPointsBoreAp * self.rp / (self.numPointsBoreAp + sqrt(2))
+        apMaxGoodField = safetyFactor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \
+                         (self.numPointsBoreAp + sqrt(2))
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
         if apMaxGoodField < apMaxGeom:  # for now, I want this to be the case
@@ -91,7 +93,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                             (False, False), positiveAngleMagnetsOnly=False,
                                             magnetWidth=self.magnetWidth,
                                             applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
-        lens.rotate(Rot.from_rotvec([np.pi/2,0,0]))
+        lens.rotate(Rot.from_rotvec([np.pi / 2, 0, 0]))
         thetaArr = np.linspace(0.0, 2 * ucAngApprox, 100)
         zArr = np.zeros(len(thetaArr))
 
@@ -152,7 +154,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         longitudinalCoordSpacing: float = (.8 * self.rp / 10.0) / self.PTL.fieldDensityMultiplier  # Spacing
         # through unit cell. .8 was carefully chosen
         numPointsX = round_And_Make_Odd(self.numPointsBoreAp * (xMax - xMin) / self.ap)
-        zMin, zMax = -TINY_STEP,(self.ap + TINY_STEP)  # same for every part of bender
+        zMin, zMax = -TINY_INTERP_STEP, (self.ap + TINY_INTERP_STEP)  # same for every part of bender
         numPointsZ = self.numPointsBoreAp
         numPointsY = round_And_Make_Odd((yMax - yMin) / longitudinalCoordSpacing)
         assert (numPointsX + 1) / numPointsZ >= (xMax - xMin) / (zMax - zMin)  # should be at least this ratio
@@ -165,11 +167,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""
 
         if -TINY_OFFSET <= s < self.Lcap:
-            x, y, z = self.rb + xc,s - self.Lcap,yc
+            x, y, z = self.rb + xc, s - self.Lcap, yc
         elif self.Lcap <= s < self.Lcap + self.ang * self.rb:
             theta = (s - self.Lcap) / self.rb
             r = self.rb + xc
-            x, y, z = cos(theta) * r, sin(theta) * r,yc
+            x, y, z = cos(theta) * r, sin(theta) * r, yc
         elif self.Lcap + self.ang * self.rb <= s <= self.ang * self.rb + 2 * self.Lcap + TINY_OFFSET:
             theta = self.ang
             r = self.rb + xc
@@ -188,7 +190,6 @@ class HalbachBenderSimSegmented(BenderIdeal):
         and yc is distance along z axis. HalbachLensClass.SegmentedBenderHalbach is in (x,z) plane with z=0 at start
         and going clockwise in +y. This needs to be converted to cartesian coordinates to actually evaluate the field
         value"""
-
 
         Ls = 2 * self.Lcap + self.ang * self.rb
         numS = round_And_Make_Odd(5 * (self.numMagnets + 2))  # carefully measured
@@ -223,12 +224,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     def generate_Cap_Field_Data(self) -> tuple[np.ndarray, ...]:
         # x and y bounds should match with internal fringe bounds
-        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_STEP
-        xMax = self.rb + self.ap + TINY_STEP
-        yMin =-self.Lcap - TINY_STEP
-        yMax = TINY_STEP
+        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP
+        xMax = self.rb + self.ap + TINY_INTERP_STEP
+        yMin = -(self.Lcap + TINY_INTERP_STEP)
+        yMax = TINY_INTERP_STEP
         fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
-        validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 2] ** 2) < self.rp
+        validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 2] ** 2) < self.rp - B_GRAD_STEP_SIZE
         lens = self.build_Bender(True, (True, False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
@@ -236,10 +237,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """An magnet slices are required to model the region going from the cap to the repeating unit cell,otherwise
         there is too large of an energy discontinuity"""
         # x and y bounds should match with cap bounds
-        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_STEP  # inward enough to account for the tilt
-        xMax = self.rb + self.ap + TINY_STEP
-        yMin = -TINY_STEP
-        yMax = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_STEP
+        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP  # inward enough to account for the tilt
+        xMax = self.rb + self.ap + TINY_INTERP_STEP
+        yMin = -TINY_INTERP_STEP
+        yMax = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
         fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
         lens = self.build_Bender(True, (True, False))
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 3)
@@ -250,7 +251,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         aligned with the z axis. If the coordinates are outside the double unit cell containing the lens, or inside
         the toirodal cylinder enveloping the magnet material, the coordinate is invalid"""
         yUC_Line = tan(self.ucAng) * x
-        if abs(y) <= self.Lm / 2.0 and self.rp < sqrt((x - self.rb) ** 2 + z ** 2) < self.rp + self.magnetWidth:
+        minor_radius = sqrt((x - self.rb) ** 2 + z ** 2)
+        lens_radius_valid_inner = self.rp - B_GRAD_STEP_SIZE
+        lens_radius_valid_outer = self.rp + self.magnetWidth + INTERP_MAGNET_OFFSET
+        if abs(y) < (self.Lm + B_GRAD_STEP_SIZE) / 2.0 and \
+                lens_radius_valid_inner <= minor_radius < lens_radius_valid_outer:
             return False
         elif abs(y) <= yUC_Line:
             return True
@@ -280,10 +285,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Segment_Field_Data(self) -> tuple[np.ndarray, ...]:
         """Internal repeating unit cell segment. This is modeled as a tilted portion with angle self.ucAng to the
         z axis, with its bottom face at z=0 alinged with the xy plane. In magnet frame coordinates"""
-        xMin = (self.rb - self.ap) * cos(self.ucAng) - TINY_STEP
-        xMax = self.rb + self.ap + TINY_STEP
-        yMin = -TINY_STEP
-        yMax = tan(self.ucAng) * (self.rb + self.ap) + TINY_STEP
+        xMin = (self.rb - self.ap) * cos(self.ucAng) - TINY_INTERP_STEP
+        xMax = self.rb + self.ap + TINY_INTERP_STEP
+        yMin = -TINY_INTERP_STEP
+        yMax = tan(self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
         fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
 
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 1)

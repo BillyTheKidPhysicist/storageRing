@@ -11,12 +11,14 @@ from constants import TUBE_WALL_THICKNESS
 from helperTools import iscloseAll
 from helperTools import make_Odd
 from latticeElements.class_LensIdeal import LensIdeal
-from latticeElements.utilities import MAGNET_ASPECT_RATIO, TINY_OFFSET, is_Even, SMALL_OFFSET, \
-    ElementTooShortError, halbach_Magnet_Width, round_down_to_nearest_valid_tube_OD
+from latticeElements.utilities import MAGNET_ASPECT_RATIO, is_Even, \
+    ElementTooShortError, halbach_Magnet_Width, round_down_to_nearest_valid_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
+    INTERP_MAGNET_OFFSET
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Lens_Helper
 
 
-# todo: update tiny_offset stuff with interp stuff, make sure to reflect this in the max aperture stuff
+# todo: the structure here is confusing and brittle because of the extra field length logic
+
 
 class HalbachLensSim(LensIdeal):
     fringeFracOuter: float = 1.5
@@ -44,7 +46,7 @@ class HalbachLensSim(LensIdeal):
         assert self.ap > 5 * self.rp / self.numGridPointsR  # ap shouldn't be too small. Value below may be dubiuos from interpolation
         self.rpLayers = rpLayers  # can be multiple bore radius for different layers
         self.Lm = None
-        self.Lcap: Optional[float] = None
+        self.Lcap: Optional[float] = None  # todo: ridiculous and confusing name
         self.extraFieldLength: Optional[float] = None  # extra field added to end of lens to account misalignment
         self.individualMagnetLength = None
         # or down
@@ -53,9 +55,8 @@ class HalbachLensSim(LensIdeal):
         """ from geometric arguments of grid inside circle.
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
-        # todo: remove redundant SMALL_OFFSET thing
-        # todo: why is this so different from the combiner version?
-        apMax = (self.rp - SMALL_OFFSET) * (1 - sqrt(2) / (self.numGridPointsR - 1))
+        # todo: why is this so different from the combiner version? It should be like that version instead
+        apMax = (self.rp - INTERP_MAGNET_OFFSET) * (1 - sqrt(2) / (self.numGridPointsR - 1))
         return apMax
 
     def fill_Pre_Constrained_Parameters(self):
@@ -143,14 +144,14 @@ class HalbachLensSim(LensIdeal):
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
 
-        yMin, yMax = -TINY_OFFSET, self.rp - TINY_OFFSET
-        xMin, xMax = -(self.extraFieldLength + TINY_OFFSET), self.Lcap + TINY_OFFSET
+        yMin, yMax = -TINY_INTERP_STEP, self.rp - INTERP_MAGNET_OFFSET
+        xMin, xMax = -(self.extraFieldLength + TINY_INTERP_STEP), self.Lcap + TINY_INTERP_STEP
         numPointsXY, numPointsZ = self.numGridPointsR, self.numGridPointsX
         if not useSymmetry:  # range will have to fully capture lens.
             numSlices = self.get_Num_Lens_Slices()
             yMin = -yMax
-            xMax = self.L + self.extraFieldLength + TINY_OFFSET
-            xMin = -(self.extraFieldLength + TINY_OFFSET)
+            xMax = self.L + self.extraFieldLength + TINY_INTERP_STEP
+            xMin = -(self.extraFieldLength + TINY_INTERP_STEP)
             assert self.fringeFracOuter == 1.5  # pointsperslice mildly depends on this value
             pointsPerSlice = 5
             numPointsZ = make_Odd(round(max([pointsPerSlice * (numSlices + 2), 2 * numPointsZ - 1])))
@@ -170,7 +171,7 @@ class HalbachLensSim(LensIdeal):
             # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
             # save resources
             planeCoords = np.asarray(np.meshgrid(lensCenter, yArr, zArr)).T.reshape(-1, 3)
-            validIndices = np.linalg.norm(planeCoords[:, 1:], axis=1) <= self.rp
+            validIndices = np.linalg.norm(planeCoords[:, 1:], axis=1) < self.rp - B_GRAD_STEP_SIZE
             BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
             BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(planeCoords[validIndices],
                                                                                          returnNorm=True)
@@ -200,8 +201,8 @@ class HalbachLensSim(LensIdeal):
                                                                            3)  # note that these coordinates can have
         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
         # input coordinates will be shifted in a wrapper function
-        validX = volumeCoords[:, 0] < self.rp * self.fringeFracOuter
-        validYZ = np.linalg.norm(volumeCoords[:, 1:], axis=1) < self.rp  # todo: update here with interp business?
+        validX = volumeCoords[:, 0] < self.rp * self.fringeFracOuter - B_GRAD_STEP_SIZE
+        validYZ = np.linalg.norm(volumeCoords[:, 1:], axis=1) < self.rp - B_GRAD_STEP_SIZE
         validIndices = np.logical_or(validX, validYZ)
         BNormGrad, BNorm = np.zeros((len(validIndices), 3)) * np.nan, np.ones(len(validIndices)) * np.nan
         BNormGrad[validIndices], BNorm[validIndices] = fieldGenerator.BNorm_Gradient(volumeCoords[validIndices],
@@ -230,7 +231,7 @@ class HalbachLensSim(LensIdeal):
         xArr, yArr_Quadrant, zArr_Quadrant = self.make_Grid_Coord_Arrays(useSymmetry)
         maxGridSep = np.sqrt(2) * (yArr_Quadrant[1] - yArr_Quadrant[0])
         if enforceGoodField:  # Don't want to enforce when including perturbation effects
-            assert self.rp - maxGridSep >= self.maximum_Good_Field_Aperture()
+            assert self.rp - B_GRAD_STEP_SIZE - maxGridSep > self.maximum_Good_Field_Aperture()
         data2D = self.make_2D_Field_Data(fieldGenerator, yArr_Quadrant, zArr_Quadrant, lensCenter) if useSymmetry \
             else None
         data3D = self.make_3D_Field_Data(fieldGenerator, xArr, yArr_Quadrant, zArr_Quadrant)
