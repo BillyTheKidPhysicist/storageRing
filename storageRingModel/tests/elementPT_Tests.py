@@ -533,9 +533,9 @@ class ElementTestRunner:
             el = self.elTestHelper.get_Element(PTL)
 
             @given(*self.elTestHelper.coordTestRules)
-            @settings(max_examples=100, deadline=None)
+            @settings(max_examples=300, deadline=None)
             def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
-                if any(isclose(x, 0.0, abs_tol=1e-6) for x in [x1, x2, x3]):
+                if any(isclose(x, 0.0, abs_tol=1e-4) for x in [x1, x2, x3]):
                     return
                 else:
                     coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
@@ -544,6 +544,8 @@ class ElementTestRunner:
                         z = -coord[2]
                         if np.isnan(F0[0]) == False and y != 0 and z != 0:
                             FSym = np.abs(el.force(np.array([coord[0], y, z])))
+                            np.set_printoptions(precision=100)
+                            print(F0,FSym)
                             assert iscloseAll(F0, FSym, 1e-10) == False  # assert there is no symmetry
 
             test_Magnetic_Imperfection_Field_Symmetry()
@@ -667,3 +669,8 @@ def test_Elements(parallel=True):
                     HexapoleLensSimTestHelper,
                     HexapoleSegmentedBenderTestHelper]
 
+    def run_Tester(tester):
+        tester().run_Tests()
+
+    processes = -1 if parallel == True else 1
+    tool_Parallel_Process(run_Tester, testersToRun, processes=processes)
