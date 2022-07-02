@@ -6,6 +6,8 @@ import numpy as np
 import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
+from numbaFunctionsAndObjects import benderHalbachFastFunctions
+
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
 from helperTools import arr_Product, round_And_Make_Odd
@@ -16,6 +18,7 @@ from latticeElements.utilities import TINY_OFFSET, is_Even, mirror_Across_Angle,
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
 from typeHints import lst_tup_arr
 
+dummy_field_data_empty=(np.ones(1)*np.nan,)*7
 
 class HalbachBenderSimSegmented(BenderIdeal):
     # magnet
@@ -141,11 +144,27 @@ class HalbachBenderSimSegmented(BenderIdeal):
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
-        fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else None
+        fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else dummy_field_data_empty
         assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[2] == fieldDataInternal[2])
-        self.fastFieldHelper = get_Halbach_Bender(
-            [fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation
-                , self.ap, self.ang, self.ucAng, self.rb, self.numMagnets, self.Lcap])
+        fieldData=(fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation)
+        useFieldPerturbations = self.PTL.standardMagnetErrors
+
+        m = np.tan(self.ucAng)
+        M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        m = np.tan(self.ang / 2)
+        M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
+        RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
+
+        numba_func_constants=(self.rb,self.ap,self.Lcap,self.ang,self.numMagnets,
+                              self.ucAng,M_ang,RIn_Ang,M_uc,self.fieldFact,useFieldPerturbations)
+
+        force_args=(numba_func_constants,fieldData)
+        potential_args=(numba_func_constants,fieldData)
+        is_coord_in_vacuum_args=(numba_func_constants,)
+        
+
+        self.assign_numba_functions(benderHalbachFastFunctions,force_args,potential_args,is_coord_in_vacuum_args)
+
 
     def make_Grid_Coords(self, xMin: float, xMax: float, yMin: float, yMax: float) -> np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.

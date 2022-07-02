@@ -1,7 +1,7 @@
 import numpy as np
 
 from latticeElements.class_BaseElement import BaseElement
-from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Ideal
+from numbaFunctionsAndObjects import combinerIdealFastFunction
 
 
 # from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
@@ -51,8 +51,16 @@ class CombinerIdeal(BaseElement):
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = get_Combiner_Ideal([self.c1, self.c2, self.La, self.Lb,
-                                                   self.apL, self.apR, self.apz, self.ang])
+
+        numba_func_constants=self.c1,self.c2, self.ang, self.La, self.Lb, self.apz, self.apL, self.apR, self.fieldFact
+
+
+        force_args = (numba_func_constants, )
+        potential_args = (numba_func_constants, )
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(combinerIdealFastFunction, force_args, potential_args, is_coord_in_vacuum_args)
+        q=np.array([5e-3,5e-3,5e-3])
 
     def compute_Trajectory_Length(self, qTracedArr: np.ndarray) -> float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their

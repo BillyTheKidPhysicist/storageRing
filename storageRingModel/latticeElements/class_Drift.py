@@ -2,6 +2,8 @@ from typing import Optional, Union
 
 import numpy as np
 
+from numbaFunctionsAndObjects import driftFastFunctions
+
 from constants import TUBE_WALL_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
 from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper
@@ -31,7 +33,15 @@ class Drift(LensIdeal):
         assert self.outerHalfWidth > ap
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = get_Drift_Field_Helper([self.L, self.ap, self.inputTiltAngle, self.outputTiltAngle])
+
+        numba_func_constants = (self.ap,self.L,self.inputTiltAngle,self.outputTiltAngle)
+
+        force_args = (numba_func_constants,)
+        potential_args = (numba_func_constants,)
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(driftFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""

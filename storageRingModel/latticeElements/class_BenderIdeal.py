@@ -8,6 +8,7 @@ from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import full_Arctan
 from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
 
+from numbaFunctionsAndObjects import benderIdealFastFunctions
 
 class BenderIdeal(BaseElement):
     """
@@ -61,7 +62,13 @@ class BenderIdeal(BaseElement):
             self.Lo = self.ro * self.ang
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = get_Bender_Ideal([self.ang, self.K, self.rp, self.rb, self.ap])
+        numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.fieldFact)
+
+        force_args = (numba_func_constants, )
+        potential_args = (numba_func_constants, )
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(benderIdealFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
     def fill_Post_Constrained_Parameters(self):
         self.fill_In_And_Out_Rotation_Matrices()

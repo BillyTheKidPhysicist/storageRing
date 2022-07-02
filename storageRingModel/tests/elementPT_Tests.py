@@ -531,14 +531,13 @@ class ElementTestRunner:
         if self.elTestHelper.testMagnetErrors == True:
             PTL = self.elTestHelper.make_Latice(magnetErrors=True)
             el = self.elTestHelper.get_Element(PTL)
-
             @given(*self.elTestHelper.coordTestRules)
             @settings(max_examples=300, deadline=None)
             def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
-                if any(isclose(x, 0.0, abs_tol=1e-4) for x in [x1, x2, x3]):
+                coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
+                if any(isclose(x, 0.0, abs_tol=1e-3) for x in [x1, x2, x3]):# or el.is_Coord_Inside(coord):
                     return
                 else:
-                    coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
                     F0 = np.abs(el.force(coord))
                     for y in [coord[1], -coord[1]]:
                         z = -coord[2]

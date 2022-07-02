@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from latticeElements.class_CombinerIdeal import CombinerIdeal
-from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Sim
+from numbaFunctionsAndObjects import combinerSimFastFunction
 
 
 class CombinerSim(CombinerIdeal):
@@ -44,9 +44,6 @@ class CombinerSim(CombinerIdeal):
         self.apR = self.apR * self.sizeScale
         self.apz = self.apz * self.sizeScale
 
-        self.fastFieldHelper = get_Combiner_Sim([self.open_And_Shape_Field_Data(), np.nan, self.Lb, self.Lm,
-                                                 self.space, self.apL, self.apR, self.apz, np.nan,
-                                                 self.fieldFact])
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
         self.L = self.Lo = trajectoryLength
         self.ang = inputAngle
@@ -58,13 +55,18 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
 
-        self.update_Field_Fact(self.fieldFact)
-
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = get_Combiner_Sim([self.open_And_Shape_Field_Data(), self.La, self.Lb,
-                                                 self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
-                                                 self.fieldFact])
+        numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.fieldFact)
+
+        fieldData=self.open_And_Shape_Field_Data()
+
+        force_args = (numba_func_constants, fieldData)
+        potential_args = (numba_func_constants, fieldData)
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(combinerSimFastFunction, force_args, potential_args, is_coord_in_vacuum_args)
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
+        raise NotImplementedError
         self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
         self.fieldFact = fieldStrengthFact

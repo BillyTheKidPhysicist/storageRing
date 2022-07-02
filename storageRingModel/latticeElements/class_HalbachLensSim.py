@@ -5,6 +5,8 @@ from typing import Optional
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
+from numbaFunctionsAndObjects import halbachLensFastFunctions
+
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from HalbachLensClass import billyHalbachCollectionWrapper
 from constants import TUBE_WALL_THICKNESS
@@ -242,16 +244,22 @@ class HalbachLensSim(LensIdeal):
         data may added on top of high density symmetry exploiting perfect data. """
 
         data2D, data3D = self.make_Field_Data(True, False, extraFieldSources)
-        xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd = self.shape_Field_Data_3D(data3D)
+        fieldData3D = self.shape_Field_Data_3D(data3D)
         if data2D is not None:  # if no inner plane being used
-            yArrIn, zArrIn, FyArrIn, FzArrIn, VArrIn = self.shape_Field_Data_2D(data2D)
+            fieldData2D = self.shape_Field_Data_2D(data2D)
         else:
-            yArrIn, zArrIn, FyArrIn, FzArrIn, VArrIn = [np.ones(1) * np.nan] * 5
-        fieldData = (
-            xArrEnd, yArrEnd, zArrEnd, FxArrEnd, FyArrEnd, FzArrEnd, VArrEnd, yArrIn, zArrIn, FyArrIn, FzArrIn, VArrIn)
+            fieldData2D = (np.ones(1) * np.nan,) * 5
         fieldDataPerturbations = self.make_Field_Perturbation_Data(extraFieldSources)
-        self.fastFieldHelper = get_Halbach_Lens_Helper([fieldData, fieldDataPerturbations, self.L, self.Lcap, self.ap,
-                                                        self.extraFieldLength])
+        fieldData=(fieldData3D,fieldData2D,fieldDataPerturbations)
+
+        numba_func_constants=(self.L, self.ap, self.Lcap, self.extraFieldLength, self.fieldFact,self.PTL.standardMagnetErrors)
+
+        force_args = (numba_func_constants, fieldData)
+        potential_args = (numba_func_constants, fieldData)
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(halbachLensFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
         assert F_edge / F_center < .01
@@ -280,14 +288,15 @@ class HalbachLensSim(LensIdeal):
             data3D_Difference[np.isnan(data3D_Difference)] = 0.0
             data3D_Difference = tuple(self.shape_Field_Data_3D(data3D_Difference))
         else:
-            data3D_Difference = None
+            data3D_Difference = (np.ones(1) * np.nan,) * 7
         return data3D_Difference
 
     def update_Field_Fact(self, fieldStrengthFact: float) -> None:
         """Update value used to model magnet strength tunability. fieldFact multiplies force and magnetic potential to
         model increasing or reducing magnet strength """
-        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
+        warnings.warn("extra field sources are being ignore here. Funcitnality is currently broken")
         self.fieldFact = fieldStrengthFact
+        self.build_Fast_Field_Helper([])
 
     def get_Valid_Jitter_Amplitude(self, Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""

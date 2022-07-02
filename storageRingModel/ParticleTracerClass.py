@@ -220,7 +220,7 @@ class ParticleTracer:
             if self.T >= self.T0:  # if out of time
                 self.particle.clipped = False
                 break
-            if self.fastMode is False or self.currentEl.fastFieldHelper is None:  # either recording data at each step
+            if self.fastMode is False:  # either recording data at each step
                 # or the element does not have the capability to be evaluated with the much faster multi_Step_Verlet
                 self.time_Step_Verlet()
                 if self.fastMode is False and self.logTracker % self.stepsBetweenLogging == 0:
@@ -243,7 +243,7 @@ class ParticleTracer:
         # collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if \
         #     self.collisionDynamics else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h,
-                                          self.currentEl.fastFieldHelper.numbaJitClass)
+                                          self.currentEl.numba_functions['force'])
         qEl_n, self.qEl[:], self.pEl[:], self.T, particleOutside = results
         qEl_n = np.array(qEl_n)
         self.particle.T = self.T
@@ -252,9 +252,8 @@ class ParticleTracer:
 
     @staticmethod
     @numba.njit()
-    def _multi_Step_Verlet(qEln, pEln, T, T0, h, helper):
+    def _multi_Step_Verlet(qEln, pEln, T, T0, h, force):
         # pylint: disable = E, W, R, C
-        force = helper.force
         # collisionRate = 0.0 if np.isnan(collisionParams[0]) else collisionParams[1]
         x, y, z = qEln
         px, py, pz = pEln
@@ -332,7 +331,8 @@ class ParticleTracer:
         if self.accelerated:
             if self.energyCorrection:
                 pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
-                                                              self.currentEl.fastFieldHelper.numbaJitClass,
+                                                              self.currentEl.numba_functions['magnetic_potential'],
+                                                              self.currentEl.numba_functions['force'],
                                                               'leaving')
             if self.logPhaseSpaceCoords:
                 qElLab = self.currentEl.transform_Element_Coords_Into_Lab_Frame(
@@ -347,7 +347,9 @@ class ParticleTracer:
             else:
                 if self.energyCorrection:
                     p_nextEl[:] += self.momentum_Correction_At_Bounday(self.E0, q_nextEl, p_nextEl,
-                                                                       nextEl.fastFieldHelper.numbaJitClass, 'entering')
+                                                                       nextEl.numba_functions['magnetic_potential'],
+                                                                       nextEl.numba_functions['force'],
+                                                                       'entering')
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
                 self.currentEl = nextEl
                 self.particle.currentEl = nextEl
@@ -389,11 +391,11 @@ class ParticleTracer:
 
     @staticmethod
     @numba.njit()
-    def momentum_Correction_At_Bounday(E0, qEl: np.ndarray, pEl: np.ndarray, fastFieldHelper, direction: str) -> \
+    def momentum_Correction_At_Bounday(E0, qEl: np.ndarray, pEl: np.ndarray, magnetic_potential,force, direction: str) -> \
             tuple[float, float, float]:
         # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
         assert direction in ('entering', 'leaving')
-        Fx, Fy, Fz = fastFieldHelper.force(qEl[0], qEl[1], qEl[2])
+        Fx, Fy, Fz = force(qEl[0], qEl[1], qEl[2])
         FNorm = np.sqrt(Fx ** 2 + Fy ** 2 + Fz ** 2)
         if FNorm < 1e-6:  # force is too small, and may cause a division error
             return 0.0, 0.0, 0.0
@@ -403,7 +405,7 @@ class ParticleTracer:
                 deltaE = E0 - ENew  # need to lose energy to maintain E0 when the potential turns off
             else:  # go from zero to non zero potentially instantly
                 deltaE = -np.array(
-                    fastFieldHelper.magnetic_Potential(qEl[0], qEl[1], qEl[2]))  # need to lose this energy
+                    magnetic_potential(qEl[0], qEl[1], qEl[2]))  # need to lose this energy
             Fx_unit, Fy_unit, Fz_unit = Fx / FNorm, Fy / FNorm, Fz / FNorm
             deltaPNorm = deltaE / (Fx_unit * pEl[0] + Fy_unit * pEl[1] + Fz_unit * pEl[2])
             deltaPx, deltaPy, deltaPz = deltaPNorm * Fx_unit, deltaPNorm * Fy_unit, deltaPNorm * Fz_unit

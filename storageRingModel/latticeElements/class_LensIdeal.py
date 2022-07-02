@@ -2,7 +2,7 @@ import numpy as np
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
-from numbaFunctionsAndObjects.fieldHelpers import get_Ideal_lens_Field_Helper
+from numbaFunctionsAndObjects import idealLensFastFunctions
 
 
 class LensIdeal(BaseElement):
@@ -35,7 +35,13 @@ class LensIdeal(BaseElement):
             self.Lo = self.L
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
-        self.fastFieldHelper = get_Ideal_lens_Field_Helper([self.L, self.K, self.ap])
+
+        numba_func_constants=self.K,self.L,self.ap,self.fieldFact
+        force_args = (numba_func_constants,)
+        potential_args = (numba_func_constants,)
+        is_coord_in_vacuum_args = (numba_func_constants,)
+
+        self.assign_numba_functions(idealLensFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
     def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""

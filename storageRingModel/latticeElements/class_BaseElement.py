@@ -1,15 +1,21 @@
-from typing import Optional
+from typing import Optional,Callable
 
 import numpy as np
 from shapely.geometry import Polygon
 
 from constants import SIMULATION_MAGNETON
 
+import numba
 
 # todo: a base geometry inheritance is most logical
 
-#todo: there is unphysicality with the field derivative calculation and the location of interpolating points near
-#magnet material
+
+
+def wrap_Numba_func(func,args):
+    @numba.njit()
+    def func_wrapper(x, y, z):
+        return func(x, y, z, *args)
+    return func_wrapper
 
 class BaseElement:
     """
@@ -59,6 +65,7 @@ class BaseElement:
         # #lens combiner
         self.fieldFact: float = 1.0  # factor to modify field values everywhere in space by, including force
         self.fastFieldHelper = None
+        self.numba_functions: dict={}
 
     def build_Fast_Field_Helper(self, extraFieldSources) -> None:
         raise NotImplementedError
@@ -80,7 +87,7 @@ class BaseElement:
         :param rotZ: Rotation about z axis of the element
         :return:
         """
-        self.fastFieldHelper.numbaJitClass.numbaJitClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+        self.fastFieldHelper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shiftY, shiftZ, rotY, rotZ)
 
     def magnetic_Potential(self, qEl: np.ndarray) -> float:
         """
@@ -93,7 +100,7 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
         """
-        return self.fastFieldHelper.numbaJitClass.magnetic_Potential(*qEl)  # will raise NotImplementedError if called
+        return self.numba_functions['magnetic_potential'](*qEl)  # will raise NotImplementedError if called
 
     def force(self, qEl: np.ndarray) -> np.ndarray:
         """
@@ -107,7 +114,7 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
         :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
         """
-        return np.asarray(self.fastFieldHelper.numbaJitClass.force(*qEl))  # will raise NotImplementedError if called
+        return np.asarray(self.numba_functions['force'](*qEl))  # will raise NotImplementedError if called
 
     def transform_Element_Coords_Into_Global_Orbit_Frame(self, qEl: np.ndarray, cumulativeLength: float) -> np.ndarray:
         """
@@ -211,8 +218,13 @@ class BaseElement:
         :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        return self.fastFieldHelper.numbaJitClass.is_Coord_Inside_Vacuum(
-            *qEl)  # will raise NotImplementedError if called
+        return self.numba_functions['is_coord_in_vacuum'](*qEl)  # will raise NotImplementedError if called
+
+    def assign_numba_functions(self,func_module,force_args,potential_args,is_coord_in_vacuum_args)-> None:
+        self.numba_functions['force']=wrap_Numba_func(func_module.force,force_args)
+        self.numba_functions['magnetic_potential']=wrap_Numba_func(func_module.magnetic_potential,potential_args)
+        self.numba_functions['is_coord_in_vacuum']=wrap_Numba_func(func_module.is_coord_in_vacuum,is_coord_in_vacuum_args)
+
 
     def fill_Pre_Constrained_Parameters(self):
         """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely

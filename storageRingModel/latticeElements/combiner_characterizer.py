@@ -113,10 +113,14 @@ def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, par
 
 
 def characterize_CombinerSim(el: CombinerSim):
+    from numbaFunctionsAndObjects.combinerSimFastFunction import force_Without_isInside_Check
+    params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.apL, el.apR, el.space, el.fieldFact)
+
+    fieldData = el.open_And_Shape_Field_Data()
     def force_Func(q):
         if el.space < q[0] < el.Lm + el.space:
             assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
-        F = np.array(el.fastFieldHelper.numbaJitClass.force_Without_isInside_Check(*q))
+        F = np.array(force_Without_isInside_Check(*q,params,fieldData))
         F[2] = 0.0
         return F
 

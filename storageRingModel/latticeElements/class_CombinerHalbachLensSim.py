@@ -11,7 +11,7 @@ from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, CombinerDimensionError, \
     CombinerIterExceededError, is_Even, get_Halbach_Layers_Radii_And_Magnet_Widths, round_down_to_nearest_valid_tube_OD, \
     TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_OFFSET
-from numbaFunctionsAndObjects.fieldHelpers import get_Combiner_Halbach_Field_Helper
+from numbaFunctionsAndObjects import combinerHalbachFastFunctions
 
 DEFAULT_SEED = 42
 ndarray = np.ndarray
@@ -165,11 +165,20 @@ class CombinerHalbachLensSim(CombinerIdeal):
         else:
             fieldDataInternal = self.make_Internal_Field_data_symmetry()
         fieldDataExternal = self.make_External_Field_data_symmetry()
-        self.fastFieldHelper = get_Combiner_Halbach_Field_Helper([fieldDataInternal, fieldDataExternal, self.La,
-                                                                  self.Lb, self.Lm, self.space, self.ap, self.ang,
-                                                                  self.fieldFact, self.extraFieldLength,
-                                                                  not self.PTL.standardMagnetErrors,
-                                                                  self.acceptance_width])
+        fieldData=(fieldDataInternal,fieldDataExternal)
+
+        useSymmetry=not self.PTL.standardMagnetErrors
+
+        numba_func_constants=(self.ap, self.Lm, self.La,self.Lb,self.space,self.ang,self.acceptance_width,
+                              self.fieldFact, useSymmetry, self.extraFieldLength)
+
+        #todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
+
+        force_args=(numba_func_constants,fieldData)
+        potential_args=(numba_func_constants,fieldData)
+        is_coord_in_vacuum_args=(numba_func_constants,)
+
+        self.assign_numba_functions(combinerHalbachFastFunctions,force_args,potential_args,is_coord_in_vacuum_args)
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lm / 2 + self.space, self.ap / 2, .0])))
@@ -237,9 +246,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def make_Field_Data(self, xArr, yArr, zArr) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
-        BNormGrad, BNorm = np.zeros((len(volumeCoords), 3)), np.zeros(len(volumeCoords))
-        validIndices = np.logical_or(np.linalg.norm(volumeCoords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE,
-                                     volumeCoords[:, 0] < self.space - B_GRAD_STEP_SIZE)  # tricky
+        BNormGrad, BNorm = np.nan*np.zeros((len(volumeCoords), 3)), np.nan*np.zeros(len(volumeCoords))
+        validR=np.linalg.norm(volumeCoords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE
+        validX=np.logical_or(volumeCoords[:, 0] < self.space - B_GRAD_STEP_SIZE ,
+                              volumeCoords[:, 0]> self.space+self.Lm - B_GRAD_STEP_SIZE)
+        validIndices = np.logical_or(validX,validR)  # tricky
         BNormGrad[validIndices], BNorm[validIndices] = self.make_Lens().BNorm_Gradient(volumeCoords[validIndices],
                                                                                        returnNorm=True,
                                                                                        dx=B_GRAD_STEP_SIZE)
