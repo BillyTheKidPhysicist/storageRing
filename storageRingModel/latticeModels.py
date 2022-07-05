@@ -244,7 +244,7 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]
 
     # -----starting at gap 5r through gap 7r-----
 
-    add_Second_Racetrack_Straight_Version_Any(PTL, ringParams['rpLens3_4'], system_constants["bendTubeODMax"])
+    add_Second_Racetrack_Straight_Version_Any(PTL, ringParams['rpLens3_4'], rpBend)
 
     # ------bender 2--------
     add_Bender(PTL, rpBend, whichVersion)

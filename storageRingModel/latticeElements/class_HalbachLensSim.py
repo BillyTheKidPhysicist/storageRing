@@ -262,7 +262,7 @@ class HalbachLensSim(LensIdeal):
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lcap, self.ap / 2, .0])))
-        assert F_edge / F_center < .01
+        assert F_edge / F_center < .015
 
     def make_Field_Perturbation_Data(self, extraFieldSources) -> Optional[tuple]:
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated

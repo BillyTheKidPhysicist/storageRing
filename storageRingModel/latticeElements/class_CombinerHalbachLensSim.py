@@ -132,9 +132,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return lens
 
     def num_points_x_interp(self, xMin: float, xMax: float) -> int:
-        # todo: need to rename this
         assert xMax > xMin
-        return round_And_Make_Odd(self.PTL.fieldDensityMultiplier * self.pointsPerRadiusX * (xMax - xMin) / self.rp)
+        minPointsX=11
+        numPointsX = round_And_Make_Odd(
+            self.PTL.fieldDensityMultiplier * self.pointsPerRadiusX * (xMax - xMin) / self.rp)
+        return numPointsX if numPointsX>=minPointsX else minPointsX
 
     def make_Internal_Field_data_symmetry(self) -> tuple[ndarray, ...]:
         xArr, yArr, zArr = self.make_Grid_Coords_Arrays_Internal_Symmetry()
@@ -165,27 +167,28 @@ class CombinerHalbachLensSim(CombinerIdeal):
         else:
             fieldDataInternal = self.make_Internal_Field_data_symmetry()
         fieldDataExternal = self.make_External_Field_data_symmetry()
-        fieldData=(fieldDataInternal,fieldDataExternal)
+        fieldData = (fieldDataInternal, fieldDataExternal)
 
-        useSymmetry=not self.PTL.standardMagnetErrors
+        useSymmetry = not self.PTL.standardMagnetErrors
 
-        numba_func_constants=(self.ap, self.Lm, self.La,self.Lb,self.space,self.ang,self.acceptance_width,
-                              self.fieldFact, useSymmetry, self.extraFieldLength)
+        numba_func_constants = (self.ap, self.Lm, self.La, self.Lb, self.space, self.ang, self.acceptance_width,
+                                self.fieldFact, useSymmetry, self.extraFieldLength)
 
-        #todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
+        # todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
 
-        force_args=(numba_func_constants,fieldData)
-        potential_args=(numba_func_constants,fieldData)
-        is_coord_in_vacuum_args=(numba_func_constants,)
+        force_args = (numba_func_constants, fieldData)
+        potential_args = (numba_func_constants, fieldData)
+        is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(combinerHalbachFastFunctions,force_args,potential_args,is_coord_in_vacuum_args)
+        self.assign_numba_functions(combinerHalbachFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lm / 2 + self.space, self.ap / 2, .0])))
         assert F_edge / F_center < .01
 
     def make_Full_Grid_Coord_Arrays(self) -> tuple[ndarray, ndarray, ndarray]:
-        full_interp_field_length = (self.Lb + (self.La + self.rp * sin(abs(self.ang))) * cos(abs(self.ang)))
+        #todo: WET
+        full_interp_field_length = (self.Lb + (self.La + self.acceptance_width * sin(abs(self.ang))) * cos(abs(self.ang)))
         magnet_center_x = self.space + self.Lm / 2
 
         xMin = magnet_center_x - full_interp_field_length / 2.0 - TINY_INTERP_STEP
@@ -208,8 +211,9 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
         numY0 = numZ = round_And_Make_Odd(self.numGridPointsR * self.PTL.fieldDensityMultiplier)
+        #todo: something is wrong here with the interp stuff. There is out of bounds error
         xMin = self.space + self.Lm / 2 - (
-                self.Lb + (self.La + self.rp * sin(abs(self.ang))) * cos(abs(self.ang))) / 2.0
+                self.Lb + (self.La + self.acceptance_width * sin(abs(self.ang))) * cos(abs(self.ang))) / 2.0
         xMax = self.space + TINY_INTERP_STEP
         zMin = - TINY_INTERP_STEP
         zMax = self.rp - INTERP_MAGNET_OFFSET
@@ -246,11 +250,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def make_Field_Data(self, xArr, yArr, zArr) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
-        BNormGrad, BNorm = np.nan*np.zeros((len(volumeCoords), 3)), np.nan*np.zeros(len(volumeCoords))
-        validR=np.linalg.norm(volumeCoords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE
-        validX=np.logical_or(volumeCoords[:, 0] < self.space - B_GRAD_STEP_SIZE ,
-                              volumeCoords[:, 0]> self.space+self.Lm - B_GRAD_STEP_SIZE)
-        validIndices = np.logical_or(validX,validR)  # tricky
+        BNormGrad, BNorm = np.nan * np.zeros((len(volumeCoords), 3)), np.nan * np.zeros(len(volumeCoords))
+        validR = np.linalg.norm(volumeCoords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE
+        validX = np.logical_or(volumeCoords[:, 0] < self.space - B_GRAD_STEP_SIZE,
+                               volumeCoords[:, 0] > self.space + self.Lm - B_GRAD_STEP_SIZE)
+        validIndices = np.logical_or(validX, validR)  # tricky
         BNormGrad[validIndices], BNorm[validIndices] = self.make_Lens().BNorm_Gradient(volumeCoords[validIndices],
                                                                                        returnNorm=True,
                                                                                        dx=B_GRAD_STEP_SIZE)

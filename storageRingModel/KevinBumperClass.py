@@ -7,13 +7,14 @@ assert HalbachLensSim.fringeFracOuter == 1.5
 swarmShift_x=0.0372 * 1.5 - 0.03
 def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identical bumper, but does not end the lattice
     assert PTL.initialLocation[0] == 0.0 and PTL.initialLocation[1] == 0.0
-    if PTL.standard_mag_sizes or PTL.standard_tube_ODs:
-        raise NotImplementedError #need to recheck this
+    intitialValues=(PTL.standard_mag_sizes,PTL.standard_tube_ODs)
+    PTL.standard_mag_sizes, PTL.standard_tube_ODs = (False,False)
     PTL.initialLocation = (0.0, 0.012)
     PTL.add_Halbach_Lens_Sim((0.0242, 0.0372), 0.321, magnetWidth=(0.0127, 0.01905))
     PTL.add_Drift(0.1274, .04, inputTiltAngle=0.1803, outputTiltAngle=0.0753)
     PTL.add_Halbach_Lens_Sim(0.0183, 0.1564)
     PTL.add_Drift(0.085, .04)
+    PTL.standard_mag_sizes, PTL.standard_tube_ODs = intitialValues
     return PTL
 
 # from ParticleTracerLatticeClass import ParticleTracerLattice

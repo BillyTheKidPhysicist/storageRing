@@ -54,15 +54,15 @@ class lockedDict(dict):
 
 # optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
-    "L1": 0.09622282605012868,  # length of first lens
-    "rp1": 0.01,  # bore radius of first lens
-    "L2": 0.24155344028683254,  # length of first lens
-    "rp2": 0.03,  # bore radius of first lens
-    "LmCombiner": 0.17047182734978528,  # hard edge length of combiner
-    "loadBeamOffset": 0.007187101087953732,  # offset of incoming beam into combiner
-    "gap1": 0.06778754563396035,  # separation between source and first lens
-    "gap2": 0.2709792520743716,  # separation between two lenses
-    "gap3": 0.2293989213563593  ##separation between final lens and input to combiner
+    "L1": 0.12150847,  # length of first lens
+    "rp1": 0.02630006,  # bore radius of first lens
+    "L2": 0.15880857 ,  # length of first lens
+    "rp2": 0.02384073,  # bore radius of first lens
+    "LmCombiner": 0.15787512,  # hard edge length of combiner
+    "loadBeamOffset": 0.00836685,  # offset of incoming beam into combiner
+    "gap1": 0.10861196,  # separation between source and first lens
+    "gap2": 0.29061003,  # separation between two lenses
+    "gap3": 0.20751606  ##separation between final lens and input to combiner
 })
 
 injectorParamsBoundsAny: lockedDict = lockedDict({
@@ -70,7 +70,7 @@ injectorParamsBoundsAny: lockedDict = lockedDict({
     "rp1": (.01, .03),  # bore radius of first lens
     "L2": (.05, .3),  # length of second lens
     "rp2": (.01, .03),  # bore radius of second lens
-    "LmCombiner": (.02, .25),  # hard edge length of combiner
+    "LmCombiner": (.05, .25),  # hard edge length of combiner
     "loadBeamOffset": (5e-3, 30e-3),  # assumed diameter of incoming beam
     "gap1": (.05, .3),  # separation between source and first lens
     "gap2": (.05, .3),  # separation between two lenses
@@ -102,7 +102,7 @@ _system_constants = {
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping
-    "bendTubeODMax": inch_To_Meter(5 / 8) ,
+    # "bendTubeODMax": inch_To_Meter(3 / 4) ,
     "rpCombiner": 0.04,
     'bendApexGap': inch_To_Meter(2.5),
     "lensToBendGap": inch_To_Meter(2),  # same at each bend to lens joint. Vacuum tube limited
@@ -127,7 +127,7 @@ optimizerBounds_V1_3: lockedDict = lockedDict({
     'rpLens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens2': (.01, .04),
-    'rpBend': (.005, system_constants["bendTubeODMax"]/2.0),
+    'rpBend': (.005, .01),
     'L_Lens1': (.05, .5),
     'L_Lens2': (.05, .5)
 })
@@ -140,7 +140,7 @@ optimizerBounds_V2: lockedDict = lockedDict({
     'rpLens2': (.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens3': (.01, .04),
     'rpLens4': (.01, .04),
-    'rpBend': (.005, system_constants["bendTubeODMax"]/2.0),
+    'rpBend': (.005, .01),
     'L_Lens1': (.1, .4),
     'L_Lens2': (.1, .4),
     'L_Lens3': (.1, .4),

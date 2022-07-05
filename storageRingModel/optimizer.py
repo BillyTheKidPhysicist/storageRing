@@ -54,7 +54,7 @@ def injected_Swarm_Cost(model) -> float:
     return swarmCost
 
 
-def build_Injector_And_Surrrogate(injectorParams):
+def build_Injector_And_Surrrogate(injectorParams,options):
     assert len(injectorParams) == len(injectorParamsBoundsAny)
     surrogateParams = lockedDict(
         {'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
@@ -62,8 +62,8 @@ def build_Injector_And_Surrrogate(injectorParams):
     for key, val in zip(injectorParamsBoundsAny.keys(), injectorParams):
         paramsInjectorDict[key] = val
     paramsInjectorDict = lockedDict(paramsInjectorDict)
-    PTL_Injector = make_Injector_Version_Any(paramsInjectorDict)
-    PTL_Ring_Surrogate = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams)
+    PTL_Injector = make_Injector_Version_Any(paramsInjectorDict,options=options)
+    PTL_Ring_Surrogate = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams,options=options)
     return PTL_Ring_Surrogate, PTL_Injector
 
 
@@ -96,7 +96,7 @@ class Solver:
     def build_Lattices(self, params):
         ringParams, injectorParams = self.unpack_Params(params)
         if self.system == 'injector_Surrogate_Ring':
-            PTL_Ring, PTL_Injector = build_Injector_And_Surrrogate(injectorParams)
+            PTL_Ring, PTL_Injector = build_Injector_And_Surrrogate(injectorParams, options=self.storageRingSystemOptions)
         else:
             systemParams = (ringParams, injectorParams)
             PTL_Ring, PTL_Injector = make_Ring_And_Injector(systemParams, '3', options=self.storageRingSystemOptions)
@@ -190,12 +190,12 @@ def _global_Optimize(cost_Function, bounds: lst_tup_arr, globalTol: float, proce
 
 
 def _local_Optimize(cost_Function, bounds: lst_tup_arr, xi: lst_tup_arr, disp: bool, processes: int,
-                    local_optimizer: str, local_search_region: float) -> tuple[float, float]:
+                    local_optimizer: str, local_search_region: float) -> tuple[tuple[float,...], float]:
     """Locally optimize a storage ring model cost function"""
     if local_optimizer == 'octopus':
         xOptimal, costMin = octopus_Optimize(cost_Function, bounds, xi, disp=disp, processes=processes,
                                              numSearchesCriteria=20, tentacleLength=local_search_region)
-    elif local_optimizer == 'simple_Line':
+    elif local_optimizer == 'simple_line':
         xOptimal, costMin = line_Search(cost_Function, xi, 1e-3, bounds)
     else:
         raise ValueError
@@ -224,25 +224,56 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 
 def main():
-    pass
-    optimize('injector_Surrogate_Ring','global',globalTol=.02)
-    optimize('injector_Surrogate_Ring','global',globalTol=.02)
-    optimize('injector_Surrogate_Ring','global',globalTol=.02)
-    # from storageRingModeler import make_Optimal_Solution_Model
-    # model=make_Optimal_Solution_Model()
-    # model.show_Floor_Plan_And_Trajectories()
+
+    xi=(0.012550212076717597, 0.009872406409921508, 0.039955736839851416,
+        0.007104369377944943, 0.05, 0.5 )
+
+    optimize('ring','local',xi=xi,local_optimizer='simple_line')
+
+
+    # xOpt,cost=optimize('injector_Surrogate_Ring','local',local_optimizer='simple_line',xi=xi)
+    # print('line results:')
+    # print(xOpt,cost)
+    # optimize('injector_Surrogate_Ring','local',xi=tuple(xOpt),local_search_region=.02)
+    # # optimize('injector_Surrogate_Ring','local')
+
 
 if __name__ == '__main__':
     main()
 
 """
+
+injector stuff:  
+---population member---- 
+DNA: array([0.12150846527965559 , 0.026300063215229087, 0.15880857130535447 ,
+       0.023840726815439268, 0.15587511504069645 , 0.008366847447454981,
+       0.10861195981388541 , 0.2906100314153392  , 0.2077660647873749  ])
+cost: 0.15526356500496963
+
+---population member---- 
+DNA: array([0.09572666856412555 , 0.02698268769887092 , 0.1916190281352214  ,
+       0.026884058369130694, 0.14529769261910877 , 0.007595821397923533,
+       0.1018789051202314  , 0.29899148256024266 , 0.2518145293100914  ])
+cost: 0.1572265625
+
+
+---population member---- 
+DNA: array([0.12487268204491239 , 0.026452795207681238, 0.1544875779627295  ,
+       0.023746964206229768, 0.14586066734676437 , 0.007358920017384266,
+       0.11226613872967701 , 0.2866928018124262  , 0.22395295855036998 ])
+cost: 0.1611328125
+
+
+0.1494140625 [0.12150847 0.02630006 0.15880857 0.02384073 0.15787512 0.00836685
+ 0.10861196 0.29061003 0.20751606]
+
+
+
+Ring stuff: 
 BEST MEMBER BELOW
 ---population member---- 
-DNA: array([0.06334723697415356  , 0.016513174212619705 ,
-       0.1539352263797151   , 0.02332449434679998  ,
-       0.1445659535054458   , 0.0069330308636660854,
-       0.11480348572253843  , 0.2804688026474986   ,
-       0.21212107962654167  ])
-cost: 0.15503466993328052
+DNA: array([0.012550212076717597, 0.009872406409921508, 0.039955736839851416,
+       0.007104369377944943, 0.05                , 0.5                 ])
+cost: 0.8917743111133124
 
 """

@@ -16,12 +16,12 @@ from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderId
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 
-@numba.njit(numba.float64(numba.float64[:]))
+@numba.njit(numba.float64(numba.float64[:]), cache=False)
 def norm_3D(vec):
     return sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)
 
 
-@numba.njit(numba.float64(numba.float64[:], numba.float64[:]))
+@numba.njit(numba.float64(numba.float64[:], numba.float64[:]), cache=False)
 def dot_Prod_3D(veca, vecb):
     return veca[0] * vecb[0] + veca[1] * vecb[1] + veca[2] * vecb[2]
 
@@ -29,17 +29,17 @@ def dot_Prod_3D(veca, vecb):
 TINY_TIME_STEP = 1e-9  # nanosecond time step to move particle from one element to another
 
 
-@numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:], numba.float64))
+@numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:], numba.float64), cache=False)
 def fast_qNew(q, F, p, h):
     return q + p * h + .5 * F * h ** 2
 
 
-@numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:], numba.float64))
+@numba.njit(numba.float64[:](numba.float64[:], numba.float64[:], numba.float64[:], numba.float64), cache=False)
 def fast_pNew(p, F, F_n, h):
     return p + .5 * (F + F_n) * h
 
 
-@numba.njit()
+@numba.njit(cache=False)
 def _transform_To_Next_Element(q, p, r01, r02, ROutEl1, RInEl2):
     # don't try and condense. Because of rounding, results won't agree with other methods and tests will fail
     q = q.copy()
@@ -251,7 +251,7 @@ class ParticleTracer:
             self.check_If_Particle_Is_Outside_And_Handle_Edge_Event(qEl_n, self.qEl, self.pEl)
 
     @staticmethod
-    @numba.njit()
+    @numba.njit(cache=False)
     def _multi_Step_Verlet(qEln, pEln, T, T0, h, force):
         # pylint: disable = E, W, R, C
         # collisionRate = 0.0 if np.isnan(collisionParams[0]) else collisionParams[1]
@@ -363,7 +363,8 @@ class ParticleTracer:
             elif el is not self.currentEl:  # element has changed
                 if self.energyCorrection:
                     pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
-                                                                  self.currentEl.fastFieldHelper.numbaJitClass,
+                                                                  self.currentEl.numba_functions['magnetic_potential'],
+                                                                  self.currentEl.numba_functions['force'],
                                                                   'leaving')
                 nextEl = el
                 self.particle.cumulativeLength += self.currentEl.Lo  # add the previous orbit length
@@ -383,15 +384,19 @@ class ParticleTracer:
                 self.elHasChanged = True
                 if self.energyCorrection:
                     self.pEl[:] += self.momentum_Correction_At_Bounday(self.E0, self.qEl, self.pEl,
-                                                                       nextEl.fastFieldHelper.numbaJitClass, 'entering')
+                                                                       self.currentEl.numba_functions[
+                                                                           'magnetic_potential'],
+                                                                       self.currentEl.numba_functions['force'],
+                                                                       'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
                                 'interpolation extends into the magnetic material. Particle is also possibly frozen '
                                 'because of broken logic that returns it to the same location.')
 
     @staticmethod
-    @numba.njit()
-    def momentum_Correction_At_Bounday(E0, qEl: np.ndarray, pEl: np.ndarray, magnetic_potential,force, direction: str) -> \
+    @numba.njit(cache=False)
+    def momentum_Correction_At_Bounday(E0, qEl: np.ndarray, pEl: np.ndarray, magnetic_potential, force,
+                                       direction: str) -> \
             tuple[float, float, float]:
         # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
         assert direction in ('entering', 'leaving')
