@@ -204,7 +204,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
                                      (self.magnetWidth,))
         lensElement.fill_Pre_Constrained_Parameters()
         lensElement.fill_Post_Constrained_Parameters()
-        lensElement.build_Fast_Field_Helper([])
+        lensElement.build_Fast_Field_Helper()
         gridSpacing = lensElement.maximum_Good_Field_Aperture() / lensElement.numGridPointsR
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
@@ -365,7 +365,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             el.fill_Pre_Constrained_Parameters()
             el.theta = 0.0
             el.fill_Post_Constrained_Parameters()
-            el.build_Fast_Field_Helper([])
+            el.build_Fast_Field_Helper()
         Ls = 2 * elPerfect.Lcap + elPerfect.ang * elPerfect.rb
         coordsCenter, coordsCartesian = elPerfect.make_Perturbation_Data_Coords()
         magnetWidth = halbach_Magnet_Width(self.rp)

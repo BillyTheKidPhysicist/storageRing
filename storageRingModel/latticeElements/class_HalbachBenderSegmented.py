@@ -139,7 +139,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lo = self.ang * self.ro + 2 * self.Lcap
         self.outerHalfWidth = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()

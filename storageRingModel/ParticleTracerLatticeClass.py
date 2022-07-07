@@ -288,7 +288,7 @@ class ParticleTracerLattice:
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
             if buildFieldHelper:
-                el.build_Fast_Field_Helper([])
+                el.build_Fast_Field_Helper()
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed

@@ -55,7 +55,7 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
         numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.fieldFact)
 
         fieldData=self.open_And_Shape_Field_Data()

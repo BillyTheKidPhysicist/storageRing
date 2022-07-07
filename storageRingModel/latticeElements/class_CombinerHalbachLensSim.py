@@ -160,7 +160,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         fieldData[0][:] = xArr
         return fieldData
 
-    def build_Fast_Field_Helper(self, extraSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
         self.set_extraFieldLength()
         if self.PTL.standardMagnetErrors:
             fieldDataInternal = self.make_Field_data_full()

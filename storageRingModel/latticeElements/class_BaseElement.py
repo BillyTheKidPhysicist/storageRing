@@ -67,7 +67,7 @@ class BaseElement:
         self.fastFieldHelper = None
         self.numba_functions: dict={}
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
         raise NotImplementedError
 
     def set_fieldFact(self, fieldFact: bool):

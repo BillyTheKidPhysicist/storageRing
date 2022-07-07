@@ -50,7 +50,7 @@ class CombinerIdeal(BaseElement):
         self.L = self.La * np.cos(
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
 
         numba_func_constants=self.c1,self.c2, self.ang, self.La, self.Lb, self.apz, self.apL, self.apR, self.fieldFact
 

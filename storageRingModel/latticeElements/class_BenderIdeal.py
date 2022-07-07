@@ -61,7 +61,7 @@ class BenderIdeal(BaseElement):
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
         numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.fieldFact)
 
         force_args = (numba_func_constants, )

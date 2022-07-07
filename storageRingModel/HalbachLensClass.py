@@ -187,7 +187,7 @@ class billyHalbachCollectionWrapper(Collection):
 
     def central_Difference(self, evalCoords: np.ndarray, returnNorm: bool, useApprox: bool, dx: float = 1e-7) -> \
             Union[tuple[np.ndarray, ...], np.ndarray]:
-
+        assert dx>0.0
         def grad(index: int) -> np.ndarray:
             coordb = evalCoords.copy()  # upper step
             coordb[:, index] += dx
@@ -206,6 +206,7 @@ class billyHalbachCollectionWrapper(Collection):
 
     def forward_Difference(self, evalCoords: np.ndarray, returnNorm: bool, useApprox: bool, dx: float = 1e-7) \
             -> Union[tuple[np.ndarray, ...], np.ndarray]:
+        assert dx > 0.0
         BNorm = self.BNorm(evalCoords, useApprox=useApprox)
 
         def grad(index):

@@ -34,7 +34,7 @@ class LensIdeal(BaseElement):
         if self.L is not None:
             self.Lo = self.L
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
 
         numba_func_constants=self.K,self.L,self.ap,self.fieldFact
         force_args = (numba_func_constants,)

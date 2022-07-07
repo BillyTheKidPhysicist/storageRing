@@ -32,7 +32,7 @@ class Drift(LensIdeal):
         self.outerHalfWidth = ap + TUBE_WALL_THICKNESS if outerHalfWidth is None else outerHalfWidth
         assert self.outerHalfWidth > ap
 
-    def build_Fast_Field_Helper(self, extraFieldSources) -> None:
+    def build_Fast_Field_Helper(self) -> None:
 
         numba_func_constants = (self.ap,self.L,self.inputTiltAngle,self.outputTiltAngle)
 
