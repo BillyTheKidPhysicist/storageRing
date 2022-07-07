@@ -25,7 +25,7 @@ def line_Search(costFunc,xi,deltaInitial,bounds,costInitial=None,processes=-1):
     i,maxiters=0,10
     while i<maxiters:
         i+=1
-        print('results',costOpt, delta, xOpt)
+        print('results',costOpt, delta, repr(xOpt))
         xOptNew, costOptNew = find_Optimal_Value(costFunc,xOpt, delta,bounds,processes)
         if costOptNew >= costOpt:
             delta *= .75
