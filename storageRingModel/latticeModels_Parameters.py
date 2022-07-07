@@ -126,10 +126,10 @@ system_constants: lockedDict = lockedDict(_system_constants)
 optimizerBounds_V1_3: lockedDict = lockedDict({
     'rpLens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
-    'rpLens2': (.01, .04),
+    # 'rpLens2': (.02, .04),
     'rpBend': (.005, .01),
     'L_Lens1': (.05, .5),
-    'L_Lens2': (.05, .5)
+    'L_Lens2': (.3, .7)
 })
 
 # version 2 bounds
@@ -155,4 +155,8 @@ ringParamsOptimal_V3 = lockedDict({
     'rpBend': 0.00759624174653381,
     'L_Lens1': 0.441164241347491,
     'L_Lens2': 0.46839105549798354
+})
+
+constants_V1_3=lockedDict({
+    "rpLens2":.04
 })

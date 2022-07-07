@@ -57,7 +57,7 @@ def injected_Swarm_Cost(model) -> float:
 def build_Injector_And_Surrrogate(injectorParams,options):
     assert len(injectorParams) == len(injectorParamsBoundsAny)
     surrogateParams = lockedDict(
-        {'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'rpLens2': .025, 'L_Lens': .5})
+        {'rpLens1': injectorRingConstraintsV1['rp1LensMax'], 'L_Lens': .5})
     paramsInjectorDict = {}
     for key, val in zip(injectorParamsBoundsAny.keys(), injectorParams):
         paramsInjectorDict[key] = val
@@ -69,14 +69,16 @@ def build_Injector_And_Surrrogate(injectorParams,options):
 
 class Solver:
     def __init__(self, system, ringParams=None, useSolenoidField=False, useCollisions=False,
-                 useEnergyCorrection=False, numParticles=1024, useBumper=False):
+                 useEnergyCorrection=False, numParticles=1024, useBumper=False,standard_tube_ODs=False,
+                 standard_mag_sizes=False):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system = system
         self.ringParams = ringParams
         self.useCollisions = useCollisions
         self.useEnergyCorrection = useEnergyCorrection
         self.numParticles = numParticles
-        self.storageRingSystemOptions = {'useSolenoidField': useSolenoidField, 'includeBumper': useBumper}
+        self.storageRingSystemOptions = {'useSolenoidField': useSolenoidField, 'includeBumper': useBumper,
+                                         'standard_tube_ODs':standard_tube_ODs,'standard_mag_sizes':standard_mag_sizes}
 
     def unpack_Params(self, params):
         ringParams, injectorParams = None, None
@@ -164,12 +166,12 @@ def make_Bounds(expand, keysToNotChange=None, whichBounds='ring') -> np.ndarray:
     return bounds
 
 
-def get_Cost_Function(system: str, ringParams: Optional[tuple], useSolenoidField, useBumper, num_particles) -> Callable[
-    [tuple], float]:
+def get_Cost_Function(system: str, ringParams: Optional[tuple], useSolenoidField, useBumper, num_particles,
+                      standard_tube_ODs,standard_mag_sizes) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
     solver = Solver(system, ringParams=ringParams, useSolenoidField=useSolenoidField, useBumper=useBumper,
-                    numParticles=num_particles)
+                    numParticles=num_particles,standard_tube_ODs=standard_tube_ODs,standard_mag_sizes=standard_mag_sizes)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
@@ -196,7 +198,7 @@ def _local_Optimize(cost_Function, bounds: lst_tup_arr, xi: lst_tup_arr, disp: b
         xOptimal, costMin = octopus_Optimize(cost_Function, bounds, xi, disp=disp, processes=processes,
                                              numSearchesCriteria=20, tentacleLength=local_search_region)
     elif local_optimizer == 'simple_line':
-        xOptimal, costMin = line_Search(cost_Function, xi, 1e-3, bounds)
+        xOptimal, costMin = line_Search(cost_Function, xi, 1e-3, bounds,processes=processes)
     else:
         raise ValueError
     return xOptimal, costMin
@@ -204,15 +206,16 @@ def _local_Optimize(cost_Function, bounds: lst_tup_arr, xi: lst_tup_arr, disp: b
 
 def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expandedBounds=False, globalTol=.005,
              disp=True, processes=10, local_optimizer='octopus', useSolenoidField: bool = False,
-             useBumper: bool = False,
-             local_search_region=.01, num_particles=1024):
+             useBumper: bool = False, local_search_region=.01, num_particles=1024,
+             standard_tube_ODs=False,standard_mag_sizes=False):
     """Optimize a model of the ring and injector"""
     assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
     assert ringParams is not None if system == 'injector_Actual_Ring' else True
     bounds = make_Bounds(expandedBounds, whichBounds=system)
-    cost_Function = get_Cost_Function(system, ringParams, useSolenoidField, useBumper, num_particles)
+    cost_Function = get_Cost_Function(system, ringParams, useSolenoidField, useBumper, num_particles,
+                                      standard_tube_ODs,standard_mag_sizes)
 
     if method == 'global':
         xOptimal, costMin = _global_Optimize(cost_Function, bounds, globalTol, processes, disp)
@@ -225,10 +228,9 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 def main():
 
-    xi=(0.012550212076717597, 0.009872406409921508, 0.039955736839851416,
-        0.007104369377944943, 0.05, 0.5 )
 
-    optimize('ring','local',xi=xi,local_optimizer='simple_line')
+
+    optimize('injector_Surrogate_Ring','global',standard_mag_sizes=True,standard_tube_ODs=True)
 
 
     # xOpt,cost=optimize('injector_Surrogate_Ring','local',local_optimizer='simple_line',xi=xi)
@@ -270,10 +272,9 @@ cost: 0.1611328125
 
 
 Ring stuff: 
-BEST MEMBER BELOW
 ---population member---- 
-DNA: array([0.012550212076717597, 0.009872406409921508, 0.039955736839851416,
-       0.007104369377944943, 0.05                , 0.5                 ])
-cost: 0.8917743111133124
+DNA: array([0.025013349356554054, 0.008001737370826989, 0.04                ,
+       0.009429285103391407, 0.051762587781885874, 0.4732940268274622  ])
+cost: 0.8136743583131429
 
 """
