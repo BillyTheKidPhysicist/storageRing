@@ -29,16 +29,16 @@ class StabilityAnalyzer:
         self.machineTolerance = machineTolerance
         self.jitterableElements = (CombinerHalbachLensSim, LensIdeal, HalbachLensSim)
 
-    def generate_Ring_And_Injector_Lattice(self, useMagnetErrors: bool,
+    def generate_Ring_And_Injector_Lattice(self, use_mag_errors: bool,
                                            combinerSeed: int = None) \
             -> tuple[ParticleTracerLattice, ParticleTracerLattice, np.ndarray]:
         # params=self.apply_Machining_Errors(self.paramsOptimal) if useMachineError==True else self.paramsOptimal
         params = self.paramsOptimal
-        PTL_Ring, PTL_Injector = make_Ring_And_Injector_Version3(params, useMagnetErrors=useMagnetErrors,
+        lattice_ring, lattice_injector = make_Ring_And_Injector_Version3(params, use_mag_errors=use_mag_errors,
                                                                  combinerSeed=combinerSeed)
         # if misalign:
-        #     self.jitter_System(PTL_Ring,PTL_Injector)
-        return PTL_Ring, PTL_Injector, params
+        #     self.jitter_System(lattice_ring,lattice_injector)
+        return lattice_ring, lattice_injector, params
 
     def apply_Machining_Errors(self, params: np.ndarray) -> np.ndarray:
         deltaParams = 2 * (np.random.random_sample(params.shape) - .5) * self.machineTolerance
@@ -68,23 +68,23 @@ class StabilityAnalyzer:
                     shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el, None)
                 el.perturb_Element(shiftY, shiftZ, rotY, rotZ)
 
-    def jitter_System(self, PTL_Ring: ParticleTracerLattice, PTL_Injector: ParticleTracerLattice) -> None:
+    def jitter_System(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice) -> None:
         combinerRandomOverride = (np.random.random_sample(), np.random.random_sample(4))
-        self.jitter_Lattice(PTL_Ring, combinerRandomOverride)
-        self.jitter_Lattice(PTL_Injector, combinerRandomOverride)
+        self.jitter_Lattice(lattice_ring, combinerRandomOverride)
+        self.jitter_Lattice(lattice_injector, combinerRandomOverride)
 
-    def dejitter_System(self, PTL_Ring, PTL_Injector):
+    def dejitter_System(self, lattice_ring, lattice_injector):
         # todo: possibly useless
         tolerance0 = self.alignmentTol
         self.alignmentTol = 0.0
-        self.jitter_Lattice(PTL_Ring, None)
-        self.jitter_Lattice(PTL_Injector, None)
+        self.jitter_Lattice(lattice_ring, None)
+        self.jitter_Lattice(lattice_injector, None)
         self.alignmentTol = tolerance0
 
-    def inject_And_Trace_Through_Ring(self, useMagnetErrors: bool, combinerSeed: int = None):
-        PTL_Ring, PTL_Injector, params = self.generate_Ring_And_Injector_Lattice(useMagnetErrors,
+    def inject_And_Trace_Through_Ring(self, use_mag_errors: bool, combinerSeed: int = None):
+        lattice_ring, lattice_injector, params = self.generate_Ring_And_Injector_Lattice(use_mag_errors,
                                                                                  combinerSeed=combinerSeed)
-        sol = solution_From_Lattice(PTL_Ring, PTL_Injector)
+        sol = solution_From_Lattice(lattice_ring, lattice_injector)
         sol.params = params
         return sol
 
@@ -103,8 +103,8 @@ class StabilityAnalyzer:
             else:
                 sol = self.inject_And_Trace_Through_Ring(True, combinerSeed=i)
             # print('seed',i)
-            print(i, sol.fluxMultiplication)
-            return sol.cost, sol.fluxMultiplication
+            print(i, sol.flux_mult)
+            return sol.cost, sol.flux_mult
 
         indices = list(range(1, 17))
         results = tool_Parallel_Process(flux_Multiplication, indices, processes=8, resultsAsArray=True)

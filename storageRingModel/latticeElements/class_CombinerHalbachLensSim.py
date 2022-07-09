@@ -121,11 +121,11 @@ class CombinerHalbachLensSim(CombinerIdeal):
         seed = DEFAULT_SEED if self.seed is None else self.seed
         state = np.random.get_state()
         np.random.seed(seed)
-        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm, self.PTL.magnetGrade,
+        lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm, self.PTL.magnet_grade,
                                           applyMethodOfMoments=True,
                                           useStandardMagErrors=self.PTL.standardMagnetErrors,
                                           numDisks=numDisks,
-                                          useSolenoidField=self.PTL.useSolenoidField, position=(lensCenter, 0, 0),
+                                          use_solenoid_field=self.PTL.use_solenoid_field, position=(lensCenter, 0, 0),
                                           orientation=Rot.from_rotvec([0, np.pi / 2.0, 0.0]))  # must reuse lens
 
         np.random.set_state(state)
@@ -250,15 +250,15 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def make_Field_Data(self, xArr, yArr, zArr) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1, 3)
-        BNormGrad, BNorm = np.nan * np.zeros((len(volumeCoords), 3)), np.nan * np.zeros(len(volumeCoords))
+        B_norm_grad, B_norm = np.nan * np.zeros((len(volumeCoords), 3)), np.nan * np.zeros(len(volumeCoords))
         validR = np.linalg.norm(volumeCoords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE
         validX = np.logical_or(volumeCoords[:, 0] < self.space - B_GRAD_STEP_SIZE,
                                volumeCoords[:, 0] > self.space + self.Lm - B_GRAD_STEP_SIZE)
         validIndices = np.logical_or(validX, validR)  # tricky
-        BNormGrad[validIndices], BNorm[validIndices] = self.make_Lens().BNorm_Gradient(volumeCoords[validIndices],
-                                                                                       returnNorm=True,
+        B_norm_grad[validIndices], B_norm[validIndices] = self.make_Lens().B_norm_grad(volumeCoords[validIndices],
+                                                                                       return_norm=True,
                                                                                        dx=B_GRAD_STEP_SIZE)
-        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        data3D = np.column_stack((volumeCoords, B_norm_grad, B_norm))
         fieldData = self.shape_Field_Data_3D(data3D)
         return fieldData
 

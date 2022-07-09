@@ -70,7 +70,7 @@ class LensIdeal(BaseElement):
 
         return qEl.copy()
 
-    def set_Length(self, L: float) -> None:
+    def set_length(self, L: float) -> None:
         """this is used typically for setting the length after satisfying constraints"""
 
         assert L > 0.0

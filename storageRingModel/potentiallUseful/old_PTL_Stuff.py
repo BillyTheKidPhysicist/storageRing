@@ -6,15 +6,15 @@ def find_Optimal_Offset_Factor(self, rp: float, rb: float, Lm: float, parallel: 
     assert rp < rb / 2.0  # geometry argument, and common mistake
     numMagnetsHalfBend = int(np.pi * rb / Lm)
     # todo: this should be self I think
-    PTL_Ring = ParticleTracerLattice(latticeType='injector')
-    PTL_Ring.add_Drift(.05)
-    PTL_Ring.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnetsHalfBend, rb)
-    PTL_Ring.end_Lattice(enforceClosedLattice=False, constrain=False)
+    lattice_ring = ParticleTracerLattice(latticeType='injector')
+    lattice_ring.add_Drift(.05)
+    lattice_ring.add_Halbach_Bender_Sim_Segmented(Lm, rp, numMagnetsHalfBend, rb)
+    lattice_ring.end_Lattice(enforceClosedLattice=False, constrain=False)
 
     def errorFunc(offset):
         h = 5e-6
-        particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.v0Nominal, 0.0, 0.0]))
-        particleTracer = ParticleTracer(PTL_Ring)
+        particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.speed_nominal, 0.0, 0.0]))
+        particleTracer = ParticleTracer(lattice_ring)
         particle = particleTracer.trace(particle, h, 1.0, fastMode=False)
         qoArr = particle.qoArr
         particleAngEl = np.arctan2(qoArr[-1][1],

@@ -9,20 +9,23 @@ described in electronic lab book. Briefly, the model assumptions are:
 """
 # pylint: disable=too-many-locals, too-many-arguments
 from typing import Union
-
+from typeHints import RealNum
 import numba
 import numpy as np
 
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
 # import latticeElements.elementPT
 from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
-    HalbachBenderSimSegmented
+    HalbachBenderSimSegmented, Element
+from helperTools import full_arctan2
 
-realNum = Union[float, int]
+
+full_arctan2=numba.njit(full_arctan2)
+
 vec3D = tuple[float, float, float]
 frequency = float
 angle = Union[float, int]
-Element = Union[BenderIdeal, LensIdeal, CombinerIdeal]
+
 
 
 @numba.njit()
@@ -32,7 +35,7 @@ def clamp_value(value: float, value_min: float, value_max: float) -> float:
 
 
 @numba.njit()
-def max_Momentum_1D_In_Trap(r, rp, F_Centrifugal) -> float:
+def max_momentum_1D_in_trap(r, rp, F_Centrifugal) -> float:
     """
     Compute the maximum possible transverse momentum based on transverse location in hexapole magnet. This comes
     from the finite depth of the trap and the corresponding momentum to escape
@@ -44,60 +47,51 @@ def max_Momentum_1D_In_Trap(r, rp, F_Centrifugal) -> float:
     """
     assert abs(r) <= rp and rp > 0.0 and F_Centrifugal >= 0.0
     Bp = .75
-    delta_E_Mag = Bp * SIMULATION_MAGNETON * (1 - (r / rp) ** 2)
-    delta_E_Const = -F_Centrifugal * rp - -F_Centrifugal * r
-    E_Escape = delta_E_Mag + delta_E_Const
-    if E_Escape < 0.0:  # particle would escape according to simple model. Instead, low energy level
-        E_Low = Bp * SIMULATION_MAGNETON * .5 ** 2
-        vMax = np.sqrt(2 * E_Low)
+    delta_E_mag = Bp * SIMULATION_MAGNETON * (1 - (r / rp) ** 2)
+    delta_E_const = -F_Centrifugal * rp - -F_Centrifugal * r
+    E_escape = delta_E_mag + delta_E_const
+    if E_escape < 0.0:  # particle would escape according to simple model. Instead, low energy level
+        E_low = Bp * SIMULATION_MAGNETON * .5 ** 2
+        v_max = np.sqrt(2 * E_low)
     else:
-        vMax = np.sqrt(2 * E_Escape)
-    return vMax
+        v_max = np.sqrt(2 * E_escape)
+    return v_max
 
 
 @numba.njit()
-def trim_Longitudinal_Momentum_To_Maximum(pLong: float, nominalSpeed: float) -> float:
+def trim_longitudinal_momentum_to_max(p_longitudinal: float, nominal_speed: float) -> float:
     """Longitudinal momentum can only exist within a range of stability. Momentum outside that range is lost,
     and so particles with that momentum are not likely to be present in the ring in much numbers"""
-    deltaPMax = 15.0  # from observations of phase space survival
-    pmin, pmax = nominalSpeed - deltaPMax, nominalSpeed + deltaPMax
-    return clamp_value(pLong, pmin, pmax)
+    delta_p_max = 15.0  # from observations of phase space survival
+    p_min, p_max = nominal_speed - delta_p_max, nominal_speed + delta_p_max
+    return clamp_value(p_longitudinal, p_min, p_max)
 
 
 @numba.njit()
-def trim_Transverse_Momentum_To_Maximum(p_i: float, q_i: float, rp: float, Fcentrifugal=0.0) -> float:
+def trim_trans_momentum_to_max(p_i: float, q_i: float, rp: float, F_centrifugal=0.0) -> float:
     """Maximum transverse momentum is limited by the depth of the trap and centrifugal force."""
-    assert abs(q_i) <= rp and rp > 0.0 and Fcentrifugal >= 0.0
-    p_iMax = max_Momentum_1D_In_Trap(q_i, rp, Fcentrifugal)
-    p_i = clamp_value(p_i, -p_iMax, p_iMax)
+    assert abs(q_i) <= rp and rp > 0.0 and F_centrifugal >= 0.0
+    p_i_max = max_momentum_1D_in_trap(q_i, rp, F_centrifugal)
+    p_i = clamp_value(p_i, -p_i_max, p_i_max)
     return p_i
 
 
-@numba.njit()
-def full_Arctan(y: realNum, x: realNum) -> angle:
-    """Compute angle spanning 0 to 2pi degrees as expected from x and y where tan(phi)=y/x"""
-    phi = np.arctan2(y, x)
-    if phi < 0:  # confine phi to be between 0 and 2pi
-        phi += 2 * np.pi
-    return phi
-
-
-def collision_Rate(T: float, rp_Meters: float) -> frequency:
+def collision_rate(T: float, rp_meters: float) -> frequency:
     """Calculate the collision rate of a beam of flux with a moving frame temperature of T confined to a fraction of
     the area rp_Meters. NOTE: This is all done in centimeters instead of meters!"""
-    assert 0 < rp_Meters < .1 and 0 <= T < .1  # reasonable values
-    rp = rp_Meters * 1e2  # convert to cm
-    vRelThermal = 1e2 * np.sqrt(16 * BOLTZMANN_CONSTANT * T / (3.14 * MASS_LITHIUM_7))  # cm/s
+    assert 0 < rp_meters < .1 and 0 <= T < .1  # reasonable values
+    rp = rp_meters * 1e2  # convert to cm
+    v_rel_thermal = 1e2 * np.sqrt(16 * BOLTZMANN_CONSTANT * T / (3.14 * MASS_LITHIUM_7))  # cm/s
     # cm/s .even with zero temperature, there is still relative motion between atoms
-    vRelRingDynamics = 50.0
-    vRel = np.sqrt(vRelRingDynamics ** 2 + vRelThermal ** 2)  # cm/s
+    v_rel_ring_dynamics = 50.0
+    v_rel = np.sqrt(v_rel_ring_dynamics ** 2 + v_rel_thermal ** 2)  # cm/s
     sigma = 5e-13  # cm^2
     speed = 210 * 1e2  # cm^2
     flux = 2e12 * 500  # 1/s
     area = np.pi * (.7 * rp) ** 2  # cm
     n = flux / (area * speed)  # 1/cm^3
-    meanFreePath = 1 / (np.sqrt(2) * n * sigma)  # cm
-    return vRel / meanFreePath  # 1/s
+    mean_free_path = 1 / (np.sqrt(2) * n * sigma)  # cm
+    return v_rel / mean_free_path  # 1/s
 
 
 @numba.njit()
@@ -109,77 +103,77 @@ def momentum_sample_3D(T: float) -> vec3D:
 
 
 @numba.njit()
-def collision_Partner_Momentum_Lens(qEl: vec3D, s0: float, T: float, rp: float) -> vec3D:
+def collision_partner_momentum_lens(qEl: vec3D, s0: float, T: float, rp: float) -> vec3D:
     """Calculate a collision partner's momentum for colliding with particle traveling in the lens. Collision partner
     is sampled from a gas with temperature T traveling along the lens of the lens/waveguide"""
     _, y, z = qEl
     deltaP = momentum_sample_3D(T)
     delta_px, py, pz = deltaP
     px = s0 + delta_px
-    px = trim_Longitudinal_Momentum_To_Maximum(px, s0)
-    py = trim_Transverse_Momentum_To_Maximum(py, y, rp)
-    pz = trim_Transverse_Momentum_To_Maximum(pz, z, rp)
+    px = trim_longitudinal_momentum_to_max(px, s0)
+    py = trim_trans_momentum_to_max(py, y, rp)
+    pz = trim_trans_momentum_to_max(pz, z, rp)
     pCollision = (px, py, pz)
     return pCollision
 
 
 @numba.njit()
-def collision_Partner_Momentum_Bender(qEl: vec3D, nominalSpeed: float, T: float, rp: float, rBend) -> vec3D:
+def collision_partner_momentum_bender(qEl: vec3D, nominal_speed: float, T: float, rp: float, rBend) -> vec3D:
     """Calculate a collision partner's momentum for colliding with lithium traveling in the bender. The collision
     partner is sampled assuming a random gas with nominal speeds in the bender given by geometry and angular momentum.
     """
     delta_pso, pxo, pyo = momentum_sample_3D(T)
-    pso = nominalSpeed + delta_pso
+    pso = nominal_speed + delta_pso
     xo = np.sqrt(qEl[0] ** 2 + qEl[1] ** 2) - rBend
     yo = qEl[2]
-    Fcentrigfugal = nominalSpeed ** 2 / rBend  # approximately centripetal force
-    pxo = trim_Transverse_Momentum_To_Maximum(pxo, xo, rp, Fcentrifugal=Fcentrigfugal)
-    pyo = trim_Transverse_Momentum_To_Maximum(pyo, yo, rp, Fcentrifugal=Fcentrigfugal)
-    pso = trim_Longitudinal_Momentum_To_Maximum(pso, nominalSpeed)
-    theta = full_Arctan(qEl[1], qEl[0])
+    F_centrifugal = nominal_speed ** 2 / rBend  # approximately centripetal force
+    pxo = trim_trans_momentum_to_max(pxo, xo, rp, F_centrifugal=F_centrifugal)
+    pyo = trim_trans_momentum_to_max(pyo, yo, rp, F_centrifugal=F_centrifugal)
+    pso = trim_longitudinal_momentum_to_max(pso, nominal_speed)
+    theta = full_arctan2(qEl[1], qEl[0])
     px = pxo * np.cos(theta) - -pso * np.sin(theta)
     py = pxo * np.sin(theta) + -pso * np.cos(theta)
     pz = pyo
-    pCollision = (px, py, pz)
-    return pCollision
+    p_collision = (px, py, pz)
+    return p_collision
 
 
 @numba.njit()
-def post_Collision_Momentum(p: vec3D, q: vec3D, collisionParams: tuple) -> vec3D:
+def post_collision_momentum(p: vec3D, q: vec3D, collision_params: tuple) -> vec3D:
     """Get the momentum after a collision. The collision partner momentum is generated, and then Jeremy's collision
     algorithm is applied to find the new momentum. There is some wonkiness here from using numba"""
-    if collisionParams[0] == 'STRAIGHT':
-        s0, T, rp = collisionParams[2], collisionParams[3], collisionParams[4]
-        pColPartner = collision_Partner_Momentum_Lens(q, s0, T, rp)
-        pNew = collision(*p, *pColPartner)
+    if collision_params[0] == 'STRAIGHT':
+        s0, T, rp = collision_params[2], collision_params[3], collision_params[4]
+        p_col_partner = collision_partner_momentum_lens(q, s0, T, rp)
+        pNew = collision(*p, *p_col_partner)
         p = pNew
-    elif collisionParams[0] == 'SEG_BEND':
-        s0, ang, T, rp, rb = collisionParams[2], collisionParams[3], collisionParams[4], \
-                             collisionParams[5], collisionParams[6]
-        theta = full_Arctan(q[1], q[0])
+    elif collision_params[0] == 'SEG_BEND':
+        s0, ang, T, rp, rb = collision_params[2], collision_params[3], collision_params[4], \
+                             collision_params[5], collision_params[6]
+        theta = full_arctan2(q[1], q[0])
         if 0.0 <= theta <= ang:
-            pColPartner = collision_Partner_Momentum_Bender(q, s0, T, rp, rb)
-            p = collision(*p, *pColPartner)
-    elif collisionParams[0] == -1:
+            p_col_partner = collision_partner_momentum_bender(q, s0, T, rp, rb)
+            p = collision(*p, *p_col_partner)
+    elif collision_params[0] == -1:
         pass
     else:
         raise NotImplementedError
     return p
 
 
-def get_Collision_Params(element: Element, atomSpeed: realNum):
+def make_collision_params(element: Element, atomSpeed: RealNum):
     """Will be changed soon I anticipate. Dealing with numba wonkiness"""
     T = .01
     if type(element) in (HalbachLensSim, Drift):
         rp = element.rp
         rpDrift_Fake = .03
         rp = rpDrift_Fake if rp == np.inf else rp
-        collisionRate = collision_Rate(T, rp)
-        return 'STRAIGHT', collisionRate, atomSpeed, T, rp, np.nan, np.nan
+        col_rate = collision_rate(T, rp)
+        return 'STRAIGHT', col_rate, atomSpeed, T, rp, np.nan, np.nan
     elif type(element) is HalbachBenderSimSegmented:
         rp, rb = element.rp, element.rb
-        collisionRate = collision_Rate(T, rp)
-        return 'SEG_BEND', collisionRate, atomSpeed, element.ang, T, rb, rp
+        col_rate = collision_rate(T, rp)
+        return 'SEG_BEND', col_rate, atomSpeed, element.ang, T, rb, rp
     else:
         return 'NONE', np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
 

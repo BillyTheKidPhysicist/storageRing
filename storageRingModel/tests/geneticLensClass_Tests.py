@@ -24,7 +24,7 @@ class testHelper:
         DNA_List2 = [{'component': 'layer', 'rp': (self.rp,) * magnetSymmetry, 'width': self.magWidth,
                       'length': self.length / numlayer}] * numlayer
         lens1, lens2 = GeneticLens(DNA_List1), GeneticLens(DNA_List2)
-        BNormGrad1, BNormGrad2 = lens1.BNorm_Gradient(self.coords), lens2.BNorm_Gradient(self.coords)
+        BNormGrad1, BNormGrad2 = lens1.B_norm_grad(self.coords), lens2.B_norm_grad(self.coords)
         RMS1, RMS2 = np.std(BNormGrad1), np.std(BNormGrad2)
         absMean1, absMean2 = np.mean(np.abs(BNormGrad1)), np.mean(np.abs(BNormGrad2))
         RMS1_0, RMS2_0 = 5.051401935138513, 5.051401935258421
@@ -40,16 +40,16 @@ class testHelper:
         DNA_List1 = [
             {'component': 'shim', 'shape': 'sphere', 'diameter': .02, 'r': self.rp, 'phi': 0.1, 'z': self.length / 2,
              'theta': np.pi / 4,
-             'psi': np.pi / 3, 'planeSymmetry': True}]
+             'psi': np.pi / 3, 'plane_symmetry': True}]
         DNA_List2 = [
             {'component': 'shim', 'shape': 'sphere', 'diameter': .02, 'r': self.rp, 'phi': 0.1, 'z': self.length / 2,
              'theta': np.pi / 4,
-             'psi': np.pi / 3, 'planeSymmetry': False},
+             'psi': np.pi / 3, 'plane_symmetry': False},
             {'component': 'shim', 'shape': 'sphere', 'diameter': .02, 'r': self.rp, 'phi': 0.1, 'z': -self.length / 2,
              'theta': 3 * np.pi / 4,
-             'psi': np.pi / 3, 'planeSymmetry': False}]
+             'psi': np.pi / 3, 'plane_symmetry': False}]
         lens1, lens2 = GeneticLens(DNA_List1), GeneticLens(DNA_List2)
-        BNormGrad1, BNormGrad2 = lens1.BNorm_Gradient(self.coords), lens2.BNorm_Gradient(self.coords)
+        BNormGrad1, BNormGrad2 = lens1.B_norm_grad(self.coords), lens2.B_norm_grad(self.coords)
         RMS1, RMS2 = np.std(BNormGrad1), np.std(BNormGrad2)
         absMean1, absMean2 = np.mean(np.abs(BNormGrad1)), np.mean(np.abs(BNormGrad2))
         RMS1_0, RMS2_0 = 1.2592615654857615, 1.2592615654863557

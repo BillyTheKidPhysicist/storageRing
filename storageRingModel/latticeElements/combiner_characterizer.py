@@ -63,7 +63,7 @@ def make_Halbahc_Combiner_Force_Function(el) -> Callable:
     def force_Func(q):
         if el.space < q[0] < el.Lm + el.space:
             assert sqrt(q[1] ** 2 + q[2] ** 2) < el.ap
-        F = -SIMULATION_MAGNETON * lens.BNorm_Gradient(q)
+        F = -SIMULATION_MAGNETON * lens.B_norm_grad(q)
         F[2] = 0.0
         return F
 
@@ -87,7 +87,7 @@ def characterize_CombinerIdeal(el: CombinerIdeal):
         assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
         return np.array(combiner_Ideal_Force(*q, el.Lm, el.c1, el.c2))
 
-    qArr, pArr = compute_Particle_Trajectory(force, el.PTL.v0Nominal, 0.0, el.Lm)
+    qArr, pArr = compute_Particle_Trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
     assert isclose(qArr[-1, 0], el.Lm) and isclose(qArr[0, 0], 0.0)
     trajectoryLength = calculateTrajectory_Length(qArr)
     inputAngle = input_Angle(pArr)
@@ -101,7 +101,7 @@ def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, par
         'HIGH_FIELD_SEEKING' if el.fieldFact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
     particleOffset = el.outputOffset if particleOffset is None else particleOffset
     force_Func = make_Halbahc_Combiner_Force_Function(el)
-    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.v0Nominal, 0.0, 2 * el.space + el.Lm,
+    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
                                              particleOutputOffsetStart=particleOffset, atomState=atomState)
 
     assert isclose(qArr[-1, 0], el.Lm + 2 * el.space) and isclose(qArr[0, 0], 0.0)
@@ -124,7 +124,7 @@ def characterize_CombinerSim(el: CombinerSim):
         F[2] = 0.0
         return F
 
-    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.v0Nominal, 0.0, 2 * el.space + el.Lm)
+    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
     assert isclose(qArr[-1, 0], 2 * el.space + el.Lm) and isclose(qArr[0, 0], 0.0)
     trajectoryLength = calculateTrajectory_Length(qArr)
     inputAngle = input_Angle(pArr)

@@ -290,7 +290,7 @@ class Swarm:
         else:
             return sum([particle.revolutions * particle.probability for particle in self.particles])
 
-    def weighted_Flux_Multiplication(self) -> float:
+    def weighted_flux_mult(self) -> float:
         # only for circular lattice
         if self.num_Particles() == 0:
             return 0.0

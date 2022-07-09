@@ -8,7 +8,7 @@ import numpy as np
 from numba.core.errors import NumbaPerformanceWarning
 
 from ParticleClass import Particle
-from collisionPhysics import post_Collision_Momentum, get_Collision_Params
+from collisionPhysics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, HalbachBenderSimSegmented, \
     CombinerSim, CombinerHalbachLensSim
@@ -67,13 +67,13 @@ class ParticleTracer:
 
         self.PTL = PTL
 
-        self.collisionDynamics = None
+        self.use_collisions = None
         self.T_CollisionLast = 0.0  # time since last collision
         self.accelerated = None
 
         self.T = None  # total time elapsed
         self.h = None  # step size
-        self.energyCorrection = None
+        self.use_energy_correction = None
 
         self.elHasChanged = False  # to record if the particle has changed to another element in the previous step
         self.E0 = None  # total initial energy of particle
@@ -142,7 +142,7 @@ class ParticleTracer:
 
     def trace(self, particle: Optional[Particle], h: float, T0: float, fastMode: bool = False,
               accelerated: bool = False,
-              energyCorrection: bool = False, stepsBetweenLogging: int = 1, collisionDynamics: bool = False,
+              use_energy_correction: bool = False, stepsBetweenLogging: int = 1, use_collisions: bool = False,
               logPhaseSpaceCoords: bool = False) -> Particle:
         # trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
         # the particle's position transformed into the element frame and then the force is transformed out. This is obviously
@@ -152,12 +152,12 @@ class ParticleTracer:
         # h: timestep
         # T0: total tracing time
         # fastMode: wether to use the performance optimized versoin that doesn't track paramters
-        if collisionDynamics:
+        if use_collisions:
             raise NotImplementedError  # the heterogenous tuple was killing performance. Need a new method
         assert 0 < h < 1e-4 and T0 > 0.0  # reasonable ranges
-        assert not (energyCorrection and collisionDynamics)
-        self.collisionDynamics = collisionDynamics
-        self.energyCorrection = energyCorrection
+        assert not (use_energy_correction and use_collisions)
+        self.use_collisions = use_collisions
+        self.use_energy_correction = use_energy_correction
         self.stepsBetweenLogging = stepsBetweenLogging
         self.logPhaseSpaceCoords = logPhaseSpaceCoords
         if particle is None:
@@ -240,8 +240,8 @@ class ParticleTracer:
                 self.particle.clipped = self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self) -> None:
-        # collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal) if \
-        #     self.collisionDynamics else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
+        # collision_params = get_Collision_Params(self.currentEl, self.PTL.speed_nominal) if \
+        #     self.use_collisions else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = self._multi_Step_Verlet(self.qEl, self.pEl, self.T, self.T0, self.h,
                                           self.currentEl.numba_functions['force'])
         qEl_n, self.qEl[:], self.pEl[:], self.T, particleOutside = results
@@ -254,7 +254,7 @@ class ParticleTracer:
     @numba.njit(cache=False)
     def _multi_Step_Verlet(qEln, pEln, T, T0, h, force):
         # pylint: disable = E, W, R, C
-        # collisionRate = 0.0 if np.isnan(collisionParams[0]) else collisionParams[1]
+        # collisionRate = 0.0 if np.isnan(collision_params[0]) else collision_params[1]
         x, y, z = qEln
         px, py, pz = pEln
         Fx, Fy, Fz = force(x, y, z)
@@ -288,7 +288,7 @@ class ParticleTracer:
             Fx, Fy, Fz = Fx_n, Fy_n, Fz_n
             T += h
             # if collisionRate!=0.0 and np.random.rand() < h * collisionRate:
-            #     px, py, pz = post_Collision_Momentum((px, py, pz), (x, y, z), collisionParams)
+            #     px, py, pz = post_collision_momentum((px, py, pz), (x, y, z), collision_params)
 
     def time_Step_Verlet(self) -> None:
         # the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
@@ -311,11 +311,11 @@ class ParticleTracer:
             return
         # a_n = F_n  # acceleration new or acceleration sub n+1
         pEl_n = fast_pNew(pEl, F, F_n, self.h)
-        if self.collisionDynamics:
-            collisionParams = get_Collision_Params(self.currentEl, self.PTL.v0Nominal)
-            if collisionParams[0] != 'NONE':
-                if np.random.rand() < self.h * collisionParams[1]:
-                    pEl_n[:] = post_Collision_Momentum(tuple(pEl_n), tuple(qEl_n), collisionParams)
+        if self.use_collisions:
+            collision_params = make_collision_params(self.currentEl, self.PTL.speed_nominal)
+            if collision_params[0] != 'NONE':
+                if np.random.rand() < self.h * collision_params[1]:
+                    pEl_n[:] = post_collision_momentum(tuple(pEl_n), tuple(qEl_n), collision_params)
 
         self.qEl = qEl_n
         self.pEl = pEl_n
@@ -329,7 +329,7 @@ class ParticleTracer:
         # pEl: momentum for both qEl_Next and qEl
 
         if self.accelerated:
-            if self.energyCorrection:
+            if self.use_energy_correction:
                 pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
                                                               self.currentEl.numba_functions['magnetic_potential'],
                                                               self.currentEl.numba_functions['force'],
@@ -345,7 +345,7 @@ class ParticleTracer:
             if not nextEl.is_Coord_Inside(q_nextEl):
                 self.particle.clipped = True
             else:
-                if self.energyCorrection:
+                if self.use_energy_correction:
                     p_nextEl[:] += self.momentum_Correction_At_Bounday(self.E0, q_nextEl, p_nextEl,
                                                                        nextEl.numba_functions['magnetic_potential'],
                                                                        nextEl.numba_functions['force'],
@@ -361,7 +361,7 @@ class ParticleTracer:
             if el is None:  # if outside the lattice
                 self.particle.clipped = True
             elif el is not self.currentEl:  # element has changed
-                if self.energyCorrection:
+                if self.use_energy_correction:
                     pEl[:] += self.momentum_Correction_At_Bounday(self.E0, qEl, pEl,
                                                                   self.currentEl.numba_functions['magnetic_potential'],
                                                                   self.currentEl.numba_functions['force'],
@@ -382,7 +382,7 @@ class ParticleTracer:
                     pElLab)  # at the beginning of the next
                 # element
                 self.elHasChanged = True
-                if self.energyCorrection:
+                if self.use_energy_correction:
                     self.pEl[:] += self.momentum_Correction_At_Bounday(self.E0, self.qEl, self.pEl,
                                                                        self.currentEl.numba_functions[
                                                                            'magnetic_potential'],

@@ -12,22 +12,22 @@ from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsA
 from octopusOptimizer import octopus_Optimize
 from simpleLineSearch import line_Search
 from storageRingModeler import StorageRingModel
-from typeHints import lst_tup_arr
+from typeHints import sequence
 
 
 class Solution:
     """class to hold onto results of each solution"""
 
-    def __init__(self, params, cost, fluxMultiplication=None, survival=None):
-        self.params, self.fluxMultiplication, self.cost, self.survival = params, fluxMultiplication, cost, survival
+    def __init__(self, params, cost, flux_mult=None, survival=None):
+        self.params, self.flux_mult, self.cost, self.survival = params, flux_mult, cost, survival
 
     def __str__(self) -> str:  # method that gets called when you do print(Solution())
         np.set_printoptions(precision=100)
         string = '----------Solution-----------   \n'
         string += 'parameters: ' + repr(self.params) + '\n'
         string += 'cost: ' + str(self.cost) + '\n'
-        if self.fluxMultiplication is not None:
-            string += 'flux multiplication: ' + str(self.fluxMultiplication) + '\n'
+        if self.flux_mult is not None:
+            string += 'flux multiplication: ' + str(self.flux_mult) + '\n'
         elif self.survival is not None:
             string += 'injection survival: ' + str(self.survival) + '\n'
         string += '----------------------------'
@@ -36,17 +36,17 @@ class Solution:
 
 
 def invalid_Solution(params):
-    sol = Solution(params, StorageRingModel.maximumCost)
+    sol = Solution(params, StorageRingModel.max_cost)
     return sol
 
 
 def injected_Swarm_Cost(model) -> float:
-    swarmRingTraced = model.inject_And_Trace_Swarm()
-    numParticlesInitial = model.swarmInjectorInitial.num_Particles(weighted=True)
+    swarmRingTraced = model.inject_swarm()
+    numParticlesInitial = model.swarm_injector_initial.num_Particles(weighted=True)
     numParticlesFinal = swarmRingTraced.num_Particles(weighted=True, unClippedOnly=True)
-    swarmCost = (numParticlesInitial - numParticlesFinal) / numParticlesInitial
-    assert 0.0 <= swarmCost <= 1.0
-    return swarmCost
+    swarm_cost = (numParticlesInitial - numParticlesFinal) / numParticlesInitial
+    assert 0.0 <= swarm_cost <= 1.0
+    return swarm_cost
 
 
 def build_Injector_And_Surrrogate(injectorParams,options):
@@ -57,13 +57,13 @@ def build_Injector_And_Surrrogate(injectorParams,options):
     for key, val in zip(injectorParamsBoundsAny.keys(), injectorParams):
         paramsInjectorDict[key] = val
     paramsInjectorDict = lockedDict(paramsInjectorDict)
-    PTL_Injector = make_Injector_Version_Any(paramsInjectorDict,options=options)
+    lattice_injector = make_Injector_Version_Any(paramsInjectorDict,options=options)
     PTL_Ring_Surrogate = make_Ring_Surrogate_For_Injection_Version_1(paramsInjectorDict, surrogateParams,options=options)
-    return PTL_Ring_Surrogate, PTL_Injector
+    return PTL_Ring_Surrogate, lattice_injector
 
 
 class Solver:
-    def __init__(self, system, ringParams=None,injectorParams=None, useSolenoidField=False, useCollisions=False,
+    def __init__(self, system, ringParams=None,injectorParams=None, use_solenoid_field=False, useCollisions=False,
                  useEnergyCorrection=False, numParticles=1024, useBumper=False,standard_tube_ODs=False,
                  standard_mag_sizes=False):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
@@ -73,7 +73,7 @@ class Solver:
         self.useCollisions = useCollisions
         self.useEnergyCorrection = useEnergyCorrection
         self.numParticles = numParticles
-        self.storageRingSystemOptions = {'useSolenoidField': useSolenoidField, 'includeBumper': useBumper,
+        self.storageRingSystemOptions = {'use_solenoid_field': use_solenoid_field, 'has_bumper': useBumper,
                                          'standard_tube_ODs':standard_tube_ODs,'standard_mag_sizes':standard_mag_sizes}
 
     def unpack_Params(self, params):
@@ -95,30 +95,30 @@ class Solver:
     def build_Lattices(self, params):
         ringParams, injectorParams = self.unpack_Params(params)
         if self.system == 'injector_Surrogate_Ring':
-            PTL_Ring, PTL_Injector = build_Injector_And_Surrrogate(injectorParams, options=self.storageRingSystemOptions)
+            lattice_ring, lattice_injector = build_Injector_And_Surrrogate(injectorParams, options=self.storageRingSystemOptions)
         else:
             systemParams = (ringParams, injectorParams)
-            PTL_Ring, PTL_Injector = make_Ring_And_Injector(systemParams, '3', options=self.storageRingSystemOptions)
-        return PTL_Ring, PTL_Injector
+            lattice_ring, lattice_injector = make_Ring_And_Injector(systemParams, '3', options=self.storageRingSystemOptions)
+        return lattice_ring, lattice_injector
 
     def make_System_Model(self, params):
-        PTL_Ring, PTL_Injector = self.build_Lattices(params)
-        model = StorageRingModel(PTL_Ring, PTL_Injector, collisionDynamics=self.useCollisions,
-                                 numParticlesSwarm=self.numParticles, energyCorrection=self.useEnergyCorrection,
-                                 isBumperIncludedInInjector=self.storageRingSystemOptions['includeBumper'])
+        lattice_ring, lattice_injector = self.build_Lattices(params)
+        model = StorageRingModel(lattice_ring, lattice_injector, use_collisions=self.useCollisions,
+                                 num_particles_swarm=self.numParticles, use_energy_correction=self.useEnergyCorrection,
+                                 use_bumper=self.storageRingSystemOptions['has_bumper'])
         return model
 
     def _solve(self, params: tuple[float, ...]) -> Solution:
         model = self.make_System_Model(params)
         if self.system == 'injector_Surrogate_Ring':
-            swarmCost = injected_Swarm_Cost(model)
-            survival = 1e2 * (1.0 - swarmCost)
-            floorPlanCost = model.floor_Plan_Cost_With_Tunability()
-            cost = swarmCost + floorPlanCost
+            swarm_cost = injected_Swarm_Cost(model)
+            survival = 1e2 * (1.0 - swarm_cost)
+            floor_plan_cost = model.floor_plan_cost_with_tunability()
+            cost = swarm_cost + floor_plan_cost
             sol = Solution(params, cost, survival=survival)
         else:
-            cost, fluxMultiplication = model.mode_Match(floorPlanCostCutoff=.05)
-            sol = Solution(params, cost, fluxMultiplication=fluxMultiplication)
+            cost, flux_mult = model.mode_match(floor_plan_cost_cutoff=.05)
+            sol = Solution(params, cost, flux_mult=flux_mult)
         return sol
 
     def solve(self, params: tuple[float, ...]) -> Solution:
@@ -163,24 +163,24 @@ def make_Bounds(expand, keysToNotChange=None, whichBounds='ring') -> np.ndarray:
     return bounds
 
 
-def get_Cost_Function(system: str, ringParams: Optional[tuple],injectorParams: Optional[tuple], useSolenoidField,
+def get_Cost_Function(system: str, ringParams: Optional[tuple],injectorParams: Optional[tuple], use_solenoid_field,
                       useBumper, num_particles,standard_tube_ODs,standard_mag_sizes) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
-    solver = Solver(system, ringParams=ringParams, useSolenoidField=useSolenoidField, useBumper=useBumper,
+    solver = Solver(system, ringParams=ringParams, use_solenoid_field=use_solenoid_field, useBumper=useBumper,
                     numParticles=num_particles,standard_tube_ODs=standard_tube_ODs,
                     standard_mag_sizes=standard_mag_sizes,injectorParams=injectorParams)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
-        if sol.fluxMultiplication is not None and sol.fluxMultiplication > 10:
+        if sol.flux_mult is not None and sol.flux_mult > 10:
             print(sol)
         return sol.cost
 
     return cost
 
 
-def _global_Optimize(cost_Function, bounds: lst_tup_arr, globalTol: float, processes: int, disp: bool) -> tuple[
+def _global_Optimize(cost_Function, bounds: sequence, globalTol: float, processes: int, disp: bool) -> tuple[
     float, float]:
     """globally optimize a storage ring model cost function"""
     member = solve_Async(cost_Function, bounds, 15 * len(bounds), workers=processes,
@@ -189,7 +189,7 @@ def _global_Optimize(cost_Function, bounds: lst_tup_arr, globalTol: float, proce
     return xOptimal, costMin
 
 
-def _local_Optimize(cost_Function, bounds: lst_tup_arr, xi: lst_tup_arr, disp: bool, processes: int,
+def _local_Optimize(cost_Function, bounds: sequence, xi: sequence, disp: bool, processes: int,
                     local_optimizer: str, local_search_region: float) -> tuple[tuple[float,...], float]:
     """Locally optimize a storage ring model cost function"""
     if local_optimizer == 'octopus':
@@ -203,7 +203,7 @@ def _local_Optimize(cost_Function, bounds: lst_tup_arr, xi: lst_tup_arr, disp: b
 
 
 def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expandedBounds=False, globalTol=.005,
-             disp=True, processes=10, local_optimizer='octopus', useSolenoidField: bool = False,
+             disp=True, processes=10, local_optimizer='octopus', use_solenoid_field: bool = False,
              useBumper: bool = False, local_search_region=.01, num_particles=1024,
              standard_tube_ODs=False,standard_mag_sizes=False, injectorParams=None):
     """Optimize a model of the ring and injector"""
@@ -213,7 +213,7 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
     assert ringParams is not None if system == 'injector_Actual_Ring' else True
     assert injectorParams is not None if system in ('ring','both') else True
     bounds = make_Bounds(expandedBounds, whichBounds=system)
-    cost_Function = get_Cost_Function(system, ringParams,injectorParams, useSolenoidField, useBumper, num_particles,
+    cost_Function = get_Cost_Function(system, ringParams,injectorParams, use_solenoid_field, useBumper, num_particles,
                                       standard_tube_ODs,standard_mag_sizes)
 
     if method == 'global':
@@ -227,19 +227,17 @@ def optimize(system, method, xi: tuple = None, ringParams: tuple = None, expande
 
 def main():
 
-    injectorParams=(0.05285079, 0.01473206, 0.16540282, 0.02387552,
-                0.1480253 ,0.00820821, 0.09821368, 0.2650349 , 0.21845571)
-    #
-    # solver = Solver('injector_Surrogate_Ring',  standard_tube_ODs=True,
-    #                 standard_mag_sizes=True)
-    # print(solver.solve(xi))
-    #
-    # exit()
+    injectorParams=(0.05210079         , 0.01473206         , 0.16259032         ,
+       0.02387552         , 0.1480253          , 0.00820821         ,
+       0.09877617999999999, 0.2650349          , 0.218033835        )
 
-    # optimize('injector_Surrogate_Ring','local',standard_mag_sizes=True,standard_tube_ODs=True,xi=xi,
-    #          local_optimizer='simple-line')
+    ringParams=(0.022428779923884062, 0.009666045743955602, 0.01                ,
+       0.05                , 0.5234875264044453  )
 
-    optimize('ring','global',injectorParams=injectorParams,standard_mag_sizes=True,standard_tube_ODs=True)
+    # optimize('ring','global',injectorParams=injectorParams,standard_mag_sizes=True,standard_tube_ODs=True)
+
+    optimize('injector_Actual_Ring', 'local', ringParams=ringParams, xi=injectorParams,
+             standard_mag_sizes=True, standard_tube_ODs=True)
 
     # xOpt,cost=optimize('injector_Surrogate_Ring','local',local_optimizer='simple_line',xi=xi)
     # print('line results:')
@@ -263,9 +261,7 @@ injection survival: 88.4765625
 
 
 Ring stuff: 
----population member---- 
-DNA: array([0.025013349356554054, 0.008001737370826989, 0.04                ,
-       0.009429285103391407, 0.051762587781885874, 0.4732940268274622  ])
-cost: 0.8136743583131429
+0.7616359151405484 0.00017797851562500002 array([0.022428779923884062, 0.009666045743955602, 0.01                ,
+       0.05                , 0.5234875264044453  ])
 
 """

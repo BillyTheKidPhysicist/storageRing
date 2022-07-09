@@ -22,10 +22,10 @@ benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
 class ParticleTracerLattice:
 
-    def __init__(self, v0Nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
+    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
                  jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
-                 useSolenoidField: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
-                 magnetGrade: str = 'N52', standard_mag_sizes: bool=False, standard_tube_ODs: bool =False):
+                 use_solenoid_field: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
+                 magnet_grade: str = 'N52', standard_mag_sizes: bool=False, standard_tube_ODs: bool =False):
         assert fieldDensityMultiplier > 0.0
         if latticeType != 'storageRing' and latticeType != 'injector':
             raise Exception('invalid lattice type provided')
@@ -35,7 +35,7 @@ class ParticleTracerLattice:
         self.latticeType = latticeType  # options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
         # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         # is also at the origin, but seceeding elements follow along the positive x axis
-        self.v0Nominal = v0Nominal  # Design particle speed
+        self.speed_nominal = speed_nominal  # Design particle speed
         self.benderIndices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
@@ -54,8 +54,8 @@ class ParticleTracerLattice:
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
         self.isClosed = None  # is the lattice closed, ie end and beginning are smoothly connected?
-        self.magnetGrade = magnetGrade
-        self.useSolenoidField = useSolenoidField
+        self.magnet_grade = magnet_grade
+        self.use_solenoid_field = use_solenoid_field
 
         self.elList: list[Element] = []  # to hold all the lattice elements
 
@@ -270,7 +270,7 @@ class ParticleTracerLattice:
         self.combinerIndex = el.index
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
-    def build_Lattice(self, constrain: bool, buildFieldHelper: bool = True):
+    def build_lattice(self, constrain: bool, build_field_helpers: bool = True):
         """Build the specified lattice. This includes:
         - Fill pre constrained parameters derive from simple inputs of length, field strength etc of each element.
         - Solve the floor plan layout. If constrained, solve for bumber of magnets and lengths of bending segment and
@@ -287,7 +287,7 @@ class ParticleTracerLattice:
         update_And_Place_Elements_From_Floor_Plan(self, floorPlan)
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
-            if buildFieldHelper:
+            if build_field_helpers:
                 el.build_Fast_Field_Helper()
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
@@ -304,7 +304,7 @@ class ParticleTracerLattice:
         #     element.build()
         self.catch_Errors(constrain)
         if buildLattice:
-            self.build_Lattice(constrain)
+            self.build_lattice(constrain)
 
     def catch_Errors(self, constrain: bool) -> None:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
@@ -359,7 +359,7 @@ class ParticleTracerLattice:
 
     def show_Lattice(self, particleCoords=None, particle=None, swarm=None, showRelativeSurvival=True,
                      showTraceLines=True,showImmediately=True,
-                     showMarkers=True, traceLineAlpha=1.0, trueAspectRatio=True, extraObjects=None, finalCoords=True,
+                     showMarkers=True, traceLineAlpha=1.0, true_aspect_ratio=True, extraObjects=None, finalCoords=True,
                      saveTitle=None, dpi=150, defaultMarkerSize=1000, plotOuter: bool = False, plotInner: bool = True):
         # plot the lattice using shapely. if user provides particleCoords plot that on the graph. If users provides particle
         # or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
@@ -370,7 +370,7 @@ class ParticleTracerLattice:
         # showRelativeSurvival: when plotting swarm indicate relative particle survival by varying size of marker
         # showMarkers: Wether to plot a marker at the position of the particle
         # traceLineAlpha: Darkness of the trace line
-        # trueAspectRatio: Wether to plot the width and height to respect the actual width and height of the plot dimensions
+        # true_aspect_ratio: Wether to plot the width and height to respect the actual width and height of the plot dimensions
         # it can make things hard to see
         # extraObjects: List of shapely objects to add to the plot. Used for adding things like apetures. Limited
         # functionality right now
@@ -430,7 +430,7 @@ class ParticleTracerLattice:
                 plt.plot(*object.coords.xy, linewidth=1, c='black')
 
         plt.grid()
-        if trueAspectRatio:
+        if true_aspect_ratio:
             plt.gca().set_aspect('equal')
         plt.xlabel('meters')
         plt.ylabel('meters')

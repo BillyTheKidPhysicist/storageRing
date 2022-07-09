@@ -9,7 +9,7 @@ import multiprocess as mp
 import numpy as np
 import skopt
 
-from helperTools import low_Discrepancy_Sample
+from helperTools import low_discrepancy_sample
 
 
 class Octopus:
@@ -81,7 +81,7 @@ class Octopus:
     def random_Tentacle_Positions(self, bounds: np.ndarray, numPostions: int) -> np.ndarray:
         """Get new positions of tentacles to search for food with low discrepancy pseudorandom sampling"""
 
-        positions = low_Discrepancy_Sample(bounds, numPostions)
+        positions = low_discrepancy_sample(bounds, numPostions)
         return positions
 
     def smart_Tentacle_Positions(self, bounds: np.ndarray, numPositions) -> np.ndarray:

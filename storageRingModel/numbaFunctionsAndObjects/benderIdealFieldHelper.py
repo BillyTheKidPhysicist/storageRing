@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 from constants import SIMULATION_MAGNETON
-from numbaFunctionsAndObjects.utilities import full_Arctan2
+from numbaFunctionsAndObjects.utilities import full_arctan2
 
 spec_Bender_Ideal = [
     ('ang', numba.float64),
@@ -34,7 +34,7 @@ class BenderIdealFieldHelper_Numba:
     def magnetic_Potential(self, x, y, z):
         # potential energy at provided coordinates
         # q coords in element frame
-        phi = full_Arctan2(y, x)
+        phi = full_arctan2(y, x)
         rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
         rToroidal = np.sqrt((rPolar - self.rb) ** 2 + z ** 2)
         if phi < self.ang and rToroidal < self.ap:
@@ -47,7 +47,7 @@ class BenderIdealFieldHelper_Numba:
     def force(self, x, y, z):
         # force at point q in element frame
         # q: particle's position in element frame
-        phi = full_Arctan2(y, x)
+        phi = full_arctan2(y, x)
         rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
         rToroidal = np.sqrt((rPolar - self.rb) ** 2 + z ** 2)
         if phi < self.ang and rToroidal < self.ap:
@@ -63,7 +63,7 @@ class BenderIdealFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def is_Coord_Inside_Vacuum(self, x, y, z):
-        phi = full_Arctan2(y, x)
+        phi = full_arctan2(y, x)
         if phi < 0:  # constraint to between zero and 2pi
             phi += 2 * np.pi
         if phi <= self.ang:  # if particle is in bending segment

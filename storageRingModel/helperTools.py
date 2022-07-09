@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import multiprocess as mp
 import numpy as np
 from scipy.stats.qmc import Sobol
-from typeHints import RealNumber
+from typeHints import RealNum
 lst_tup_arr_type = Union[list, tuple, np.ndarray]
 
 
@@ -109,7 +109,7 @@ def iscloseAll(a: lst_tup_arr_type, b: lst_tup_arr_type, abstol: float) -> bool:
     return np.all(np.isclose(a, b, atol=abstol, equal_nan=False))
 
 
-def within_Tol(a: RealNumber, b: RealNumber, tol: RealNumber = 1e-12):
+def within_Tol(a: RealNum, b: RealNum, tol: RealNum = 1e-12):
     return math.isclose(a, b, abs_tol=tol, rel_tol=0.0)
 
 
@@ -134,7 +134,7 @@ def arr_Product(*args):
     return np.asarray(list(itertools.product(*args)))
 
 
-def full_Arctan(y, x):
+def full_arctan2(y, x):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
     phi = np.arctan2(y, x)
     if phi < 0:  # confine phi to be between 0 and 2pi
@@ -146,16 +146,16 @@ def make_Odd(num: int) -> int:
     assert isinstance(num, int) and num != 0 and not num < 0  # i didn't verify this on negative numbers
     return num + (num + 1) % 2
 
-def round_And_Make_Odd(num:RealNumber) -> int:
+def round_And_Make_Odd(num:RealNum) -> int:
     return make_Odd(round(num))
 
-def low_Discrepancy_Sample(bounds: lst_tup_arr_type, num: int, seed=None) -> np.ndarray:
+def low_discrepancy_sample(bounds: lst_tup_arr_type, num: int, seed=None) -> np.ndarray:
     """
     Make a low discrepancy sample (ie well spread)
 
     :param bounds: sequence of lower and upper bounds of the sampling
     :param num: number of samples. powers of two are best for nice sobol properties
-    :params seed: Seed for sobol sampler. None, and no seeding. See scipy docs.
+    :param seed: Seed for sobol sampler. None, and no seeding. See scipy docs.
     :return:
     """
     sobolSeed = None if not seed else seed

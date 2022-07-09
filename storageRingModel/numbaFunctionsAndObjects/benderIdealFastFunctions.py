@@ -2,14 +2,14 @@ import numba
 import numpy as np
 
 from constants import SIMULATION_MAGNETON
-from numbaFunctionsAndObjects.utilities import full_Arctan2
+from numbaFunctionsAndObjects.utilities import full_arctan2
 
 @numba.njit()
 def magnetic_potential( x, y, z,params):
     # potential energy at provided coordinates
     # q coords in element frame
     rb, ap, ang,K, fieldFact = params
-    phi = full_Arctan2(y, x)
+    phi = full_arctan2(y, x)
     rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
     if phi < ang and rToroidal < ap:
@@ -24,7 +24,7 @@ def force( x, y, z,params):
     # force at point q in element frame
     # q: particle's position in element frame
     rb, ap, ang,K, fieldFact = params
-    phi = full_Arctan2(y, x)
+    phi = full_arctan2(y, x)
     rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
     if phi < ang and rToroidal < ap:
@@ -42,7 +42,7 @@ def force( x, y, z,params):
 @numba.njit()
 def is_coord_in_vacuum( x, y, z,params):
     rb, ap, ang, K, fieldFact = params
-    phi = full_Arctan2(y, x)
+    phi = full_arctan2(y, x)
     if phi < 0:  # constraint to between zero and 2pi
         phi += 2 * np.pi
     if phi <= ang:  # if particle is in bending segment

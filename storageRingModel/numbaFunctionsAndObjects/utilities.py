@@ -4,7 +4,7 @@ from numba.experimental import jitclass
 
 
 @numba.njit()
-def full_Arctan2(y, x):
+def full_arctan2(y, x):
     phi = np.arctan2(y, x)
     if phi < 0:  # confine phi to be between 0 and 2pi
         phi += 2 * np.pi

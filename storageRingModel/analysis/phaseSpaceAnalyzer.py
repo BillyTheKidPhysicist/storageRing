@@ -16,7 +16,7 @@ cmap = plt.get_cmap('viridis')
 
 
 def make_Test_Swarm_And_Lattice(numParticles=128, totalTime=.1) -> (Swarm, ParticleTracerLattice):
-    PTL = ParticleTracerLattice(v0Nominal=210.0)
+    PTL = ParticleTracerLattice(speed_nominal=210.0)
     PTL.add_Lens_Ideal(.4, 1.0, .025)
     PTL.add_Drift(.1)
     PTL.add_Lens_Ideal(.4, 1.0, .025)
@@ -42,14 +42,16 @@ class Particle(ParticleBase):
         super().__init__(qi=qi, pi=pi)
         self.qo = None
         self.po = None
+        self.q=None
+        self.p=None
         self.E = None
         self.deltaE = None
+        self.T=None
 
 
 class SwarmSnapShot:
     def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0):
         assert xSnapShot > 0.0  # orbit coordinates, not real coordinates
-        for particle in swarm: assert particle.dataLogging == True
         self.particles: list[Particle] = None
         self.xSnapShot=xSnapShot
         self.swarm=swarm
@@ -59,18 +61,19 @@ class SwarmSnapShot:
     def _take_Particle_Snapshot(self,particle):
         particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
         particleSnapShot.probability = particle.probability
+        particleSnapShot.T=particle.T
         if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
             E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
             particleSnapShot.E = E
             particleSnapShot.deltaE = E - particle.EArr[0].copy()
             particleSnapShot.qo = qo
             particleSnapShot.po = po
-            particleSnapShot.qf=q
-            particleSnapShot.pf=p
+            particleSnapShot.q=q
+            particleSnapShot.p=p
             particleSnapShot.clipped = False
-        else:
+        elif particle.qoArr is not None:
             particleSnapShot.qo = particle.qoArr[-1].copy()
-            particleSnapShot.po = particle.pArr[-1].copy()
+            particleSnapShot.po = particle.poArr[-1].copy()
             particleSnapShot.pf = particle.pf.copy()
             particleSnapShot.qf = particle.qf.copy()
             particleSnapShot.E = particle.EArr[-1].copy()
@@ -85,7 +88,7 @@ class SwarmSnapShot:
 
     def _check_If_Particle_Can_Be_Interpolated(self, particle, x):
         # this assumes orbit coordinates
-        if len(particle.qoArr) == 0 or particle.T<=self.min_Survival_T:
+        if particle.qoArr is None or len(particle.qoArr) == 0 or particle.T<=self.min_Survival_T:
             return False  # clipped immediately probably
         elif particle.qoArr[-1, 0] > x > particle.qoArr[0, 0]:
             return True
@@ -107,6 +110,12 @@ class SwarmSnapShot:
         stepFraction = (xSnapShot - qo1[0]) / (qo2[0] - qo1[0])
         qoSnapShot = self._interpolate_Array(qoArr, indexBefore, stepFraction)
         poSnapShot = self._interpolate_Array(poArr, indexBefore, stepFraction)
+        if np.any(np.isnan(poSnapShot)):
+            print(qoSnapShot,poSnapShot)
+            print(particle.T,indexBefore,stepFraction)
+            print(poArr[indexBefore-1],poArr[indexBefore],poArr[indexBefore+1])
+            print(qoArr[indexBefore-1],qoArr[indexBefore],qoArr[indexBefore+1])
+        assert not np.any(np.isnan(poSnapShot))
         ESnapShot = self._interpolate_Array(EArr, indexBefore, stepFraction)
         qLabSnapShot=self._interpolate_Array(particle.qArr, indexBefore, stepFraction)
         pLabSnapShot=self._interpolate_Array(particle.pArr, indexBefore, stepFraction)
@@ -302,7 +311,7 @@ class PhaseSpaceAnalyzer:
             numParticleSurvived = np.sum(TSurvivedArr > T)
             survival = 100 * numParticleSurvived / self.swarm.num_Particles()
             survivalList.append(survival)
-        TRev = self.lattice.totalLength / self.lattice.v0Nominal
+        TRev = self.lattice.totalLength / self.lattice.speed_nominal
         if axis is None:
             plt.title('Percent particle survival versus revolution time')
             plt.plot(TArr, survivalList)

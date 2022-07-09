@@ -1,5 +1,5 @@
-from collisionPhysics import max_Momentum_1D_In_Trap, trim_Transverse_Momentum_To_Maximum, collision_Rate, \
-    collision_Partner_Momentum_Lens, collision_Partner_Momentum_Bender, trim_Longitudinal_Momentum_To_Maximum
+from collisionPhysics import max_momentum_1D_in_trap, trim_trans_momentum_to_max, collision_rate, \
+    collision_partner_momentum_lens, collision_partner_momentum_bender, trim_longitudinal_momentum_to_max
 from math import isclose
 from helperTools import iscloseAll,tool_Parallel_Process
 import numpy as np
@@ -10,41 +10,41 @@ def test_max_Momentum_1D_In_Trap():
     rp = .02314
     Fconst = 0.0
     Bp = .75
-    assert max_Momentum_1D_In_Trap(rp * .5, rp, Fconst) == max_Momentum_1D_In_Trap(-rp * .5, rp, Fconst)
-    assert max_Momentum_1D_In_Trap(rp, rp, Fconst) == 0.0
-    assert max_Momentum_1D_In_Trap(0.0, rp, Fconst) == np.sqrt(2 * Bp * SIMULATION_MAGNETON)
+    assert max_momentum_1D_in_trap(rp * .5, rp, Fconst) == max_momentum_1D_in_trap(-rp * .5, rp, Fconst)
+    assert max_momentum_1D_in_trap(rp, rp, Fconst) == 0.0
+    assert max_momentum_1D_in_trap(0.0, rp, Fconst) == np.sqrt(2 * Bp * SIMULATION_MAGNETON)
 
     Fconst = 10000.0
     Bp = .75
     rMax = Fconst / (2 * Bp * SIMULATION_MAGNETON / rp ** 2)
-    assert max_Momentum_1D_In_Trap(rMax, rp, Fconst) > max_Momentum_1D_In_Trap(rMax * .99, rp, Fconst)
-    assert max_Momentum_1D_In_Trap(rMax, rp, Fconst) > max_Momentum_1D_In_Trap(rMax * 1.01, rp, Fconst)
+    assert max_momentum_1D_in_trap(rMax, rp, Fconst) > max_momentum_1D_in_trap(rMax * .99, rp, Fconst)
+    assert max_momentum_1D_in_trap(rMax, rp, Fconst) > max_momentum_1D_in_trap(rMax * 1.01, rp, Fconst)
 
 
 def test_trim_Momentum_To_Maximum():
-    assert trim_Transverse_Momentum_To_Maximum(1000.0, 0.0, 1.0) == -trim_Transverse_Momentum_To_Maximum(-1000.0, 0.0,
+    assert trim_trans_momentum_to_max(1000.0, 0.0, 1.0) == -trim_trans_momentum_to_max(-1000.0, 0.0,
                                                                                                          1.0)
-    assert trim_Transverse_Momentum_To_Maximum(1.0, 0.99999, 1.0) == -trim_Transverse_Momentum_To_Maximum(-1.0, 0.99999,
+    assert trim_trans_momentum_to_max(1.0, 0.99999, 1.0) == -trim_trans_momentum_to_max(-1.0, 0.99999,
                                                                                                           1.0)
-    assert trim_Transverse_Momentum_To_Maximum(1.0, 0.99999, 1.0,
-                                               Fcentrifugal=100) != -trim_Transverse_Momentum_To_Maximum(-1.0, 0.99999,
-                                                                                                         1.0)
+    assert trim_trans_momentum_to_max(1.0, 0.99999, 1.0,
+                                      F_centrifugal=100) != -trim_trans_momentum_to_max(-1.0, 0.99999,
+                                                                                        1.0)
 
 
 def test_collision_Rate():
-    assert collision_Rate(0.00, .01) != .0
-    assert isclose(collision_Rate(.01, .01) / collision_Rate(.01, .02), 4.0)
-    assert isclose(collision_Rate(.08, .01) / collision_Rate(.02, .01), 2.0, abs_tol=1e-2)
-    assert 0.0 < collision_Rate(.05, .01) < 1000.0
+    assert collision_rate(0.00, .01) != .0
+    assert isclose(collision_rate(.01, .01) / collision_rate(.01, .02), 4.0)
+    assert isclose(collision_rate(.08, .01) / collision_rate(.02, .01), 2.0, abs_tol=1e-2)
+    assert 0.0 < collision_rate(.05, .01) < 1000.0
 
 
 def test_collision_Partner_Momentum_Lens():
-    assert iscloseAll(collision_Partner_Momentum_Lens((0.0, 0.0, 0.0), 210.0, 0.0, .01), (210.0, 0.0, 0.0), 1e-12)
-    px, py, pz = collision_Partner_Momentum_Lens((.5, 0.0, 0.0), 210.0, .09, .015)
+    assert iscloseAll(collision_partner_momentum_lens((0.0, 0.0, 0.0), 210.0, 0.0, .01), (210.0, 0.0, 0.0), 1e-12)
+    px, py, pz = collision_partner_momentum_lens((.5, 0.0, 0.0), 210.0, .09, .015)
     assert abs(py) < px and abs(pz) < px and pz != 0.0 and py != 0.0 and px != 0.0
 
 
 def test_collision_Partner_Momentum_Bender():
     rBend = 1.032435
-    px, py, pz = collision_Partner_Momentum_Bender((rBend + 1e-3, 0.0, 0.0), 210.0, .01, .015, rBend)
+    px, py, pz = collision_partner_momentum_bender((rBend + 1e-3, 0.0, 0.0), 210.0, .01, .015, rBend)
     assert py < -150 and px != 0.0 and pz != 0.0 and abs(px) < abs(py) and abs(pz) < abs(py)

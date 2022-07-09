@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
-from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_Arctan2
+from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_arctan2
 
 
 
@@ -18,7 +18,7 @@ def cartesian_To_Center(x, y, z, params):
         xc = x - rb
         yc = z
     else:
-        theta = full_Arctan2(y, x)
+        theta = full_arctan2(y, x)
         if theta <= ang:
             s = theta * rb + Lcap
             xc = np.sqrt(x ** 2 + y ** 2) - rb
@@ -81,25 +81,25 @@ def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x, y,ucAng,M_
     # or leaving the element interface as mirror images of each other.
     # FNew: Force to be rotated out of unit cell frame
     # q: particle's position in the element frame where the force is acting
-    phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+    phi = full_arctan2(y, x)  # calling a fast numba version that is global
     cellNum = int(phi / ucAng) + 1  # cell number that particle is in, starts at one
     if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
-        rotAngle = 2 * (cellNum // 2) * ucAng
+        rot_angle = 2 * (cellNum // 2) * ucAng
     else:  # otherwise it needs to be reflected. This is the algorithm for reflections
         Fx0 = Fx
         Fy0 = Fy
         Fx = M_uc[0, 0] * Fx0 + M_uc[0, 1] * Fy0
         Fy = M_uc[1, 0] * Fx0 + M_uc[1, 1] * Fy0
-        rotAngle = 2 * ((cellNum - 1) // 2) * ucAng
+        rot_angle = 2 * ((cellNum - 1) // 2) * ucAng
     Fx0 = Fx
     Fy0 = Fy
-    Fx = np.cos(rotAngle) * Fx0 - np.sin(rotAngle) * Fy0
-    Fy = np.sin(rotAngle) * Fx0 + np.cos(rotAngle) * Fy0
+    Fx = np.cos(rot_angle) * Fx0 - np.sin(rot_angle) * Fy0
+    Fy = np.sin(rot_angle) * Fx0 + np.cos(rot_angle) * Fy0
     return Fx, Fy, Fz
 
 @numba.njit()
 def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z,ang,ucAng):
-    phi = ang - full_Arctan2(y, x)
+    phi = ang - full_arctan2(y, x)
     revs = int(phi / ucAng)  # number of revolutions through unit cell
     if revs % 2 == 0:  # if even
         theta = phi - ucAng * revs
@@ -112,7 +112,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z,ang,ucAng):
 
 @numba.njit()
 def is_coord_in_vacuum(x, y, z,params):
-    phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+    phi = full_arctan2(y, x)  # calling a fast numba version that is global
 
     rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, fieldFact, useFieldPerturbations = params
     if phi < ang:  # if particle is inside bending angle region
@@ -137,7 +137,7 @@ def magnetic_potential(x0, y0, z0,params,fieldData):
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
     z = abs(z)
-    phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+    phi = full_arctan2(y, x)  # calling a fast numba version that is global
     if phi < ang:  # if particle is inside bending angle region
         revs = int((ang - phi) / ucAng)  # number of revolutions through unit cell
         if revs == 0 or revs == 1:
@@ -199,7 +199,7 @@ def force(x0, y0, z0,params,fieldData):
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
     z = abs(z)
-    phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+    phi = full_arctan2(y, x)  # calling a fast numba version that is global
     if phi <= ang:  # if particle is inside bending angle region
         rXYPlane = np.sqrt(x ** 2 + y ** 2)  # radius in xy plane
         if np.sqrt((rXYPlane - rb) ** 2 + z ** 2) < ap:

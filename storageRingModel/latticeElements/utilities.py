@@ -4,7 +4,7 @@ import numpy as np
 
 from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT
 from helperTools import inch_To_Meter
-from typeHints import FloatTuple, RealNumber
+from typeHints import FloatTuple, RealNum
 
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
@@ -15,7 +15,7 @@ B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_OFFSET = 1.5 * B_GRAD_STEP_SIZE
 TINY_INTERP_STEP = 1e-12
 
-def round_Down_To_Imperial(value: RealNumber) -> float:
+def round_Down_To_Imperial(value: RealNum) -> float:
     """Round 'value' down to its nearest imperial multiple of 1/16 inch"""
     minMult = inch_To_Meter(1 / 16)
     assert minMult <= value
@@ -26,20 +26,20 @@ def round_Down_To_Imperial(value: RealNumber) -> float:
     return value_rounded
 
 
-def round_down_to_nearest_valid_mag_width(width_proposed: RealNumber) -> float:
+def round_down_to_nearest_valid_mag_width(width_proposed: RealNum) -> float:
     """Given a proposed magnet width, round down the nearest available width (in L x width x width)"""
     width_rounded=round_Down_To_Imperial(width_proposed)
     assert width_rounded <= inch_To_Meter(1.5)
     return width_rounded
 
 
-def round_down_to_nearest_valid_tube_OD(OD_proposed: RealNumber) -> float:
+def round_down_to_nearest_valid_tube_OD(OD_proposed: RealNum) -> float:
     """Given a proposed tube OD, round down the nearest available OD """
     return round_Down_To_Imperial(OD_proposed)
 
 
-def halbach_Magnet_Width(rp: RealNumber, magnetSeparation: RealNumber = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
-                         use_standard_sizes: bool = False) -> RealNumber:
+def halbach_Magnet_Width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
+                         use_standard_sizes: bool = False) -> RealNum:
     assert rp > 0.0
     halfAngle = 2 * np.pi / 24
     maxMagnetWidth = rp * np.tan(halfAngle) * 2
@@ -49,8 +49,8 @@ def halbach_Magnet_Width(rp: RealNumber, magnetSeparation: RealNumber = SPACE_BE
     return magnetWidth
 
 
-def get_Halbach_Layers_Radii_And_Magnet_Widths(rp_first: RealNumber, numConcentricLayers: int,
-                                               magnetSeparation: RealNumber = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
+def get_Halbach_Layers_Radii_And_Magnet_Widths(rp_first: RealNum, numConcentricLayers: int,
+                                               magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
                                                use_standard_sizes: bool = False) -> tuple[FloatTuple, FloatTuple]:
     """Given a starting bore radius, construct the maximum magnet widths to build the specified number of concentric
     layers"""
@@ -104,7 +104,7 @@ def is_Even(x: int) -> bool:
     return True if x % 2 == 0 else False
 
 
-def mirror_Across_Angle(x: RealNumber, y: RealNumber, ang: RealNumber) -> tuple[float, float]:
+def mirror_Across_Angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, float]:
     """mirror_Across_Angle x and y across a line at angle "ang" that passes through the origin"""
     m = np.tan(ang)
     d = (x + y * m) / (1 + m ** 2)

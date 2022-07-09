@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as Rot
 from numbaFunctionsAndObjects import halbachLensFastFunctions
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
-from HalbachLensClass import billyHalbachCollectionWrapper
+from HalbachLensClass import Collection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import iscloseAll
 from helperTools import round_And_Make_Odd
@@ -71,10 +71,10 @@ class HalbachLensSim(LensIdeal):
         self.set_extraFieldLength()
         self.fill_Geometric_Params()
         lensLength = self.effective_Material_Length()
-        self.magnet = MagneticLens(lensLength, self.rpLayers, self.magnetWidths, self.PTL.magnetGrade,
-                                   self.PTL.useSolenoidField, self.fringeFracOuter * self.rp)
+        self.magnet = MagneticLens(lensLength, self.rpLayers, self.magnetWidths, self.PTL.magnet_grade,
+                                   self.PTL.use_solenoid_field, self.fringeFracOuter * self.rp)
 
-    def set_Length(self, L: float) -> None:
+    def set_length(self, L: float) -> None:
         assert L > 0.0
         self.L = L
 
@@ -177,8 +177,8 @@ class HalbachLensSim(LensIdeal):
         xArr, yArr, zArr = self.make_Grid_Coord_Arrays(True)
         lensCenter=self.magnet.Lm/2.0+self.magnet.x_in_offset
         planeCoords = np.asarray(np.meshgrid(lensCenter, yArr, zArr)).T.reshape(-1, 3)
-        BNormGrad, BNorm = self.magnet.get_valid_field_values(planeCoords,B_GRAD_STEP_SIZE,False)
-        data2D = np.column_stack((planeCoords[:, 1:], BNormGrad[:, 1:], BNorm))  # 2D is formated as
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(planeCoords,B_GRAD_STEP_SIZE,False)
+        data2D = np.column_stack((planeCoords[:, 1:], B_norm_grad[:, 1:], B_norm))  # 2D is formated as
         # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data2D
 
@@ -197,8 +197,8 @@ class HalbachLensSim(LensIdeal):
         volumeCoords = np.asarray(np.meshgrid(xArr, yArr, zArr)).T.reshape(-1,3)  # note that these coordinates can have
         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 
-        BNormGrad, BNorm=self.magnet.get_valid_field_values(volumeCoords,B_GRAD_STEP_SIZE,use_magnet_errors)
-        data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+        B_norm_grad, B_norm=self.magnet.get_valid_field_values(volumeCoords,B_GRAD_STEP_SIZE,use_magnet_errors)
+        data3D = np.column_stack((volumeCoords, B_norm_grad, B_norm))
 
         return data3D
 

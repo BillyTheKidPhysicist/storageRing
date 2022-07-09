@@ -52,6 +52,10 @@ class lockedDict(dict):
         self._reset_Use_Counter()
 
 
+INJECTOR_TUNABILITY_LENGTH = 2e-2
+
+
+
 # optimal injector parameters
 injectorParamsOptimalAny: lockedDict = lockedDict({
     "L1": 0.05285079,  # length of first lens
@@ -151,7 +155,6 @@ optimizerBounds_V2: lockedDict = lockedDict({
 ringParamsOptimal_V3 = lockedDict({
     'rpLens3_4': 0.02102425839849725,
     'rpLens1': .01,
-    'rpLens2': 0.038773002120334694,
     'rpBend': 0.00759624174653381,
     'L_Lens1': 0.441164241347491,
     'L_Lens2': 0.46839105549798354

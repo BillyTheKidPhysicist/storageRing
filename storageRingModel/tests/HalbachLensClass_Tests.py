@@ -4,14 +4,14 @@ import scipy.optimize as spo
 import multiprocess as mp
 import itertools
 from helperTools import iscloseAll,tool_Parallel_Process,arr_Product
-from typeHints import RealNumber
+from typeHints import RealNum
 import math
 import numpy as np
 
 numericTol = 1e-14  # my working numeric tolerance
 
 
-def within_Tol(a: RealNumber, b: RealNumber):
+def within_Tol(a: RealNum, b: RealNum):
     return math.isclose(a, b, abs_tol=numericTol, rel_tol=0.0)
 
 
@@ -27,24 +27,24 @@ class SpheretestHelper:
     def test1(self):
         # test that the field points in the right direction
         sphere = Sphere(.0254)
-        sphere.position_Sphere(r=.05, theta=0.0, z=0.0)
+        sphere.position_sphere(r=.05, theta=0.0, z=0.0)
         sphere.orient(np.pi / 2, 0.0)
         rCenter = np.zeros((1, 3))
         BVec_0 = np.asarray([0.11180404595756577, -0.0, -3.4230116753414134e-18])  # point along x only
-        BVec = sphere.B(rCenter)[0]
-        assert np.all(np.abs(BVec - BVec_0) < self.numericTol) and np.all(np.abs(BVec[1:]) < self.numericTol)
+        B_vec = sphere.B(rCenter)[0]
+        assert np.all(np.abs(B_vec - BVec_0) < self.numericTol) and np.all(np.abs(B_vec[1:]) < self.numericTol)
 
     def test2(self):
         # test that rotation symmetry works as expected
         sphere1 = Sphere(.0254)
-        sphere1.position_Sphere(.05, 0.0, 0.0)
+        sphere1.position_sphere(.05, 0.0, 0.0)
         sphere1.orient(np.pi / 2, 0.0)
         sphere2 = Sphere(.0254)
-        sphere2.position_Sphere(.05, np.pi / 3, 0.0)
+        sphere2.position_sphere(.05, np.pi / 3, 0.0)
         sphere2.orient(np.pi / 2, 4 * np.pi / 3)
         rtest = np.ones((1, 3)) * .01
-        BVec1 = sphere1.B_Shim(rtest, planeSymmetry=False)[0]
-        BVec2 = sphere2.B_Shim(rtest, planeSymmetry=False)[0]
+        BVec1 = sphere1.B_shim(rtest, plane_symmetry=False)[0]
+        BVec2 = sphere2.B_shim(rtest, plane_symmetry=False)[0]
         BVec1_0 = np.asarray([-0.0011941881467123633, -0.16959218399899806, 0.025757119925902405])
         BVec2_0 = np.asarray([-0.001194188146712627, -0.16959218399899786, 0.025757119925902378])
         assert np.all(np.abs(BVec1 - BVec1_0) < self.numericTol)
@@ -54,14 +54,14 @@ class SpheretestHelper:
     def test3(self):
         # test that reflection symmetry works as expected
         sphere1 = Sphere(.0254)
-        sphere1.position_Sphere(.05, 0.0, .1)
+        sphere1.position_sphere(.05, 0.0, .1)
         sphere1.orient(np.pi / 4, np.pi / 3)
         sphere2 = Sphere(.0254)
-        sphere2.position_Sphere(.05, 0.0, -.1)
+        sphere2.position_sphere(.05, 0.0, -.1)
         sphere2.orient(3 * np.pi / 4, np.pi / 3)
         rtest = np.ones((1, 3)) * .01
-        BVec_Symm1 = sphere1.B_Shim(rtest, planeSymmetry=True)[0]
-        BVec_Symm2 = sphere1.B_Shim(rtest, planeSymmetry=False)[0] + sphere2.B_Shim(rtest, planeSymmetry=False)[0]
+        BVec_Symm1 = sphere1.B_shim(rtest, plane_symmetry=True)[0]
+        BVec_Symm2 = sphere1.B_shim(rtest, plane_symmetry=False)[0] + sphere2.B_shim(rtest, plane_symmetry=False)[0]
         BVec_Symm1_0 = np.asarray([-0.0058071761934043635, -0.004844616334816022, 0.010212674466403442])
         BVec_Symm2_0 = np.asarray([-0.005807176193404366, -0.004844616334816021, 0.010212674466403436])
         assert np.all(np.abs(BVec_Symm1 - BVec_Symm1_0) < self.numericTol)
@@ -82,10 +82,10 @@ class LayertestHelper:
         z, width, length, rp = 1.0, .02, .5, .05
         layer1 = Layer(rp, width, length, position=(0.0, 0.0, z))
         rtest = np.asarray([[.02, .02, 1.0]])
-        BVec = layer1.B_Vec(rtest)
+        B_vec = layer1.B_vec(rtest)
         BVec_0 = np.asarray([7.04735665657541e-09, 0.1796475065591648, 0.0])
-        assert abs(BVec[2]) < self.numericTol
-        assert np.all(np.abs(BVec_0 - BVec) < self.numericTol)
+        assert abs(B_vec[2]) < self.numericTol
+        assert np.all(np.abs(BVec_0 - B_vec) < self.numericTol)
 
     def test2(self):
         # test that misalingments actually change field
@@ -103,10 +103,10 @@ class LayertestHelper:
         layer4 = Layer(rp, width, length, position=(0.0, 0.0, z), phiShift=1e-3 * np.random.random_sample((12, 1)))
         BVecEachLens = []
         for layer, BVecError0 in zip([layer1, layer2, layer3, layer4], BVecErrorEachLens_0):
-            BVec = layer.B_Vec(rtest)
-            BVecEachLens.append(BVec)
-            assert np.all(np.abs(BVecNoError - BVec)[:2] > self.numericTol)  # difference must exist
-            assert np.all(np.abs(BVecError0 - BVec)[:2] < self.numericTol)  # difference must be reliable with
+            B_vec = layer.B_vec(rtest)
+            BVecEachLens.append(B_vec)
+            assert np.all(np.abs(BVecNoError - B_vec)[:2] > self.numericTol)  # difference must exist
+            assert np.all(np.abs(BVecError0 - B_vec)[:2] < self.numericTol)  # difference must be reliable with
             # same seed
         np.random.seed(int(time.time()))
 
@@ -141,8 +141,8 @@ class HalbachLenstestHelper:
         coords[:, 2] += self.length / 3  # break symmetry of test points
         coords[:, 1] += self.rp / 10.0  # break symmetry of test points
         coords[:, 0] -= self.rp / 8.0  # break symmetry of test points
-        BNormVals1 = np.linalg.norm(lensAB.B_Vec(coords), axis=1)
-        BNormVals2 = np.linalg.norm(lensA.B_Vec(coords) + lensB.B_Vec(coords), axis=1)
+        BNormVals1 = np.linalg.norm(lensAB.B_vec(coords), axis=1)
+        BNormVals2 = np.linalg.norm(lensA.B_vec(coords) + lensB.B_vec(coords), axis=1)
         RMS1, RMS2 = np.std(BNormVals1), np.std(BNormVals2)
         mean1, mean2 = np.mean(BNormVals1), np.mean(BNormVals2)
         RMS1_0, RMS2_0 = 0.07039945056080353, 0.07039945056080353
@@ -159,7 +159,7 @@ class HalbachLenstestHelper:
         rArr = np.linalg.norm(coords[:, :2], axis=1)
         coords = coords[rArr < self.rp]
         rArr = rArr[rArr < self.rp]
-        BNormVals = lens.BNorm(coords)
+        BNormVals = lens.B_norm(coords)
         params = spo.curve_fit(self.hexapole_Fit, rArr, BNormVals)[0]
         residuals = 1e2 * np.abs(np.sum(BNormVals - self.hexapole_Fit(rArr, *params))) / np.sum(BNormVals)
         residuals0 = 0.03770965561603838
@@ -176,7 +176,7 @@ class HalbachLenstestHelper:
                            , sameSeed=True)
         xArr = np.linspace(-self.rp * .5, self.rp * .5)
         coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
-        BNormsVals_STD = np.std(lens.BNorm(coords))
+        BNormsVals_STD = np.std(lens.B_norm(coords))
         assert BNormsVals_STD != BNormsVals_STD_NoError  # assert magnet errors causes field changes
         assert within_Tol(BNormsVals_STD, BNormsVals_STD_Error)  # assert magnet errors cause same field value
         # changes with same seed
@@ -188,8 +188,8 @@ class HalbachLenstestHelper:
         layer = Layer(self.rp, self.magnetWidth, self.length)
         xArr = np.linspace(-self.rp * .5, self.rp * .5, 20)
         testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
-        BNormsValsLayer_STD = np.std(layer.BNorm(testCoords))
-        BNormsValsLens_STD = np.std(lens.BNorm(testCoords))
+        BNormsValsLayer_STD = np.std(layer.B_norm(testCoords))
+        BNormsValsLens_STD = np.std(lens.B_norm(testCoords))
         assert within_Tol(BNormsValsLens_STD, BNormsValsLayer_STD)
 
     def test5(self):
@@ -203,7 +203,7 @@ class HalbachLenstestHelper:
         assert within_Tol(zCenter, 0.0)
         xArr = np.linspace(-self.rp * .5, self.rp * .5, 20)
         testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
-        BValsSingle, BValsSliced = lensSingle.BNorm(testCoords), lensSliced.BNorm(testCoords)
+        BValsSingle, BValsSliced = lensSingle.B_norm(testCoords), lensSliced.B_norm(testCoords)
         assert iscloseAll(BValsSingle, BValsSliced, numericTol)
 
     def test6(self):
@@ -229,15 +229,15 @@ class HalbachLenstestHelper:
         lens = HalbachLens(.05, .025, .1, numDisks=10)
         xArr = np.linspace(.01, .01, 10)
         coords = arr_Product(xArr, xArr, xArr)
-        BVals_Unsplit = lens.BNorm_Gradient(coords)
-        lens._getB_Wrapper = lambda x: HalbachLens._getB_Wrapper(lens, x, sizeMax=5)
-        BVals_Split = lens.BNorm_Gradient(coords)
+        BVals_Unsplit = lens.B_norm_grad(coords)
+        lens._getB_wrapper = lambda x: HalbachLens._getB_wrapper(lens, x, sizeMax=5)
+        BVals_Split = lens.B_norm_grad(coords)
         assert iscloseAll(BVals_Split, BVals_Unsplit, 0.0)  # should be exactly the same
 
     def test_All_Three_Are_Different(self, lens1, lens2, lens3):
         xArr = np.linspace(-self.rp * .5, self.rp * .5)
         coords = np.asarray(list(itertools.product(xArr, xArr, [0])))
-        vals1, vals2, vals3 = [lens.BNorm(coords) for lens in [lens1, lens2, lens3]]
+        vals1, vals2, vals3 = [lens.B_norm(coords) for lens in [lens1, lens2, lens3]]
         differenceTol = 1e-6
         for valsA, valsB in [[vals1, vals2], [vals1, vals3], [vals2, vals3]]:
             iscloseAll(valsA, valsB, differenceTol)
@@ -269,10 +269,10 @@ class SegmentedBenderHalbachHelper:
         values."""
         coords = self.make_Bender_Test_Coords(bender)
         t = time.time()
-        BVec_Exact = bender.B_Vec(coords)
+        BVec_Exact = bender.B_vec(coords)
         t1 = time.time() - t
         t = time.time()
-        BVec_Approx = bender.B_Vec(coords, useApprox=True)
+        BVec_Approx = bender.B_vec(coords, use_approx=True)
         t2 = time.time() - t
         assert t2 < .5 * t1  # should be faster. For some cases it is much faster
         precisionCutoff = 1e-9  # absolute values below this are neglected for tolerance reasons

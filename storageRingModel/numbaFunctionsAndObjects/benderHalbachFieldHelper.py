@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
-from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_Arctan2
+from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_arctan2
 
 spec_Bender_Halbach = [
     ('fieldDataSeg', numba.types.UniTuple(numba.float64[::1], 7)),
@@ -69,7 +69,7 @@ class SegmentedBenderSimFieldHelper_Numba:
             xc = x - self.rb
             yc = z
         else:
-            theta = full_Arctan2(y, x)
+            theta = full_arctan2(y, x)
             if theta <= self.ang:
                 s = theta * self.rb + self.Lcap
                 xc = np.sqrt(x ** 2 + y ** 2) - self.rb
@@ -123,20 +123,20 @@ class SegmentedBenderSimFieldHelper_Numba:
         # or leaving the element interface as mirror images of each other.
         # FNew: Force to be rotated out of unit cell frame
         # q: particle's position in the element frame where the force is acting
-        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+        phi = full_arctan2(y, x)  # calling a fast numba version that is global
         cellNum = int(phi / self.ucAng) + 1  # cell number that particle is in, starts at one
         if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
-            rotAngle = 2 * (cellNum // 2) * self.ucAng
+            rot_angle = 2 * (cellNum // 2) * self.ucAng
         else:  # otherwise it needs to be reflected. This is the algorithm for reflections
             Fx0 = Fx
             Fy0 = Fy
             Fx = self.M_uc[0, 0] * Fx0 + self.M_uc[0, 1] * Fy0
             Fy = self.M_uc[1, 0] * Fx0 + self.M_uc[1, 1] * Fy0
-            rotAngle = 2 * ((cellNum - 1) // 2) * self.ucAng
+            rot_angle = 2 * ((cellNum - 1) // 2) * self.ucAng
         Fx0 = Fx
         Fy0 = Fy
-        Fx = np.cos(rotAngle) * Fx0 - np.sin(rotAngle) * Fy0
-        Fy = np.sin(rotAngle) * Fx0 + np.cos(rotAngle) * Fy0
+        Fx = np.cos(rot_angle) * Fx0 - np.sin(rot_angle) * Fy0
+        Fy = np.sin(rot_angle) * Fx0 + np.cos(rot_angle) * Fy0
         return Fx, Fy, Fz
 
     def force(self, x0, y0, z0):
@@ -147,7 +147,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
         z = abs(z)
-        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+        phi = full_arctan2(y, x)  # calling a fast numba version that is global
         if phi <= self.ang:  # if particle is inside bending angle region
             rXYPlane = np.sqrt(x ** 2 + y ** 2)  # radius in xy plane
             if np.sqrt((rXYPlane - self.rb) ** 2 + z ** 2) < self.ap:
@@ -206,7 +206,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         return Fx, Fy, Fz
 
     def transform_Element_Coords_Into_Unit_Cell_Frame(self, x, y, z):
-        phi = self.ang - full_Arctan2(y, x)
+        phi = self.ang - full_arctan2(y, x)
         revs = int(phi / self.ucAng)  # number of revolutions through unit cell
         if revs % 2 == 0:  # if even
             theta = phi - self.ucAng * revs
@@ -218,7 +218,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         return x, y, z
 
     def is_Coord_Inside_Vacuum(self, x, y, z):
-        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+        phi = full_arctan2(y, x)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
             return (np.sqrt(x ** 2 + y ** 2) - self.rb) ** 2 + z ** 2 < self.ap ** 2
         else:  # if outside bender's angle range
@@ -238,7 +238,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan
         z = abs(z)
-        phi = full_Arctan2(y, x)  # calling a fast numba version that is global
+        phi = full_arctan2(y, x)  # calling a fast numba version that is global
         if phi < self.ang:  # if particle is inside bending angle region
             revs = int((self.ang - phi) / self.ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:

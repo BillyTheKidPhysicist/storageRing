@@ -38,6 +38,6 @@ def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identic
 #     return swarm
 #
 #
-# exmaple_bumper = add_Kevin_Bumper_Elements(ParticleTracerLattice(latticeType='injector', magnetGrade='N52'))
+# exmaple_bumper = add_Kevin_Bumper_Elements(ParticleTracerLattice(latticeType='injector', magnet_grade='N52'))
 # exmaple_bumper.end_Lattice()
 # example_swarm_3cm = create_swarm(exmaple_bumper, -0.03, 500)

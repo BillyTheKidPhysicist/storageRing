@@ -7,6 +7,7 @@ import multiprocess as multiprocessing
 import scipy.optimize as spo
 import scipy.interpolate as spi
 
+#todo: clean up and make PEP-8 compliant
 
 def low_Discrepancy_Sample(bounds, num: int) -> np.ndarray:
     """

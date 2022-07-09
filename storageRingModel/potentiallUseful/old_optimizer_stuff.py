@@ -1,24 +1,24 @@
 def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIndices: list_array_tuple,
                            tuningChoice: str, whichKnobs: str) -> None:
-    if max(tuningElementIndices) >= len(self.latticeRing.elList) - 1: raise Exception(
+    if max(tuningElementIndices) >= len(self.lattice_ring.elList) - 1: raise Exception(
         "element indices out of bounds")
     if len(tuningBounds) != len(tuningElementIndices): raise Exception(
         "Bounds do not match number of tuned elements")
-    combinerRing, combinerLat = self.latticeRing.combiner, self.latticeInjector.combiner
+    combinerRing, combinerLat = self.lattice_ring.combiner, self.lattice_injector.combiner
     if not (combinerRing.Lm == combinerLat.Lm and combinerRing.ap == combinerLat.ap and combinerRing.outputOffset ==
             combinerLat.outputOffset):
         raise Exception('Combiners are different between the two lattices')
-    injectorTuningElements = [self.latticeInjector.elList[index] for index in self.injectTuneElIndices]
+    injectorTuningElements = [self.lattice_injector.elList[index] for index in self.injectTuneElIndices]
     if not all(isinstance(el, Drift) for el in injectorTuningElements):
         raise Exception("injector tuning elements must be drift region")
     if tuningChoice == 'field':
         for elIndex in tuningElementIndices:
-            el = self.latticeRing.elList[elIndex]
+            el = self.lattice_ring.elList[elIndex]
             if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:
                 raise Exception("For field tuning elements must be LensIdeal or HalbachLensSim")
     elif tuningChoice == 'spacing':
         for elIndex in tuningElementIndices:
-            elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(self.latticeRing.elList[elIndex])
+            elBefore, elAfter = self.lattice_ring.get_Element_Before_And_After(self.lattice_ring.elList[elIndex])
             tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
             if (isinstance(elBefore, Drift) and isinstance(elAfter, Drift)) != True:
                 raise Exception("For spacing tuning neighboring elements must be Drift elements")
@@ -39,7 +39,7 @@ def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningCho
     self.tuningBounds = ringTuningBounds.copy()
     if self.whichKnobs == 'all':
         self.tuningBounds.extend(injectorTuningBounds)
-    self.tunedElementList = [self.latticeRing.elList[index] for index in tuningElementIndices]
+    self.tunedElementList = [self.lattice_ring.elList[index] for index in tuningElementIndices]
     self.tuningChoice = tuningChoice
     if self.sameSeedForSearch == True:
         np.random.seed(42)
@@ -70,9 +70,9 @@ def test_Lattice_Stability(self, ringTuningBounds: list_array_tuple, injectorTun
 def _fast_Minimize(self):
     # less accurate method that minimizes with a smaller surrogate swarm then uses the full swarm for the final
     # value
-    useSurrogate, energyCorrection = [True, False]
+    useSurrogate, use_energy_correction = [True, False]
     sol_Surrogate = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=self.tolerance,
-                                               polish=False, args=(useSurrogate, energyCorrection),
+                                               polish=False, args=(useSurrogate, use_energy_correction),
                                                maxiter=self.maxEvals // (
                                                        self.optimalPopSize * len(self.tuningBounds)),
                                                popsize=self.optimalPopSize, init='halton')
@@ -82,16 +82,16 @@ def _fast_Minimize(self):
 def _accurate_Minimize(self):
     # start first by quickly randomly searching with a surrogate swarm.
     randomSamplePoints = 128
-    energyCorrection = False  # leave this off here, apply later once
+    use_energy_correction = False  # leave this off here, apply later once
     useSurrogateRoughPass = True
     samples = skopt.sampler.Sobol().generate(self.tuningBounds, randomSamplePoints)
-    vals = [self.mode_Match_Cost(sample, useSurrogateRoughPass, energyCorrection) for sample in samples]
+    vals = [self.mode_Match_Cost(sample, useSurrogateRoughPass, use_energy_correction) for sample in samples]
     XInitial = samples[np.argmin(vals)]
     useSurrogateScipyOptimer = False
     sol = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, polish=False, x0=XInitial,
                                      tol=self.tolerance,
                                      maxiter=self.maxEvals // (self.optimalPopSize * len(self.tuningBounds)),
-                                     args=(useSurrogateScipyOptimer, energyCorrection), popsize=self.optimalPopSize,
+                                     args=(useSurrogateScipyOptimer, use_energy_correction), popsize=self.optimalPopSize,
                                      init='halton')
     return sol
 
@@ -101,8 +101,8 @@ def _minimize(self) -> Solution:
         scipySol = self._fast_Minimize()
     else:
         scipySol = self._accurate_Minimize()
-    useSurrogate, energyCorrection = [False, True]
-    cost_Most_Accurate = self.mode_Match_Cost(scipySol.x, useSurrogate, energyCorrection)
+    useSurrogate, use_energy_correction = [False, True]
+    cost_Most_Accurate = self.mode_Match_Cost(scipySol.x, useSurrogate, use_energy_correction)
     sol = Solution()
     sol.scipyMessage = scipySol.message
     sol.cost = cost_Most_Accurate
@@ -128,7 +128,7 @@ def optimize(self, tuningElementIndices, ringTuningBounds=None, injectorTuningBo
                               injectorTuningBounds)
     if self.test_Lattice_Stability(ringTuningBounds, injectorTuningBounds, parallel=parallel) == False:
         sol = Solution()
-        sol.fluxMultiplication = 0.0
+        sol.flux_mult = 0.0
         sol.cost = 1.0
         sol.stable = False
         return sol
@@ -152,9 +152,9 @@ def update_Injector_Lattice(self, X: list_array_tuple):
     raise NotImplementedError
     assert len(X) == 2
     assert X[0] > 0.0 and X[1] > 0.0
-    self.latticeInjector.elList[self.injectTuneElIndices[0]].set_Length(X[0])
-    self.latticeInjector.elList[self.injectTuneElIndices[1]].set_Length(X[1])
-    self.latticeInjector.build_Lattice()
+    self.lattice_injector.elList[self.injectTuneElIndices[0]].set_length(X[0])
+    self.lattice_injector.elList[self.injectTuneElIndices[1]].set_length(X[1])
+    self.lattice_injector.build_lattice()
 def update_Ring_Lattice(self, X: list_array_tuple) -> None:
     assert len(X) == 2
     if self.tuningChoice == 'field':
@@ -171,26 +171,26 @@ def update_Ring_Spacing(self, X: list_array_tuple) -> None:
     raise NotImplementedError
     for elCenter, spaceFracElBefore in zip(self.tunedElementList, X):
         self.move_Element_Longitudinally(elCenter, spaceFracElBefore)
-    self.latticeRing.build_Lattice()
+    self.lattice_ring.build_lattice()
 def move_Element_Longitudinally(self, elCenter: Element, spaceFracElBefore: float) -> None:
     assert 0 <= spaceFracElBefore <= 1.0
-    elBefore, elAfter = self.latticeRing.get_Element_Before_And_After(elCenter)
+    elBefore, elAfter = self.lattice_ring.get_Element_Before_And_After(elCenter)
     assert isinstance(elBefore, Drift) and isinstance(elAfter, Drift)
     totalBorderingElLength = elBefore.L + elAfter.L
     tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
     LBefore = spaceFracElBefore * tunableLength + self.minElementLength
     LAfter = totalBorderingElLength - LBefore
-    elBefore.set_Length(LBefore)
-    elAfter.set_Length(LAfter)
+    elBefore.set_length(LBefore)
+    elAfter.set_length(LAfter)
 def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     self.update_Ring_And_Injector(X)
     maxInitialTransversePos = 1e-3
-    T_Max = 1.1 * minRevsToTest * self.latticeRing.totalLength / self.latticeRing.v0Nominal
-    swarmTestInitial = self.swarmTracerRing.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
-    swarmTestAtCombiner = self.swarmTracerRing.move_Swarm_To_Combiner_Output(swarmTestInitial)
-    swarmTestTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
+    T_Max = 1.1 * minRevsToTest * self.lattice_ring.totalLength / self.lattice_ring.speed_nominal
+    swarmTestInitial = self.swarm_tracer_ring.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
+    swarmTestAtCombiner = self.swarm_tracer_ring.move_Swarm_To_Combiner_Output(swarmTestInitial)
+    swarmTestTraced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
                                                                        T_Max, accelerated=False, fastMode=True,
-                                                                       collisionDynamics=self.collisionDynamics)
+                                                                       use_collisions=self.use_collisions)
     stable = False
     for particle in swarmTestTraced:
         if particle.revolutions > minRevsToTest:  # any stable particle, consider lattice stable

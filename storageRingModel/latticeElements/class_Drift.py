@@ -12,7 +12,7 @@ from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper
 
 
 realNumber = (int, float)
-lst_tup_arr = Union[list, tuple, np.ndarray]
+sequence = Union[list, tuple, np.ndarray]
 
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element

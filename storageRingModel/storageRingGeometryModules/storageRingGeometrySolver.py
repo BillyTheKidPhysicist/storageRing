@@ -119,12 +119,12 @@ class StorageRingGeometryConstraintsSolver:
                 radius = bendingParams[i // 2][0]  # both benders in an arc must have same bending radius
                 self.storageRing.benders[i].set_Radius(radius)
             else:
-                raise ValueError
+                raise NotImplementedError
 
         if self.isSameLengthTuneLenses:
             assert len(lensParams) == 1
             for lens in self.tunedLenses:
-                lens.set_Length(lensParams[0])
+                lens.set_length(lensParams[0])
         else:
             raise NotImplementedError
         self.storageRing.build()

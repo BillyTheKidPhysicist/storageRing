@@ -132,7 +132,7 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
 
     assert type(element) in (Drift, HalbachLensSim, LensIdeal) and type(shape) in (Line, LineWithAngledEnds)
     if shape.constrained:
-        element.set_Length(shape.length)
+        element.set_length(shape.length)
 
     element.r1 = np.array([*shape.pos_in, 0])
     element.r2 = np.array([*shape.pos_out, 0])

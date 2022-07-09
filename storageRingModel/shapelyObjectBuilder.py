@@ -16,7 +16,7 @@ from constants import FLAT_WALL_VACUUM_THICKNESS, TUBE_WALL_THICKNESS
 from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
     HalbachBenderSimSegmented, CombinerHalbachLensSim, CombinerSim
 from latticeElements.elements import Element
-from typeHints import RealNumber
+from typeHints import RealNum
 
 BENDER_POINTS = 250  # how many points to represent the bender with along each curve
 SMALL_NUMBER = 1e-16
@@ -216,8 +216,8 @@ def make_Lens_Shapely_Objects(el: Element) -> tuple[Polygon, Polygon]:
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
-def is_Drift_Input_Output_Tilt_Valid(L: RealNumber, halfWidth: RealNumber, theta1: RealNumber,
-                                     theta2: RealNumber) -> bool:
+def is_Drift_Input_Output_Tilt_Valid(L: RealNum, halfWidth: RealNum, theta1: RealNum,
+                                     theta2: RealNum) -> bool:
     """Check that te drift region, a trapezoid shape, is concave. theta1 and theta2 can violate this condition
     depending on their value"""
     m1, m2 = tan(pi / 2 + theta1), tan(pi / 2 + theta2)

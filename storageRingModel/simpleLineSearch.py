@@ -22,7 +22,7 @@ def find_Optimal_Value(func,xi,delta,bounds,processes):
 def line_Search(costFunc,xi,deltaInitial,bounds,costInitial=None,processes=-1):
     xOpt,delta=xi,deltaInitial
     costOpt=costInitial if costInitial is not None else costFunc(xi)
-    i,maxiters=0,10
+    i,maxiters=0,30
     while i<maxiters:
         i+=1
         print('results',costOpt, delta, repr(xOpt))

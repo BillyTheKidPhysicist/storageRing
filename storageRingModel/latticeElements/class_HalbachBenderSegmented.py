@@ -16,7 +16,7 @@ from latticeElements.utilities import TINY_OFFSET, is_Even, mirror_Across_Angle,
     max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_OFFSET, TINY_INTERP_STEP
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
-from typeHints import lst_tup_arr
+from typeHints import sequence
 
 dummy_field_data_empty=(np.ones(1)*np.nan,)*7
 
@@ -92,10 +92,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
         m = 1  # in simulation units mass is 1kg
         ucAngApprox = self.get_Unit_Cell_Angle()  # this will be different if the bore radius changes
-        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, self.PTL.magnetGrade, 10,
+        lens = _HalbachBenderFieldGenerator(self.rp, self.rb, ucAngApprox, self.Lm, self.PTL.magnet_grade, 10,
                                             (False, False), positiveAngleMagnetsOnly=False,
                                             magnetWidth=self.magnetWidth,
-                                            applyMethodOfMoments=True, useSolenoidField=self.PTL.useSolenoidField)
+                                            applyMethodOfMoments=True, use_solenoid_field=self.PTL.use_solenoid_field)
         lens.rotate(Rot.from_rotvec([np.pi / 2, 0, 0]))
         thetaArr = np.linspace(0.0, 2 * ucAngApprox, 100)
         zArr = np.zeros(len(thetaArr))
@@ -106,9 +106,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
             xArr = r * np.cos(thetaArr)
             yArr = r * np.sin(thetaArr)
             coords = np.column_stack((xArr, yArr, zArr))
-            F = lens.BNorm_Gradient(coords) * SIMULATION_MAGNETON
+            F = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
             Fr = np.linalg.norm(F[:, :2], axis=1)
-            FCen = np.ones(len(coords)) * m * self.PTL.v0Nominal ** 2 / r
+            FCen = np.ones(len(coords)) * m * self.PTL.speed_nominal ** 2 / r
             FCen[coords[:, 2] < 0.0] = 0.0
             error = np.sum((Fr - FCen) ** 2)
             return error
@@ -228,7 +228,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Perturbation_Data(self) -> tuple[np.ndarray, ...]:
         coordsCenter, coordsCartesian = self.make_Perturbation_Data_Coords()
         lensImperfect = self.build_Bender(True, (True, True), methodOfMoments=False, numLenses=self.numMagnets,
-                                          useMagnetErrors=True)
+                                          use_mag_errors=True)
         lensPerfect = self.build_Bender(True, (True, True), methodOfMoments=False, numLenses=self.numMagnets)
         rCenterArr = np.linalg.norm(coordsCenter[:, 1:], axis=1)
         validIndices = rCenterArr < self.rp
@@ -315,27 +315,27 @@ class HalbachBenderSimSegmented(BenderIdeal):
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
 
     def compute_Valid_Field_Vals(self, lens: _HalbachBenderFieldGenerator, fieldCoords: np.ndarray,
-                                 validIndices: lst_tup_arr) -> tuple[np.ndarray, np.ndarray]:
+                                 validIndices: sequence) -> tuple[np.ndarray, np.ndarray]:
         BNormGradArr, BNormArr = np.zeros((len(fieldCoords), 3)) * np.nan, np.zeros(len(fieldCoords)) * np.nan
-        BNormGradArr[validIndices], BNormArr[validIndices] = lens.BNorm_Gradient(fieldCoords[validIndices],
-                                                                                 returnNorm=True, useApprox=True)
+        BNormGradArr[validIndices], BNormArr[validIndices] = lens.B_norm_grad(fieldCoords[validIndices],
+                                                                                 return_norm=True, use_approx=True)
         return BNormGradArr, BNormArr
 
     def compute_Valid_Field_Data(self, lens: _HalbachBenderFieldGenerator, fieldCoords: np.ndarray,
-                                 validIndices: lst_tup_arr) -> tuple[np.ndarray, ...]:
+                                 validIndices: sequence) -> tuple[np.ndarray, ...]:
         BNormGradArr, BNormArr = self.compute_Valid_Field_Vals(lens, fieldCoords, validIndices)
         fieldDataUnshaped = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
         return self.shape_Field_Data_3D(fieldDataUnshaped)
 
     def build_Bender(self, positiveAngleOnly: bool, useHalfCapEnd: tuple[bool, bool], methodOfMoments: bool = True,
-                     numLenses: int = None, useMagnetErrors: bool = False):
+                     numLenses: int = None, use_mag_errors: bool = False):
         numLenses = self.numModelLenses if numLenses is None else numLenses
-        benderFieldGenerator = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, self.PTL.magnetGrade,
+        benderFieldGenerator = _HalbachBenderFieldGenerator(self.rp, self.rb, self.ucAng, self.Lm, self.PTL.magnet_grade,
                                                             numLenses, useHalfCapEnd,
                                                             applyMethodOfMoments=methodOfMoments,
                                                             positiveAngleMagnetsOnly=positiveAngleOnly,
-                                                            useSolenoidField=self.PTL.useSolenoidField,
-                                                            useMagnetError=useMagnetErrors,
+                                                            use_solenoid_field=self.PTL.use_solenoid_field,
+                                                            useMagnetError=use_mag_errors,
                                                             magnetWidth=self.magnetWidth)
         benderFieldGenerator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return benderFieldGenerator

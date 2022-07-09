@@ -4,7 +4,7 @@ from numbers import Number
 import magpylib.current
 import numba
 import numpy as np
-from magpylib import Collection
+from magpylib import Collection as _Collection
 from magpylib._src.fields.field_wrap_BH_level2 import getBH_level2
 from magpylib._src.obj_classes.class_BaseTransform import apply_move
 from magpylib.magnet import Cuboid as _Cuboid
@@ -29,19 +29,19 @@ COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number d
 @numba.njit()
 def B_NUMBA(r: np.ndarray, r0: np.ndarray, m: np.ndarray) -> np.ndarray:
     r = r - r0  # convert to difference vector
-    rNormTemp = np.sqrt(np.sum(r ** 2, axis=1))
-    rNorm = np.empty((rNormTemp.shape[0], 1))
-    rNorm[:, 0] = rNormTemp
-    mrDotTemp = np.sum(m * r, axis=1)
-    mrDot = np.empty((rNormTemp.shape[0], 1))
-    mrDot[:, 0] = mrDotTemp
-    Bvec = (MAGNETIC_PERMEABILITY / (4 * np.pi)) * (3 * r * mrDot / rNorm ** 5 - m / rNorm ** 3)
-    return Bvec
+    r_norm_temp = np.sqrt(np.sum(r ** 2, axis=1))
+    r_norm = np.empty((r_norm_temp.shape[0], 1))
+    r_norm[:, 0] = r_norm_temp
+    mr_dot_temp = np.sum(m * r, axis=1)
+    mr_dot = np.empty((r_norm_temp.shape[0], 1))
+    mr_dot[:, 0] = mr_dot_temp
+    B_vec = (MAGNETIC_PERMEABILITY / (4 * np.pi)) * (3 * r * mr_dot / r_norm ** 5 - m / r_norm ** 3)
+    return B_vec
 
 
 class Sphere:
 
-    def __init__(self, radius: float, magnetGrade: str = 'legacy'):
+    def __init__(self, radius: float, magnet_grade: str = 'legacy'):
         # angle: symmetry plane angle. There is a negative and positive one
         # radius: radius in inches
         # M: magnetization
@@ -49,7 +49,7 @@ class Sphere:
         self.angle: Optional[float] = None  # angular location of the magnet
         self.radius: float = radius
         self.volume: float = (4 * np.pi / 3) * self.radius ** 3  # m^3
-        self.m0: float = MAGNETIC_PERMEABILITY[magnetGrade] * self.volume  # dipole moment
+        self.m0: float = MAGNETIC_PERMEABILITY[magnet_grade] * self.volume  # dipole moment
         self.r0: Optional[np.ndarray] = None  # location of sphere
         self.n: Optional[np.ndarray] = None  # orientation
         self.m: Optional[np.ndarray] = None  # vector sphere moment
@@ -59,14 +59,14 @@ class Sphere:
         self.z: Optional[float] = None
         self.r: Optional[float] = None
 
-    def position_Sphere(self, r: float, theta: float, z: float) -> None:
+    def position_sphere(self, r: float, theta: float, z: float) -> None:
         self.r, self.theta, self.z = r, theta, z
-        assert not None in (theta, z, r)
+        assert None not in (theta, z, r)
         x = self.r * np.cos(self.theta)
         y = self.r * np.sin(self.theta)
         self.r0 = np.asarray([x, y, self.z])
 
-    def update_Size(self, radius: float) -> None:
+    def update_size(self, radius: float) -> None:
         self.radius = radius
         self.volume = (4 * np.pi / 3) * self.radius ** 3
         M = 1.15e6  # magnetization density
@@ -87,49 +87,50 @@ class Sphere:
         assert len(r.shape) == 2 and r.shape[1] == 3
         return B_NUMBA(r, self.r0, self.m)
 
-    def B_Shim(self, r: np.ndarray, planeSymmetry: bool = True, negativeSymmetry: bool = True,
-               rotationAngle: float = np.pi / 3) -> np.ndarray:
+    def B_shim(self, r: np.ndarray, plane_symmetry: bool = True, negative_symmetry: bool = True,
+               rotation_angle: float = np.pi / 3) -> np.ndarray:
         # a single magnet actually represents 12 magnet
         # r: array of N position vectors to get field at. Shape (N,3)
-        # planeSymmetry: Wether to exploit z symmetry or not
+        # plane_symmetry: Wether to exploit z symmetry or not
         # plt.quiver(self.r0[0],self.r0[1],self.m[0],self.m[1],color='r')
         arr = np.zeros(r.shape)
         arr += self.B(r)
-        arr += self.B_Symmetry(r, 1, negativeSymmetry, rotationAngle, not planeSymmetry)
-        arr += self.B_Symmetry(r, 2, negativeSymmetry, rotationAngle, not planeSymmetry)
-        arr += self.B_Symmetry(r, 3, negativeSymmetry, rotationAngle, not planeSymmetry)
-        arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle, not planeSymmetry)
-        arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle, not planeSymmetry)
+        arr += self.B_symmetry(r, 1, negative_symmetry, rotation_angle, not plane_symmetry)
+        arr += self.B_symmetry(r, 2, negative_symmetry, rotation_angle, not plane_symmetry)
+        arr += self.B_symmetry(r, 3, negative_symmetry, rotation_angle, not plane_symmetry)
+        arr += self.B_symmetry(r, 4, negative_symmetry, rotation_angle, not plane_symmetry)
+        arr += self.B_symmetry(r, 5, negative_symmetry, rotation_angle, not plane_symmetry)
 
-        if planeSymmetry:
-            arr += self.B_Symmetry(r, 0, negativeSymmetry, rotationAngle, planeSymmetry)
-            arr += self.B_Symmetry(r, 1, negativeSymmetry, rotationAngle, planeSymmetry)
-            arr += self.B_Symmetry(r, 2, negativeSymmetry, rotationAngle, planeSymmetry)
-            arr += self.B_Symmetry(r, 3, negativeSymmetry, rotationAngle, planeSymmetry)
-            arr += self.B_Symmetry(r, 4, negativeSymmetry, rotationAngle, planeSymmetry)
-            arr += self.B_Symmetry(r, 5, negativeSymmetry, rotationAngle, planeSymmetry)
+        if plane_symmetry:
+            arr += self.B_symmetry(r, 0, negative_symmetry, rotation_angle, plane_symmetry)
+            arr += self.B_symmetry(r, 1, negative_symmetry, rotation_angle, plane_symmetry)
+            arr += self.B_symmetry(r, 2, negative_symmetry, rotation_angle, plane_symmetry)
+            arr += self.B_symmetry(r, 3, negative_symmetry, rotation_angle, plane_symmetry)
+            arr += self.B_symmetry(r, 4, negative_symmetry, rotation_angle, plane_symmetry)
+            arr += self.B_symmetry(r, 5, negative_symmetry, rotation_angle, plane_symmetry)
 
         return arr
 
-    def B_Symmetry(self, r: np.ndarray, rotations: float, negativeSymmetry: float, rotationAngle: float,
+    def B_symmetry(self, r: np.ndarray, rotations: float, negative_symmetry: float, rotation_angle: float,
                    planeReflection: float) -> np.ndarray:
-        rotAngle = rotationAngle * rotations
-        M_Rot = np.array([[np.cos(rotAngle), -np.sin(rotAngle)], [np.sin(rotAngle), np.cos(rotAngle)]])
-        r0Sym = self.r0.copy()
-        r0Sym[:2] = M_Rot @ r0Sym[:2]
-        mSym = self.m.copy()
-        mSym[:2] = M_Rot @ mSym[:2]
-        if negativeSymmetry:
-            mSym[:2] *= (-1) ** rotations
+        rot_angle = rotation_angle * rotations
+        M_rot = np.array([[np.cos(rot_angle), -np.sin(rot_angle)], [np.sin(rot_angle), np.cos(rot_angle)]])
+        r0_sym = self.r0.copy()
+        r0_sym[:2] = M_rot @ r0_sym[:2]
+        m_sym = self.m.copy()
+        m_sym[:2] = M_rot @ m_sym[:2]
+        if negative_symmetry:
+            m_sym[:2] *= (-1) ** rotations
         if planeReflection:  # another dipole on the other side of the z=0 line
-            r0Sym[2] = -r0Sym[2]
-            mSym[-1] *= -1
-        # plt.quiver(r0Sym[0], r0Sym[1], mSym[0], mSym[1])
-        BVecArr = B_NUMBA(r, r0Sym, mSym)
-        return BVecArr
+            r0_sym[2] = -r0_sym[2]
+            m_sym[-1] *= -1
+        # plt.quiver(r0_sym[0], r0_sym[1], m_sym[0], m_sym[1])
+        B_vec_arr = B_NUMBA(r, r0_sym, m_sym)
+
+        return B_vec_arr
 
 
-class billyHalbachCollectionWrapper(Collection):
+class Collection(_Collection):
 
     def __init__(self, *sources, **kwargs):
         super().__init__(*sources, **kwargs)
@@ -142,116 +143,117 @@ class billyHalbachCollectionWrapper(Collection):
         for child in self.children_all:
             apply_move(child, displacement)
 
-    def _getB_Wrapper(self, evalCoords_mm: np.ndarray, sizeMax: float = 500_000) -> np.ndarray:
+    def _getB_wrapper(self, evalCoords_mm: np.ndarray, sizeMax: float = 500_000) -> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
         applied to sources when ram usage would be too hight"""
-        sourcesAll = self.sources_all
+        sources_all = self.sources_all
         size = len(evalCoords_mm) * len(self.sources_all)
-        splits = min([int(size / sizeMax), len(sourcesAll)])
+        splits = min([int(size / sizeMax), len(sources_all)])
         splits = 1 if splits < 1 else splits
-        splitSize = math.ceil(len(sourcesAll) / splits)
-        splitSources = [sourcesAll[splitSize * i:splitSize * (i + 1)] for i in range(splits)] if splits > 1 else [
-            sourcesAll]
-        BVec = np.zeros(evalCoords_mm.shape)
+        split_size = math.ceil(len(sources_all) / splits)
+        split_sources = [sources_all[split_size * i:split_size * (i + 1)] for i in range(splits)] if splits > 1 else [
+            sources_all]
+        B_vec = np.zeros(evalCoords_mm.shape)
         counter = 0
-        for sources in splitSources:
+        for sources in split_sources:
             if len(sources) == 0:
                 break
             counter += len(sources)
-            BVec += getBH_level2(sources, evalCoords_mm, sumup=True, squeeze=True, pixel_agg=None, field="B")
-        BVec = BVec[0] if len(BVec) == 1 else BVec
-        assert counter == len(sourcesAll)
-        return BVec
+            B_vec += getBH_level2(sources, evalCoords_mm, sumup=True, squeeze=True, pixel_agg=None, field="B")
+        B_vec = B_vec[0] if len(B_vec) == 1 else B_vec
+        assert counter == len(sources_all)
+        return B_vec
 
-    def B_Vec(self, evalCoords: np.ndarray, useApprox: int = False) -> np.ndarray:
+    def B_vec(self, eval_coords: np.ndarray, use_approx: int = False) -> np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
         assert len(self) > 0
-        if useApprox:
+        if use_approx:
             raise NotImplementedError  # this is only implement on the bender
         mTesla_To_Tesla = 1e-3
-        evalCoords_mm = METER_TO_mm * evalCoords
-        BVec = mTesla_To_Tesla * self._getB_Wrapper(evalCoords_mm)
-        return BVec
+        evalCoords_mm = METER_TO_mm * eval_coords
+        B_vec = mTesla_To_Tesla * self._getB_wrapper(evalCoords_mm)
+        return B_vec
 
-    def BNorm(self, evalCoords: np.ndarray, useApprox: bool = False) -> np.ndarray:
+    def B_norm(self, eval_coords: np.ndarray, use_approx: bool = False) -> np.ndarray:
         # r: coordinates to evaluate the field at. Either a (N,3) array, where N is the number of points, or a (3) array.
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
 
-        BVec = self.B_Vec(evalCoords, useApprox=useApprox)
-        if len(evalCoords.shape) == 1:
-            return norm(BVec)
-        elif len(evalCoords) == 1:
-            return np.asarray([norm(BVec)])
+        B_vec = self.B_vec(eval_coords, use_approx=use_approx)
+        if len(eval_coords.shape) == 1:
+            return norm(B_vec)
+        elif len(eval_coords) == 1:
+            return np.asarray([norm(B_vec)])
         else:
-            return norm(BVec, axis=1)
+            return norm(B_vec, axis=1)
 
-    def central_Difference(self, evalCoords: np.ndarray, returnNorm: bool, useApprox: bool, dx: float = 1e-7) -> \
+    def central_diff(self, eval_coords: np.ndarray, return_norm: bool, use_approx: bool, dx: float = 1e-7) -> \
             Union[tuple[np.ndarray, ...], np.ndarray]:
         assert dx>0.0
+        
         def grad(index: int) -> np.ndarray:
-            coordb = evalCoords.copy()  # upper step
-            coordb[:, index] += dx
-            BNormB = self.BNorm(coordb, useApprox=useApprox)
-            coorda = evalCoords.copy()  # upper step
-            coorda[:, index] += -dx
-            BNormA = self.BNorm(coorda, useApprox=useApprox)
-            return (BNormB - BNormA) / (2 * dx)
+            coord_b = eval_coords.copy()  # upper step
+            coord_b[:, index] += dx
+            B_norm_b = self.B_norm(coord_b, use_approx=use_approx)
+            coord_a = eval_coords.copy()  # upper step
+            coord_a[:, index] += -dx
+            B_norm_a = self.B_norm(coord_a, use_approx=use_approx)
+            return (B_norm_b - B_norm_a) / (2 * dx)
 
-        BNormGrad = np.column_stack((grad(0), grad(1), grad(2)))
-        if returnNorm:
-            BNorm = self.BNorm(evalCoords, useApprox=useApprox)
-            return BNormGrad, BNorm
+        B_norm_grad = np.column_stack((grad(0), grad(1), grad(2)))
+        if return_norm:
+            B_norm = self.B_norm(eval_coords, use_approx=use_approx)
+            return B_norm_grad, B_norm
         else:
-            return BNormGrad
+            return B_norm_grad
 
-    def forward_Difference(self, evalCoords: np.ndarray, returnNorm: bool, useApprox: bool, dx: float = 1e-7) \
+    def forward_Diff(self, eval_coords: np.ndarray, return_norm: bool, use_approx: bool, dx: float = 1e-7) \
             -> Union[tuple[np.ndarray, ...], np.ndarray]:
         assert dx > 0.0
-        BNorm = self.BNorm(evalCoords, useApprox=useApprox)
+        B_norm = self.B_norm(eval_coords, use_approx=use_approx)
 
         def grad(index):
-            coordb = evalCoords.copy()  # upper step
-            coordb[:, index] += dx
-            BNormB = self.BNorm(coordb, useApprox=useApprox)
-            return (BNormB - BNorm) / dx
+            coord_b = eval_coords.copy()  # upper step
+            coord_b[:, index] += dx
+            B_norm_b = self.B_norm(coord_b, use_approx=use_approx)
+            return (B_norm_b - B_norm) / dx
 
-        BNormGrad = np.column_stack((grad(0), grad(1), grad(2)))
-        if returnNorm:
-            return BNormGrad, BNorm
+        B_norm_grad = np.column_stack((grad(0), grad(1), grad(2)))
+        if return_norm:
+            return B_norm_grad, B_norm
         else:
-            return BNormGrad
+            return B_norm_grad
 
-    def shape_Eval_Coords(self, evalCoords: np.ndarray) -> np.ndarray:
+    def shape_eval_coords(self, eval_coords: np.ndarray) -> np.ndarray:
         """Shape the coordinates that the field values are evaluated at. valid input shapes are (3) and (N,3) where N
         is the number of points to evaluate. (3) is converted to (1,3)"""
 
-        assert evalCoords.ndim in (1, 2)
-        evalCoordsShaped = np.array([evalCoords]) if evalCoords.ndim != 2 else evalCoords
-        return evalCoordsShaped
+        assert eval_coords.ndim in (1, 2)
+        eval_coords_shaped = np.array([eval_coords]) if eval_coords.ndim != 2 else eval_coords
+        return eval_coords_shaped
 
-    def BNorm_Gradient(self, evalCoords: np.ndarray, returnNorm: bool = False, differenceMethod='forward',
-                       useApprox: bool = False, dx: float = 1e-7) -> Union[np.ndarray, tuple]:
+    def B_norm_grad(self, eval_coords: np.ndarray, return_norm: bool = False, diff_method='forward',
+                       use_approx: bool = False, dx: float = 1e-7) -> Union[np.ndarray, tuple]:
         # Return the gradient of the norm of the B field. use forward difference theorom
         # r: (N,3) vector of coordinates or (3) vector of coordinates.
-        # returnNorm: Wether to return the norm as well as the gradient.
+        # return_norm: Wether to return the norm as well as the gradient.
         # dr: step size
         # Returns a either a (N,3) or (3) array, whichever matches the shape of the r array
 
-        evalCoordsShaped = self.shape_Eval_Coords(evalCoords)
+        eval_coords_shaped = self.shape_eval_coords(eval_coords)
 
-        assert differenceMethod in ('central', 'forward')
-        results = self.central_Difference(evalCoordsShaped, returnNorm, useApprox,dx=dx) if\
-        differenceMethod == 'central' else self.forward_Difference(evalCoordsShaped, returnNorm, useApprox,dx=dx)
-        if len(evalCoords.shape) == 1:
-            if returnNorm:
-                [[Bgradx, Bgrady, Bgradz]], [B0] = results
-                results = (np.array([Bgradx, Bgrady, Bgradz]), B0)
+        assert diff_method in ('central', 'forward')
+        results = self.central_diff(eval_coords_shaped, return_norm, use_approx,dx=dx) if\
+        diff_method == 'central' else self.forward_Diff(eval_coords_shaped, return_norm, use_approx,dx=dx)
+        if len(eval_coords.shape) == 1:
+            if return_norm:
+                [[B_grad_x, B_grad_y, B_grad_z]], [B0] = results
+                results = (np.array([B_grad_x, B_grad_y, B_grad_z]), B0)
             else:
-                [[Bgradx, Bgrady, Bgradz]] = results
-                results = np.array([Bgradx, Bgrady, Bgradz])
+                [[B_grad_x, B_grad_y, B_grad_z]] = results
+                results = np.array([B_grad_x, B_grad_y, B_grad_z])
         return results
 
-    def method_Of_Moments(self):
+    def apply_method_of_moments(self):
         apply_demag(self)
 
 
@@ -262,12 +264,12 @@ class Cuboid(_Cuboid):
         self.magnetization0 = self.magnetization.copy()
 
 
-class Layer(billyHalbachCollectionWrapper):
+class Layer(Collection):
     # class object for a layer of the magnet. Uses the RectangularPrism object
 
     numMagnetsInLayer = 12
 
-    def __init__(self, rp: float, magnetWidth: float, length: float, magnetGrade: str, position: tuple3Float = None,
+    def __init__(self, rp: float, magnetWidth: float, length: float, magnet_grade: str, position: tuple3Float = None,
                  orientation: Rotation = None, mur: float = 1.05,
                  rMagnetShift=None, thetaShift=None, phiShift=None, M_NormShiftRelative=None, dimShift=None,
                  M_AngleShift=None, applyMethodOfMoments=False):
@@ -288,7 +290,7 @@ class Layer(billyHalbachCollectionWrapper):
         self.magnetWidth: float = magnetWidth
         self.length: float = length
         self.applyMethodOfMoments = applyMethodOfMoments
-        self.M: float = GRADE_MAGNETIZATION[magnetGrade]
+        self.M: float = GRADE_MAGNETIZATION[magnet_grade]
         self.build()
 
     def make_Arr_If_None_Else_Copy(self, variable: Optional[list_tuple_arr], numParams=1) -> np.ndarray:
@@ -316,7 +318,7 @@ class Layer(billyHalbachCollectionWrapper):
             self.rotate(self.orientationToSet, anchor=0.0)
         self.move(self.positionToSet)
         if self.applyMethodOfMoments:
-            self.method_Of_Moments()
+            self.apply_method_of_moments()
 
     def make_Cuboid_Orientation_Magpy(self):
         """Make orientations of each magpylib cuboid. A list of scipy Rotation objects. add error effects
@@ -366,13 +368,13 @@ class Layer(billyHalbachCollectionWrapper):
         return magnetizationAll
 
 
-class HalbachLens(billyHalbachCollectionWrapper):
+class HalbachLens(Collection):
     numMagnetsInLayer = 12
 
-    def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float, magnetGrade: str,
+    def __init__(self, rp: Union[float, tuple], magnetWidth: Union[float, tuple], length: float, magnet_grade: str,
                  position: list_tuple_arr = None, orientation: Rotation = None,
                  numDisks: int = 1, applyMethodOfMoments=False, useStandardMagErrors=False,
-                 useSolenoidField: bool = False, sameSeed=False):
+                 use_solenoid_field: bool = False, sameSeed=False):
         #todo: why does initializing with non zero position indicate zero position still
         # todo: Better seeding system
         super().__init__()
@@ -382,7 +384,7 @@ class HalbachLens(billyHalbachCollectionWrapper):
         assert isinstance(rp, (float, tuple)) and isinstance(magnetWidth, (float, tuple))
         position = (0.0, 0.0, 0.0) if position is None else position
         self.rp: tuple = rp if isinstance(rp, tuple) else (rp,)
-        assert length / min(self.rp) >= .5 if useSolenoidField else True  # shorter than this and the solenoid model
+        assert length / min(self.rp) >= .5 if use_solenoid_field else True  # shorter than this and the solenoid model
         # is dubious
         self.length: float = length
 
@@ -394,10 +396,10 @@ class HalbachLens(billyHalbachCollectionWrapper):
         if sameSeed is True:
             raise Exception
         self.sameSeed: bool = sameSeed
-        self.magnetGrade = magnetGrade
+        self.magnet_grade = magnet_grade
         self.numDisks = numDisks
         self.numLayers = len(self.rp)
-        self.useSolenoidField = useSolenoidField
+        self.use_solenoid_field = use_solenoid_field
         self.mur = 1.05
 
         self.layerList: list[Layer] = []
@@ -412,15 +414,15 @@ class HalbachLens(billyHalbachCollectionWrapper):
                 else:
                     dimVariation, magVecAngleVariation, magNormVariation = np.zeros((12, 3)), np.zeros(
                         (12, 2)), np.zeros((12, 1))
-                layer = Layer(radiusLayer, widthLayer, length, magnetGrade=self.magnetGrade, position=(0, 0, zLayer),
+                layer = Layer(radiusLayer, widthLayer, length, magnet_grade=self.magnet_grade, position=(0, 0, zLayer),
                               M_AngleShift=magVecAngleVariation, dimShift=dimVariation,
                               M_NormShiftRelative=magNormVariation, mur=self.mur)
                 self.add(layer)
                 self.layerList.append(layer)
         if self.applyMethodOfMoments:  # this must come before adding solenoids because the demag does not play nice with
             # coils
-            self.method_Of_Moments()
-        if self.useSolenoidField:
+            self.apply_method_of_moments()
+        if self.use_solenoid_field:
             self.add_Solenoid_Coils()
         if self.orientationToSet is not None:
             self.rotate(self.orientationToSet, anchor=0.0)
@@ -476,14 +478,14 @@ class HalbachLens(billyHalbachCollectionWrapper):
             self.add(loop)
 
 
-class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
+class SegmentedBenderHalbach(Collection):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 
-    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnetGrade: str, numLenses,
+    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnet_grade: str, numLenses,
                  useHalfCapEnd: tuple[bool, bool],
                  positiveAngleMagnetsOnly: bool = False, applyMethodOfMoments=False, useMagnetError: bool = False,
-                 useSolenoidField: bool = False, magnetWidth: float = None):
+                 use_solenoid_field: bool = False, magnetWidth: float = None):
         # todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(numLenses, int)
@@ -494,8 +496,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # is called the unit cell because obviously one only needs to use half the magnet and can use symmetry to
         # solve the rest
         self.Lm: float = Lm  # length of single magnet
-        self.magnetGrade = magnetGrade
-        self.useSolenoidField = useSolenoidField
+        self.magnet_grade = magnet_grade
+        self.use_solenoid_field = use_solenoid_field
         self.positiveAngleMagnetsOnly: bool = positiveAngleMagnetsOnly  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
@@ -538,7 +540,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
 
     def _build(self) -> None:
         for Lm, angle in self.lens_Length_And_Angle_Iter():
-            lens = HalbachLens(self.rp, self.magnetWidth, Lm, magnetGrade=self.magnetGrade,
+            lens = HalbachLens(self.rp, self.magnetWidth, Lm, magnet_grade=self.magnet_grade,
                                position=(self.rb, 0.0, 0.0),
                                useStandardMagErrors=self.useStandardMagnetErrors,
                                applyMethodOfMoments=False)
@@ -550,8 +552,8 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             self.lensList.append(lens)
             self.add(lens)
         if self.applyMethodsOfMoments:  # must be done before adding coils because coils dont' play nice
-            self.method_Of_Moments()
-        if self.useSolenoidField:
+            self.apply_method_of_moments()
+        if self.use_solenoid_field:
             self.add_Solenoid_Coils()
 
     def get_Seperated_Split_Indices(self, thetaArr: np.ndarray, deltaTheta: float, thetaMin: float, thetaMax: float) \
@@ -589,7 +591,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
             validCoordIndices = (thetaArr <= thetaUpper) & (thetaArr > thetaLower)
         return validCoordIndices
 
-    def B_Vec_Approx(self, evalCoords: np.ndarray) -> np.ndarray:
+    def B_Vec_Approx(self, eval_coords: np.ndarray) -> np.ndarray:
         """Compute the magnetic field vector without using all the individual lenses, only the lenses that are close.
         This should be accurate within 1% based on testing, but 5 times faster. There are some very annoying issues with
         degeneracy of angles from -pi to pi and 0 to 2pi. I avoid this by insisting the bender starts at theta=0 and is
@@ -606,7 +608,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         # todo: assert that the spacing is the same
         # todo: make a test that this accepts benders as exptected, and behaves as epxcted. Look at temp4 for a good way to do it
         # todo: rename stuff to be more intelligeable
-        thetaArrCoords = np.arctan2(evalCoords[:, 2], evalCoords[:, 0])
+        thetaArrCoords = np.arctan2(eval_coords[:, 2], eval_coords[:, 0])
         angularLength = self.lensAnglesArr.max() - self.lensAnglesArr.min()
         if angularLength < np.pi:  # bender exists between -pi and pi. Don't need to change anything
             pass
@@ -626,7 +628,7 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
         numSplits = round(len(self.lensList) / (2 * numLensBorder + splitFactor))
         numSplits = 1 if numSplits == 0 else numSplits
         splitAngles = np.linspace(self.lensAnglesArr.min(), self.lensAnglesArr.max(), numSplits + 1)
-        BVec = np.zeros(evalCoords.shape)
+        B_vec = np.zeros(eval_coords.shape)
         indicesEvaluated = np.zeros(
             len(thetaArrCoords))  # to track which indices fields are computed for. Only for an assert check
         for i in range(len(splitAngles) - 1):
@@ -638,25 +640,25 @@ class SegmentedBenderHalbach(billyHalbachCollectionWrapper):
                                                                 thetaLower, thetaUpper)
             if sum(validCoordIndices) > 0:
                 for lens in benderLensesSubSection:
-                    BVec[validCoordIndices] += lens.B_Vec(evalCoords[validCoordIndices])
+                    B_vec[validCoordIndices] += lens.B_vec(eval_coords[validCoordIndices])
                 indicesEvaluated += validCoordIndices
         assert np.all(indicesEvaluated == 1)  # check that every coord index was used once and only once
-        return BVec
+        return B_vec
 
-    def B_Vec(self, evalCoords: np.ndarray, useApprox=False) -> np.ndarray:
+    def B_vec(self, eval_coords: np.ndarray, use_approx=False) -> np.ndarray:
         """
-        overrides billyHalbachCollectionWrapper
+        overrides Collection
 
-        :param evalCoords: Coordinate to evaluate magnetic field vector at, m. shape (n,3)
-        :param useApprox: Wether to use the approximately true, within 1%, method of neglecting lenses that are
+        :param eval_coords: Coordinate to evaluate magnetic field vector at, m. shape (n,3)
+        :param use_approx: Wether to use the approximately true, within 1%, method of neglecting lenses that are
         far from a given coordinate in evalCorods
         :return: The magnetic field vector, T. shape (n,3)
         """
 
-        if useApprox:
-            return self.B_Vec_Approx(evalCoords)
+        if use_approx:
+            return self.B_Vec_Approx(eval_coords)
         else:
-            return super().B_Vec(evalCoords)
+            return super().B_vec(eval_coords)
 
     def add_Solenoid_Coils(self) -> None:
         """Add simple coils through length of lens. This is to remove the region of non zero magnetic field to prevent

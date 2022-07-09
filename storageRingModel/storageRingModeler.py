@@ -1,5 +1,5 @@
 import copy
-from typing import Union, Optional
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,357 +8,318 @@ from shapely.geometry import Polygon, LineString
 
 from KevinBumperClass import swarmShift_x
 from ParticleClass import Swarm, Particle
-from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
-from floorPlanCheckerFunctions import does_Fit_In_Room, plot_Floor_Plan_In_Lab
-from helperTools import full_Arctan
+from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
+from helperTools import full_arctan2
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim
 from latticeModels import make_Ring_And_Injector
-from latticeModels_Parameters import injectorParamsOptimalAny, ringParamsOptimal_V3
+from latticeModels_Parameters import injectorParamsOptimalAny, ringParamsOptimal_V3, INJECTOR_TUNABILITY_LENGTH
 
-list_array_tuple = Union[np.ndarray, tuple, list]
-
+# expected elements of injector.
+# todo: This logic here could be changed. These expected elements shouldn't be hard coded here
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
 ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerHalbachLensSim)
 
 
-def injector_Is_Expected_Design(latticeInjector, isBumperIncluded):
-    expectedElements = (*ELEMENTS_BUMPER, *ELEMENTS_MODE_MATCHER) if isBumperIncluded else ELEMENTS_MODE_MATCHER
-    for el, elExpectedType in zip(latticeInjector.elList, expectedElements):
-        if not type(el) is elExpectedType:
+def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bumper: bool):
+    """Check that the injector lattice has the expected ordering of elements. Some logic may break if the injector
+    is not laid out as expected. """
+    expected_elements = (*ELEMENTS_BUMPER, *ELEMENTS_MODE_MATCHER) if has_bumper else ELEMENTS_MODE_MATCHER
+    for el, expected_type in zip(lattice_injector.elList, expected_elements):
+        if not type(el) is expected_type:
             return False
     return True
 
 
 class StorageRingModel:
-    maximumCost = 2.0
-    maximumSwarmCost = 1.0
-    maximumFloorPlanCost = 1.0
+    max_cost = 2.0
+    max_swarm_cost = 1.0
+    max_floor_plan_cost = 1.0
 
-    def __init__(self, latticeRing: ParticleTracerLattice, latticeInjector: ParticleTracerLattice,
-                 numParticlesSwarm: int = 1024, collisionDynamics: bool = False, energyCorrection: bool = False,
-                 isBumperIncludedInInjector: bool = False):
-        assert latticeRing.latticeType == 'storageRing' and latticeInjector.latticeType == 'injector'
-        assert injector_Is_Expected_Design(latticeInjector, isBumperIncludedInInjector)
-        self.latticeRing = latticeRing
-        self.latticeInjector = latticeInjector
-        self.injectorLensIndices = [i for i, el in enumerate(self.latticeInjector) if type(el) is HalbachLensSim]
-        self.particleTracerRing = ParticleTracer(latticeRing)
-        self.particleTracerInjector = ParticleTracer(latticeInjector)
-        self.swarmTracerInjector = SwarmTracer(self.latticeInjector)
+    def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
+                 num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
+                 use_bumper: bool = False):
+        assert lattice_ring.latticeType == 'storageRing' and lattice_injector.latticeType == 'injector'
+        assert injector_is_expected_design(lattice_injector, use_bumper)
+        self.lattice_ring = lattice_ring
+        self.lattice_injector = lattice_injector
+        self.injector_lens_indices = [i for i, el in enumerate(self.lattice_injector) if type(el) is HalbachLensSim]
+        self.swarm_tracer_injector = SwarmTracer(self.lattice_injector)
         self.h = 7.5e-6  # timestep size
         self.T = 10.0
-        self.swarmTracerRing = SwarmTracer(self.latticeRing)
+        self.swarm_tracer_ring = SwarmTracer(self.lattice_ring)
+        self.has_bumper = use_bumper
+        self.use_collisions = use_collisions
+        self.use_energy_correction = use_energy_correction
+        self.swarm_injector_initial = self.generate_swarm(num_particles)
 
-        self.sameSeedForSwarm = True  # generate the same swarms every time by seeding the random generator during swarm
-        # generation with the same number, 42
-
-        self.minElementLength = 1.1 * self.particleTracerRing.minTimeStepsPerElement * \
-                                self.latticeRing.v0Nominal * self.h
-        self.injectorTunabilityLength = 2e-2  # longitudinal range of tunability for injector system, for and aft
-
-        self.swarmInjectorInitial = None
-
-        self.isBumperIncluded = isBumperIncludedInInjector
-
-        self.collisionDynamics = collisionDynamics
-        self.energyCorrection = energyCorrection
-        self.swarmInjectorInitial = self.generate_Swarm(numParticlesSwarm)
-
-    def generate_Swarm(self, numParticlesSwarm: int) -> Swarm:
+    def generate_swarm(self, numParticlesSwarm: int) -> Swarm:
         """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
-        swarm = self.swarmTracerInjector.initialize_Simulated_Collector_Focus_Swarm(numParticlesSwarm)
-        if self.isBumperIncluded:
-            swarm = self.swarmTracerInjector.time_Step_Swarm_Distance_Along_x(swarm, swarmShift_x, holdPositionInX=True)
+        swarm = self.swarm_tracer_injector.initialize_Simulated_Collector_Focus_Swarm(numParticlesSwarm)
+        if self.has_bumper:
+            swarm = self.swarm_tracer_injector.time_Step_Swarm_Distance_Along_x(swarm, swarmShift_x,
+                                                                                holdPositionInX=True)
         return swarm
 
-    def convert_Pos_Injector_Frame_To_Ring_Frame(self, qLabInject: np.ndarray) -> np.ndarray:
-        """
-        Convert particle position in injector lab frame into ring lab frame.
-
-        :param qLabInject: particle coords in injector lab frame. 3D position vector
-        :return: 3D position vector
-        """
+    def convert_position_injector_to_ring_frame(self, q_lab_inject: np.ndarray) -> np.ndarray:
+        """Convert 3D position in injector lab frame into ring lab frame."""
         # a nice trick
-        qLabRing = self.latticeInjector.combiner.transform_Lab_Coords_Into_Element_Frame(qLabInject)
-        qLabRing = self.latticeRing.combiner.transform_Element_Coords_Into_Lab_Frame(qLabRing)
-        return qLabRing
+        q_lab_ring = self.lattice_injector.combiner.transform_Lab_Coords_Into_Element_Frame(q_lab_inject)
+        q_lab_ring = self.lattice_ring.combiner.transform_Element_Coords_Into_Lab_Frame(q_lab_ring)
+        return q_lab_ring
 
-    def convert_Moment_Injector_Frame_To_Ring_Frame(self, pLabInject: np.ndarray) -> np.ndarray:
-        """
-        Convert particle momentum in injector lab frame into ring lab frame.
+    def convert_momentum_injector_to_ring_frame(self, p_lab_inject: np.ndarray) -> np.ndarray:
+        """Convert 3D particle momentum in injector lab frame into ring lab frame"""
+        p_lab_ring = self.lattice_injector.combiner.transform_Lab_Frame_Vector_Into_Element_Frame(p_lab_inject)
+        p_lab_ring = self.lattice_ring.combiner.transform_Element_Frame_Vector_Into_Lab_Frame(p_lab_ring)
+        return p_lab_ring
 
-        :param pLabInject: particle momentum in injector lab frame. 3D position vector
-        :return: 3D momentum vector
-        """
-        pLabRing = self.latticeInjector.combiner.transform_Lab_Frame_Vector_Into_Element_Frame(pLabInject)
-        pLabRing = self.latticeRing.combiner.transform_Element_Frame_Vector_Into_Lab_Frame(pLabRing)
-        return pLabRing
-
-    def make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(self, particle: Particle) -> Optional[LineString]:
+    def line_In_ring_frame_from_injector_particle(self, particle: Particle) -> Optional[LineString]:
         """
         Make a shapely line object from an injector particle. If the injector particle was clipped right away
-        (starting outside the vacuum for example), None is returned
-
-        :param particle: particle that was traced through injector
-        :return: None if the particle has no logged coords, or a shapely line object in ring frame
-        """
+        (starting outside the vacuum for example), None is returned"""
         assert particle.traced
         if len(particle.elPhaseSpaceLog) <= 1:
             return None
         else:
-            qList = []
+            q_list = []
             for q, _ in particle.elPhaseSpaceLog:
-                qRingFrame_xy = self.convert_Pos_Injector_Frame_To_Ring_Frame(q)[:2]
-                qList.append(qRingFrame_xy)
-            line = LineString(qList)
+                q_ring_frame_xy = self.convert_position_injector_to_ring_frame(q)[:2]
+                q_list.append(q_ring_frame_xy)
+            line = LineString(q_list)
             return line
 
-    def does_Injector_Particle_Clip_On_Ring(self, particle: Particle) -> bool:
+    def does_ring_clip_injector_particle(self, particle: Particle) -> bool:
         """
-        Test if particle clipped the ring. Only certain elements are considered, as of writing this only the first lens
-        in the ring surrogate
-
-        :param particle: particle that was traced through injector
-        :return: True if particle clipped ring, False if it didn't
+        Test if particle clipped the ring. Only certain elements are considered, as of writing this is any lens before
+        the combiner
         """
-
-        line = self.make_Shapely_Line_In_Ring_Frame_From_Injector_Particle(particle)
+        line = self.line_In_ring_frame_from_injector_particle(particle)
         if line is None:  # particle was clipped immediately, but in the injector not in the ring
             return False
-        lensesBeforeCombiner = self.get_Lenses_Before_Combiner_Ring()
-        assert all(type(lens) is HalbachLensSim for lens in lensesBeforeCombiner)
-        return any(line.intersects(lens.SO_Outer) for lens in lensesBeforeCombiner)
+        else:
+            lenses_pre_combiner = self.lenses_before_ring_combiner()
+            assert all(type(lens) is HalbachLensSim for lens in lenses_pre_combiner)
+            return any(line.intersects(lens.SO_Outer) for lens in lenses_pre_combiner)
 
-    def get_Lenses_Before_Combiner_Ring(self) -> tuple[HalbachLensSim, ...]:
+    def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
         lenses = []
-        for i, el in enumerate(self.latticeRing.elList):
+        for i, el in enumerate(self.lattice_ring.elList):
             if type(el) is HalbachLensSim:
                 lenses.append(el)
-            if i == self.latticeRing.combiner.index:
+            if i == self.lattice_ring.combiner.index:
                 break
         assert len(lenses) > 0
         return tuple(lenses)
 
-    def get_Injector_Shapely_Objects_In_Lab_Frame(self, which: str) -> list[Polygon]:
-        assert which in ('interior', 'exterior')
-        shapelyObjectLabFrameList = []
-        ne_Inj, ne_Ring = self.latticeInjector.combiner.ne, self.latticeRing.combiner.ne
-        angleInj = full_Arctan(ne_Inj[1], ne_Inj[0])
-        angleRing = full_Arctan(ne_Ring[1], ne_Ring[0])
-        rotationAngle = angleRing - angleInj
-        r2Injector = self.latticeInjector.combiner.r2
-        r2Ring = self.latticeRing.combiner.r2
-        for el in self.latticeInjector:
-            SO = copy.copy(el.SO_Outer if which == 'exterior' else el.SO)
-            SO = translate(SO, xoff=-r2Injector[0], yoff=-r2Injector[1])
-            SO = rotate(SO, rotationAngle, use_radians=True, origin=(0, 0))
-            SO = translate(SO, xoff=r2Ring[0], yoff=r2Ring[1])
-            shapelyObjectLabFrameList.append(SO)
-        return shapelyObjectLabFrameList
+    def injector_shapes_in_lab_frame(self, which_profile: str) -> list[Polygon]:
+        assert which_profile in ('interior', 'exterior')
+        shapes_lab_frame = []
+        ne_Inj, ne_Ring = self.lattice_injector.combiner.ne, self.lattice_ring.combiner.ne
+        angle_injector = full_arctan2(ne_Inj[1], ne_Inj[0])
+        angle_ring = full_arctan2(ne_Ring[1], ne_Ring[0])
+        rotation_angle = angle_ring - angle_injector
+        r2_injector = self.lattice_injector.combiner.r2
+        r2_ring = self.lattice_ring.combiner.r2
+        for el in self.lattice_injector:
+            SO = copy.copy(el.SO_Outer if which_profile == 'exterior' else el.SO)
+            SO = translate(SO, xoff=-r2_injector[0], yoff=-r2_injector[1])
+            SO = rotate(SO, rotation_angle, use_radians=True, origin=(0, 0))
+            SO = translate(SO, xoff=r2_ring[0], yoff=r2_ring[1])
+            shapes_lab_frame.append(SO)
+        return shapes_lab_frame
 
-    def generate_Shapely_Object_List_Of_Floor_Plan(self, whichSide: str) -> list[Polygon]:
+    def floor_plan_shapes(self, whichSide: str) -> list[Polygon]:
         assert whichSide in ('exterior', 'interior')
-        shapelyObjectList = []
-        shapelyObjectList.extend([el.SO_Outer if whichSide == 'exterior' else el.SO for el in self.latticeRing])
-        shapelyObjectList.extend(self.get_Injector_Shapely_Objects_In_Lab_Frame(whichSide))
-        return shapelyObjectList
+        shapes = []
+        shapes.extend([el.SO_Outer if whichSide == 'exterior' else el.SO for el in self.lattice_ring])
+        shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
+        return shapes
 
-    def floor_Plan_OverLap_mm(self) -> float:
-        """Find the area overlap between the elements before the last injector lens, and the lenses between combiner
-        input and adjacent bender output. Overlap of the element after the last injector lens is handled later by
-        clipping particles on it
+    def floor_plan_overLap_mm(self) -> float:
+        """Find the area overlap between the elements before and including the last injector lens, and the lenses
+        between combiner input and adjacent bender output. Overlap of the drift region after the last injector lens is
+        handled later by clipping particles on it
         """
-        lensesBeforeCombiner = self.get_Lenses_Before_Combiner_Ring()
-        injectorShapelyObjects = self.get_Injector_Shapely_Objects_In_Lab_Frame('exterior')
-        injectorShapelyObjectsToTest = injectorShapelyObjects[:self.injectorLensIndices[-1] + 1]
-        assert all(type(lens) is HalbachLensSim for lens in lensesBeforeCombiner)
-        convertAreaTo_mm = 1e3 ** 2
-        area = 0.0
-        for lens in lensesBeforeCombiner:
-            for shape in injectorShapelyObjectsToTest:  # don't forget to add 1
-                area += lens.SO_Outer.intersection(shape).area * convertAreaTo_mm
-        return area
+        lenses_pre_combiner = self.lenses_before_ring_combiner()
+        injector_shapes = self.injector_shapes_in_lab_frame('exterior')
+        injector_shapes_to_compare = injector_shapes[:self.injector_lens_indices[-1] + 1]
+        assert all(type(lens) is HalbachLensSim for lens in lenses_pre_combiner)
+        m_to_mm_area = 1e3 ** 2
+        area_mm = 0.0
+        for lens in lenses_pre_combiner:  # count up all the area overlap
+            for shape in injector_shapes_to_compare:  # don't forget to add 1
+                area_mm += lens.SO_Outer.intersection(shape).area * m_to_mm_area
+        return area_mm
 
-    def show_Floor_Plan(self, which: str = 'exterior', deferPltShow=False, trueAspect=True,
+    def show_floor_plan(self, which: str = 'exterior', defer_show=False, true_aspect_ratio=True,
                         linestyle: str = '-', color: str = 'black') -> None:
-        shapelyObjectList = self.generate_Shapely_Object_List_Of_Floor_Plan(which)
-        for shapelyObject in shapelyObjectList: plt.plot(*shapelyObject.exterior.xy, c=color, linestyle=linestyle)
+        shapes = self.floor_plan_shapes(which)
+        for shape in shapes:
+            plt.plot(*shape.exterior.xy, c=color, linestyle=linestyle)
         plt.xlabel('meters')
         plt.ylabel('meters')
         plt.grid()
-        if trueAspect:
+        if true_aspect_ratio:
             plt.gca().set_aspect('equal')
-        if not deferPltShow:
+        if not defer_show:
             plt.show()
 
-    def show_System_Floor_Plan_In_Lab(self) -> None:
-        plot_Floor_Plan_In_Lab(self)
+    def show_system_floor_plan_in_room(self) -> None:
+        plot_floor_plan_in_lab(self)
 
-    def show_Floor_Plan_And_Trajectories(self, trueAspectRatio: bool = True, Tmax=1.0) -> None:
+    def show_floor_plan_with_trajectories(self, true_aspect_ratio: bool = True, T_max=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
-
-        self.show_Floor_Plan(deferPltShow=True, trueAspect=trueAspectRatio, color='grey')
-        self.show_Floor_Plan(which='interior', deferPltShow=True, trueAspect=trueAspectRatio, linestyle=':')
+        self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio, color='grey')
+        self.show_floor_plan(which='interior', defer_show=True, true_aspect_ratio=true_aspect_ratio, linestyle=':')
         swarm = Swarm()
-        swarm.particles = self.swarmInjectorInitial.particles[:100]
-        swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
+        swarm.particles = self.swarm_injector_initial.particles[:100]
+        swarm_injector_traced = self.swarm_tracer_injector.trace_Swarm_Through_Lattice(
             swarm, self.h, 1.0, parallel=False,
-            fastMode=False, copySwarm=True, accelerated=False, logPhaseSpaceCoords=True, energyCorrection=True,
-            collisionDynamics=self.collisionDynamics)
-        for particle in swarmInjectorTraced:
-            particle.clipped = True if self.does_Injector_Particle_Clip_On_Ring(particle) else particle.clipped
-        swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                                  copyParticles=True)
-        swarmRingTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmRingInitial, self.h, Tmax,
-                                                                           fastMode=False,
-                                                                           parallel=False, energyCorrection=True,
-                                                                           stepsBetweenLogging=4,
-                                                                           collisionDynamics=self.collisionDynamics)
+            fastMode=False, copySwarm=True, accelerated=False, logPhaseSpaceCoords=True, use_energy_correction=True,
+            use_collisions=self.use_collisions)
+        for particle in swarm_injector_traced:
+            particle.clipped = True if self.does_ring_clip_injector_particle(particle) else particle.clipped
+        swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
+                                                                              copy_particles=True)
+        swarm_ring_traced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarm_ring_initial, self.h, T_max,
+                                                                               fastMode=False,
+                                                                               parallel=False,
+                                                                               use_energy_correction=True,
+                                                                               stepsBetweenLogging=4,
+                                                                               use_collisions=self.use_collisions)
 
-        for particleInj, particleRing in zip(swarmInjectorTraced, swarmRingTraced):
-            assert not (particleInj.clipped and not particleRing.clipped)  # this wouldn't make sense
-            color = 'r' if particleRing.clipped else 'g'
-            inj_qarr = particleInj.qArr if len(particleInj.qArr) != 0 else np.array([particleInj.qi])
-            qRingArr = np.array([self.convert_Pos_Injector_Frame_To_Ring_Frame(q) for q in inj_qarr])
-            plt.plot(qRingArr[:, 0], qRingArr[:, 1], c=color, alpha=.3)
-            if particleInj.clipped:  # if clipped in injector, plot last location
-                plt.scatter(qRingArr[-1, 0], qRingArr[-1, 1], marker='x', zorder=100, c=color)
-            if particleRing.qArr is not None and len(particleRing.qArr) > 1:  # if made to ring
-                plt.plot(particleRing.qArr[:, 0], particleRing.qArr[:, 1], c=color, alpha=.3)
-                if not particleInj.clipped:  # if not clipped in injector plot last ring location
-                    plt.scatter(particleRing.qArr[-1, 0], particleRing.qArr[-1, 1], marker='x', zorder=100, c=color)
+        for particle_injector, particle_ring in zip(swarm_injector_traced, swarm_ring_traced):
+            assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
+            color = 'r' if particle_ring.clipped else 'g'
+            q_arr_injector = particle_injector.qArr if len(particle_injector.qArr) != 0 else \
+                np.array([particle_injector.qi])
+            q_arr_ring = np.array([self.convert_position_injector_to_ring_frame(q) for q in q_arr_injector])
+            plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
+            if particle_injector.clipped:  # if clipped in injector, plot last location
+                plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color)
+            if particle_ring.qArr is not None and len(particle_ring.qArr) > 1:  # if made to ring
+                plt.plot(particle_ring.qArr[:, 0], particle_ring.qArr[:, 1], c=color, alpha=.3)
+                if not particle_injector.clipped:  # if not clipped in injector plot last ring location
+                    plt.scatter(particle_ring.qArr[-1, 0], particle_ring.qArr[-1, 1], marker='x', zorder=100, c=color)
         plt.show()
 
-    def mode_Match(self, floorPlanCostCutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:
+    def mode_match(self, floor_plan_cost_cutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
-        assert floorPlanCostCutoff >= 0
-        floorPlanCost = self.floor_Plan_Cost_With_Tunability()
-        if self.floor_Plan_Cost() > floorPlanCostCutoff:
-            cost = self.maximumSwarmCost + floorPlanCost
-            fluxMultiplication = np.nan
+        assert floor_plan_cost_cutoff >= 0
+        floor_plan_cost = self.floor_plan_cost_with_tunability()
+        if self.floor_plan_cost() > floor_plan_cost_cutoff:
+            cost = self.max_swarm_cost + floor_plan_cost
+            flux_mult = np.nan
         else:
-            swarmTraced = self.inject_And_Trace_Swarm(parallel)
-            fluxMultiplication = swarmTraced.weighted_Flux_Multiplication()
-            swarmCost = self.swarm_Cost(swarmTraced)
-            cost = swarmCost + floorPlanCost
-        assert 0.0 <= cost <= self.maximumCost
-        return cost, fluxMultiplication
+            swarm_traced = self.inject_swarm(parallel)
+            flux_mult = swarm_traced.weighted_flux_mult()
+            swarm_cost = self.swarm_cost(swarm_traced)
+            cost = swarm_cost + floor_plan_cost
+        assert 0.0 <= cost <= self.max_cost
+        return cost, flux_mult
 
-    def inject_And_Trace_Swarm(self, parallel: bool = False) -> Swarm:
+    def inject_swarm(self, parallel: bool = False) -> Swarm:
+        swarm_initial = self.trace_through_injector_and_transform_to_ring()
+        swarm_traced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarm_initial, self.h, self.T,
+                                                                          fastMode=True, accelerated=True,
+                                                                          copySwarm=False,
+                                                                          use_energy_correction=self.use_energy_correction,
+                                                                          use_collisions=self.use_collisions,
+                                                                          parallel=parallel)
+        return swarm_traced
 
-        swarmInitial = self.trace_Through_Injector_And_Transform_To_Ring()
-        swarmTraced = self.swarmTracerRing.trace_Swarm_Through_Lattice(swarmInitial, self.h, self.T,
-                                                                       fastMode=True, accelerated=True, copySwarm=False,
-                                                                       energyCorrection=self.energyCorrection,
-                                                                       collisionDynamics=self.collisionDynamics,
-                                                                       parallel=parallel)
-        return swarmTraced
+    def transform_swarm_from_injector_to_ring_frame(self, swarm_injector_traced: Swarm,
+                                                    copy_particles: bool = False) -> Swarm:
+        swarm_ring_frame = Swarm()
+        for particle in swarm_injector_traced:
+            clipped = particle.clipped or self.does_ring_clip_injector_particle(particle)
+            qRing = self.convert_position_injector_to_ring_frame(particle.qf)
+            pRing = self.convert_momentum_injector_to_ring_frame(particle.pf)
+            particle_ring = particle.copy() if copy_particles else particle
+            particle_ring.qi, particle_ring.pi = qRing, pRing
+            particle_ring.reset()
+            particle_ring.clipped = clipped
+            swarm_ring_frame.add(particle_ring)
+        return swarm_ring_frame
 
-    def transform_Swarm_From_Injector_Frame_To_Ring_Frame(self, swarmInjectorTraced: Swarm,
-                                                          copyParticles: bool = False) -> Swarm:
-        # identify particles that survived to combiner end and move them assuming the combiner's output (r2)
-        # was moved to the origin
+    def trace_through_injector_and_transform_to_ring(self) -> Swarm:
+        swarm_injector_traced = self.swarm_tracer_injector.trace_Swarm_Through_Lattice(
+            self.swarm_injector_initial.copy(), self.h, 1.0, fastMode=True, copySwarm=False,
+            logPhaseSpaceCoords=True, accelerated=True, use_collisions=self.use_collisions)
+        swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
+                                                                              copy_particles=True)
+        return swarm_ring_initial
 
-        swarmRing = Swarm()
-        for particle in swarmInjectorTraced:
-            clipped = particle.clipped or self.does_Injector_Particle_Clip_On_Ring(particle)
-            qRing = self.convert_Pos_Injector_Frame_To_Ring_Frame(particle.qf)
-            pRing = self.convert_Moment_Injector_Frame_To_Ring_Frame(particle.pf)
-            particleRing = particle.copy() if copyParticles else particle
-            particleRing.qi, particleRing.pi = qRing, pRing
-            particleRing.reset()
-            particleRing.clipped = clipped
-            swarmRing.add(particleRing)
-        return swarmRing
-
-    def trace_Through_Injector_And_Transform_To_Ring(self) -> Swarm:
-
-        swarmInjectorTraced = self.swarmTracerInjector.trace_Swarm_Through_Lattice(
-            self.swarmInjectorInitial.copy(), self.h, 1.0, fastMode=True, copySwarm=False,
-            logPhaseSpaceCoords=True, accelerated=True, collisionDynamics=self.collisionDynamics)
-        swarmRingInitial = self.transform_Swarm_From_Injector_Frame_To_Ring_Frame(swarmInjectorTraced,
-                                                                    copyParticles=True)
-        return swarmRingInitial
-
-    def compute_Swarm_Flux_Mult_Percent(self, swarmTraced: Swarm) -> float:
+    def swarm_flux_mult_percent_of_max(self, swarm_traced: Swarm) -> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         # all particles survived through the lattice.
-        totalFluxMult = swarmTraced.weighted_Flux_Multiplication()
-        weightedFluxMultMax = self.maximum_Weighted_Flux_Multiplication()
-        fluxMultPerc = 1e2 * totalFluxMult / weightedFluxMultMax
-        assert 0.0 <= fluxMultPerc <= 100.0
-        return fluxMultPerc
+        max_flux_mult = self.T * self.lattice_ring.speed_nominal / self.lattice_ring.totalLength
+        flux_mult_perc = 1e2 * swarm_traced.weighted_flux_mult() / max_flux_mult
+        assert 0.0 <= flux_mult_perc <= 100.0
+        return flux_mult_perc
 
-    def maximum_Weighted_Flux_Multiplication(self) -> float:
-        # unrealistic maximum flux of lattice
-        rBendNominal = 1.0
-        LCombinerNominal = .2
-        minLatticeLength = 2 * (np.pi * rBendNominal + LCombinerNominal)
-        maxFluxMult = self.T * self.latticeRing.v0Nominal / minLatticeLength  # the aboslute max
-        return maxFluxMult
-
-    def floor_Plan_Cost(self) -> float:
-        overlap = self.floor_Plan_OverLap_mm()  # units of mm^2
+    def floor_plan_cost(self) -> float:
+        overlap = self.floor_plan_overLap_mm()  # units of mm^2
         factor = 100  # units of mm^2
-        costOverlap = 2 / (1 + np.exp(-overlap / factor)) - 1
-        cost = self.maximumFloorPlanCost if not does_Fit_In_Room(self) else costOverlap
-        assert 0.0 <= cost <= self.maximumFloorPlanCost
+        cost_overlap = 2 / (1 + np.exp(-overlap / factor)) - 1
+        cost = self.max_floor_plan_cost if not does_fit_in_room(self) else cost_overlap
+        assert 0.0 <= cost <= self.max_floor_plan_cost
         return cost
 
-    def get_Drift_After_Last_Lens_Injector(self) -> Drift:
+    def get_drift_after_last_lens_injector(self) -> Drift:
         """Get drift element which comes immediately after last lens in injector"""
-
-        drift = self.latticeInjector.elList[self.injectorLensIndices[-1] + 1]
+        drift = self.lattice_injector.elList[self.injector_lens_indices[-1] + 1]
         assert type(drift) is Drift
         return drift
 
-    def floor_Plan_Cost_With_Tunability(self) -> float:
+    def floor_plan_cost_with_tunability(self) -> float:
         """Measure floor plan cost at nominal position, and at maximum spatial tuning displacement in each direction.
         Return the largest value of the three. This is used to punish the system when the injector lens is no longer
         tunable because it is so close to the ring"""
-        driftAfterLens = self.get_Drift_After_Last_Lens_Injector()
-        L0 = driftAfterLens.L  # value before tuning
-        cost = [self.floor_Plan_Cost()]
+        drift_after_lens = self.get_drift_after_last_lens_injector()
+        L0 = drift_after_lens.L  # value before tuning
+        cost = [self.floor_plan_cost()]
 
-        driftAfterLens.set_Length(L0 + -self.injectorTunabilityLength)  # move lens away from combiner
-        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)  # don't waste time building field helpers
-        cost.append(self.floor_Plan_Cost())
+        drift_after_lens.set_length(L0 + -INJECTOR_TUNABILITY_LENGTH)  # move lens away from combiner
+        self.lattice_injector.build_lattice(False, build_field_helpers=False)  # don't waste time building field helpers
+        cost.append(self.floor_plan_cost())
 
-        driftAfterLens.set_Length(L0)  # reset
-        self.latticeInjector.build_Lattice(False, buildFieldHelper=False)  # don't waste time building field helpers,
+        drift_after_lens.set_length(L0)  # reset
+        self.lattice_injector.build_lattice(False,
+                                            build_field_helpers=False)  # don't waste time building field helpers,
         # previous helpers are still saved
-        floorPlanCost = max(cost)
-        assert 0.0 <= floorPlanCost <= 1.0
-        return floorPlanCost
+        floor_plan_cost = max(cost)
+        assert 0.0 <= floor_plan_cost <= 1.0
+        return floor_plan_cost
 
-    def swarm_Cost(self, swarm: Swarm) -> float:
+    def swarm_cost(self, swarm: Swarm) -> float:
         """Cost associated with a swarm after being traced through system"""
-        fluxMultPerc = self.compute_Swarm_Flux_Mult_Percent(swarm)
-        swarmCost = (100.0 - fluxMultPerc) / 100.0
-        assert 0.0 <= swarmCost <= self.maximumSwarmCost
-        return swarmCost
+        flux_mult_perc = self.swarm_flux_mult_percent_of_max(swarm)
+        swarm_cost = (100.0 - flux_mult_perc) / 100.0
+        assert 0.0 <= swarm_cost <= self.max_swarm_cost
+        return swarm_cost
 
 
-def build_StorageRingModel(params, version: str, numParticlesSwarm: int = 1024, collisionDynamics: bool = False,
-                           energyCorrection: bool = False, useMagnetErrors: bool = False,
-                           useSolenoidField: bool = True, includeBumper: bool = False):
+def build_storage_ring_model(params, version: str, num_particles: int = 1024, use_collisions: bool = False,
+                             use_energy_correction: bool = False, use_mag_errors: bool = False,
+                             use_solenoid_field: bool = True, use_bumper: bool = False):
     """Convenience function for building a StorageRingModel"""
-    options = {'useMagnetErrors': useMagnetErrors, 'useSolenoidField': useSolenoidField, 'includeBumper': includeBumper}
-    PTL_Ring, PTL_Injector = make_Ring_And_Injector(params, version, options=options)
-    model = StorageRingModel(PTL_Ring, PTL_Injector, energyCorrection=energyCorrection,
-                             numParticlesSwarm=numParticlesSwarm, collisionDynamics=collisionDynamics,
-                             isBumperIncludedInInjector=includeBumper)
+    options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper}
+    lattice_ring, lattice_injector = make_Ring_And_Injector(params, version, options=options)
+    model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
+                             num_particles=num_particles, use_collisions=use_collisions,
+                             use_bumper=use_bumper)
     return model
 
 
-def make_Optimal_Solution_Model(includeBumper: bool = True, useSolenoidField: bool = True) -> StorageRingModel:
-    """Build the current optimal model. A convenienve function"""
-    ringParams = tuple(ringParamsOptimal_V3.values())
-    injectorParams = tuple(injectorParamsOptimalAny.values())
-    X = (ringParams, injectorParams)
-    model = build_StorageRingModel(X, '3', includeBumper=includeBumper, useSolenoidField=useSolenoidField)
+def make_optimal_solution_model(use_bumper: bool = True, use_solenoid_field: bool = True) -> StorageRingModel:
+    """Convenience function for building the current optimal model"""
+    ring_params = tuple(ringParamsOptimal_V3.values())
+    injector_params = tuple(injectorParamsOptimalAny.values())
+    system_params = (ring_params, injector_params)
+    model = build_storage_ring_model(system_params, '3', use_bumper=use_bumper, use_solenoid_field=use_solenoid_field)
     return model

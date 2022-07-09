@@ -61,7 +61,7 @@ class Line(Shape):
         self.length = length
         self.constrained = constrained
 
-    def set_Length(self, length: float) -> None:
+    def set_length(self, length: float) -> None:
         """Set the length of the line"""
 
         assert length > 0.0

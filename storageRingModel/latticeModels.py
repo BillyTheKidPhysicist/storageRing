@@ -25,8 +25,8 @@ lst_arr_tple = Union[list, np.ndarray, tuple]
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 minTimeStepGap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
 InjectorModel = RingModel = ParticleTracerLattice
-DEFAULT_SYSTEM_OPTIONS = lockedDict({'useMagnetErrors': False, 'combinerSeed': None, 'useSolenoidField': False,
-                                     'includeBumper': False,'standard_tube_ODs':False,'standard_mag_sizes': False})
+DEFAULT_SYSTEM_OPTIONS = lockedDict({'use_mag_errors': False, 'combinerSeed': None, 'use_solenoid_field': False,
+                                     'has_bumper': False,'standard_tube_ODs':False,'standard_mag_sizes': False})
 
 
 def check_And_Add_Default_Values(options: Optional[dict]) -> lockedDict:
@@ -232,8 +232,8 @@ def make_Ring(ringParams: lockedDict, whichVersion: str, options: Optional[dict]
     options = check_And_Add_Default_Values(options)
     assert whichVersion in ('1', '2', '3')
 
-    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                        standardMagnetErrors=options['useMagnetErrors'],useSolenoidField=options['useSolenoidField'],
+    PTL = ParticleTracerLattice(speed_nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
+                        standardMagnetErrors=options['use_mag_errors'],use_solenoid_field=options['use_solenoid_field'],
                     standard_tube_ODs=options['standard_tube_ODs'],standard_mag_sizes=options['standard_mag_sizes'])
 
     # ------starting at gap 1 through lenses and gaps and combiner to gap4
@@ -274,9 +274,9 @@ def make_Injector_Version_Any(injectorParams: lockedDict, options: dict = None) 
     if gap1 < system_constants["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
     PTL = ParticleTracerLattice(atomCharacteristic["nominalDesignSpeed"], latticeType='injector',
-                        standardMagnetErrors=options['useMagnetErrors'],useSolenoidField=options['useSolenoidField'],
+                        standardMagnetErrors=options['use_mag_errors'],use_solenoid_field=options['use_solenoid_field'],
                         standard_tube_ODs=options['standard_tube_ODs'],standard_mag_sizes=options['standard_mag_sizes'])
-    if options['includeBumper']:
+    if options['has_bumper']:
         add_Kevin_Bumper_Elements(PTL)
 
     # -----gap between source and first lens-----
@@ -328,8 +328,8 @@ def make_Ring_Surrogate_For_Injection_Version_1(injectorParams: lockedDict,
                                   'L_Lens1': surrogateParamsDict['L_Lens'],
                                   'L_Lens2': surrogateParamsDict['L_Lens']})
 
-    PTL = ParticleTracerLattice(v0Nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
-                                useSolenoidField=options['useSolenoidField'],
+    PTL = ParticleTracerLattice(speed_nominal=atomCharacteristic["nominalDesignSpeed"], latticeType='storageRing',
+                                use_solenoid_field=options['use_solenoid_field'],
                         standard_tube_ODs=options['standard_tube_ODs'],standard_mag_sizes=options['standard_mag_sizes'])
 
     add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, options, whichOP_Ap='Injection')
@@ -363,12 +363,12 @@ def make_injectorParams_Dict_Version_Any(injectorParams_tuple: tuple) -> dict:
     return injectorParamsDict
 
 
-def assert_Combiners_Are_Same(PTL_Injector: ParticleTracerLattice, PTL_Ring: ParticleTracerLattice) -> None:
+def assert_Combiners_Are_Same(lattice_injector: ParticleTracerLattice, lattice_ring: ParticleTracerLattice) -> None:
     """Combiner from injector and ring must have the same shared characteristics, as well as have the expected
     parameters"""
 
-    assert PTL_Injector.combiner.outputOffset == PTL_Ring.combiner.outputOffset
-    assert PTL_Injector.combiner.ang < 0 < PTL_Ring.combiner.ang
+    assert lattice_injector.combiner.outputOffset == lattice_ring.combiner.outputOffset
+    assert lattice_injector.combiner.ang < 0 < lattice_ring.combiner.ang
 
 
 def _make_Ring_And_Injector_Params_Locked_Dicts(systemParams: tuple[tuple, tuple], whichVersion) \
@@ -396,10 +396,10 @@ def _make_Ring_And_Injector(systemParams: tuple[tuple, tuple], whichVersion: str
 
     assert whichVersion in ('1', '2', '3')
     ringParams, injectorParams = _make_Ring_And_Injector_Params_Locked_Dicts(systemParams, whichVersion)
-    PTL_Ring = make_Ring(ringParams, whichVersion, options)
-    PTL_Injector = make_Injector_Version_Any(injectorParams, options=options)
-    assert_Combiners_Are_Same(PTL_Injector, PTL_Ring)
-    return PTL_Ring, PTL_Injector
+    lattice_ring = make_Ring(ringParams, whichVersion, options)
+    lattice_injector = make_Injector_Version_Any(injectorParams, options=options)
+    assert_Combiners_Are_Same(lattice_injector, lattice_ring)
+    return lattice_ring, lattice_injector
 
 
 def make_Ring_And_Injector(systemParams: tuple[tuple, tuple], version, options: dict = None) -> tuple[

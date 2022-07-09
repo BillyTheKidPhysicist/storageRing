@@ -23,7 +23,7 @@
 #         if self.L is not None:
 #             self.build()
 #
-#     def set_Length(self, L):
+#     def set_length(self, L):
 #         assert L > 0.0
 #         self.L = L
 #         self.build()
@@ -60,8 +60,8 @@
 #                                                                             3)  # note that these coordinates can have
 #         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 #         # input coordinates will be shifted in a wrapper function
-#         BNormGrad, BNorm = self.lens.BNorm_Gradient(volumeCoords, returnNorm=True)
-#         data3D = np.column_stack((volumeCoords, BNormGrad, BNorm))
+#         B_norm_grad, B_norm = self.lens.B_norm_grad(volumeCoords, return_norm=True)
+#         data3D = np.column_stack((volumeCoords, B_norm_grad, B_norm))
 #         self.fill_Field_Func(data3D)
 #         # self.compile_fast_Force_Function()
 #

@@ -8,8 +8,8 @@ import numpy as np
 from ParticleClass import Swarm, Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from helperTools import low_Discrepancy_Sample
-from typeHints import RealNumber
+from helperTools import low_discrepancy_sample
+from typeHints import RealNum
 
 
 def lorentz_Function(x, gamma):
@@ -21,7 +21,7 @@ def normal(v, sigma, v0=0.0):
     return np.exp(-.5 * ((v - v0) / sigma) ** 2)
 
 
-tupleOrNum = Union[tuple[float, float], RealNumber]
+tupleOrNum = Union[tuple[float, float], RealNum]
 realNumbers = (int, float)
 
 
@@ -53,7 +53,7 @@ class SwarmTracer:
 
         return z
 
-    def time_Step_Swarm_Distance_Along_x(self, swarm, distance: RealNumber, holdPositionInX: bool = False) -> Swarm:
+    def time_Step_Swarm_Distance_Along_x(self, swarm, distance: RealNum, holdPositionInX: bool = False) -> Swarm:
         """Particles are time stepped, forward or backward, to move 'distance' along the x axis"""
         for particle in swarm:
             t = distance / particle.pi[0]
@@ -63,7 +63,7 @@ class SwarmTracer:
                 particle.qi += t * particle.pi
         return swarm
 
-    def initialize_Stablity_Testing_Swarm(self, qMax: RealNumber) -> Swarm:
+    def initialize_Stablity_Testing_Swarm(self, qMax: RealNum) -> Swarm:
         smallOffset = -1e-10  # this prevents setting a particle right at a boundary which is takes time to sort out
         swarmTest = Swarm()
         swarmTest.add_New_Particle(qi=np.asarray([smallOffset, 0.0, 0.0]))
@@ -87,7 +87,7 @@ class SwarmTracer:
         swarm = Swarm()
         for arg in argsArr:
             qi = np.asarray([0.0, arg[0], arg[1]])
-            pi = np.asarray([-self.lattice.v0Nominal, arg[2], arg[3]])
+            pi = np.asarray([-self.lattice.speed_nominal, arg[2], arg[3]])
             if upperSymmetry == True:
                 if qi[2] < 0:
                     pass
@@ -135,7 +135,7 @@ class SwarmTracer:
         assert 0.0 < captureDiam <= .1 and 0.0 < collectorOutputAngle <= .2 and 0.0 < gammaSpace <= .01 \
                and probabilityMin >= 0.0  # reasonable values
 
-        pTransMax = self.lattice.v0Nominal * np.tan(
+        pTransMax = self.lattice.speed_nominal * np.tan(
             collectorOutputAngle)  # transverse velocity dominates thermal velocity,
         # ie, geometric heating
         # sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
@@ -154,7 +154,7 @@ class SwarmTracer:
             px, py, pz = particle.pi
             probability = probability * lorentz_Function(r, gammaSpace)  # spatial probability
             pTrans = np.sqrt(py ** 2 + pz ** 2)
-            px = -np.sqrt(self.lattice.v0Nominal ** 2 - pTrans ** 2)
+            px = -np.sqrt(self.lattice.speed_nominal ** 2 - pTrans ** 2)
             particle.pi[0] = px
             assert probability < 1.0
             probabilityList.append(probability)
@@ -179,12 +179,12 @@ class SwarmTracer:
             pTBounds = [(-pTBounds, pTBounds), (-pTBounds, pTBounds)]
         if isinstance(pxBounds, realNumbers):
             assert pxBounds > 0.0
-            pxBounds = (-pxBounds - self.lattice.v0Nominal, pxBounds - self.lattice.v0Nominal)
+            pxBounds = (-pxBounds - self.lattice.speed_nominal, pxBounds - self.lattice.speed_nominal)
         else:
-            pxBounds = (pxBounds[0] - self.lattice.v0Nominal, pxBounds[1] - self.lattice.v0Nominal)
+            pxBounds = (pxBounds[0] - self.lattice.speed_nominal, pxBounds[1] - self.lattice.speed_nominal)
         generatorBounds = [*qTBounds, pxBounds, *pTBounds]
         pxMin, pxMax = generatorBounds[2]
-        assert len(generatorBounds) == 5 and pxMin < -self.lattice.v0Nominal < pxMax
+        assert len(generatorBounds) == 5 and pxMin < -self.lattice.speed_nominal < pxMax
         return generatorBounds
 
     def initalize_PseudoRandom_Swarm_In_Phase_Space(self, qTBounds: tupleOrNum, pTBounds: tupleOrNum,
@@ -193,7 +193,7 @@ class SwarmTracer:
                                                     sameSeed: bool = False, circular: bool = True,
                                                     smallXOffset: bool = True) -> Swarm:
         # return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
-        # and that is heading in the negative x direction with average velocity lattice.v0Nominal. A seed can be reused to
+        # and that is heading in the negative x direction with average velocity lattice.speed_nominal. A seed can be reused to
         # get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
         # each corner exactly and midpoints between corners if desired
         # NOTE: it's not guaranteed that there will be exactly num particles.
@@ -217,7 +217,7 @@ class SwarmTracer:
             np.random.seed(sameSeed)
         swarm = Swarm()
         sampleSeed = None if not sameSeed else sameSeed
-        samples = low_Discrepancy_Sample(generatorBounds, round(numParticles * numParticlesfrac), seed=sampleSeed)
+        samples = low_discrepancy_sample(generatorBounds, round(numParticles * numParticlesfrac), seed=sampleSeed)
         np.random.shuffle(samples)
 
         if smallXOffset:
@@ -244,7 +244,7 @@ class SwarmTracer:
 
     def initialize_Point_Source_Swarm(self, sourceAngle: float, numParticles: int, smallXOffset: bool = True,
                                       sameSeed: bool = False) -> Swarm:
-        p0 = self.lattice.v0Nominal  # the momentum of each particle
+        p0 = self.lattice.speed_nominal  # the momentum of each particle
         qTBounds, pxBounds = 1e-12, 1e-12  # force to a point spatialy, and no speed spread
         pTBounds = np.tan(sourceAngle) * p0
         swarmPseudoRandom = self.initalize_PseudoRandom_Swarm_In_Phase_Space(qTBounds, pTBounds, pxBounds, numParticles,
@@ -258,11 +258,11 @@ class SwarmTracer:
 
     def initialize_Ring_Swarm(self, angle, num):
         assert 0.0 < angle < np.pi / 2
-        pr = np.tan(angle) * self.lattice.v0Nominal
+        pr = np.tan(angle) * self.lattice.speed_nominal
         thetaArr = np.linspace(0.0, 2 * np.pi, num + 1)[:-1]
         swarm = Swarm()
         for theta in thetaArr:
-            swarm.add_New_Particle(pi=np.asarray([-self.lattice.v0Nominal, pr * np.cos(theta), pr * np.sin(theta)]))
+            swarm.add_New_Particle(pi=np.asarray([-self.lattice.speed_nominal, pr * np.cos(theta), pr * np.sin(theta)]))
         return swarm
 
     def initalize_PseudoRandom_Swarm_At_Combiner_Output(self, qTBounds, pTBounds, pxBounds, numParticles,
@@ -336,7 +336,7 @@ class SwarmTracer:
     def trace_Swarm_Through_Lattice(self, swarm: Swarm, h: float, T: float, parallel: bool = False,
                                     fastMode: bool = True,
                                     copySwarm: bool = True, accelerated: bool = False, stepsBetweenLogging: int = 1,
-                                    energyCorrection: bool = False, collisionDynamics: bool = False,
+                                    use_energy_correction: bool = False, use_collisions: bool = False,
                                     logPhaseSpaceCoords: bool = False) -> Swarm:
         if copySwarm == True:
             swarmNew = swarm.copy()
@@ -346,9 +346,9 @@ class SwarmTracer:
         def trace_Particle(particle):
             particleNew = self.particleTracer.trace(particle, h, T, fastMode=fastMode, accelerated=accelerated,
                                                     stepsBetweenLogging=stepsBetweenLogging,
-                                                    energyCorrection=energyCorrection,
+                                                    use_energy_correction=use_energy_correction,
                                                     logPhaseSpaceCoords=logPhaseSpaceCoords,
-                                                    collisionDynamics=collisionDynamics)
+                                                    use_collisions=use_collisions)
             return particleNew
 
         if parallel == 'superfast':
