@@ -15,7 +15,7 @@ from helperTools import tool_Parallel_Process
 cmap = plt.get_cmap('viridis')
 
 
-def make_Test_Swarm_And_Lattice(numParticles=128, totalTime=.1) -> (Swarm, ParticleTracerLattice):
+def make_Test_Swarm_And_Lattice(num_particles=128, totalTime=.1) -> (Swarm, ParticleTracerLattice):
     PTL = ParticleTracerLattice(speed_nominal=210.0)
     PTL.add_Lens_Ideal(.4, 1.0, .025)
     PTL.add_Drift(.1)
@@ -30,9 +30,9 @@ def make_Test_Swarm_And_Lattice(numParticles=128, totalTime=.1) -> (Swarm, Parti
     PTL.end_Lattice()
 
     swarmTracer = SwarmTracer(PTL)
-    swarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3, 5.0, 1e-5, numParticles)
-    swarm = swarmTracer.trace_Swarm_Through_Lattice(swarm, 1e-5, totalTime, fastMode=False, parallel=True,
-                                                    stepsBetweenLogging=4)
+    swarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3, 5.0, 1e-5, num_particles)
+    swarm = swarmTracer.trace_Swarm_Through_Lattice(swarm, 1e-5, totalTime, use_fast_mode=False, parallel=True,
+                                                    steps_per_logging=4)
     print('swarm and lattice done')
     return swarm, PTL
 
@@ -154,7 +154,7 @@ class SwarmSnapShot:
 
 class PhaseSpaceAnalyzer:
     def __init__(self, swarm, lattice: ParticleTracerLattice):
-        assert lattice.latticeType == 'storageRing'
+        assert lattice.lattice_type == 'storageRing'
         assert all(type(particle.clipped) is bool for particle in swarm)
         assert all(particle.traced is True for particle in swarm)
         self.swarm = swarm
@@ -308,8 +308,8 @@ class PhaseSpaceAnalyzer:
         TArr = TArr[:-1]  # exlcude last point because all particles are clipped there
         survivalList = []
         for T in TArr:
-            numParticleSurvived = np.sum(TSurvivedArr > T)
-            survival = 100 * numParticleSurvived / self.swarm.num_Particles()
+            num_particlesurvived = np.sum(TSurvivedArr > T)
+            survival = 100 * num_particlesurvived / self.swarm.num_Particles()
             survivalList.append(survival)
         TRev = self.lattice.totalLength / self.lattice.speed_nominal
         if axis is None:
@@ -387,13 +387,13 @@ class PhaseSpaceAnalyzer:
         plotIndex, _ = self._get_Axis_Index(dimension, 'NONE')
         vals = np.array([np.append(particle.qi, particle.pi)[plotIndex] for particle in self.swarm])
         fracSurvived = []
-        numParticlesInBin = []
+        num_particlesInBin = []
         binEdges = np.linspace(vals.min(), vals.max(), numBins)
         for i in range(len(binEdges) - 1):
             isValidList = (vals > binEdges[i]) & (vals < binEdges[i + 1])
             binParticles = [particle for particle, isValid in zip(self.swarm.particles, isValidList) if isValid]
             numSurvived = sum([not particle.clipped for particle in binParticles])
-            numParticlesInBin.append(len(binParticles))
+            num_particlesInBin.append(len(binParticles))
             if weightingMethod == 'clipped':
                 fracSurvived.append(numSurvived / len(binParticles) if len(binParticles) != 0 else np.nan)
             else:
@@ -402,8 +402,8 @@ class PhaseSpaceAnalyzer:
                 fracSurvived.append(np.mean(survivalTimes) / TMax if len(survivalTimes) != 0 else np.nan)
         plt.title("Particle acceptance")
         if showInputDist:
-            numParticlesInBin = [num / max(numParticlesInBin) for num in numParticlesInBin]
-            plt.bar(binEdges[:-1], numParticlesInBin, width=binEdges[1] - binEdges[0], align='edge', color=cInitial,
+            num_particlesInBin = [num / max(num_particlesInBin) for num in num_particlesInBin]
+            plt.bar(binEdges[:-1], num_particlesInBin, width=binEdges[1] - binEdges[0], align='edge', color=cInitial,
                     label='Initial distribution')
         plt.bar(binEdges[:-1], fracSurvived, width=binEdges[1] - binEdges[0], align='edge', label='Acceptance',
                 color=cAccepted)
@@ -455,10 +455,10 @@ class PhaseSpaceAnalyzer:
             yPlotVals.append(X[yPlotIndex] * unitModifier[1])
             assert particle.T <= TMax
             weights.append(particle.T)
-        histogramNumParticles, _, _ = np.histogram2d(xPlotVals, yPlotVals, bins=bins)
+        histogramnum_particles, _, _ = np.histogram2d(xPlotVals, yPlotVals, bins=bins)
         histogramSurvivalTimes, binsx, binsy = np.histogram2d(xPlotVals, yPlotVals, bins=bins, weights=weights)
-        histogramNumParticles[histogramNumParticles == 0] = np.nan
-        histogramAcceptance = histogramSurvivalTimes / (histogramNumParticles * TMax)
+        histogramnum_particles[histogramnum_particles == 0] = np.nan
+        histogramAcceptance = histogramSurvivalTimes / (histogramnum_particles * TMax)
         histogramAcceptance = np.rot90(histogramAcceptance)
         histogramAcceptance[np.isnan(histogramAcceptance)] = emptyVals
         plt.title('Phase space acceptance')

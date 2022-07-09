@@ -52,8 +52,8 @@ class BaseElement:
         self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for
         # finding if the coordinates
         # # are inside an element that can't be found with simple geometry
-        self.SO_Outer: Optional[Polygon] = None  # shapely object that represents the outer edge of the element
-        self.outerHalfWidth: Optional[
+        self.SO_outer: Optional[Polygon] = None  # shapely object that represents the outer edge of the element
+        self.outer_half_width: Optional[
             float] = None  # outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
@@ -61,130 +61,132 @@ class BaseElement:
         self.index: Optional[int] = None
         self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the
         # length. This is a nominal value because for segmented benders the path length is not simple to compute
-        self.outputOffset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
+        self.output_offset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
-        self.fieldFact: float = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fastFieldHelper = None
+        self.field_fact: float = 1.0  # factor to modify field values everywhere in space by, including force
+        self.fast_field_helper = None
         self.numba_functions: dict={}
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
         raise NotImplementedError
 
-    def set_fieldFact(self, fieldFact: bool):
-        assert fieldFact > 0.0
-        self.fieldFact = fieldFact
-        self.fastFieldHelper.fieldFact = fieldFact
+    def set_field_fact(self, field_fact: bool):
+        assert field_fact > 0.0
+        self.field_fact = field_fact
+        self.fast_field_helper.field_fact = field_fact
 
-    def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float):
+    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float):
         """
         perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
         the element will be shifted, and therefore the force it applies will be as well. This is modeled as shifting
         and rotating the supplied coordinates to force and magnetic field function, then rotating the force
 
-        :param shiftY: Shift in the y direction in element frame
-        :param shiftZ: Shift in the z direction in the element frame
-        :param rotY: Rotation about y axis of the element
-        :param rotZ: Rotation about z axis of the element
+        :param shift_y: Shift in the y direction in element frame
+        :param shift_z: Shift in the z direction in the element frame
+        :param rot_angle_y: Rotation about y axis of the element
+        :param rot_angle_z: Rotation about z axis of the element
         :return:
         """
-        self.fastFieldHelper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shiftY, shiftZ, rotY, rotZ)
 
-    def magnetic_Potential(self, qEl: np.ndarray) -> float:
+        raise NotImplementedError
+        self.fast_field_helper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shift_y, shift_z, rot_angle_y, rot_angle_z)
+
+    def magnetic_potential(self, q_el: np.ndarray) -> float:
         """
-        Return magnetic potential energy at position qEl.
+        Return magnetic potential energy at position q_el.
 
         Return magnetic potential energy of a lithium atom in simulation units, where the mass of a lithium-7 atom is
-        1kg, at cartesian 3D coordinate qEl in the local element frame. This is done by calling up fastFieldHelper, a
+        1kg, at cartesian 3D coordinate q_el in the local element frame. This is done by calling up fast_field_helper, a
         jitclass, which does the actual math/interpolation.
 
-        :param qEl: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
+        :param q_el: 3D cartesian position vector in local element frame, numpy.array([x,y,z])
         :return: magnetic potential energy of a lithium atom in simulation units, float
         """
-        return self.numba_functions['magnetic_potential'](*qEl)  # will raise NotImplementedError if called
+        return self.numba_functions['magnetic_potential'](*q_el)  # will raise NotImplementedError if called
 
-    def force(self, qEl: np.ndarray) -> np.ndarray:
+    def force(self, q_el: np.ndarray) -> np.ndarray:
         """
-        Return force at position qEl.
+        Return force at position q_el.
 
-        Return 3D cartesian force of a lithium at cartesian 3D coordinate qEl in the local element frame. Force vector
-        has simulation units where lithium-7 mass is 1kg. This is done by calling up fastFieldHelper, a
+        Return 3D cartesian force of a lithium at cartesian 3D coordinate q_el in the local element frame. Force vector
+        has simulation units where lithium-7 mass is 1kg. This is done by calling up fast_field_helper, a
         jitclass, which does the actual math/interpolation.
 
 
-        :param qEl: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
+        :param q_el: 3D cartesian position vector in local element frame,numpy.array([x,y,z])
         :return: New 3D cartesian force vector, numpy.array([Fx,Fy,Fz])
         """
-        return np.asarray(self.numba_functions['force'](*qEl))  # will raise NotImplementedError if called
+        return np.asarray(self.numba_functions['force'](*q_el))  # will raise NotImplementedError if called
 
-    def transform_Element_Coords_Into_Global_Orbit_Frame(self, qEl: np.ndarray, cumulativeLength: float) -> np.ndarray:
+    def transform_element_coords_into_global_orbit_frame(self, q_el: np.ndarray, cumulative_length: float) -> np.ndarray:
         """
         Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
         observer/lab cartesian coordinates.
 
-        :param qLab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
-        :param cumulativeLength: total length in orbit frame traveled so far. For a series of linear elements this
+        :param q_el: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
+        :param cumulative_length: total length in orbit frame traveled so far. For a series of linear elements this
         would simply be the sum of their length, float
         :return: New 3D global orbit frame position, numpy.ndarray([x,y,z])
         """
 
-        qOrbit = self.transform_Element_Coords_Into_Local_Orbit_Frame(qEl)
-        qOrbit[0] = qOrbit[0] + cumulativeLength  # longitudinal component grows
-        return qOrbit
+        q_orbit = self.transform_element_coords_into_local_orbit_frame(q_el)
+        q_orbit[0] = q_orbit[0] + cumulative_length  # longitudinal component grows
+        return q_orbit
 
-    def transform_Element_Momentum_Into_Global_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
-        """wraps self.transform_Element_Momentum_Into_Local_Orbit_Frame"""
+    def transform_element_momentum_into_global_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
+        """wraps self.transform_element_momentum_into_local_orbit_frame"""
 
-        return self.transform_Element_Momentum_Into_Local_Orbit_Frame(qEl, pEl)
+        return self.transform_element_momentum_into_local_orbit_frame(q_el, p_el)
 
-    def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
+    def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """
         Generate local cartesian element frame coordinates from cartesian observer/lab frame coordinates
 
-        :param qLab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
+        :param q_lab: 3D cartesian position vector in observer/lab frame,numpy.array([x,y,z])
         :return: New 3D cartesian element frame position, numpy.ndarray([x,y,z])
         """
         raise NotImplementedError
 
-    def transform_Element_Coords_Into_Lab_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """
         Generate cartesian observer/lab frame coordinates from local cartesian element frame coordinates
 
-        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :param q_el: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
         """
         raise NotImplementedError
 
-    def transform_Orbit_Frame_Into_Lab_Frame(self, qOrbit: np.ndarray) -> np.ndarray:
+    def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """
         Generate global cartesian observer/lab frame coords from non-cartesian local orbit frame coords. Orbit coords
         are similiar to the Frenet-Serret Frame.
 
-        :param qOrbit: 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
+        :param q_orbit: 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
             the orbit trajectory. xo is in the xy lab plane, yo is perpdindicular Not necessarily the same as the
             distance along the center of the element.
         :return: New 3D cartesian observer/lab frame position, numpy.ndarray([x,y,z])
         """
         raise NotImplementedError
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """
         Generate non-cartesian local orbit frame coords from local cartesian element frame coords. Orbit coords are
         similiar to the Frenet-Serret Frame.
 
-        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :param q_el: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: New 3D non-cartesian orbit frame position, numpy.ndarray([so,xo,yo]). so is the distance along
             the orbit trajectory. xo is in the xy lab plane, yo is perpdindicular Not necessarily the same as the
             distance along the center of the element.
         """
         raise NotImplementedError
 
-    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
         """
         Transform momentum vector in element frame in frame moving along with nominal orbit. In this frame px is the
         momentum tangent to the orbit, py is perpindicular and horizontal, pz is vertical.
 
-        :param qEl: 3D Position vector in element frame
-        :param pEl: 3D Momentum vector in element frame
+        :param q_el: 3D Position vector in element frame
+        :param p_el: 3D Momentum vector in element frame
         :return: New 3D momentum vector in orbit frame
         """
         raise NotImplementedError
@@ -206,19 +208,19 @@ class BaseElement:
 
         :param vecEl: 3D cartesian vector in element frame,numpy.array([vx,vy,vz])
         :return: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz])
-        """""
+        """
         vecNew = vecEl.copy()  # prevent editing
         vecNew[:2] = self.ROut @ vecNew[:2]
         return vecNew
 
-    def is_Coord_Inside(self, qEl: np.ndarray) -> bool:
+    def is_Coord_Inside(self, q_el: np.ndarray) -> bool:
         """
         Check if a 3D cartesian element frame coordinate is contained within an element's vacuum tube
 
-        :param qEl: 3D cartesian position vector in element frame,numpy.array([x,y,z])
+        :param q_el: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        return self.numba_functions['is_coord_in_vacuum'](*qEl)  # will raise NotImplementedError if called
+        return self.numba_functions['is_coord_in_vacuum'](*q_el)  # will raise NotImplementedError if called
 
     def assign_numba_functions(self,func_module,force_args,potential_args,is_coord_in_vacuum_args)-> None:
         self.numba_functions['force']=wrap_Numba_func(func_module.force,force_args)

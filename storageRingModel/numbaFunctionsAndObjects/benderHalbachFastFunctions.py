@@ -11,7 +11,7 @@ from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_arctan2
 def cartesian_To_Center(x, y, z, params):
     """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
     evaluation by interpolator"""
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, fieldFact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
 
     if x > 0.0 and -Lcap <= y <= 0.0:
         s = Lcap + y
@@ -58,19 +58,19 @@ def _Force_Func_Cap(x, y, z,fieldDataCap):
     return Fx, Fy, Fz
 
 @numba.njit()
-def _magnetic_Potential_Func_Seg(x, y, z,fieldDataSeg):
+def _magnetic_potential_Func_Seg(x, y, z,fieldDataSeg):
     return scalar_interp3D(x, y, z, *fieldDataSeg[:3], fieldDataSeg[-1])
 
 @numba.njit()
-def _magnetic_Potential_Func_Internal_Fringe(x, y, z,fieldDataInternal):
+def _magnetic_potential_Func_Internal_Fringe(x, y, z,fieldDataInternal):
     return scalar_interp3D(x, y, z, *fieldDataInternal[:3], fieldDataInternal[-1])
 
 @numba.njit()
-def _magnetic_Potential_Func_Cap(x, y, z,fieldDataCap):
+def _magnetic_potential_Func_Cap(x, y, z,fieldDataCap):
     return scalar_interp3D(x, y, z, *fieldDataCap[:3], fieldDataCap[-1])
 
 @numba.njit()
-def _magnetic_Potential_Func_Perturbation(x, y, z,fieldPerturbationData,params):
+def _magnetic_potential_Func_Perturbation(x, y, z,fieldPerturbationData,params):
     s, xc, yc = cartesian_To_Center(x, y, z,params)
     return scalar_interp3D(s, xc, yc, *fieldPerturbationData[:3], fieldPerturbationData[-1])
 
@@ -114,7 +114,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z,ang,ucAng):
 def is_coord_in_vacuum(x, y, z,params):
     phi = full_arctan2(y, x)  # calling a fast numba version that is global
 
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, fieldFact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     if phi < ang:  # if particle is inside bending angle region
         return (np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2 < ap ** 2
     else:  # if outside bender's angle range
@@ -131,7 +131,7 @@ def is_coord_in_vacuum(x, y, z,params):
 def magnetic_potential(x0, y0, z0,params,fieldData):
     # magnetic potential at point q in element frame
     # q: particle's position in element frame
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, fieldFact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData = fieldData
     x, y, z = x0, y0, z0
     if not is_coord_in_vacuum(x, y, z,params):
@@ -148,44 +148,44 @@ def magnetic_potential(x0, y0, z0,params,fieldData):
             position = 'INNER'
         if position == 'INNER':
             quc = transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z,ang,ucAng)  # get unit cell coords
-            V0 = _magnetic_Potential_Func_Seg(quc[0], quc[1], quc[2],fieldDataSeg)
+            V0 = _magnetic_potential_Func_Seg(quc[0], quc[1], quc[2],fieldDataSeg)
         elif position == 'FIRST' or position == 'LAST':
-            V0 = magnetic_Potential_First_And_Last(x, y, z, position,M_ang,fieldDataInternal)
+            V0 = magnetic_potential_First_And_Last(x, y, z, position,M_ang,fieldDataInternal)
         else:
             V0 = np.nan
     elif phi > ang:  # if outside bender's angle range
         if (rb - ap < x < rb + ap) and (0 > y > -Lcap):  # If inside the cap on
             # eastward side
-            V0 = _magnetic_Potential_Func_Cap(x, y, z,fieldDataCap)
+            V0 = _magnetic_potential_Func_Cap(x, y, z,fieldDataCap)
         else:
             xTest = RIn_Ang[0, 0] * x + RIn_Ang[0, 1] * y
             yTest = RIn_Ang[1, 0] * x + RIn_Ang[1, 1] * y
             if (rb - ap < xTest < rb + ap) and (
                     Lcap > yTest > 0):  # if on the westwards side
                 yTest = -yTest
-                V0 = _magnetic_Potential_Func_Cap(xTest, yTest, z,fieldDataCap)
+                V0 = _magnetic_potential_Func_Cap(xTest, yTest, z,fieldDataCap)
             else:  # if not in either cap
                 V0 = np.nan
     if useFieldPerturbations and not np.isnan(V0):
-        deltaV = _magnetic_Potential_Func_Perturbation(x0, y0, z0,fieldPerturbationData,params)  # extra force from design imperfections
+        deltaV = _magnetic_potential_Func_Perturbation(x0, y0, z0,fieldPerturbationData,params)  # extra force from design imperfections
         V0 = V0 + deltaV
-    V0 *= fieldFact
+    V0 *= field_fact
     return V0
 
 @numba.njit()
-def magnetic_Potential_First_And_Last(x, y, z, position,M_ang,fieldDataInternal):
+def magnetic_potential_First_And_Last(x, y, z, position,M_ang,fieldDataInternal):
     if position == 'FIRST':
         xNew = M_ang[0, 0] * x + M_ang[0, 1] * y
         yNew = M_ang[1, 0] * x + M_ang[1, 1] * y
-        V0 = _magnetic_Potential_Func_Internal_Fringe(xNew, yNew, z,fieldDataInternal)
+        V0 = _magnetic_potential_Func_Internal_Fringe(xNew, yNew, z,fieldDataInternal)
     elif position == 'LAST':
-        V0 = _magnetic_Potential_Func_Internal_Fringe(x, y, z,fieldDataInternal)
+        V0 = _magnetic_potential_Func_Internal_Fringe(x, y, z,fieldDataInternal)
     else:
         raise Exception('INVALID POSITION SUPPLIED')
     return V0
 
 
-def update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ):
+def update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z):
     """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
     raise NotImplementedError
 
@@ -194,7 +194,7 @@ def force(x0, y0, z0,params,fieldData):
     # force at point q in element frame
     # q: particle's position in element frame
     x, y, z = x0, y0, z0
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, fieldFact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     fieldDataSeg,fieldDataInternal,fieldDataCap,fieldPerturbationData=fieldData
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
@@ -248,9 +248,9 @@ def force(x0, y0, z0,params,fieldData):
             else:  # if not in either cap, then outside the bender
                 Fx, Fy, Fz = np.nan, np.nan, np.nan
     Fz = Fz * FzSymmetryFact
-    Fx *= fieldFact
-    Fy *= fieldFact
-    Fz *= fieldFact
+    Fx *= field_fact
+    Fy *= field_fact
+    Fz *= field_fact
     if useFieldPerturbations and not np.isnan(Fx):
         deltaFx, deltaFy, deltaFz = _force_Func_Perturbation(x0, y0,
                                                                   z0,params,fieldPerturbationData)  # extra force from design imperfections

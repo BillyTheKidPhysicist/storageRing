@@ -26,21 +26,21 @@ def make_Halbach_Lens_Outer_Points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a halbach lens. Overall shape is
     a rectangle overlayd on a shorter but wider rectangle. This represents the width of the magnets"""
     assert type(el) is HalbachLensSim
-    halfWidth = el.outerHalfWidth
-    vacuumTubeOuterWidth = el.ap + TUBE_WALL_THICKNESS
-    fringeLength = el.fringeFieldLength
-    point1 = np.asarray([0.0, vacuumTubeOuterWidth])
-    point2 = np.asarray([fringeLength, vacuumTubeOuterWidth])
-    point3 = np.asarray([fringeLength, halfWidth])
-    point4 = np.asarray([el.L - fringeLength, halfWidth])
-    point5 = np.asarray([el.L - fringeLength, vacuumTubeOuterWidth])
-    point6 = np.asarray([el.L, vacuumTubeOuterWidth])
-    topPoints = [point1, point2, point3, point4, point5, point6]
+    half_width = el.outer_half_width
+    vacuum_tube_outer_width = el.ap + TUBE_WALL_THICKNESS
+    fringe_length = el.fringeFieldLength
+    point1 = np.asarray([0.0, vacuum_tube_outer_width])
+    point2 = np.asarray([fringe_length, vacuum_tube_outer_width])
+    point3 = np.asarray([fringe_length, half_width])
+    point4 = np.asarray([el.L - fringe_length, half_width])
+    point5 = np.asarray([el.L - fringe_length, vacuum_tube_outer_width])
+    point6 = np.asarray([el.L, vacuum_tube_outer_width])
+    top_points = [point1, point2, point3, point4, point5, point6]
 
-    bottomPoints = np.flip(np.row_stack(topPoints), axis=0)  # points need to go clockwise
-    bottomPoints[:, -1] *= -1
-    pointsOuter = [*topPoints, *bottomPoints]
-    return pointsOuter
+    bottom_points = np.flip(np.row_stack(top_points), axis=0)  # points need to go clockwise
+    bottom_points[:, -1] *= -1
+    points_outer = [*top_points, *bottom_points]
+    return points_outer
 
 
 def make_Hexapole_Bender_Caps_Outer_Points(el: Element) -> tuple[list[np.ndarray], list[np.ndarray]]:
@@ -48,22 +48,22 @@ def make_Hexapole_Bender_Caps_Outer_Points(el: Element) -> tuple[list[np.ndarray
     a stepped shape from the width of the magnets. Output cap points along -y and is easy to specify the
     coordinates and is then mirrored to produce the input cap as well."""
 
-    vacuumTubeOuterWidth = el.ap + TUBE_WALL_THICKNESS
-    pointsCapStart = [np.array([el.rb - el.outerHalfWidth, -el.Lm / 2.0]),
-                      np.array([el.rb - vacuumTubeOuterWidth, -el.Lm / 2.0]),
-                      np.array([el.rb - vacuumTubeOuterWidth, -el.Lcap]),
-                      np.array([el.rb + vacuumTubeOuterWidth, -el.Lcap]),
-                      np.array([el.rb + vacuumTubeOuterWidth, -el.Lm / 2.0]),
-                      np.array([el.rb + el.outerHalfWidth, -el.Lm / 2.0])]
+    vacuum_tube_outer_width = el.ap + TUBE_WALL_THICKNESS
+    points_cap_start = [np.array([el.rb - el.outer_half_width, -el.Lm / 2.0]),
+                      np.array([el.rb - vacuum_tube_outer_width, -el.Lm / 2.0]),
+                      np.array([el.rb - vacuum_tube_outer_width, -el.Lcap]),
+                      np.array([el.rb + vacuum_tube_outer_width, -el.Lcap]),
+                      np.array([el.rb + vacuum_tube_outer_width, -el.Lm / 2.0]),
+                      np.array([el.rb + el.outer_half_width, -el.Lm / 2.0])]
 
-    pointsCapEnd = []
+    points_cap_end = []
     m = np.tan(el.ang / 2.0)
-    for point in pointsCapStart:
-        xStart, yStart = point
-        d = (xStart + yStart * m) / (1 + m ** 2)
-        pointEnd = np.array([2 * d - xStart, 2 * d * m - yStart])
-        pointsCapEnd.append(pointEnd)
-    return pointsCapStart, pointsCapEnd
+    for point in points_cap_start:
+        x_start, y_start = point
+        d = (x_start + y_start * m) / (1 + m ** 2)
+        point_end = np.array([2 * d - x_start, 2 * d * m - y_start])
+        points_cap_end.append(point_end)
+    return points_cap_start, points_cap_end
 
 
 def make_Hexapole_Bender_Outer_Points(el: Element) -> list[np.ndarray]:
@@ -71,27 +71,27 @@ def make_Hexapole_Bender_Outer_Points(el: Element) -> list[np.ndarray]:
     Shape is a toroid with short straight section at input/ouput, with another wider but shorter toroid ontop """
 
     assert type(el) is HalbachBenderSimSegmented
-    phiArr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
+    phi_arr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
 
-    xInner = (el.rb - el.outerHalfWidth) * np.cos(phiArr)  # x values for inner bend
-    yInner = (el.rb - el.outerHalfWidth) * np.sin(phiArr)  # y values for inner bend
-    xOuter = np.flip((el.rb + el.outerHalfWidth) * np.cos(phiArr))  # x values for outer bend
-    yOuter = np.flip((el.rb + el.outerHalfWidth) * np.sin(phiArr))  # y values for outer bend
+    x_inner = (el.rb - el.outer_half_width) * np.cos(phi_arr)  # x values for inner bend
+    y_inner = (el.rb - el.outer_half_width) * np.sin(phi_arr)  # y values for inner bend
+    x_outer = np.flip((el.rb + el.outer_half_width) * np.cos(phi_arr))  # x values for outer bend
+    y_outer = np.flip((el.rb + el.outer_half_width) * np.sin(phi_arr))  # y values for outer bend
 
-    pointsCapStart, pointsCapEnd = make_Hexapole_Bender_Caps_Outer_Points(el)
-    pointsCapStart, pointsCapEnd = np.array(pointsCapStart), np.array(pointsCapEnd)
-    xInner = np.append(np.flip(pointsCapEnd[:, 0]), xInner)
-    yInner = np.append(np.flip(pointsCapEnd[:, 1]), yInner)
-    xInner = np.append(xInner, pointsCapStart[:, 0])
-    yInner = np.append(yInner, pointsCapStart[:, 1])
-    x = np.append(xInner, xOuter)  # list of x values in order
-    y = np.append(yInner, yOuter)  # list of y values in order
-    pointsOuter = np.column_stack((x, y))  # shape the coordinates and make the object
-    rotMatrix2D = Rot.from_rotvec([0, 0, el.theta - el.ang + pi / 2]).as_matrix()[:2, :2]
-    for i, point in enumerate(pointsOuter):
-        pointsOuter[i] = rotMatrix2D @ point
-    pointsOuter += el.r0[:2]
-    return pointsOuter
+    points_cap_start, points_cap_end = make_Hexapole_Bender_Caps_Outer_Points(el)
+    points_cap_start, points_cap_end = np.array(points_cap_start), np.array(points_cap_end)
+    x_inner = np.append(np.flip(points_cap_end[:, 0]), x_inner)
+    y_inner = np.append(np.flip(points_cap_end[:, 1]), y_inner)
+    x_inner = np.append(x_inner, points_cap_start[:, 0])
+    y_inner = np.append(y_inner, points_cap_start[:, 1])
+    x = np.append(x_inner, x_outer)  # list of x values in order
+    y = np.append(y_inner, y_outer)  # list of y values in order
+    points_outer = np.column_stack((x, y))  # shape the coordinates and make the object
+    rot_mat_2D = Rot.from_rotvec([0, 0, el.theta - el.ang + pi / 2]).as_matrix()[:2, :2]
+    for i, point in enumerate(points_outer):
+        points_outer[i] = rot_mat_2D @ point
+    points_outer += el.r0[:2]
+    return points_outer
 
 
 def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
@@ -106,23 +106,23 @@ def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
     # pylint: disable=too-many-locals
     assert type(el) is CombinerHalbachLensSim
     apR, apL = el.ap, el.ap
-    extraFact = el.acceptance_width/el.ap
-    halfWidth = el.outerHalfWidth
+    extra_fact = el.acceptance_width/el.ap
+    half_width = el.outer_half_width
     point1 = np.array([0, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
     point2 = np.array([el.space, apR + TUBE_WALL_THICKNESS])  # top left ( in standard xy plane) when theta=0
-    point3 = np.array([el.space, halfWidth])  # top left ( in standard xy plane) when theta=0
-    point4 = np.array([el.Lb, halfWidth])  # top middle when theta=0
-    point5 = np.array([el.Lb, extraFact*apR + TUBE_WALL_THICKNESS])  # top middle when theta=0
-    point6 = np.array([el.Lb + (el.La - (extraFact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       (extraFact*apR + TUBE_WALL_THICKNESS) + (
-                               el.La - (extraFact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
-    point7 = np.array([el.Lb + (el.La +( extraFact * apL + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
-                       -( extraFact * apL + TUBE_WALL_THICKNESS) + (el.La  +
-                                                                     ( extraFact * apL + TUBE_WALL_THICKNESS)
+    point3 = np.array([el.space, half_width])  # top left ( in standard xy plane) when theta=0
+    point4 = np.array([el.Lb, half_width])  # top middle when theta=0
+    point5 = np.array([el.Lb, extra_fact*apR + TUBE_WALL_THICKNESS])  # top middle when theta=0
+    point6 = np.array([el.Lb + (el.La - (extra_fact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       (extra_fact*apR + TUBE_WALL_THICKNESS) + (
+                               el.La - (extra_fact*apR + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.sin(el.ang)])
+    point7 = np.array([el.Lb + (el.La +( extra_fact * apL + TUBE_WALL_THICKNESS) * np.sin(el.ang)) * np.cos(el.ang),
+                       -( extra_fact * apL + TUBE_WALL_THICKNESS) + (el.La  +
+                                                                     ( extra_fact * apL + TUBE_WALL_THICKNESS)
                                                                      * np.sin(el.ang)) * np.sin(el.ang)])
-    point8 = np.array([el.Lb, -extraFact * apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
-    point9 = np.array([el.Lb, -halfWidth])  # bottom middle when theta=0
-    point10 = np.array([el.space, -halfWidth])  # bottom middle when theta=0
+    point8 = np.array([el.Lb, -extra_fact * apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
+    point9 = np.array([el.Lb, -half_width])  # bottom middle when theta=0
+    point10 = np.array([el.space, -half_width])  # bottom middle when theta=0
     point11 = np.array([el.space, -apL - TUBE_WALL_THICKNESS])  # bottom middle when theta=0
     point12 = np.array([0, -apL - TUBE_WALL_THICKNESS])  # bottom left when theta=0
     pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
@@ -237,9 +237,9 @@ def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
 
 def make_Drift_Shapely_Objects(el: Drift):
     """Make shapely objects for drift element. Drift element is trapezoid shaped to allow for tilted input/output"""
-    L, ap, outerHalfWidth, theta1, theta2 = el.L, el.ap, el.outerHalfWidth, el.inputTiltAngle, el.outputTiltAngle
+    L, ap, outer_half_width, theta1, theta2 = el.L, el.ap, el.outer_half_width, el.inputTiltAngle, el.outputTiltAngle
     pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
-    pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outerHalfWidth)
+    pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outer_half_width)
     for point in [*pointsInner, *pointsOuter]:
         point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
     return Polygon(pointsOuter), Polygon(pointsInner)
@@ -323,4 +323,4 @@ def build_Shapely_Objects(elementList: list[Element]) -> None:
     for el in elementList:
         shapelyObject_Outer, shapelyObject_Inner = make_Element_Shapely_Object(el)
         el.SO = shapelyObject_Inner
-        el.SO_Outer = shapelyObject_Outer
+        el.SO_outer = shapelyObject_Outer

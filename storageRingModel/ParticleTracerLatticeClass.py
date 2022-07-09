@@ -22,17 +22,17 @@ benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
 class ParticleTracerLattice:
 
-    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, latticeType: str = 'storageRing',
-                 jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, standardMagnetErrors: bool = False,
+    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storageRing',
+                 jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
-                 magnet_grade: str = 'N52', standard_mag_sizes: bool=False, standard_tube_ODs: bool =False):
+                 magnet_grade: str = 'N52', use_standard_mag_size: bool=False, use_standard_tube_OD: bool =False):
         assert fieldDensityMultiplier > 0.0
-        if latticeType != 'storageRing' and latticeType != 'injector':
+        if lattice_type != 'storageRing' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
         if jitterAmp > 5e-3:
             raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
                             "depend on this value, and relatively large values were not planned for")
-        self.latticeType = latticeType  # options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
+        self.lattice_type = lattice_type  # options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
         # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         # is also at the origin, but seceeding elements follow along the positive x axis
         self.speed_nominal = speed_nominal  # Design particle speed
@@ -45,9 +45,9 @@ class ParticleTracerLattice:
         self.totalLength: Optional[float] = None  # total length of lattice, m
         self.jitterAmp = jitterAmp
         self.fieldDensityMultiplier = fieldDensityMultiplier
-        self.standardMagnetErrors = standardMagnetErrors
-        self.standard_tube_ODs=standard_tube_ODs
-        self.standard_mag_sizes=standard_mag_sizes
+        self.use_mag_errors = use_mag_errors
+        self.use_standard_tube_OD=use_standard_tube_OD
+        self.use_standard_mag_size=use_standard_mag_size
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linearElementsToConstraint: list[HalbachLensSim] = []  # elements whos length will be changed when the
@@ -62,7 +62,7 @@ class ParticleTracerLattice:
     def __iter__(self) -> Iterable[Element]:
         return (element for element in self.elList)
 
-    def _find_rOptimal(self, outputOffsetFactArr: np.ndarray, errorArr: np.ndarray) -> Optional[float]:
+    def _find_rOptimal(self, output_offsetFactArr: np.ndarray, errorArr: np.ndarray) -> Optional[float]:
         test = errorArr.copy()[1:]
         test = np.append(test, errorArr[0])
         numValidSolutions = np.sum(~np.isnan(errorArr))
@@ -79,14 +79,14 @@ class ParticleTracerLattice:
         if valid == False:
             return None
         # trim out invalid points
-        outputOffsetFactArr = outputOffsetFactArr[~np.isnan(errorArr)]
+        output_offsetFactArr = output_offsetFactArr[~np.isnan(errorArr)]
         errorArr = errorArr[~np.isnan(errorArr)]
-        fit = spi.RBFInterpolator(outputOffsetFactArr[:, np.newaxis], errorArr)
-        outputOffsetFactArrDense = np.linspace(outputOffsetFactArr[0], outputOffsetFactArr[-1], 10_000)
-        errorArrDense = fit(outputOffsetFactArrDense[:, np.newaxis])
-        rOptimal = outputOffsetFactArrDense[np.argmin(errorArrDense)]
-        rMinDistFromEdge = np.min(outputOffsetFactArr[1:] - outputOffsetFactArr[:-1]) / 4
-        if rOptimal > outputOffsetFactArr[-1] - rMinDistFromEdge or rOptimal < outputOffsetFactArr[
+        fit = spi.RBFInterpolator(output_offsetFactArr[:, np.newaxis], errorArr)
+        output_offsetFactArrDense = np.linspace(output_offsetFactArr[0], output_offsetFactArr[-1], 10_000)
+        errorArrDense = fit(output_offsetFactArrDense[:, np.newaxis])
+        rOptimal = output_offsetFactArrDense[np.argmin(errorArrDense)]
+        rMinDistFromEdge = np.min(output_offsetFactArr[1:] - output_offsetFactArr[:-1]) / 4
+        if rOptimal > output_offsetFactArr[-1] - rMinDistFromEdge or rOptimal < output_offsetFactArr[
             0] + rMinDistFromEdge:
             # print('Invalid solution, rMin very near edge. ')
             return None
@@ -105,14 +105,14 @@ class ParticleTracerLattice:
         """
 
         file = 'combinerV3.txt'
-        el = CombinerSim(self, file, self.latticeType, sizeScale=sizeScale)
+        el = CombinerSim(self, file, self.lattice_type, sizeScale=sizeScale)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
         self.combinerIndex = el.index
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
-    def add_Combiner_Sim_Lens(self, Lm: float, rp: float, loadBeamOffset: float = 5e-3, layers: int = 1,
+    def add_Combiner_Sim_Lens(self, Lm: float, rp: float, load_beam_offset: float = 5e-3, layers: int = 1,
                               ap: float = None,
                               seed: int = None) -> None:
 
@@ -130,7 +130,7 @@ class ParticleTracerLattice:
         :return: None
         """
 
-        el = CombinerHalbachLensSim(self, Lm, rp, loadBeamOffset, layers, ap, seed)
+        el = CombinerHalbachLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed)
         el.index = len(self.elList)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -201,7 +201,7 @@ class ParticleTracerLattice:
             print('not fully supported feature')
 
     def add_Drift(self, L: float, ap: float = .03, inputTiltAngle: float = 0.0, outputTiltAngle: float = 0.0,
-                  outerHalfWidth: float = None) -> None:
+                  outer_half_width: float = None) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -215,11 +215,11 @@ class ParticleTracerLattice:
         :param ap: Aperture of drift region, m
         :param inputTiltAngle: Tilt angle of the input plane to the drift region.
         :param outputTiltAngle: Tilt angle of the output to the drift region.
-        :param outerHalfWidth: Outer half width of drift region. For example, a valve.
+        :param outer_half_width: Outer half width of drift region. For example, a valve.
         :return:
         """
 
-        el = Drift(self, L, ap, outerHalfWidth, inputTiltAngle, outputTiltAngle)  # create a drift element object
+        el = Drift(self, L, ap, outer_half_width, inputTiltAngle, outputTiltAngle)  # create a drift element object
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
 
@@ -227,7 +227,7 @@ class ParticleTracerLattice:
                                          rOffsetFact: float = 1.0, ap: float = None) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # Lcap: Length of element on the end/input of bender
-        # outputOffsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
+        # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
         el = HalbachBenderSimSegmented(self, Lm, rp, numMagnets, rb, ap, rOffsetFact)
         el.index = len(self.elList)  # where the element is in the lattice
@@ -288,11 +288,11 @@ class ParticleTracerLattice:
         for el in self.elList:
             el.fill_Post_Constrained_Parameters()
             if build_field_helpers:
-                el.build_Fast_Field_Helper()
+                el.build_fast_field_felper()
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
-        if self.latticeType == 'storageRing' and constrain:  # double check
+        if self.lattice_type == 'storageRing' and constrain:  # double check
             assert is_Particle_Tracer_Lattice_Closed(self)
         build_Shapely_Objects(self.elList)
         self.totalLength = 0
@@ -319,7 +319,7 @@ class ParticleTracerLattice:
                 if not type(bender1) is type(self.elList[i]):
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
         if constrain:
-            if self.latticeType != 'storageRing':
+            if self.lattice_type != 'storageRing':
                 raise Exception('Constrained lattice must be storage ring type')
             if not len(self.benderIndices) >= 2:
                 raise Exception('THERE MUST BE AT LEAST TWO BENDERS')
@@ -333,7 +333,7 @@ class ParticleTracerLattice:
                 raise Exception('COMBINER MUST BE PRESENT')
 
     def get_Element_Before_And_After(self, elCenter: Element) -> tuple[Element, Element]:
-        if (elCenter.index == len(self.elList) - 1 or elCenter.index == 0) and self.latticeType == 'injector':
+        if (elCenter.index == len(self.elList) - 1 or elCenter.index == 0) and self.lattice_type == 'injector':
             raise Exception('Element cannot be first or last if lattice is injector type')
         elBeforeIndex = elCenter.index - 1 if elCenter.index != 0 else len(self.elList) - 1
         elAfterIndex = elCenter.index + 1 if elCenter.index < len(self.elList) - 1 else 0
@@ -354,7 +354,7 @@ class ParticleTracerLattice:
                 xInOrbitFrame = xPos - cumulativeLen
                 break
             cumulativeLen += latticeElement.Lo
-        xLab, yLab, zLab = element.transform_Orbit_Frame_Into_Lab_Frame(np.asarray([xInOrbitFrame, 0, 0]))
+        xLab, yLab, zLab = element.transform_orbit_frame_into_lab_frame(np.asarray([xInOrbitFrame, 0, 0]))
         return xLab, yLab
 
     def show_Lattice(self, particleCoords=None, particle=None, swarm=None, showRelativeSurvival=True,
@@ -399,7 +399,7 @@ class ParticleTracerLattice:
                 linestyle = ':' if plotOuter else '-'  # dashed inner if plotting iner
                 plt.plot(*elPlotPoints, c=ELEMENT_PLOT_COLORS[type(el)], linestyle=linestyle)
             if plotOuter:
-                elPlotPoints = el.SO_Outer.exterior.xy
+                elPlotPoints = el.SO_outer.exterior.xy
                 plt.plot(*elPlotPoints, c=ELEMENT_PLOT_COLORS[type(el)])
 
         if particleCoords is not None:  # plot from the provided particle coordinate

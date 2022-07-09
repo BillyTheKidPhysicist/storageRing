@@ -5,8 +5,8 @@ def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIn
     if len(tuningBounds) != len(tuningElementIndices): raise Exception(
         "Bounds do not match number of tuned elements")
     combinerRing, combinerLat = self.lattice_ring.combiner, self.lattice_injector.combiner
-    if not (combinerRing.Lm == combinerLat.Lm and combinerRing.ap == combinerLat.ap and combinerRing.outputOffset ==
-            combinerLat.outputOffset):
+    if not (combinerRing.Lm == combinerLat.Lm and combinerRing.ap == combinerLat.ap and combinerRing.output_offset ==
+            combinerLat.output_offset):
         raise Exception('Combiners are different between the two lattices')
     injectorTuningElements = [self.lattice_injector.elList[index] for index in self.injectTuneElIndices]
     if not all(isinstance(el, Drift) for el in injectorTuningElements):
@@ -166,7 +166,7 @@ def update_Ring_Lattice(self, X: list_array_tuple) -> None:
 def update_Ring_Field_Values(self, X: list_array_tuple) -> None:
     raise NotImplementedError
     for el, arg in zip(self.tunedElementList, X):
-        el.fieldFact = arg
+        el.field_fact = arg
 def update_Ring_Spacing(self, X: list_array_tuple) -> None:
     raise NotImplementedError
     for elCenter, spaceFracElBefore in zip(self.tunedElementList, X):
@@ -186,10 +186,10 @@ def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     self.update_Ring_And_Injector(X)
     maxInitialTransversePos = 1e-3
     T_Max = 1.1 * minRevsToTest * self.lattice_ring.totalLength / self.lattice_ring.speed_nominal
-    swarmTestInitial = self.swarm_tracer_ring.initialize_Stablity_Testing_Swarm(maxInitialTransversePos)
+    swarmTestInitial = self.swarm_tracer_ring.initialize_stablity_testing_swarm(maxInitialTransversePos)
     swarmTestAtCombiner = self.swarm_tracer_ring.move_Swarm_To_Combiner_Output(swarmTestInitial)
     swarmTestTraced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
-                                                                       T_Max, accelerated=False, fastMode=True,
+                                                                       T_Max, accelerated=False, use_fast_mode=True,
                                                                        use_collisions=self.use_collisions)
     stable = False
     for particle in swarmTestTraced:

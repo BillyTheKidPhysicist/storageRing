@@ -32,9 +32,9 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
     L2 = combiner.La  # from previous bender to kin
     inputAng = combiner.ang
     inputOffset = combiner.inputOffset
-    outputOffset = combiner.outputOffset
-    L1 += -(inputOffset + outputOffset) / np.tan(inputAng)
-    L2 += - inputOffset * np.sin(inputAng) + (inputOffset + outputOffset) / np.sin(inputAng)
+    output_offset = combiner.output_offset
+    L1 += -(inputOffset + output_offset) / np.tan(inputAng)
+    L2 += - inputOffset * np.sin(inputAng) + (inputOffset + output_offset) / np.sin(inputAng)
     return Kink(-combiner.ang, L2, L1)
 
 
@@ -42,14 +42,14 @@ def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> C
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
     lengthSegment, Lcap, radius, numMagnets = bender.Lm, bender.Lcap, bender.ro, bender.numMagnets
-    magnetDepth = bender.rp + bender.magnetWidth + bender.outputOffset #todo: why does this have outputOffset??
+    magnetDepth = bender.rp + bender.magnetWidth + bender.output_offset #todo: why does this have output_offset??
     return CappedSlicedBend(lengthSegment, numMagnets, magnetDepth, Lcap, radius)
 
 
 def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     """Use a ParticleTracerLattice to construct a geometric representation of the storage ring. The geometric
     representation is of the ideal orbit of a particle loosely speaking, not the centerline of elements."""
-    assert not (constrain and PTL.latticeType == 'injector')
+    assert not (constrain and PTL.lattice_type == 'injector')
     elements = []
     firstEl = None
     for i, el_PTL in enumerate(PTL):
@@ -89,7 +89,7 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
     """Given a geometric shape object, fill the geometric attributes of an Element object. """
 
     assert type(bender) in (BenderIdeal, HalbachBenderSimSegmented) and type(shape) in (Bend, CappedSlicedBend)
-    bender.rb = shape.radius - bender.outputOffset  # get the bending radius back from orbit radius
+    bender.rb = shape.radius - bender.output_offset  # get the bending radius back from orbit radius
     if type(bender) is HalbachBenderSimSegmented:
         bender.numMagnets = shape.numMagnets
     bender.r1 = np.array([*shape.pos_in, 0])
@@ -111,7 +111,7 @@ def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, Comb
     assert type(shape) is Kink
 
     n_out_perp = -np.flip(shape.n_out) * np.array([-1, 1])
-    r2 = (shape.pos_out + n_out_perp * combiner.outputOffset)
+    r2 = (shape.pos_out + n_out_perp * combiner.output_offset)
     combiner.r2 = np.array([*r2, 0.0])
     r1 = r2 + -shape.n_out * combiner.Lb + shape.n_in * combiner.La
     combiner.r1 = np.array([*r1, 0])

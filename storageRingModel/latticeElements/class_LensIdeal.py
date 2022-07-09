@@ -30,45 +30,45 @@ class LensIdeal(BaseElement):
 
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
-        self.K = self.fieldFact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
+        self.K = self.field_fact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
 
-        numba_func_constants=self.K,self.L,self.ap,self.fieldFact
+        numba_func_constants=self.K,self.L,self.ap,self.field_fact
         force_args = (numba_func_constants,)
         potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
         self.assign_numba_functions(idealLensFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
-    def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
+    def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = qLab.copy()
+        qNew = q_lab.copy()
         qNew -= self.r1
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
 
-    def transform_Element_Coords_Into_Lab_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = qEl.copy()
+        qNew = q_el.copy()
         qNew = self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew += self.r1
         return qNew
 
-    def transform_Orbit_Frame_Into_Lab_Frame(self, qOrbit: np.ndarray) -> np.ndarray:
+    def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = qOrbit.copy()
+        qNew = q_orbit.copy()
         qNew[:2] = self.ROut @ qNew[:2]
         qNew += self.r1
         return qNew
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Element and orbit frame is identical in simple
         straight elements"""
 
-        return qEl.copy()
+        return q_el.copy()
 
     def set_length(self, L: float) -> None:
         """this is used typically for setting the length after satisfying constraints"""
@@ -77,8 +77,8 @@ class LensIdeal(BaseElement):
         self.L = L
         self.Lo = self.L
 
-    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Element and orbit frame is identical in simple
         straight elements"""
 
-        return pEl.copy()
+        return p_el.copy()

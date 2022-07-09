@@ -28,31 +28,31 @@ def force( x, y, z,params):
 def force_Without_isInside_Check( x, y, z,params):
     # force at point q in element frame
     # q: particle's position in element frame
-    c1, c2,ang,La,Lb,apz,apL,apR, fieldFact = params
+    c1, c2,ang,La,Lb,apz,apL,apR, field_fact = params
     Fx, Fy, Fz = combiner_Ideal_Force(x, y, z, Lb, c1, c2)
     # print(Fx, Fy, Fz)
-    # print(fieldFact)
-    Fx *= fieldFact
-    Fy *= fieldFact
-    Fz *= fieldFact
+    # print(field_fact)
+    Fx *= field_fact
+    Fy *= field_fact
+    Fz *= field_fact
     return Fx, Fy, Fz
 
 @numba.njit()
 def magnetic_potential( x, y, z,params):
-    c1, c2, ang, La, Lb, apz, apL, apR, fieldFact = params
+    c1, c2, ang, La, Lb, apz, apL, apR, field_fact = params
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
     if 0 < x < Lb:
         V0 = SIMULATION_MAGNETON * np.sqrt((c2 * z) ** 2 + (c1 + c2 * y) ** 2)
     else:
         V0 = 0.0
-    V0 *= fieldFact
+    V0 *= field_fact
     return V0
 
 @numba.njit()
 def is_coord_in_vacuum(x, y, z,params):
     # q: coordinate to test in element's frame
-    c1, c2, ang, La, Lb, apz, apL, apR, fieldFact = params
+    c1, c2, ang, La, Lb, apz, apL, apR, field_fact = params
     if not -apz < z < apz:  # if outside the z apeture (vertical)
         return False
     elif 0 <= x <= Lb:  # particle is in the horizontal section (in element frame) that passes

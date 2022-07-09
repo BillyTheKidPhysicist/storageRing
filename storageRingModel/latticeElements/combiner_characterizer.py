@@ -6,7 +6,7 @@ from latticeElements.elements import CombinerIdeal, CombinerHalbachLensSim, Comb
 from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
 
 
-def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleOutputOffsetStart: float = 0.0,
+def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleoutput_offsetStart: float = 0.0,
                                 atomState='LOW_FIELD_SEEKING') -> tuple[np.ndarray, np.ndarray]:
     # this computes the output angle and offset for a combiner magnet.
     # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
@@ -17,11 +17,11 @@ def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleOutputO
     # h: timestep
     # lowField: wether to model low or high field seekers
     h = 5e-6
-    particleOutputOffsetStart = -particleOutputOffsetStart  # temporary
+    particleoutput_offsetStart = -particleoutput_offsetStart  # temporary
     assert atomState in ('LOW_FIELD_SEEKING', 'HIGH_FIELD_SEEKING')
     stateFact = 1 if atomState == 'LOW_FIELD_SEEKING' else -1
     Force = lambda x: forceFunc(x) * stateFact
-    q = np.asarray([xStart, particleOutputOffsetStart, 0.0])
+    q = np.asarray([xStart, particleoutput_offsetStart, 0.0])
     p = np.asarray([speed, 0.0, 0.0])
     qList, pList = [q], [p]
 
@@ -98,11 +98,11 @@ def characterize_CombinerIdeal(el: CombinerIdeal):
 
 def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, particleOffset=None):
     atomState = (
-        'HIGH_FIELD_SEEKING' if el.fieldFact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
-    particleOffset = el.outputOffset if particleOffset is None else particleOffset
+        'HIGH_FIELD_SEEKING' if el.field_fact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
+    particleOffset = el.output_offset if particleOffset is None else particleOffset
     force_Func = make_Halbahc_Combiner_Force_Function(el)
     qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
-                                             particleOutputOffsetStart=particleOffset, atomState=atomState)
+                                             particleoutput_offsetStart=particleOffset, atomState=atomState)
 
     assert isclose(qArr[-1, 0], el.Lm + 2 * el.space) and isclose(qArr[0, 0], 0.0)
     minBeamLensSep = closet_Approach_To_Lens_Corner(el, qArr)
@@ -114,7 +114,7 @@ def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, par
 
 def characterize_CombinerSim(el: CombinerSim):
     from numbaFunctionsAndObjects.combinerSimFastFunction import force_Without_isInside_Check
-    params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.apL, el.apR, el.space, el.fieldFact)
+    params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.apL, el.apR, el.space, el.field_fact)
 
     fieldData = el.open_And_Shape_Field_Data()
     def force_Func(q):

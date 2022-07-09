@@ -61,8 +61,8 @@ class HalbachLensSim(LensIdeal):
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
         # todo: why is this so different from the combiner version? It should be like that version instead
-        apMax = (self.rp - INTERP_MAGNET_OFFSET) * (1 - sqrt(2) / (self.numGridPointsR - 1))
-        return apMax
+        ap_max = (self.rp - INTERP_MAGNET_OFFSET) * (1 - sqrt(2) / (self.numGridPointsR - 1))
+        return ap_max
 
     def fill_Pre_Constrained_Parameters(self):
         pass
@@ -85,7 +85,7 @@ class HalbachLensSim(LensIdeal):
         # todo: this may give results which are not limited by aperture, but by interpolation region validity
         boreOD = 2 * self.rp
         apLargestTube = round_down_to_nearest_valid_tube_OD(
-            boreOD) / 2.0 - TUBE_WALL_THICKNESS if self.PTL.standard_tube_ODs else inf
+            boreOD) / 2.0 - TUBE_WALL_THICKNESS if self.PTL.use_standard_tube_OD else inf
         apLargestInterp = self.maximum_Good_Field_Aperture()
         ap_valid = apLargestTube if apLargestTube < apLargestInterp else apLargestInterp
         return ap_valid
@@ -118,7 +118,7 @@ class HalbachLensSim(LensIdeal):
         :return: tuple of transverse widths of magnets
         """
         if magnetWidthsProposed is None:
-            magnetWidths = tuple(halbach_Magnet_Width(rp, use_standard_sizes=self.PTL.standard_mag_sizes) for
+            magnetWidths = tuple(halbach_Magnet_Width(rp, use_standard_sizes=self.PTL.use_standard_mag_size) for
                                  rp in rpLayers)
         else:
             assert len(magnetWidthsProposed) == len(rpLayers)
@@ -143,7 +143,7 @@ class HalbachLensSim(LensIdeal):
         self.Lo = self.L
         self.Lcap = self.effective_Material_Length() / 2 + self.fringeFracOuter * max(self.rpLayers)
         mountThickness = 1e-3  # outer thickness of mount, likely from space required by epoxy and maybe clamp
-        self.outerHalfWidth = max(self.rpLayers) + self.magnetWidths[np.argmax(self.rpLayers)] + mountThickness
+        self.outer_half_width = max(self.rpLayers) + self.magnetWidths[np.argmax(self.rpLayers)] + mountThickness
 
     def make_Grid_Coord_Arrays(self, useSymmetry: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -224,13 +224,13 @@ class HalbachLensSim(LensIdeal):
             data3D_Difference_no_perturb
         return  fieldData3D, fieldData2D, fieldDataPerturbations
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
-        apply_perturbation = True if self.PTL.standardMagnetErrors or len(self.magnet.neighbors) > 0 else False
+        apply_perturbation = True if self.PTL.use_mag_errors or len(self.magnet.neighbors) > 0 else False
         fieldData=self.make_interp_data(apply_perturbation)
 
-        numba_func_constants=(self.L, self.ap, self.Lcap, self.extraFieldLength, self.fieldFact,apply_perturbation)
+        numba_func_constants=(self.L, self.ap, self.Lcap, self.extraFieldLength, self.field_fact,apply_perturbation)
 
         force_args = (numba_func_constants, fieldData)
         potential_args = (numba_func_constants, fieldData)
@@ -265,11 +265,11 @@ class HalbachLensSim(LensIdeal):
         return data3D_Difference
 
     def update_Field_Fact(self, fieldStrengthFact: float) -> None:
-        """Update value used to model magnet strength tunability. fieldFact multiplies force and magnetic potential to
+        """Update value used to model magnet strength tunability. field_fact multiplies force and magnetic potential to
         model increasing or reducing magnet strength """
         warnings.warn("extra field sources are being ignore here. Funcitnality is currently broken")
-        self.fieldFact = fieldStrengthFact
-        self.build_Fast_Field_Helper()
+        self.field_fact = fieldStrengthFact
+        self.build_fast_field_felper()
 
     def get_Valid_Jitter_Amplitude(self, Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
@@ -285,20 +285,20 @@ class HalbachLensSim(LensIdeal):
                     'jitter amplitude of:' + str(jitterAmpProposed) + ' clipped to maximum value:' + str(maxJitterAmp))
         return jitterAmp
 
-    def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float) -> None:
+    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float) -> None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
 
         if self.PTL.jitterAmp == 0.0 and self.PTL.jitterAmp != 0.0:
             warnings.warn("No jittering was accomodated for, so their will be no effect")
-        assert abs(rotZ) < .05 and abs(rotZ) < .05  # small angle
-        totalShiftY = shiftY + tan(rotZ) * self.L
-        totalShiftZ = shiftZ + tan(rotY) * self.L
-        totalShift = sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
+        assert abs(rot_angle_z) < .05 and abs(rot_angle_z) < .05  # small angle
+        totalshift_y = shift_y + tan(rot_angle_z) * self.L
+        totalshift_z = shift_z + tan(rot_angle_y) * self.L
+        totalShift = sqrt(totalshift_y ** 2 + totalshift_z ** 2)
         maxShift = self.get_Valid_Jitter_Amplitude()
         if totalShift > maxShift:
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact = .95 * maxShift / totalShift  # safety factor
             print('proposed', totalShift, 'new', reductionFact * maxShift)
-            shiftY, shiftZ, rotY, rotZ = [val * reductionFact for val in [shiftY, shiftZ, rotY, rotZ]]
-        self.fastFieldHelper.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+            shift_y, shift_z, rot_angle_y, rot_angle_z = [val * reductionFact for val in [shift_y, shift_z, rot_angle_y, rot_angle_z]]
+        self.fast_field_helper.update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z)

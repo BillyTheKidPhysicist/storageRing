@@ -14,7 +14,7 @@ V0 = 200.0
 
 def generate_Test_Swarm(PTL):
     swarmTracer = SwarmTracer(PTL)
-    testSwarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3, 10.0, 5.0, 30, sameSeed=42)
+    testSwarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3, 10.0, 5.0, 30, same_seed=42)
     return testSwarm
 
 
@@ -22,7 +22,7 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
     """swarm is traced through the lattice with all fancy features turned off"""
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
-    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, fastMode=False, parallel=False,
+    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, use_fast_mode=False, parallel=False,
                                                           accelerated=False)
     testData = []
     for particle in tracedSwarm:
@@ -34,11 +34,11 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
     np.savetxt(os.path.join(testDataFolderPath, TESTDataFilePath), np.asarray(testData))
 
 
-def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, fastMode, accelerated, parallel):
+def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, accelerated, parallel):
     np.set_printoptions(precision=100)
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
-    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, fastMode=fastMode,
+    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, use_fast_mode=use_fast_mode,
                                                           accelerated=accelerated,
                                                           parallel=parallel)
     testData = np.loadtxt(TESTDataFilePath)
@@ -60,7 +60,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, fastMode, accelerated
             EFinalTest = testData[i, 7]
             condition = (np.all(np.abs(qf - qTest) < eps) and np.all(np.abs(pf - pTest) < eps) and np.abs(
                 revs - revsTest) < eps)
-            if fastMode == False:  # include energy considerations
+            if use_fast_mode == False:  # include energy considerations
                 EFinalTraced = tracedSwarm.particles[i].EArr[-1]
                 condition = condition and np.abs(EFinalTest - EFinalTraced) < eps
             if condition == False:
@@ -70,7 +70,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, fastMode, accelerated
                 print('p:', pf)
                 print('pTest:', pTest)
                 print('difference:', pTest - pf)
-                if fastMode == False:
+                if use_fast_mode == False:
                     print('Energy: ', EFinalTraced)
                     print('EnergyTest: ', EFinalTest)
                     print('difference: ', EFinalTest - EFinalTraced)
@@ -80,7 +80,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, fastMode, accelerated
 def generate_Lattice(configuration):
     # a variety of lattice configurations are tested
     if configuration == '1':
-        PTL = ParticleTracerLattice(speed_nominal=200.0, latticeType='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
         PTL.add_Drift(.25)
         PTL.add_Halbach_Bender_Sim_Segmented(.0254, .01, 150, 1.0, rOffsetFact=1.015)
         PTL.add_Lens_Ideal(1.0, 1.0, .01)
@@ -88,7 +88,7 @@ def generate_Lattice(configuration):
         PTL.add_Drift(.1)
         PTL.end_Lattice(constrain=False)
     elif configuration in ('2', '5'):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, latticeType='injector')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='injector')
         PTL.add_Drift(.25)
         PTL.add_Halbach_Lens_Sim(.01, .5)
         PTL.add_Drift(.1)
@@ -99,14 +99,14 @@ def generate_Lattice(configuration):
         PTL.add_Halbach_Lens_Sim(.01, .5)
         PTL.end_Lattice()
     elif configuration == '3':
-        PTL = ParticleTracerLattice(speed_nominal=200.0, latticeType='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
         PTL.add_Lens_Ideal(1.0, 1.0, .01)
         PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .01)
         PTL.add_Lens_Ideal(1.0, 1.0, .01)
         PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .01)
         PTL.end_Lattice()
     elif configuration in ('4', '6'):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, latticeType='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
         PTL.add_Halbach_Lens_Sim(.01, .5)
         if configuration == '4':
             PTL.add_Combiner_Sim()
@@ -131,15 +131,15 @@ def TEST_Lattice_Configuration(configuration, fullTest=False, saveData=False, pa
     if saveData == True:
         _save_TEST_Data(PTL, testSwarm, TESTName)
     elif fullTest == True:
-        for fastMode in [True, False]:
+        for use_fast_mode in [True, False]:
             for accelerated in [True, False]:
                 for parallel in [True, False]:
-                    TEST_Lattice_Tracing(PTL, testSwarm, TESTName, fastMode, accelerated, parallel)
+                    TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode, accelerated, parallel)
     elif fullTest == False:
-        fastMode1, accelerated1, parallel1 = True, True, parallel
-        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, fastMode1, accelerated1, parallel)
-        fastMode2, accelerated2, parallel2 = False, False, False
-        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, fastMode2, accelerated2, parallel)
+        use_fast_mode1, accelerated1, parallel1 = True, True, parallel
+        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode1, accelerated1, parallel)
+        use_fast_mode2, accelerated2, parallel2 = False, False, False
+        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode2, accelerated2, parallel)
 
 
 def _save_New_Data():

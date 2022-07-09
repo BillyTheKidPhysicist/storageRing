@@ -53,7 +53,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lm = Lm
         self.rp = rp
         self.ap = ap
-        self.magnetWidth = halbach_Magnet_Width(rp, use_standard_sizes=PTL.standard_mag_sizes)
+        self.magnetWidth = halbach_Magnet_Width(rp, use_standard_sizes=PTL.use_standard_mag_size)
         self.ucAng: Optional[float] = None
         self.rOffsetFact = rOffsetFact  # factor to times the theoretic optimal bending radius by
         self.Lcap = self.fringeFracOuter * self.rp
@@ -64,27 +64,27 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        apMaxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
-                                                      use_standard_sizes=self.PTL.standard_mag_sizes)
+        ap_maxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
+                                                      use_standard_sizes=self.PTL.use_standard_mag_size)
         # todo: revisit this, I am doubtful of how correct this is
         safetyFactor = .95
-        apMaxGoodField = safetyFactor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \
+        ap_maxGoodField = safetyFactor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \
                          (self.numPointsBoreAp + sqrt(2))
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
-        if apMaxGoodField < apMaxGeom:  # for now, I want this to be the case
+        if ap_maxGoodField < ap_maxGeom:  # for now, I want this to be the case
             warnings.warn("bender aperture being limited by the good field region")
-        apMax = min([apMaxGeom, apMaxGoodField])
-        assert apMax < self.rp
-        return apMax
+        ap_max = min([ap_maxGeom, ap_maxGoodField])
+        assert ap_max < self.rp
+        return ap_max
 
     def set_BpFact(self, BpFact: float):
         assert 0.0 <= BpFact
-        self.fieldFact = BpFact
+        self.field_fact = BpFact
 
     def fill_Pre_Constrained_Parameters(self) -> None:
-        self.outputOffset = self.find_Optimal_Radial_Offset() * self.rOffsetFact
-        self.ro = self.outputOffset + self.rb
+        self.output_offset = self.find_Optimal_Radial_Offset() * self.rOffsetFact
+        self.ro = self.output_offset + self.rb
 
     def find_Optimal_Radial_Offset(self) -> float:
         """Find the radial offset that accounts for the centrifugal force moving the particles deeper into the
@@ -134,20 +134,20 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.ang = 2 * self.numMagnets * self.ucAng
         self.fill_In_And_Out_Rotation_Matrices()
         assert self.ang < 2 * pi * 3 / 4  # not sure why i put this here
-        self.ro = self.rb + self.outputOffset
+        self.ro = self.rb + self.output_offset
         self.L = self.ang * self.rb
         self.Lo = self.ang * self.ro + 2 * self.Lcap
-        self.outerHalfWidth = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
+        self.outer_half_width = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
-        fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.standardMagnetErrors else dummy_field_data_empty
+        fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.use_mag_errors else dummy_field_data_empty
         assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[2] == fieldDataInternal[2])
         fieldData=(fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation)
-        useFieldPerturbations = self.PTL.standardMagnetErrors
+        useFieldPerturbations = self.PTL.use_mag_errors
 
         m = np.tan(self.ucAng)
         M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
@@ -156,7 +156,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
 
         numba_func_constants=(self.rb,self.ap,self.Lcap,self.ang,self.numMagnets,
-                              self.ucAng,M_ang,RIn_Ang,M_uc,self.fieldFact,useFieldPerturbations)
+                              self.ucAng,M_ang,RIn_Ang,M_uc,self.field_fact,useFieldPerturbations)
 
         force_args=(numba_func_constants,fieldData)
         potential_args=(numba_func_constants,fieldData)
@@ -340,54 +340,54 @@ class HalbachBenderSimSegmented(BenderIdeal):
         benderFieldGenerator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return benderFieldGenerator
 
-    def in_Which_Section_Of_Bender(self, qEl: np.ndarray) -> str:
-        """Find which section of the bender qEl is in. options are:
+    def in_Which_Section_Of_Bender(self, q_el: np.ndarray) -> str:
+        """Find which section of the bender q_el is in. options are:
             - 'IN' refers to the westward cap. at some angle
             - 'OUT' refers to the eastern. input is aligned with y=0
             - 'ARC' in the bending arc between input and output caps
         Return 'NONE' if not inside the bender"""
 
-        angle = full_Arctan(qEl)
+        angle = full_Arctan(q_el)
         if 0 <= angle <= self.ang:
             return 'ARC'
         capNames = ['IN', 'OUT']
         for name in capNames:
-            xCap, yCap = mirror_Across_Angle(qEl[0], qEl[1], self.ang / 2.0) if name == 'IN' else qEl[:2]
+            xCap, yCap = mirror_Across_Angle(q_el[0], q_el[1], self.ang / 2.0) if name == 'IN' else q_el[:2]
             if (self.rb - self.ap < xCap < self.rb + self.ap) and (0 > yCap > -self.Lcap):
                 return name
         return 'NONE'
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
 
-        whichSection = self.in_Which_Section_Of_Bender(qEl)
+        whichSection = self.in_Which_Section_Of_Bender(q_el)
         if whichSection == 'ARC':
-            phi = self.ang - full_Arctan(qEl)
-            xo = sqrt(qEl[0] ** 2 + qEl[1] ** 2) - self.ro
+            phi = self.ang - full_Arctan(q_el)
+            xo = sqrt(q_el[0] ** 2 + q_el[1] ** 2) - self.ro
             so = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
         elif whichSection == 'OUT':
-            so = self.Lcap + self.ang * self.ro + (-qEl[1])
-            xo = qEl[0] - self.ro
+            so = self.Lcap + self.ang * self.ro + (-q_el[1])
+            xo = q_el[0] - self.ro
         elif whichSection == 'IN':
-            xMirror, yMirror = mirror_Across_Angle(qEl[0], qEl[1], self.ang / 2.0)
+            xMirror, yMirror = mirror_Across_Angle(q_el[0], q_el[1], self.ang / 2.0)
             so = self.Lcap + yMirror
             xo = xMirror - self.ro
         else:
             raise ValueError
-        qo = np.array([so, xo, qEl[2]])
+        qo = np.array([so, xo, q_el[2]])
         return qo
 
-    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Mildly tricky. Need to determine if the position is in
         one of the caps or the bending segment, then handle accordingly"""
 
-        whichSection = self.in_Which_Section_Of_Bender(qEl)
+        whichSection = self.in_Which_Section_Of_Bender(q_el)
         if whichSection == 'ARC':
-            return super().transform_Element_Momentum_Into_Local_Orbit_Frame(qEl, pEl)
+            return super().transform_element_momentum_into_local_orbit_frame(q_el, p_el)
         elif whichSection == 'OUT':
-            pso, pxo = -pEl[1], pEl[0]
+            pso, pxo = -p_el[1], p_el[0]
         elif whichSection == 'IN':
-            pxo, pso = mirror_Across_Angle(pEl[0], pEl[1], self.ang / 2.0)
+            pxo, pso = mirror_Across_Angle(p_el[0], p_el[1], self.ang / 2.0)
         else:
             raise ValueError
-        pOrbit = np.array([pso, pxo, qEl[-2]])
+        pOrbit = np.array([pso, pxo, q_el[-2]])
         return pOrbit

@@ -55,18 +55,18 @@ class StabilityAnalyzer:
         shiftAmp = shiftAmp / np.sqrt(2)  # consider both dimensions being misaligned
         rotAngleY = 2 * (random4Nums[0] - .5) * angleAmp
         rotAngleZ = 2 * (random4Nums[1] - .5) * angleAmp
-        shiftY = 2 * (random4Nums[2] - .5) * shiftAmp
-        shiftZ = 2 * (random4Nums[3] - .5) * shiftAmp
-        return shiftY, shiftZ, rotAngleY, rotAngleZ
+        shift_y = 2 * (random4Nums[2] - .5) * shiftAmp
+        shift_z = 2 * (random4Nums[3] - .5) * shiftAmp
+        return shift_y, shift_z, rotAngleY, rotAngleZ
 
     def jitter_Lattice(self, PTL, combinerRandomOverride):
         for el in PTL:
             if any(validElementType == type(el) for validElementType in self.jitterableElements):
                 if any(type(el) == elType for elType in combinerTypes):
-                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el, randomOverRide=combinerRandomOverride)
+                    shift_y, shift_z, rot_angle_y, rot_angle_z = self.make_Jitter_Amplitudes(el, randomOverRide=combinerRandomOverride)
                 else:
-                    shiftY, shiftZ, rotY, rotZ = self.make_Jitter_Amplitudes(el, None)
-                el.perturb_Element(shiftY, shiftZ, rotY, rotZ)
+                    shift_y, shift_z, rot_angle_y, rot_angle_z = self.make_Jitter_Amplitudes(el, None)
+                el.perturb_element(shift_y, shift_z, rot_angle_y, rot_angle_z)
 
     def jitter_System(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice) -> None:
         combinerRandomOverride = (np.random.random_sample(), np.random.random_sample(4))

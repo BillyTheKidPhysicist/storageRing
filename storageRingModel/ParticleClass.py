@@ -34,23 +34,23 @@ class Particle:
         self.color = None  # color that can be added to each particle for plotting
 
         self.force = None  # current force on the particle
-        self.currentEl = None  # which element the particle is ccurently in
-        self.currentElIndex = None  # Index of the elmenent that the particle is curently in. THis remains unchanged even
+        self.current_el = None  # which element the particle is ccurently in
+        self.current_el_index = None  # Index of the elmenent that the particle is curently in. THis remains unchanged even
         # after the particle leaves the tracing algorithm and such can be used to record where it clipped
-        self.cumulativeLength = 0  # total length traveled by the particle IN TERMS of lattice elements. It updates after
+        self.cumulative_length = 0  # total length traveled by the particle IN TERMS of lattice elements. It updates after
         # the particle leaves an element by adding that elements length (particle trajectory length that is)
         self.revolutions = 0  # revolutions particle makd around lattice. Initially zero
         self.clipped = None  # wether particle clipped an apeture
-        self.dataLogging = None  # wether the particle is loggin parameters such as position and energy. This will typically be
-        # false when fastmode is being used in the particle tracer class
+        self.data_logging = None  # wether the particle is loggin parameters such as position and energy. This will typically be
+        # false when use_fast_mode is being used in the particle tracer class
         # these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         # they are converted into arrays
-        self._pList = []  # List of momentum vectors
-        self._qList = []  # List of position vector
-        self._qoList = []  # List of position in orbit frame vectors
-        self._poList = []
-        self._TList = []  # kinetic energy list. Each entry contains the element index and corresponding energy
-        self._VList = []  # potential energy list. Each entry contains the element index and corresponding energy
+        self._p_list = []  # List of momentum vectors
+        self._q_list = []  # List of position vector
+        self._qo_list = []  # List of position in orbit frame vectors
+        self._po_list = []
+        self._t_list = []  # kinetic energy list. Each entry contains the element index and corresponding energy
+        self._v_list = []  # potential energy list. Each entry contains the element index and corresponding energy
         # array versions
         self.pArr = None
         self.p0Arr = None  # array of norm of momentum.
@@ -76,39 +76,39 @@ class Particle:
         string += 'pi: ' + str(self.pi) + '\n'
         string += 'p: ' + str(self.pf) + '\n'
         string += 'q: ' + str(self.qf) + '\n'
-        string += 'current element: ' + str(self.currentEl) + ' \n '
+        string += 'current element: ' + str(self.current_el) + ' \n '
         string += 'revolution: ' + str(self.revolutions) + ' \n'
         return string
 
-    def log_Params(self, currentEl: Element, qEl: np.ndarray, pEl: np.ndarray) -> None:
-        qLab = currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
-        pLab = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)
-        self._qList.append(qLab.copy())
-        self._pList.append(pLab.copy())
-        self._TList.append((currentEl.index, np.sum(pLab ** 2) / 2.0))
+    def log_Params(self, currentEl: Element, q_el: np.ndarray, p_el: np.ndarray) -> None:
+        q_lab = currentEl.transform_element_coords_into_lab_frame(q_el)
+        pLab = currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
+        self._q_list.append(q_lab.copy())
+        self._p_list.append(pLab.copy())
+        self._t_list.append((currentEl.index, np.sum(pLab ** 2) / 2.0))
         if currentEl is not None:
-            qEl = currentEl.transform_Lab_Coords_Into_Element_Frame(qLab)
+            q_el = currentEl.transform_lab_coords_into_element_frame(q_lab)
             elIndex = currentEl.index
-            self._qoList.append(currentEl.transform_Element_Coords_Into_Global_Orbit_Frame(qEl, self.cumulativeLength))
-            self._poList.append(currentEl.transform_Element_Momentum_Into_Global_Orbit_Frame(qEl, pEl))
-            self._VList.append((elIndex, currentEl.magnetic_Potential(qEl)))
+            self._qo_list.append(currentEl.transform_element_coords_into_global_orbit_frame(q_el, self.cumulative_length))
+            self._po_list.append(currentEl.transform_element_momentum_into_global_orbit_frame(q_el, p_el))
+            self._v_list.append((elIndex, currentEl.magnetic_potential(q_el)))
 
-    def get_Energy(self, currentEl: Element, qEl: np.ndarray, pEl: np.ndarray) -> float:
-        V = currentEl.magnetic_Potential(qEl)
-        T = np.sum(pEl ** 2) / 2.0
+    def get_Energy(self, currentEl: Element, q_el: np.ndarray, p_el: np.ndarray) -> float:
+        V = currentEl.magnetic_potential(q_el)
+        T = np.sum(p_el ** 2) / 2.0
         return T + V
 
     def fill_Energy_Array_And_Dicts(self) -> None:
-        self.TArr = np.asarray([entry[1] for entry in self._TList])
-        self.VArr = np.asarray([entry[1] for entry in self._VList])
+        self.TArr = np.asarray([entry[1] for entry in self._t_list])
+        self.VArr = np.asarray([entry[1] for entry in self._v_list])
         self.EArr = self.TArr.copy() + self.VArr.copy()
 
         if self.EArr.shape[0] > 1:
-            elementIndexPrev = self._TList[0][0]
+            elementIndexPrev = self._t_list[0][0]
             E_AfterEnteringEl = self.EArr[0]
 
-            for i, _ in enumerate(self._TList):
-                if self._TList[i][0] != elementIndexPrev:
+            for i, _ in enumerate(self._t_list):
+                if self._t_list[i][0] != elementIndexPrev:
                     E_BeforeLeavingEl = self.EArr[i - 1]
                     deltaE = E_BeforeLeavingEl - E_AfterEnteringEl
                     if str(elementIndexPrev) not in self.elDeltaEDict:
@@ -116,10 +116,10 @@ class Particle:
                     else:
                         self.elDeltaEDict[str(elementIndexPrev)].append(deltaE)
                     E_AfterEnteringEl = self.EArr[i]
-                    elementIndexPrev = self._TList[i][0]
-        self._TList, self._VList = [], []
+                    elementIndexPrev = self._t_list[i][0]
+        self._t_list, self._v_list = [], []
 
-    def finished(self, currentEl: Optional[Element], qEl: np.ndarray, pEl: np.ndarray,
+    def finished(self, currentEl: Optional[Element], q_el: np.ndarray, p_el: np.ndarray,
                  totalLatticeLength: Optional[float] = None, clippedImmediately=False) -> None:
         # finish tracing with the particle, tie up loose ends
         # totalLaticeLength: total length of periodic lattice
@@ -127,28 +127,28 @@ class Particle:
         self.force = None
         if clippedImmediately:
             self.qf, self.pf = self.qi.copy(), self.pi.copy()
-        if self.dataLogging:
-            self.qArr = np.asarray(self._qList)
-            self._qList = []  # save memory
-            self.pArr = np.asarray(self._pList)
-            self._pList = []
-            self.qoArr = np.asarray(self._qoList)
-            self._qoList = []
-            self.poArr = np.asarray(self._poList)
-            self._poList = []
+        if self.data_logging:
+            self.qArr = np.asarray(self._q_list)
+            self._q_list = []  # save memory
+            self.pArr = np.asarray(self._p_list)
+            self._p_list = []
+            self.qoArr = np.asarray(self._qo_list)
+            self._qo_list = []
+            self.poArr = np.asarray(self._po_list)
+            self._po_list = []
             if self.pArr.shape[0] != 0:
                 self.p0Arr = npl.norm(self.pArr, axis=1)
             self.fill_Energy_Array_And_Dicts()
-        if self.currentEl is not None:
-            self.currentEl = currentEl
-            self.qf = self.currentEl.transform_Element_Coords_Into_Lab_Frame(qEl)
-            self.pf = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(pEl)
-            self.currentElIndex = self.currentEl.index
+        if self.current_el is not None:
+            self.current_el = currentEl
+            self.qf = self.current_el.transform_element_coords_into_lab_frame(q_el)
+            self.pf = self.current_el.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
+            self.current_el_index = self.current_el.index
             if totalLatticeLength is not None:
                 self.totalLatticeLength = totalLatticeLength
-                qoFinal = self.currentEl.transform_Element_Coords_Into_Global_Orbit_Frame(qEl, self.cumulativeLength)
+                qoFinal = self.current_el.transform_element_coords_into_global_orbit_frame(q_el, self.cumulative_length)
                 self.revolutions = qoFinal[0] / totalLatticeLength
-            self.currentEl = None  # to save memory
+            self.current_el = None  # to save memory
 
     def plot_Energies(self, showOnlyTotalEnergy: bool = False) -> None:
         if self.EArr.shape[0] == 0:

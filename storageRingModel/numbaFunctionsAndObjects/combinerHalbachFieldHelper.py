@@ -13,7 +13,7 @@ spec_Combiner_Halbach = [
     ('space', numba.float64),
     ('ap', numba.float64),
     ('ang', numba.float64),
-    ('fieldFact', numba.float64),
+    ('field_fact', numba.float64),
     ('extraFieldLength', numba.float64),
     ('useSymmetry', numba.boolean),
     ('acceptance_width', numba.float64)
@@ -22,7 +22,7 @@ spec_Combiner_Halbach = [
 
 class CombinerHalbachLensSimFieldHelper_Numba:
 
-    def __init__(self, fieldDataInternal, fieldDataExternal, La, Lb, Lm, space, ap, ang, fieldFact, extraFieldLength,
+    def __init__(self, fieldDataInternal, fieldDataExternal, La, Lb, Lm, space, ap, ang, field_fact, extraFieldLength,
                  useSymmetry, acceptance_width):
         self.fieldDataInternal = fieldDataInternal
         self.fieldDataExternal = fieldDataExternal
@@ -32,19 +32,19 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.space = space
         self.ap = ap
         self.ang = ang
-        self.fieldFact = fieldFact
+        self.field_fact = field_fact
         self.extraFieldLength = extraFieldLength
         self.useSymmetry = useSymmetry
         self.acceptance_width = acceptance_width
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.fieldDataInternal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.fieldFact,
+        return (self.fieldDataInternal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.field_fact,
                 self.extraFieldLength, self.useSymmetry, self.acceptance_width), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, ()
+        return self.field_fact, ()
 
     def _force_Func_Internal(self, x, y, z):
         xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
@@ -56,11 +56,11 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
-    def _magnetic_Potential_Func_Internal(self, x, y, z):
+    def _magnetic_potential_Func_Internal(self, x, y, z):
         xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
         return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
 
-    def _magnetic_Potential_Func_External(self, x, y, z):
+    def _magnetic_potential_Func_External(self, x, y, z):
         xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
         return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
 
@@ -103,12 +103,12 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         else:
             Fx, Fy, Fz = self._force_Func_Internal(x, y, z)
         # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
-        Fx *= self.fieldFact
-        Fy *= self.fieldFact
-        Fz *= self.fieldFact
+        Fx *= self.field_fact
+        Fy *= self.field_fact
+        Fz *= self.field_fact
         return Fx, Fy, Fz
 
-    def magnetic_Potential(self, x, y, z):
+    def magnetic_potential(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan
         # x, y, z = self.baseClass.misalign_Coords(x, y, z)
@@ -117,21 +117,21 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
         if self.useSymmetry:
             if -self.extraFieldLength <= x <= self.space:
-                V = self._magnetic_Potential_Func_External(x, y, z)
+                V = self._magnetic_potential_Func_External(x, y, z)
             elif self.space < x <= symmetryPlaneX:
-                V = self._magnetic_Potential_Func_Internal(x, y, z)
+                V = self._magnetic_potential_Func_Internal(x, y, z)
             elif symmetryPlaneX < x <= self.Lm + self.space:
                 x = 2 * symmetryPlaneX - x
-                V = self._magnetic_Potential_Func_Internal(x, y, z)
+                V = self._magnetic_potential_Func_Internal(x, y, z)
             elif self.Lm + self.space < x:  # particle can extend past 2*symmetryPlaneX
                 x = 2 * symmetryPlaneX - x
-                V = self._magnetic_Potential_Func_External(x, y, z)
+                V = self._magnetic_potential_Func_External(x, y, z)
             else:
                 print(x, y, z, self.Lm, self.space)
                 raise ValueError
         else:
-            V = self._magnetic_Potential_Func_Internal(x, y, z)
-        V = V * self.fieldFact
+            V = self._magnetic_potential_Func_Internal(x, y, z)
+        V = V * self.field_fact
         return V
 
     def is_Coord_Inside_Vacuum(self, x, y, z):

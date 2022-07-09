@@ -1,35 +1,35 @@
 from helperTools import *
-def change_Value_Along_Dimension(xi,dim,delta,bounds):
-    xNew=np.array(xi)
-    xNew[dim]+=delta
-    xUpper=np.array(bounds)[:,1]
-    xLower=np.array(bounds)[:,0]
-    xNew=np.clip(xNew,a_min=xLower,a_max=xUpper)
-    return xNew
-def get_Search_Params(xi,delta,bounds):
-    paramsList=[]
+def change__value__along__dimension(xi,dim,delta,bounds):
+    x_new=np.array(xi)
+    x_new[dim]+=delta
+    x_upper=np.array(bounds)[:,1]
+    x_lower=np.array(bounds)[:,0]
+    x_new=np.clip(x_new,a_min=x_lower,a_max=x_upper)
+    return x_new
+def get__search__params(xi,delta,bounds):
+    list_of_params=[]
     for i in range(len(xi)):
         for shift in [-delta,delta]:
-            paramsList.append(change_Value_Along_Dimension(xi,i,shift,bounds))
-    return paramsList
+            list_of_params.append(change__value__along__dimension(xi,i,shift,bounds))
+    return list_of_params
 
-def find_Optimal_Value(func,xi,delta,bounds,processes):
+def find__optimal__value(func,xi,delta,bounds,processes):
     assert len(bounds) == len(xi)
-    paramsList=get_Search_Params(xi,delta,bounds)
-    results=tool_Parallel_Process(func,paramsList,processes=processes)
-    return paramsList[np.argmin(results)],np.min(results)
+    list_of_params=get__search__params(xi,delta,bounds)
+    results=tool_Parallel_Process(func,list_of_params,processes=processes)
+    return list_of_params[np.argmin(results)],np.min(results)
 
-def line_Search(costFunc,xi,deltaInitial,bounds,costInitial=None,processes=-1):
-    xOpt,delta=xi,deltaInitial
-    costOpt=costInitial if costInitial is not None else costFunc(xi)
+def line__search(cost_func,xi,delta_initial,bounds,cost_initial=None,processes=-1):
+    x_opt,delta=xi,delta_initial
+    cost_opt=cost_initial if cost_initial is not None else cost_func(xi)
     i,maxiters=0,30
     while i<maxiters:
         i+=1
-        print('results',costOpt, delta, repr(xOpt))
-        xOptNew, costOptNew = find_Optimal_Value(costFunc,xOpt, delta,bounds,processes)
-        if costOptNew >= costOpt:
+        print('results',cost_opt, delta, repr(x_opt))
+        x_opt_new, cost_opt_new = find__optimal__value(cost_func,x_opt, delta,bounds,processes)
+        if cost_opt_new >= cost_opt:
             delta *= .75
         else:
-            xOpt = xOptNew
-            costOpt = costOptNew
-    return xOpt,costOpt
+            x_opt = x_opt_new
+            cost_opt = cost_opt_new
+    return x_opt,cost_opt

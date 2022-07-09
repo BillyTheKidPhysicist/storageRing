@@ -17,9 +17,9 @@
 #         self.self.effectiveLength = None  # if the magnet is very long, to save simulation
 #         # time use a smaller length that still captures the physics, and then model the inner portion as 2D
 #
-#         self.magnetic_Potential_Func_Fringe = None
-#         self.magnetic_Potential_Func_Inner = None
-#         self.fieldFact = 1.0  # factor to multiply field values by for tunability
+#         self.magnetic_potential_Func_Fringe = None
+#         self.magnetic_potential_Func_Inner = None
+#         self.field_fact = 1.0  # factor to multiply field values by for tunability
 #         if self.L is not None:
 #             self.build()
 #
@@ -75,7 +75,7 @@
 #         # if np.isnan(F[0])==False:
 #         #     if q[0]<2*self.rp*self.fringeFracOuter or q[0]>self.L-2*self.rp*self.fringeFracOuter:
 #         #         return np.zeros(3)
-#         # F = self.fieldFact * np.asarray(F)
+#         # F = self.field_fact * np.asarray(F)
 #         # return F
 #
 #     def fill_Field_Func(self, data):
@@ -91,9 +91,9 @@
 #             return Fx, Fy, Fz
 #
 #         self.force_Func = force_Func
-#         self.magnetic_Potential_Func = lambda x, y, z: interpV(-z, y, x)
+#         self.magnetic_potential_Func = lambda x, y, z: interpV(-z, y, x)
 #
-#     def magnetic_Potential(self, q):
+#     def magnetic_potential(self, q):
 #         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
 #         x, y, z = q
 #         y = abs(y)  # confine to upper right quadrant
@@ -103,10 +103,10 @@
 #
 #         if 0 <= x <= self.L / 2:
 #             x = self.L / 2 - x
-#             V = self.magnetic_Potential_Func(x, y, z)
+#             V = self.magnetic_potential_Func(x, y, z)
 #         elif self.L / 2 < x:
 #             x = x - self.L / 2
-#             V = self.magnetic_Potential_Func(x, y, z)
+#             V = self.magnetic_potential_Func(x, y, z)
 #         else:
 #             raise Exception(ValueError)
 #         return V

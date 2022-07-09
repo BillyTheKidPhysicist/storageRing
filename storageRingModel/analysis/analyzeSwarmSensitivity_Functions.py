@@ -86,7 +86,7 @@ def solve_Misaligned(model: StorageRingModel,deltaxMax: float, deltarMax: float,
     return results
 
 
-dimIndex={'x':0,'y':1,'z':2,'roty':3,'rotz':4}
+dimIndex={'x':0,'y':1,'z':2,'rot_angle_y':3,'rot_angle_z':4}
 def get_Results_Misaligned_Dimension(model: StorageRingModel,whichDim: str,amplitude: float,num: int, parallel: bool=True):
     misalignValues=np.linspace(-amplitude,amplitude,num)
     index=dimIndex[whichDim]

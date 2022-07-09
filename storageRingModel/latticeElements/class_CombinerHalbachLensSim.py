@@ -56,7 +56,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.loadBeamOffset = loadBeamOffset
         self.PTL = PTL
         self.magnetWidths = None
-        self.fieldFact: float = -1.0 if PTL.latticeType == 'injector' else 1.0
+        self.field_fact: float = -1.0 if PTL.lattice_type == 'injector' else 1.0
         self.space = None
         self.extraFieldLength = 0.0
         self.extraLoadApFrac = 1.5
@@ -75,7 +75,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers, use_standard_sizes=
-        self.PTL.standard_mag_sizes)
+        self.PTL.use_standard_mag_size)
         self.magnetWidths = magnetWidths
         self.space = max(rpLayers) * self.outerFringeFrac
         self.ap = self.valid_aperture() if self.ap is None else self.ap
@@ -92,7 +92,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
                 sin(inputAngle) + cos(inputAngle) ** 2 / sin(inputAngle))
         self.inputOffset = inputOffset - tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
-        self.outerHalfWidth = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
+        self.outer_half_width = max(rpLayers) + max(magnetWidths) + MIN_MAGNET_MOUNT_THICKNESS
         self.acceptance_width = self.get_Acceptance_Width()
 
     def get_Acceptance_Width(self) -> float:
@@ -106,8 +106,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def valid_aperture(self):
         boreOD = 2 * self.rp
         apLargestTube = round_down_to_nearest_valid_tube_OD(boreOD) / 2.0 - COMBINER_TUBE_WALL_THICKNESS
-        apMaxInterp = self.max_ap_internal_interp_region()
-        assert apLargestTube < apMaxInterp
+        ap_maxInterp = self.max_ap_internal_interp_region()
+        assert apLargestTube < ap_maxInterp
         return apLargestTube
 
     def make_Lens(self) -> _HalbachLensFieldGenerator:
@@ -115,7 +115,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         used because this is called multiple times."""
         rpLayers, magnetWidths = get_Halbach_Layers_Radii_And_Magnet_Widths(self.rp, self.numLayers)
         individualMagnetLengthApprox = min([(MAGNET_ASPECT_RATIO * min(magnetWidths)), self.Lm])
-        numDisks = 1 if not self.PTL.standardMagnetErrors else round(self.Lm / individualMagnetLengthApprox)
+        numDisks = 1 if not self.PTL.use_mag_errors else round(self.Lm / individualMagnetLengthApprox)
         lensCenter = self.Lm / 2 + self.space
 
         seed = DEFAULT_SEED if self.seed is None else self.seed
@@ -123,7 +123,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         np.random.seed(seed)
         lens = _HalbachLensFieldGenerator(rpLayers, magnetWidths, self.Lm, self.PTL.magnet_grade,
                                           applyMethodOfMoments=True,
-                                          useStandardMagErrors=self.PTL.standardMagnetErrors,
+                                          useStandardMagErrors=self.PTL.use_mag_errors,
                                           numDisks=numDisks,
                                           use_solenoid_field=self.PTL.use_solenoid_field, position=(lensCenter, 0, 0),
                                           orientation=Rot.from_rotvec([0, np.pi / 2.0, 0.0]))  # must reuse lens
@@ -160,19 +160,19 @@ class CombinerHalbachLensSim(CombinerIdeal):
         fieldData[0][:] = xArr
         return fieldData
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
         self.set_extraFieldLength()
-        if self.PTL.standardMagnetErrors:
+        if self.PTL.use_mag_errors:
             fieldDataInternal = self.make_Field_data_full()
         else:
             fieldDataInternal = self.make_Internal_Field_data_symmetry()
         fieldDataExternal = self.make_External_Field_data_symmetry()
         fieldData = (fieldDataInternal, fieldDataExternal)
 
-        useSymmetry = not self.PTL.standardMagnetErrors
+        useSymmetry = not self.PTL.use_mag_errors
 
         numba_func_constants = (self.ap, self.Lm, self.La, self.Lb, self.space, self.ang, self.acceptance_width,
-                                self.fieldFact, useSymmetry, self.extraFieldLength)
+                                self.field_fact, useSymmetry, self.extraFieldLength)
 
         # todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
 
@@ -244,8 +244,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert max(np.abs(yArr)) == max(np.abs(zArr))  # must be same for logic below or using radius
         radius_interp_region = max(np.abs(yArr))
         assert radius_interp_region < self.rp - B_GRAD_STEP_SIZE  # interp must not reach into material for logic below
-        apMaxGoodField = radius_interp_region - np.sqrt(2) * (yArr[1] - yArr[0])
-        return apMaxGoodField
+        ap_maxGoodField = radius_interp_region - np.sqrt(2) * (yArr[1] - yArr[0])
+        return ap_maxGoodField
 
     def make_Field_Data(self, xArr, yArr, zArr) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
@@ -266,17 +266,17 @@ class CombinerHalbachLensSim(CombinerIdeal):
         """compute characteristics of the input orbit. This applies for injected beam, or recirculating beam"""
         from latticeElements.combiner_characterizer import characterize_CombinerHalbach
 
-        self.outputOffset = self.find_Ideal_Offset()
+        self.output_offset = self.find_Ideal_Offset()
 
         inputAngle, inputOffset, trajectoryLength, _ = characterize_CombinerHalbach(self)
-        assert inputAngle * self.fieldFact > 0  # satisfied if low field is positive angle and high is negative.
+        assert inputAngle * self.field_fact > 0  # satisfied if low field is positive angle and high is negative.
         # Sometimes this can be triggered because the lens is to long so an oscilattory behaviour is required by
         # injector
         return inputAngle, inputOffset, trajectoryLength
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
-        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
-        self.fieldFact = fieldStrengthFact
+        self.fast_field_helper.numbaJitClass.field_fact = fieldStrengthFact
+        self.field_fact = fieldStrengthFact
 
     def get_Valid_Jitter_Amplitude(self, Print=False) -> float:
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""
@@ -300,15 +300,15 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert tiltMax1D < .05  # insist small angle approx
         self.extraFieldLength = self.rp * np.tan(tiltMax1D) * 1.5  # safety factor
 
-    def perturb_Element(self, shiftY: float, shiftZ: float, rotY: float, rotZ: float) -> None:
+    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float) -> None:
         """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
         interpolation"""
         raise NotImplementedError  # need to reimplement the accomodate jitter stuff
 
-        assert abs(rotZ) < .05 and abs(rotZ) < .05  # small angle
-        totalShiftY = shiftY + np.tan(rotZ) * self.L
-        totalShiftZ = shiftZ + np.tan(rotY) * self.L
-        totalShift = sqrt(totalShiftY ** 2 + totalShiftZ ** 2)
+        assert abs(rot_angle_z) < .05 and abs(rot_angle_z) < .05  # small angle
+        totalshift_y = shift_y + np.tan(rot_angle_z) * self.L
+        totalshift_z = shift_z + np.tan(rot_angle_y) * self.L
+        totalShift = sqrt(totalshift_y ** 2 + totalshift_z ** 2)
         maxShift = self.get_Valid_Jitter_Amplitude()
         if maxShift == 0.0 and self.PTL.jitterAmp != 0.0:
             warnings.warn("No jittering was accomodated for, so their will be no effect")
@@ -316,8 +316,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
             print('Misalignment is moving particles to bad field region, misalingment will be clipped')
             reductionFact = .95 * maxShift / totalShift  # safety factor
             print('proposed', totalShift, 'new', reductionFact * totalShift)
-            shiftY, shiftZ, rotY, rotZ = [val * reductionFact for val in [shiftY, shiftZ, rotY, rotZ]]
-        self.fastFieldHelper.numbaJitClass.update_Element_Perturb_Params(shiftY, shiftZ, rotY, rotZ)
+            shift_y, shift_z, rot_angle_y, rot_angle_z = [val * reductionFact for val in [shift_y, shift_z, rot_angle_y, rot_angle_z]]
+        self.fast_field_helper.numbaJitClass.update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z)
 
     def find_Ideal_Offset(self) -> float:
         """use newton's method to find where the vertical translation of the combiner wher the minimum seperation

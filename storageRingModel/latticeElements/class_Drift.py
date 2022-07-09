@@ -25,14 +25,14 @@ class Drift(LensIdeal):
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
 
-    def __init__(self, PTL, L: float, ap: float, outerHalfWidth: Optional[float],
+    def __init__(self, PTL, L: float, ap: float, outer_half_width: Optional[float],
                  inputTiltAngle: float, outputTiltAngle: float):
         super().__init__(PTL, L, 0, np.inf, ap)  # set Bp to zero and bore radius to infinite
         self.inputTiltAngle, self.outputTiltAngle = inputTiltAngle, outputTiltAngle
-        self.outerHalfWidth = ap + TUBE_WALL_THICKNESS if outerHalfWidth is None else outerHalfWidth
-        assert self.outerHalfWidth > ap
+        self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
+        assert self.outer_half_width > ap
 
-    def build_Fast_Field_Helper(self) -> None:
+    def build_fast_field_felper(self) -> None:
 
         numba_func_constants = (self.ap,self.L,self.inputTiltAngle,self.outputTiltAngle)
 

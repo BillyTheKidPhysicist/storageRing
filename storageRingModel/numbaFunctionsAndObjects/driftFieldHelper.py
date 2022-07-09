@@ -21,7 +21,7 @@ class DriftFieldHelper_Numba:
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return (self.L, self.ap, self.inputAngleTilt, self.outputAngleTilt), ()
 
-    def magnetic_Potential(self, x, y, z):
+    def magnetic_potential(self, x, y, z):
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan

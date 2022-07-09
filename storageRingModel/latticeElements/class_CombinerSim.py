@@ -55,8 +55,8 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
 
-    def build_Fast_Field_Helper(self) -> None:
-        numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.fieldFact)
+    def build_fast_field_felper(self) -> None:
+        numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.field_fact)
 
         fieldData=self.open_And_Shape_Field_Data()
 
@@ -68,5 +68,5 @@ class CombinerSim(CombinerIdeal):
 
     def update_Field_Fact(self, fieldStrengthFact) -> None:
         raise NotImplementedError
-        self.fastFieldHelper.numbaJitClass.fieldFact = fieldStrengthFact
-        self.fieldFact = fieldStrengthFact
+        self.fast_field_helper.numbaJitClass.field_fact = fieldStrengthFact
+        self.field_fact = fieldStrengthFact

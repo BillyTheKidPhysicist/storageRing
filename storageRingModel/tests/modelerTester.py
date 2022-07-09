@@ -15,7 +15,7 @@ def test_Modeler():
     lattice_ring.add_Drift(.1)
     lattice_ring.end_Lattice(constrain=False)
 
-    lattice_injector = ParticleTracerLattice(latticeType='injector')
+    lattice_injector = ParticleTracerLattice(lattice_type='injector')
     lattice_injector.add_Drift(.1)
     lattice_injector.add_Halbach_Lens_Sim(.01, .1)
     lattice_injector.add_Drift(.1)
@@ -30,10 +30,10 @@ def test_Modeler():
     model.swarm_injector_initial.particles = model.swarm_injector_initial.particles[:500]
     swarm_injector_traced = model.swarm_tracer_injector.trace_Swarm_Through_Lattice(
         model.swarm_injector_initial.quick_Copy(), 1e-5, 1.0,
-        fastMode=False, copySwarm=False, logPhaseSpaceCoords=True, accelerated=True)
+        use_fast_mode=False, copy_swarm=False, log_phase_space_coords=True, accelerated=True)
     swarmRingInitial = model.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                                copy_particles=True)
-    swarmRingTraced = model.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmRingInitial, 1e-5, 1, fastMode=False,
+    swarmRingTraced = model.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
                                                                         accelerated=True)
 
     lenses = model.lenses_before_ring_combiner()
@@ -43,7 +43,7 @@ def test_Modeler():
         if particle_injector.qArr is not None and len(particle_injector.qArr) > 1:
             qInj_RingFrame = np.array([model.convert_position_injector_to_ring_frame(q) for q in particle_injector.qArr])
             line = LineString(qInj_RingFrame[:, :2])
-            assert any(lens.SO_Outer.intersects(line) for lens in lenses) == \
+            assert any(lens.SO_outer.intersects(line) for lens in lenses) == \
                    model.does_ring_clip_injector_particle(particle_injector)  # test that the
             # method of looking for particle clipping with shapely and without logging agrees with this more
             # straightforward method

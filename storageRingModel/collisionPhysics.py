@@ -103,10 +103,10 @@ def momentum_sample_3D(T: float) -> vec3D:
 
 
 @numba.njit()
-def collision_partner_momentum_lens(qEl: vec3D, s0: float, T: float, rp: float) -> vec3D:
+def collision_partner_momentum_lens(q_el: vec3D, s0: float, T: float, rp: float) -> vec3D:
     """Calculate a collision partner's momentum for colliding with particle traveling in the lens. Collision partner
     is sampled from a gas with temperature T traveling along the lens of the lens/waveguide"""
-    _, y, z = qEl
+    _, y, z = q_el
     deltaP = momentum_sample_3D(T)
     delta_px, py, pz = deltaP
     px = s0 + delta_px
@@ -118,19 +118,19 @@ def collision_partner_momentum_lens(qEl: vec3D, s0: float, T: float, rp: float) 
 
 
 @numba.njit()
-def collision_partner_momentum_bender(qEl: vec3D, nominal_speed: float, T: float, rp: float, rBend) -> vec3D:
+def collision_partner_momentum_bender(q_el: vec3D, nominal_speed: float, T: float, rp: float, rBend) -> vec3D:
     """Calculate a collision partner's momentum for colliding with lithium traveling in the bender. The collision
     partner is sampled assuming a random gas with nominal speeds in the bender given by geometry and angular momentum.
     """
     delta_pso, pxo, pyo = momentum_sample_3D(T)
     pso = nominal_speed + delta_pso
-    xo = np.sqrt(qEl[0] ** 2 + qEl[1] ** 2) - rBend
-    yo = qEl[2]
+    xo = np.sqrt(q_el[0] ** 2 + q_el[1] ** 2) - rBend
+    yo = q_el[2]
     F_centrifugal = nominal_speed ** 2 / rBend  # approximately centripetal force
     pxo = trim_trans_momentum_to_max(pxo, xo, rp, F_centrifugal=F_centrifugal)
     pyo = trim_trans_momentum_to_max(pyo, yo, rp, F_centrifugal=F_centrifugal)
     pso = trim_longitudinal_momentum_to_max(pso, nominal_speed)
-    theta = full_arctan2(qEl[1], qEl[0])
+    theta = full_arctan2(q_el[1], q_el[0])
     px = pxo * np.cos(theta) - -pso * np.sin(theta)
     py = pxo * np.sin(theta) + -pso * np.cos(theta)
     pz = pyo

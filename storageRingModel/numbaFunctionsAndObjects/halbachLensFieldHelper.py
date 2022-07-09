@@ -21,7 +21,7 @@ spec_Lens_Halbach = [
     ('L', numba.float64),
     ('Lcap', numba.float64),
     ('ap', numba.float64),
-    ('fieldFact', numba.float64),
+    ('field_fact', numba.float64),
     ('extraFieldLength', numba.float64),
     ('useFieldPerturbations', numba.boolean)
 ]
@@ -36,7 +36,7 @@ class LensHalbachFieldHelper_Numba:
         self.L = L
         self.Lcap = Lcap
         self.ap = ap
-        self.fieldFact = 1.0
+        self.field_fact = 1.0
         self.extraFieldLength = extraFieldLength
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
@@ -46,17 +46,17 @@ class LensHalbachFieldHelper_Numba:
         fieldData = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
                     self.yArrIn, self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
-        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength), (self.fieldFact,)
+        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength), (self.field_fact,)
 
     def set_Internal_State(self, params):
-        self.fieldFact = params[0]
+        self.field_fact = params[0]
 
     def is_Coord_Inside_Vacuum(self, x: float, y: float, z: float) -> bool:
         """Check if coord is inside vacuum tube. pseudo-overrides BaseClassFieldHelper"""
         return 0 <= x <= self.L and y ** 2 + z ** 2 < self.ap ** 2
 
-    def _magnetic_Potential_Func_Fringe(self, x: float, y: float, z: float, useImperfectInterp: bool = False) -> float:
-        """Wrapper for interpolation of magnetic fields at ends of lens. see self.magnetic_Potential"""
+    def _magnetic_potential_Func_Fringe(self, x: float, y: float, z: float, useImperfectInterp: bool = False) -> float:
+        """Wrapper for interpolation of magnetic fields at ends of lens. see self.magnetic_potential"""
         if not useImperfectInterp:
             V = scalar_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd, self.VArrEnd)
         else:
@@ -64,8 +64,8 @@ class LensHalbachFieldHelper_Numba:
             V = scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
         return V
 
-    def _magnetic_Potential_Func_Inner(self, x: float, y: float, z: float) -> float:
-        """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_Potential"""
+    def _magnetic_potential_Func_Inner(self, x: float, y: float, z: float) -> float:
+        """Wrapper for interpolation of magnetic fields of plane at center lens.see self.magnetic_potential"""
         V = interp2D(y, z, self.yArrIn, self.zArrIn, self.VArrIn)
         return V
 
@@ -129,9 +129,9 @@ class LensHalbachFieldHelper_Numba:
             Fx=-Fx
         else:
             raise Exception("Particle outside field region")  # this may be triggered when itentionally misligned
-        Fx *= self.fieldFact
-        Fy *= FySymmetryFact * self.fieldFact
-        Fz *= FzSymmetryFact * self.fieldFact
+        Fx *= self.field_fact
+        Fy *= FySymmetryFact * self.field_fact
+        Fz *= FzSymmetryFact * self.field_fact
         # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
         return Fx, Fy, Fz
 
@@ -142,23 +142,23 @@ class LensHalbachFieldHelper_Numba:
         x, y, z = x0, y0, z0
         Fx, Fy, Fz = self._force_Func_Outer(x, y, z,
                                             useImperfectInterp=True)  # being used to hold fields for entire lens
-        Fx = Fx * self.fieldFact
-        Fy = Fy * self.fieldFact
-        Fz = Fz * self.fieldFact
+        Fx = Fx * self.field_fact
+        Fy = Fy * self.field_fact
+        Fz = Fz * self.field_fact
         # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
         return Fx, Fy, Fz
 
-    def magnetic_Potential(self, x: float, y: float, z: float) -> float:
+    def magnetic_potential(self, x: float, y: float, z: float) -> float:
         """Magnetic potential of lithium atom. Functions to combine perfect potential and extra potential from
         imperfections. Perturbation potential is messed up potential minus perfect potential."""
 
-        V = self._magnetic_Potential(x, y, z)
+        V = self._magnetic_potential(x, y, z)
         if self.useFieldPerturbations:
-            deltaV = self._magnetic_Potential_Perturbations(x, y, z)  # extra potential from design imperfections
+            deltaV = self._magnetic_potential_Perturbations(x, y, z)  # extra potential from design imperfections
             V += deltaV
         return V
 
-    def _magnetic_Potential(self, x: float, y: float, z: float) -> float:
+    def _magnetic_potential(self, x: float, y: float, z: float) -> float:
         """
         Magnetic potential energy of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
@@ -178,21 +178,21 @@ class LensHalbachFieldHelper_Numba:
         y = abs(y)
         z = abs(z)
         if -self.extraFieldLength <= x <= self.Lcap:
-            V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
+            V0 = self._magnetic_potential_Func_Fringe(x, y, z)
         elif self.Lcap < x <= self.L - self.Lcap:
-            V0 = self._magnetic_Potential_Func_Inner(x, y, z)
+            V0 = self._magnetic_potential_Func_Inner(x, y, z)
         elif 0 <= x <= self.L + self.extraFieldLength:
             x = self.L - x
-            V0 = self._magnetic_Potential_Func_Fringe(x, y, z)
+            V0 = self._magnetic_potential_Func_Fringe(x, y, z)
         else:
             raise Exception("Particle outside field region")
-        V0 *= self.fieldFact
+        V0 *= self.field_fact
         return V0
 
-    def _magnetic_Potential_Perturbations(self, x0: float, y0: float, z0: float) -> float:
+    def _magnetic_potential_Perturbations(self, x0: float, y0: float, z0: float) -> float:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
-        V0 = self._magnetic_Potential_Func_Fringe(x, y, z, useImperfectInterp=True)
+        V0 = self._magnetic_potential_Func_Fringe(x, y, z, useImperfectInterp=True)
         return V0

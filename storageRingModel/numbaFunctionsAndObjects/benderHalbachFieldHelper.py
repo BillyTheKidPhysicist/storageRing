@@ -19,7 +19,7 @@ spec_Bender_Halbach = [
     ('RIn_Ang', numba.float64[:, ::1]),
     ('M_uc', numba.float64[:, ::1]),
     ('M_ang', numba.float64[:, ::1]),
-    ('fieldFact', numba.float64),
+    ('field_fact', numba.float64),
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('useFieldPerturbations', numba.boolean)
 ]
@@ -43,7 +43,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         self.Lcap = Lcap
         self.RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
-        self.fieldFact = 1.0
+        self.field_fact = 1.0
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False  # apply magnet Perturbation data
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
 
@@ -53,11 +53,11 @@ class SegmentedBenderSimFieldHelper_Numba:
         initParams = (
         self.fieldDataSeg, self.fieldDataInternal, self.fieldDataCap, fieldPerturbationData, self.ap, self.ang,
         self.ucAng, self.rb, self.numMagnets, self.Lcap)
-        internalParams = (self.fieldFact,)
+        internalParams = (self.field_fact,)
         return initParams, internalParams
 
     def set_Internal_State(self, params):
-        self.fieldFact = params[0]
+        self.field_fact = params[0]
 
     def cartesian_To_Center(self, x, y, z):
         """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
@@ -104,16 +104,16 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fx, Fy, Fz = vec_interp3D(x, y, z, *self.fieldDataCap[:6])
         return Fx, Fy, Fz
 
-    def _magnetic_Potential_Func_Seg(self, x, y, z):
+    def _magnetic_potential_Func_Seg(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.fieldDataSeg[:3], self.fieldDataSeg[-1])
 
-    def _magnetic_Potential_Func_Internal_Fringe(self, x, y, z):
+    def _magnetic_potential_Func_Internal_Fringe(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.fieldDataInternal[:3], self.fieldDataInternal[-1])
 
-    def _magnetic_Potential_Func_Cap(self, x, y, z):
+    def _magnetic_potential_Func_Cap(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.fieldDataCap[:3], self.fieldDataCap[-1])
 
-    def _magnetic_Potential_Func_Perturbation(self, x, y, z):
+    def _magnetic_potential_Func_Perturbation(self, x, y, z):
         s, xc, yc = self.cartesian_To_Center(x, y, z)
         return scalar_interp3D(s, xc, yc, *self.fieldPerturbationData[:3], self.fieldPerturbationData[-1])
 
@@ -196,9 +196,9 @@ class SegmentedBenderSimFieldHelper_Numba:
                 else:  # if not in either cap, then outside the bender
                     Fx, Fy, Fz = np.nan, np.nan, np.nan
         Fz = Fz * FzSymmetryFact
-        Fx *= self.fieldFact
-        Fy *= self.fieldFact
-        Fz *= self.fieldFact
+        Fx *= self.field_fact
+        Fy *= self.field_fact
+        Fz *= self.field_fact
         if self.useFieldPerturbations and not np.isnan(Fx):
             deltaFx, deltaFy, deltaFz = self._force_Func_Perturbation(x0, y0,
                                                                       z0)  # extra force from design imperfections
@@ -231,7 +231,7 @@ class SegmentedBenderSimFieldHelper_Numba:
                 return (qTestx - self.rb) ** 2 + z ** 2 <= self.ap ** 2 and (self.Lcap >= qTesty >= 0)
                 # if on the westwards side
 
-    def magnetic_Potential(self, x0, y0, z0):
+    def magnetic_potential(self, x0, y0, z0):
         # magnetic potential at point q in element frame
         # q: particle's position in element frame
         x, y, z = x0, y0, z0
@@ -249,41 +249,41 @@ class SegmentedBenderSimFieldHelper_Numba:
                 position = 'INNER'
             if position == 'INNER':
                 quc = self.transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z)  # get unit cell coords
-                V0 = self._magnetic_Potential_Func_Seg(quc[0], quc[1], quc[2])
+                V0 = self._magnetic_potential_Func_Seg(quc[0], quc[1], quc[2])
             elif position == 'FIRST' or position == 'LAST':
-                V0 = self.magnetic_Potential_First_And_Last(x, y, z, position)
+                V0 = self.magnetic_potential_First_And_Last(x, y, z, position)
             else:
                 V0 = np.nan
         elif phi > self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < x < self.rb + self.ap) and (0 > y > -self.Lcap):  # If inside the cap on
                 # eastward side
-                V0 = self._magnetic_Potential_Func_Cap(x, y, z)
+                V0 = self._magnetic_potential_Func_Cap(x, y, z)
             else:
                 xTest = self.RIn_Ang[0, 0] * x + self.RIn_Ang[0, 1] * y
                 yTest = self.RIn_Ang[1, 0] * x + self.RIn_Ang[1, 1] * y
                 if (self.rb - self.ap < xTest < self.rb + self.ap) and (
                         self.Lcap > yTest > 0):  # if on the westwards side
                     yTest = -yTest
-                    V0 = self._magnetic_Potential_Func_Cap(xTest, yTest, z)
+                    V0 = self._magnetic_potential_Func_Cap(xTest, yTest, z)
                 else:  # if not in either cap
                     V0 = np.nan
         if self.useFieldPerturbations and not np.isnan(V0):
-            deltaV = self._magnetic_Potential_Func_Perturbation(x0, y0, z0)  # extra force from design imperfections
+            deltaV = self._magnetic_potential_Func_Perturbation(x0, y0, z0)  # extra force from design imperfections
             V0 = V0 + deltaV
-        V0 *= self.fieldFact
+        V0 *= self.field_fact
         return V0
 
-    def magnetic_Potential_First_And_Last(self, x, y, z, position):
+    def magnetic_potential_First_And_Last(self, x, y, z, position):
         if position == 'FIRST':
             xNew = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y
             yNew = self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
-            V0 = self._magnetic_Potential_Func_Internal_Fringe(xNew, yNew, z)
+            V0 = self._magnetic_potential_Func_Internal_Fringe(xNew, yNew, z)
         elif position == 'LAST':
-            V0 = self._magnetic_Potential_Func_Internal_Fringe(x, y, z)
+            V0 = self._magnetic_potential_Func_Internal_Fringe(x, y, z)
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return V0
 
-    def update_Element_Perturb_Params(self, shiftY, shiftZ, rotY, rotZ):
+    def update_Element_Perturb_Params(self, shift_y, shift_z, rot_angle_y, rot_angle_z):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         raise NotImplementedError

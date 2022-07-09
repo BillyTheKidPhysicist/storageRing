@@ -54,15 +54,15 @@ class BenderIdeal(BaseElement):
     def fill_Pre_Constrained_Parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
-        self.outputOffset = sqrt(
+        self.output_offset = sqrt(
             self.rb ** 2 / 4 + self.PTL.speed_nominal ** 2 / self.K) - self.rb / 2  # self.output_Offset(self.rb)
-        self.ro = self.rb + self.outputOffset
+        self.ro = self.rb + self.output_offset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
-    def build_Fast_Field_Helper(self) -> None:
-        numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.fieldFact)
+    def build_fast_field_felper(self) -> None:
+        numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.field_fact)
 
         force_args = (numba_func_constants, )
         potential_args = (numba_func_constants, )
@@ -78,49 +78,49 @@ class BenderIdeal(BaseElement):
         self.ROut = Rot.from_rotvec([0.0, 0.0, rot]).as_matrix()[:2, :2]
         self.RIn = Rot.from_rotvec([0.0, 0.0, -rot]).as_matrix()[:2, :2]
 
-    def transform_Lab_Coords_Into_Element_Frame(self, qLab: np.ndarray) -> np.ndarray:
+    def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
-        qNew = qLab - self.r0
+        qNew = q_lab - self.r0
         qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
         return qNew
 
-    def transform_Element_Coords_Into_Lab_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
-        qNew = qEl.copy()
+        qNew = q_el.copy()
         qNew = self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
         qNew = qNew + self.r0
         return qNew
 
-    def transform_Element_Coords_Into_Local_Orbit_Frame(self, qEl: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
-        qo = qEl.copy()
+        qo = q_el.copy()
         phi = self.ang - full_Arctan(qo)  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
-        qox = sqrt(qEl[0] ** 2 + qEl[1] ** 2) - self.ro
+        qox = sqrt(q_el[0] ** 2 + q_el[1] ** 2) - self.ro
         qo[0] = qos
         qo[1] = qox
         return qo
 
-    def transform_Orbit_Frame_Into_Lab_Frame(self, qOrbit: np.ndarray) -> np.ndarray:
+    def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
         raise NotImplementedError  # there is an error here with yo
-        xo, yo, zo = qOrbit
+        xo, yo, zo = q_orbit
         phi = self.ang - xo / self.ro
         xLab = self.ro * cos(phi)
         yLab = self.ro * sin(phi)
         zLab = zo
-        qLab = np.asarray([xLab, yLab, zLab])
-        qLab[:2] = self.ROut @ qLab[:2]
-        qLab += self.r0
-        return qLab
+        q_lab = np.asarray([xLab, yLab, zLab])
+        q_lab[:2] = self.ROut @ q_lab[:2]
+        q_lab += self.r0
+        return q_lab
 
-    def transform_Element_Momentum_Into_Local_Orbit_Frame(self, qEl: np.ndarray, pEl: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Simple cartesian to cylinderical coordinates"""
 
-        x, y = qEl[:2]
-        xDot, yDot, zDot = pEl
+        x, y = q_el[:2]
+        xDot, yDot, zDot = p_el
         r = sqrt(x ** 2 + y ** 2)
         rDot = (x * xDot + y * yDot) / r
         thetaDot = (x * yDot - xDot * y) / r ** 2

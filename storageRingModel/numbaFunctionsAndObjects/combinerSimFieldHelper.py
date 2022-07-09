@@ -19,14 +19,14 @@ spec_Combiner_Sim = [
     ('apR', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
-    ('fieldFact', numba.float64)
+    ('field_fact', numba.float64)
 ]
 
 
 # @jitclass(spec)
 class CombinerSimFieldHelper_Numba:
 
-    def __init__(self, fieldData, La, Lb, Lm, space, apL, apR, apz, ang, fieldFact):
+    def __init__(self, fieldData, La, Lb, Lm, space, apL, apR, apz, ang, field_fact):
         self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr = fieldData
         self.La = La
         self.Lb = Lb
@@ -36,19 +36,19 @@ class CombinerSimFieldHelper_Numba:
         self.apR = apR
         self.apz = apz
         self.ang = ang
-        self.fieldFact = fieldFact
+        self.field_fact = field_fact
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
         return (fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
-                self.fieldFact), ()
+                self.field_fact), ()
 
     def _force_Func(self, x, y, z):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return vec_interp3D(x, y, z, self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr)
 
-    def _magnetic_Potential_Func(self, x, y, z):
+    def _magnetic_potential_Func(self, x, y, z):
         return scalar_interp3D(x, y, z, self.xArr, self.yArr, self.zArr, self.VArr)
 
     def force(self, x, y, z):
@@ -73,12 +73,12 @@ class CombinerSimFieldHelper_Numba:
                 z = -z
                 zFact = -1  # z force is opposite in lower half
         Fx, Fy, Fz = self._force_Func(x, y, z)
-        Fx = self.fieldFact * xFact * Fx
-        Fy = self.fieldFact * Fy
-        Fz = self.fieldFact * zFact * Fz
+        Fx = self.field_fact * xFact * Fx
+        Fy = self.field_fact * Fy
+        Fz = self.field_fact * zFact * Fz
         return Fx, Fy, Fz
 
-    def magnetic_Potential(self, x, y, z):
+    def magnetic_potential(self, x, y, z):
         # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
         if 0 <= x <= (self.Lm / 2 + self.space):  # if the particle is in the first half of the magnet
             if z < 0:  # if particle is in the lower plane
@@ -88,7 +88,7 @@ class CombinerSimFieldHelper_Numba:
                     x - (self.Lm / 2 + self.space))  # use the reflection of the particle
             if z < 0:  # if in the lower plane, need to use symmetry
                 z = -z
-        return self.fieldFact * self._magnetic_Potential_Func(x, y, z)
+        return self.field_fact * self._magnetic_potential_Func(x, y, z)
 
     def is_Coord_Inside_Vacuum(self, x, y, z) -> bool:
         # q: coordinate to test in element's frame

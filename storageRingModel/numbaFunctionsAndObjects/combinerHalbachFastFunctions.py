@@ -18,11 +18,11 @@ def _force_Func_External( x, y, z,fieldDataExternal):
     Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
     return Fx, Fy, Fz
 @numba.njit()
-def _magnetic_Potential_Func_Internal( x, y, z,fieldDataInternal):
+def _magnetic_potential_Func_Internal( x, y, z,fieldDataInternal):
     xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
     return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
 @numba.njit()
-def _magnetic_Potential_Func_External( x, y, z,fieldDataExternal):
+def _magnetic_potential_Func_External( x, y, z,fieldDataExternal):
     xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
     return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
 
@@ -38,7 +38,7 @@ def force_Without_isInside_Check( x0, y0, z0,params,fieldData):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     # x, y, z = baseClass.misalign_Coords(x0, y0, z0)
-    ap, Lm, La,Lb,space,ang,acceptance_width, fieldFact, useSymmetry, extraFieldLength = params
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
     fieldDataInternal,fieldDataExternal=fieldData
     x, y, z = x0, y0, z0
     symmetryPlaneX = Lm / 2 + space  # field symmetry plane location
@@ -69,43 +69,43 @@ def force_Without_isInside_Check( x0, y0, z0,params,fieldData):
     else:
         Fx, Fy, Fz = _force_Func_Internal(x, y, z,fieldDataInternal)
     # Fx, Fy, Fz = baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
-    Fx *= fieldFact
-    Fy *= fieldFact
-    Fz *= fieldFact
+    Fx *= field_fact
+    Fy *= field_fact
+    Fz *= field_fact
     return Fx, Fy, Fz
 @numba.njit()
 def magnetic_potential( x, y, z,params,fieldData):
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
     # x, y, z = baseClass.misalign_Coords(x, y, z)
-    ap, Lm, La,Lb,space,ang,acceptance_width, fieldFact, useSymmetry, extraFieldLength = params
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
     fieldDataInternal, fieldDataExternal = fieldData
     y = abs(y)  # confine to upper right quadrant
     z = abs(z)
     symmetryPlaneX = Lm / 2 + space  # field symmetry plane location
     if useSymmetry:
         if -extraFieldLength <= x <= space:
-            V = _magnetic_Potential_Func_External(x, y, z,fieldDataExternal)
+            V = _magnetic_potential_Func_External(x, y, z,fieldDataExternal)
         elif space < x <= symmetryPlaneX:
-            V = _magnetic_Potential_Func_Internal(x, y, z,fieldDataInternal)
+            V = _magnetic_potential_Func_Internal(x, y, z,fieldDataInternal)
         elif symmetryPlaneX < x <= Lm + space:
             x = 2 * symmetryPlaneX - x
-            V = _magnetic_Potential_Func_Internal(x, y, z,fieldDataInternal)
+            V = _magnetic_potential_Func_Internal(x, y, z,fieldDataInternal)
         elif Lm + space < x:  # particle can extend past 2*symmetryPlaneX
             x = 2 * symmetryPlaneX - x
-            V = _magnetic_Potential_Func_External(x, y, z,fieldDataExternal)
+            V = _magnetic_potential_Func_External(x, y, z,fieldDataExternal)
         else:
             print(x, y, z, Lm, space)
             raise ValueError
     else:
-        V = _magnetic_Potential_Func_Internal(x, y, z,fieldDataInternal)
-    V = V * fieldFact
+        V = _magnetic_potential_Func_Internal(x, y, z,fieldDataInternal)
+    V = V * field_fact
     return V
 
 @numba.njit()
 def is_coord_in_vacuum( x, y, z,params):
     # q: coordinate to test in element's frame
-    ap, Lm, La,Lb,space,ang,acceptance_width, fieldFact, useSymmetry, extraFieldLength = params
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
     standOff = 10e-6  # first valid (non np.nan) interpolation point on face of lens is 1e-6 off the surface of the lens
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)

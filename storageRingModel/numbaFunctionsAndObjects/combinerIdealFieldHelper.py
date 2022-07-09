@@ -23,7 +23,7 @@ spec_Combiner_Ideal = [
     ('apR', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
-    ('fieldFact', numba.float64)
+    ('field_fact', numba.float64)
 ]
 
 
@@ -38,18 +38,18 @@ class CombinerIdealFieldHelper_Numba:
         self.apR = apR
         self.apz = apz
         self.ang = ang
-        self.fieldFact = 1.0
+        self.field_fact = 1.0
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang), (self.fieldFact,)
+        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang), (self.field_fact,)
 
     def set_Internal_State(self, params):
-        self.fieldFact = params[0]
+        self.field_fact = params[0]
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return self.fieldFact, (self.fieldFact,)
+        return self.field_fact, (self.field_fact,)
 
     def force(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):
@@ -61,19 +61,19 @@ class CombinerIdealFieldHelper_Numba:
         # force at point q in element frame
         # q: particle's position in element frame
         Fx, Fy, Fz = combiner_Ideal_Force(x, y, z, self.Lb, self.c1, self.c2)
-        Fx *= self.fieldFact
-        Fy *= self.fieldFact
-        Fz *= self.fieldFact
+        Fx *= self.field_fact
+        Fy *= self.field_fact
+        Fz *= self.field_fact
         return Fx, Fy, Fz
 
-    def magnetic_Potential(self, x, y, z):
+    def magnetic_potential(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan
         if 0 < x < self.Lb:
             V0 = SIMULATION_MAGNETON * np.sqrt((self.c2 * z) ** 2 + (self.c1 + self.c2 * y) ** 2)
         else:
             V0 = 0.0
-        V0 *= self.fieldFact
+        V0 *= self.field_fact
         return V0
 
     def is_Coord_Inside_Vacuum(self, x, y, z):

@@ -10,7 +10,7 @@ spec_Bender_Ideal = [
     ('rp', numba.float64),
     ('rb', numba.float64),
     ('ap', numba.float64),
-    ('fieldFact', numba.float64)
+    ('field_fact', numba.float64)
 ]
 
 
@@ -22,16 +22,16 @@ class BenderIdealFieldHelper_Numba:
         self.rp = rp
         self.rb = rb
         self.ap = ap
-        self.fieldFact = 1.0
+        self.field_fact = 1.0
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.ang, self.K, self.rp, self.rb, self.ap), (self.fieldFact,)
+        return (self.ang, self.K, self.rp, self.rb, self.ap), (self.field_fact,)
 
     def set_Internal_State(self, params):
-        self.fieldFact = params[0]
+        self.field_fact = params[0]
 
-    def magnetic_Potential(self, x, y, z):
+    def magnetic_potential(self, x, y, z):
         # potential energy at provided coordinates
         # q coords in element frame
         phi = full_arctan2(y, x)
@@ -41,7 +41,7 @@ class BenderIdealFieldHelper_Numba:
             V0 = .5 * self.K * SIMULATION_MAGNETON * rToroidal ** 2
         else:
             V0 = np.nan
-        V0 *= self.fieldFact
+        V0 *= self.field_fact
         return V0
 
     def force(self, x, y, z):
@@ -57,9 +57,9 @@ class BenderIdealFieldHelper_Numba:
             Fz = -self.K * z
         else:
             Fx, Fy, Fz = np.nan, np.nan, np.nan
-        Fx *= self.fieldFact
-        Fy *= self.fieldFact
-        Fz *= self.fieldFact
+        Fx *= self.field_fact
+        Fy *= self.field_fact
+        Fz *= self.field_fact
         return Fx, Fy, Fz
 
     def is_Coord_Inside_Vacuum(self, x, y, z):
@@ -76,6 +76,6 @@ class BenderIdealFieldHelper_Numba:
         else:
             return False
 
-    def update_Element_Perturb_Params(self, shiftY, shiftZ, rotY, rotZ):
+    def update_Element_Perturb_Params(self, shift_y, shift_z, rot_angle_y, rot_angle_z):
         """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
         raise NotImplementedError

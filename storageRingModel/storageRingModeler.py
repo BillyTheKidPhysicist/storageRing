@@ -40,7 +40,7 @@ class StorageRingModel:
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
                  use_bumper: bool = False):
-        assert lattice_ring.latticeType == 'storageRing' and lattice_injector.latticeType == 'injector'
+        assert lattice_ring.lattice_type == 'storageRing' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
         self.lattice_injector = lattice_injector
@@ -54,19 +54,19 @@ class StorageRingModel:
         self.use_energy_correction = use_energy_correction
         self.swarm_injector_initial = self.generate_swarm(num_particles)
 
-    def generate_swarm(self, numParticlesSwarm: int) -> Swarm:
+    def generate_swarm(self, num_particlesSwarm: int) -> Swarm:
         """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
-        swarm = self.swarm_tracer_injector.initialize_Simulated_Collector_Focus_Swarm(numParticlesSwarm)
+        swarm = self.swarm_tracer_injector.initialize_Simulated_Collector_Focus_Swarm(num_particlesSwarm)
         if self.has_bumper:
-            swarm = self.swarm_tracer_injector.time_Step_Swarm_Distance_Along_x(swarm, swarmShift_x,
-                                                                                holdPositionInX=True)
+            swarm = self.swarm_tracer_injector.time_step_swarm_distance_along_x(swarm, swarmShift_x,
+                                                                                hold_position_in_x=True)
         return swarm
 
     def convert_position_injector_to_ring_frame(self, q_lab_inject: np.ndarray) -> np.ndarray:
         """Convert 3D position in injector lab frame into ring lab frame."""
         # a nice trick
-        q_lab_ring = self.lattice_injector.combiner.transform_Lab_Coords_Into_Element_Frame(q_lab_inject)
-        q_lab_ring = self.lattice_ring.combiner.transform_Element_Coords_Into_Lab_Frame(q_lab_ring)
+        q_lab_ring = self.lattice_injector.combiner.transform_lab_coords_into_element_frame(q_lab_inject)
+        q_lab_ring = self.lattice_ring.combiner.transform_element_coords_into_lab_frame(q_lab_ring)
         return q_lab_ring
 
     def convert_momentum_injector_to_ring_frame(self, p_lab_inject: np.ndarray) -> np.ndarray:
@@ -101,7 +101,7 @@ class StorageRingModel:
         else:
             lenses_pre_combiner = self.lenses_before_ring_combiner()
             assert all(type(lens) is HalbachLensSim for lens in lenses_pre_combiner)
-            return any(line.intersects(lens.SO_Outer) for lens in lenses_pre_combiner)
+            return any(line.intersects(lens.SO_outer) for lens in lenses_pre_combiner)
 
     def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
@@ -124,7 +124,7 @@ class StorageRingModel:
         r2_injector = self.lattice_injector.combiner.r2
         r2_ring = self.lattice_ring.combiner.r2
         for el in self.lattice_injector:
-            SO = copy.copy(el.SO_Outer if which_profile == 'exterior' else el.SO)
+            SO = copy.copy(el.SO_outer if which_profile == 'exterior' else el.SO)
             SO = translate(SO, xoff=-r2_injector[0], yoff=-r2_injector[1])
             SO = rotate(SO, rotation_angle, use_radians=True, origin=(0, 0))
             SO = translate(SO, xoff=r2_ring[0], yoff=r2_ring[1])
@@ -134,7 +134,7 @@ class StorageRingModel:
     def floor_plan_shapes(self, whichSide: str) -> list[Polygon]:
         assert whichSide in ('exterior', 'interior')
         shapes = []
-        shapes.extend([el.SO_Outer if whichSide == 'exterior' else el.SO for el in self.lattice_ring])
+        shapes.extend([el.SO_outer if whichSide == 'exterior' else el.SO for el in self.lattice_ring])
         shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
         return shapes
 
@@ -151,7 +151,7 @@ class StorageRingModel:
         area_mm = 0.0
         for lens in lenses_pre_combiner:  # count up all the area overlap
             for shape in injector_shapes_to_compare:  # don't forget to add 1
-                area_mm += lens.SO_Outer.intersection(shape).area * m_to_mm_area
+                area_mm += lens.SO_outer.intersection(shape).area * m_to_mm_area
         return area_mm
 
     def show_floor_plan(self, which: str = 'exterior', defer_show=False, true_aspect_ratio=True,
@@ -178,17 +178,17 @@ class StorageRingModel:
         swarm.particles = self.swarm_injector_initial.particles[:100]
         swarm_injector_traced = self.swarm_tracer_injector.trace_Swarm_Through_Lattice(
             swarm, self.h, 1.0, parallel=False,
-            fastMode=False, copySwarm=True, accelerated=False, logPhaseSpaceCoords=True, use_energy_correction=True,
+            use_fast_mode=False, copy_swarm=True, accelerated=False, log_phase_space_coords=True, use_energy_correction=True,
             use_collisions=self.use_collisions)
         for particle in swarm_injector_traced:
             particle.clipped = True if self.does_ring_clip_injector_particle(particle) else particle.clipped
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                               copy_particles=True)
         swarm_ring_traced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarm_ring_initial, self.h, T_max,
-                                                                               fastMode=False,
+                                                                               use_fast_mode=False,
                                                                                parallel=False,
                                                                                use_energy_correction=True,
-                                                                               stepsBetweenLogging=4,
+                                                                               steps_per_logging=4,
                                                                                use_collisions=self.use_collisions)
 
         for particle_injector, particle_ring in zip(swarm_injector_traced, swarm_ring_traced):
@@ -225,8 +225,8 @@ class StorageRingModel:
     def inject_swarm(self, parallel: bool = False) -> Swarm:
         swarm_initial = self.trace_through_injector_and_transform_to_ring()
         swarm_traced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarm_initial, self.h, self.T,
-                                                                          fastMode=True, accelerated=True,
-                                                                          copySwarm=False,
+                                                                          use_fast_mode=True, accelerated=True,
+                                                                          copy_swarm=False,
                                                                           use_energy_correction=self.use_energy_correction,
                                                                           use_collisions=self.use_collisions,
                                                                           parallel=parallel)
@@ -248,8 +248,8 @@ class StorageRingModel:
 
     def trace_through_injector_and_transform_to_ring(self) -> Swarm:
         swarm_injector_traced = self.swarm_tracer_injector.trace_Swarm_Through_Lattice(
-            self.swarm_injector_initial.copy(), self.h, 1.0, fastMode=True, copySwarm=False,
-            logPhaseSpaceCoords=True, accelerated=True, use_collisions=self.use_collisions)
+            self.swarm_injector_initial.copy(), self.h, 1.0, use_fast_mode=True, copy_swarm=False,
+            log_phase_space_coords=True, accelerated=True, use_collisions=self.use_collisions)
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                               copy_particles=True)
         return swarm_ring_initial

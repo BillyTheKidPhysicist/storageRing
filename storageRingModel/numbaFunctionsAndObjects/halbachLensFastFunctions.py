@@ -9,7 +9,7 @@ from numbaFunctionsAndObjects.utilities import tupleOf3Floats, nanArr7Tuple
 
 @numba.njit(cache=False)
 def is_coord_in_vacuum(x: float, y: float, z: float, params) -> bool:
-    L, ap, Lcap, extraFieldLength, fieldFact,magnetImperfections = params
+    L, ap, Lcap, extraFieldLength, field_fact,magnetImperfections = params
     return 0 <= x <= L and y ** 2 + z ** 2 < ap ** 2
 
 
@@ -31,15 +31,15 @@ def _force_Func_Outer(x, y, z, fieldData) -> tupleOf3Floats:
     return Fx, Fy, Fz
 
 @numba.njit(cache=False)
-def _magnetic_Potential_Func_Fringe( x: float, y: float, z: float, fieldData) -> float:
-    """Wrapper for interpolation of magnetic fields at ends of lens. see magnetic_Potential"""
+def _magnetic_potential_Func_Fringe( x: float, y: float, z: float, fieldData) -> float:
+    """Wrapper for interpolation of magnetic fields at ends of lens. see magnetic_potential"""
     xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldData
     V = scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
     return V
 
 @numba.njit(cache=False)
-def _magnetic_Potential_Func_Inner( x: float, y: float, z: float,fieldData) -> float:
-    """Wrapper for interpolation of magnetic fields of plane at center lens.see magnetic_Potential"""
+def _magnetic_potential_Func_Inner( x: float, y: float, z: float,fieldData) -> float:
+    """Wrapper for interpolation of magnetic fields of plane at center lens.see magnetic_potential"""
     yArr, zArr, FyArr, FzArr, VArr = fieldData
     V = interp2D(y, z, yArr, zArr, VArr)
     return V
@@ -48,7 +48,7 @@ def _magnetic_Potential_Func_Inner( x: float, y: float, z: float,fieldData) -> f
 
 @numba.njit(cache=False)
 def force(x: float, y: float, z: float, params, fieldData) -> tupleOf3Floats:
-    L, ap, Lcap, extraFieldLength, fieldFact, magnetImperfections = params
+    L, ap, Lcap, extraFieldLength, field_fact, magnetImperfections = params
     fieldData3D, fieldData2D,fieldDataPerturbations=fieldData
     Fx,Fy,Fz=_force(x,y,z,params,fieldData2D,fieldData3D)
     if magnetImperfections and not np.isnan(Fx):
@@ -75,7 +75,7 @@ def _force(x: float, y: float, z: float, params, fieldData2D,fieldData3D) -> tup
     :return: tuple of length 3 of the force vector, simulation units. contents are nan if coordinate is outside
     vacuum
     """
-    L, ap, Lcap, extraFieldLength, fieldFact,magnetImperfections = params
+    L, ap, Lcap, extraFieldLength, field_fact,magnetImperfections = params
 
 
     if not is_coord_in_vacuum(x, y, z,params):
@@ -95,19 +95,19 @@ def _force(x: float, y: float, z: float, params, fieldData2D,fieldData3D) -> tup
         Fx = -Fx
     else:
         raise Exception("Particle outside field region")  # this may be triggered when itentionally misligned
-    Fx *= fieldFact
-    Fy *= FySymmetryFact * fieldFact
-    Fz *= FzSymmetryFact * fieldFact
+    Fx *= field_fact
+    Fy *= FySymmetryFact * field_fact
+    Fz *= FzSymmetryFact * field_fact
     # Fx, Fy, Fz = baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
     return Fx, Fy, Fz
 
 @numba.njit(cache=False)
 def magnetic_potential(x: float, y: float, z: float,params, fieldData) -> float:
-    L, ap, Lcap, extraFieldLength, fieldFact, magnetImperfections = params
+    L, ap, Lcap, extraFieldLength, field_fact, magnetImperfections = params
     fieldData3D, fieldData2D,fieldDataPerturbations=fieldData
     V = _magnetic_potential(x, y, z, params, fieldData2D, fieldData3D)
     if magnetImperfections and not np.isnan(V):
-        delta_V = _magnetic_Potential_Func_Fringe(x, y, z, fieldDataPerturbations)
+        delta_V = _magnetic_potential_Func_Fringe(x, y, z, fieldDataPerturbations)
         V += delta_V
 
     return V
@@ -123,28 +123,28 @@ def _magnetic_potential(x: float, y: float, z: float,params, fieldData2D,fieldDa
     is outside vacuum tube
 
     """
-    L, ap, Lcap, extraFieldLength, fieldFact,magnetImperfections = params
+    L, ap, Lcap, extraFieldLength, field_fact,magnetImperfections = params
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
     # x, y, z = baseClass.misalign_Coords(x, y, z)
     y = abs(y)
     z = abs(z)
     if -extraFieldLength <= x <= Lcap:
-        V0 = _magnetic_Potential_Func_Fringe(x, y, z,fieldData3D)
+        V0 = _magnetic_potential_Func_Fringe(x, y, z,fieldData3D)
     elif Lcap < x <= L - Lcap:
-        V0 = _magnetic_Potential_Func_Inner(x, y, z,fieldData2D)
+        V0 = _magnetic_potential_Func_Inner(x, y, z,fieldData2D)
     elif 0 <= x <= L + extraFieldLength:
         x = L - x
-        V0 = _magnetic_Potential_Func_Fringe(x, y, z,fieldData3D)
+        V0 = _magnetic_potential_Func_Fringe(x, y, z,fieldData3D)
     else:
         raise Exception("Particle outside field region")
-    V0 *= fieldFact
+    V0 *= field_fact
     return V0
 
 
 # @numba.njit(cache=False)
 # def _force_Field_Perturbations(x0: float, y0: float, z0: float, params, fieldData) -> tupleOf3Floats:
-#     L, ap, Lcap, extraFieldLength, fieldFact = params
+#     L, ap, Lcap, extraFieldLength, field_fact = params
 #     if not is_coord_in_vacuum(x0, y0, z0, L, ap):
 #         return np.nan, np.nan, np.nan
 #     # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
@@ -152,9 +152,9 @@ def _magnetic_potential(x: float, y: float, z: float,params, fieldData2D,fieldDa
 #     x = x - L / 2
 #     Fx, Fy, Fz = _force_Func_Outer(x, y, z, fieldData, fieldPerturbationData,
 #                                    useImperfectInterp=True)  # being used to hold fields for entire lens
-#     Fx = Fx * fieldFact
-#     Fy = Fy * fieldFact
-#     Fz = Fz * fieldFact
+#     Fx = Fx * field_fact
+#     Fy = Fy * field_fact
+#     Fz = Fz * field_fact
 #     # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
 #     return Fx, Fy, Fz
 # @numba.njit(cache=False)
