@@ -41,9 +41,9 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
 def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
-    lengthSegment, Lcap, radius, numMagnets = bender.Lm, bender.Lcap, bender.ro, bender.numMagnets
-    magnetDepth = bender.rp + bender.magnetWidth + bender.output_offset #todo: why does this have output_offset??
-    return CappedSlicedBend(lengthSegment, numMagnets, magnetDepth, Lcap, radius)
+    lengthSegment, Lcap, radius, num_magnets = bender.Lm, bender.Lcap, bender.ro, bender.num_magnets
+    magnetDepth = bender.rp + bender.magnet_width + bender.output_offset #todo: why does this have output_offset??
+    return CappedSlicedBend(lengthSegment, num_magnets, magnetDepth, Lcap, radius)
 
 
 def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
@@ -54,10 +54,10 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     firstEl = None
     for i, el_PTL in enumerate(PTL):
         if type(el_PTL) in (HalbachLensSim, LensIdeal):
-            constrained = True if el_PTL in PTL.linearElementsToConstraint else False
+            constrained = True if el_PTL in PTL.linear_elements_to_constrain else False
             elements.append(Line(el_PTL.L, constrained=constrained))
         elif type(el_PTL) is Drift:
-            elements.append(LineWithAngledEnds(el_PTL.L, el_PTL.inputTiltAngle, el_PTL.outputTiltAngle))
+            elements.append(LineWithAngledEnds(el_PTL.L, el_PTL.input_tilt_angle, el_PTL.output_tilt_angle))
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
             elements.append(_kink_From_Combiner(el_PTL))
         elif type(el_PTL) is HalbachBenderSimSegmented:
@@ -71,7 +71,7 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
 
     n_in_Initial = -np.array([np.cos(PTL.initialAngle), np.sin(PTL.initialAngle)]) if PTL.initialAngle != -np.pi \
         else np.array([1.0, 0.0])
-    pos_in_Initial = np.array(PTL.initialLocation)
+    pos_in_Initial = np.array(PTL.initial_location)
     firstEl.place(pos_in_Initial, n_in_Initial)
 
     storageRing = StorageRingGeometry(elements)
@@ -91,7 +91,7 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
     assert type(bender) in (BenderIdeal, HalbachBenderSimSegmented) and type(shape) in (Bend, CappedSlicedBend)
     bender.rb = shape.radius - bender.output_offset  # get the bending radius back from orbit radius
     if type(bender) is HalbachBenderSimSegmented:
-        bender.numMagnets = shape.numMagnets
+        bender.num_magnets = shape.num_magnets
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
     bender.nb = np.array([*shape.n_in, 0])
@@ -152,10 +152,10 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
     element.R_In = np.asarray([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
 
 
-def is_Particle_Tracer_Lattice_Closed(PTL) -> bool:
+def is_particle_tracer_lattice_closed(PTL) -> bool:
     """Check that the lattice is closed. """
 
-    elPTL_First, elPTL_Last = PTL.elList[0], PTL.elList[-1]
+    elPTL_First, elPTL_Last = PTL.el_list[0], PTL.el_list[-1]
     closedTolerance = 1e-11
     if not iscloseAll(elPTL_First.nb, -1 * elPTL_Last.ne, closedTolerance):  # normal vector must be same
         return False
@@ -164,8 +164,8 @@ def is_Particle_Tracer_Lattice_Closed(PTL) -> bool:
     return True
 
 
-def update_And_Place_Elements_From_Floor_Plan(PTL, floorPlan):
-    for i, (el_PTL, el_Geom) in enumerate(zip(PTL.elList, floorPlan)):
+def update_and_place_elements_from_floor_plan(PTL, floor_plan):
+    for i, (el_PTL, el_Geom) in enumerate(zip(PTL.el_list, floor_plan)):
         if type(el_PTL) in (LensIdeal, HalbachLensSim, Drift):
             _build_Lattice_Lens_Or_Drift(el_PTL, el_Geom)
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):

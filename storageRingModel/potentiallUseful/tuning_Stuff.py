@@ -1,19 +1,19 @@
 from latticeElements.elements import Drift,HalbachLensSim
-def get_Element_Before_And_After(elCenter,lattice):
-    if (elCenter.index == len(lattice.elList) - 1 or elCenter.index == 0) and lattice.lattice_type == 'injector':
+def get_element_before_and_after(el_center,lattice):
+    if (el_center.index == len(lattice.el_list) - 1 or el_center.index == 0) and lattice.lattice_type == 'injector':
         raise Exception('Element cannot be first or last if lattice is injector type')
-    elBeforeIndex = elCenter.index - 1 if elCenter.index != 0 else len(lattice.elList) - 1
-    elAfterIndex = elCenter.index + 1 if elCenter.index < len(lattice.elList) - 1 else 0
-    elBefore = lattice.elList[elBeforeIndex]
-    elAfter = lattice.elList[elAfterIndex]
-    return elBefore, elAfter
-def move_Injector_Element_Longitudinally(elCenter,deltaL,lattice) -> None:
-    elBefore, elAfter = get_Element_Before_And_After(elCenter,lattice)
-    assert all(type(el) is Drift  for el in (elBefore,elAfter)) and type(elCenter) is HalbachLensSim
-    elBefore.set_length(elBefore.L+deltaL)
-    elAfter.set_length(elAfter.L-deltaL)
+    el_before_index = el_center.index - 1 if el_center.index != 0 else len(lattice.el_list) - 1
+    el_after_index = el_center.index + 1 if el_center.index < len(lattice.el_list) - 1 else 0
+    el_before = lattice.el_list[el_before_index]
+    el_after = lattice.el_list[el_after_index]
+    return el_before, el_after
+def move_Injector_Element_Longitudinally(el_center,deltaL,lattice) -> None:
+    el_before, el_after = get_element_before_and_after(el_center,lattice)
+    assert all(type(el) is Drift  for el in (el_before,el_after)) and type(el_center) is HalbachLensSim
+    el_before.set_length(el_before.L+deltaL)
+    el_after.set_length(el_after.L-deltaL)
 def twist_Knobs(shiftLens1,shiftLens2,lattice):
-    lenses=[el for el in lattice.elList if type(el) is HalbachLensSim]
+    lenses=[el for el in lattice.el_list if type(el) is HalbachLensSim]
     assert len(lenses)==2
     for el,shift in zip(lenses,[shiftLens1,shiftLens2]):
         move_Injector_Element_Longitudinally(el,shift,lattice)
@@ -21,7 +21,7 @@ def twist_Knobs(shiftLens1,shiftLens2,lattice):
 import copy
 def make_Injector_With_Longer_First_Drift(extraLength):
     lattice=copy.deepcopy(lattice_injector)
-    firstEl=lattice.elList[0]
+    firstEl=lattice.el_list[0]
     firstEl.set_length(firstEl.L+extraLength)
     lattice.build_lattice(False)
     return lattice

@@ -49,14 +49,14 @@
 #
 #         z_min = -TINY_STEP
 #         z_max = self.L / 2 + TINY_STEP
-#         zArr = np.linspace(z_min, z_max, num=numPointsLongitudinal)  # add a little extra so interp works as expected
+#         z_arr = np.linspace(z_min, z_max, num=numPointsLongitudinal)  # add a little extra so interp works as expected
 #
-#         # assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
+#         # assert (z_arr[-1]-z_arr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
 #         assert len(xArr_Quadrant) % 2 == 1 and len(yArr_Quadrant) % 2 == 1
 #         assert all((arr[-1] - arr[-2]) / self.rp < .1 for arr in [xArr_Quadrant, yArr_Quadrant]), "" \
 #                                                                "spatial step size must be small compared to radius"
 #
-#         volume_coords = np.asarray(np.meshgrid(xArr_Quadrant, yArr_Quadrant, zArr)).T.reshape(-1,
+#         volume_coords = np.asarray(np.meshgrid(xArr_Quadrant, yArr_Quadrant, z_arr)).T.reshape(-1,
 #                                                                             3)  # note that these coordinates can have
 #         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 #         # input coordinates will be shifted in a wrapper function

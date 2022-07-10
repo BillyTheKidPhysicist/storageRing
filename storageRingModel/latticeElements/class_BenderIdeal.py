@@ -108,10 +108,10 @@ class BenderIdeal(BaseElement):
         raise NotImplementedError  # there is an error here with yo
         xo, yo, zo = q_orbit
         phi = self.ang - xo / self.ro
-        xLab = self.ro * cos(phi)
-        yLab = self.ro * sin(phi)
-        zLab = zo
-        q_lab = np.asarray([xLab, yLab, zLab])
+        x_lab = self.ro * cos(phi)
+        y_lab = self.ro * sin(phi)
+        z_lab = zo
+        q_lab = np.asarray([x_lab, y_lab, z_lab])
         q_lab[:2] = self.R_Out @ q_lab[:2]
         q_lab += self.r0
         return q_lab

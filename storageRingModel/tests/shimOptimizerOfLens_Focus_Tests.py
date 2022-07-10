@@ -8,22 +8,22 @@ def test1():
     rp = .05
     L0 = .23
     sphereDiam = .0254
-    magnetWidth = .0254
+    magnet_width = .0254
     lensBounds = [{'length': (L0 - rp, L0)}]
-    lensParams = [{'rp': rp, 'width': magnetWidth}]
-    lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
+    lensParams = [{'rp': rp, 'width': magnet_width}]
+    lensBaseLineParams = [{'rp': rp, 'width': magnet_width, 'length': L0}]
 
-    shimAParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
+    shimAParamBounds = {'r': (rp, rp + magnet_width), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
     shimALockedParams = {'diameter': sphereDiam, 'shape': 'sphere', 'plane_symmetry': False, 'location': 'top'}
 
-    shimBParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
+    shimBParamBounds = {'r': (rp, rp + magnet_width), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
     shimBLockedParams = {'diameter': sphereDiam, 'shape': 'sphere', 'plane_symmetry': False, 'location': 'bottom'}
 
-    shimCParamBounds = {'r': (rp, rp + magnetWidth), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
+    shimCParamBounds = {'r': (rp, rp + magnet_width), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
                         'theta': (0.0, np.pi),
                         'psi': (0.0, 2 * np.pi)}
     shimCLockedParams = {'diameter': sphereDiam, 'shape': 'sphere', 'plane_symmetry': True}
@@ -72,10 +72,10 @@ def test2():
     # test that layer works as expected
     tol = 1e-6
     lensLongitudinalSymmetry = True
-    rp, magnetWidth, L0, numLayers = .05, .02, .35, 6
+    rp, magnet_width, L0, numLayers = .05, .02, .35, 6
     lensBounds = [{}] * (numLayers // 2)
-    lensParamsLocked = [{'width': magnetWidth, 'length': L0 / numLayers, 'rp': rp} for _ in range(numLayers // 2)]
-    lensBaseLineParams = [{'rp': rp, 'width': magnetWidth, 'length': L0}]
+    lensParamsLocked = [{'width': magnet_width, 'length': L0 / numLayers, 'rp': rp} for _ in range(numLayers // 2)]
+    lensBaseLineParams = [{'rp': rp, 'width': magnet_width, 'length': L0}]
     shimOptimizer = ShimOptimizer('full', lensLongitudinalSymmetry)
     shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)
     emptyArgs = []

@@ -17,17 +17,17 @@ cmap = plt.get_cmap('viridis')
 
 def make_Test_Swarm_And_Lattice(num_particles=128, totalTime=.1) -> (Swarm, ParticleTracerLattice):
     PTL = ParticleTracerLattice(speed_nominal=210.0)
-    PTL.add_Lens_Ideal(.4, 1.0, .025)
-    PTL.add_Drift(.1)
-    PTL.add_Lens_Ideal(.4, 1.0, .025)
-    PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .025)
-    PTL.add_Drift(.2)
-    PTL.add_Lens_Ideal(.2, 1.0, .025)
-    PTL.add_Drift(.1)
-    PTL.add_Lens_Ideal(.2, 1.0, .025)
-    PTL.add_Drift(.2)
-    PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .025)
-    PTL.end_Lattice()
+    PTL.add_lens_ideal(.4, 1.0, .025)
+    PTL.add_drift(.1)
+    PTL.add_lens_ideal(.4, 1.0, .025)
+    PTL.add_bender_ideal(np.pi, 1.0, 1.0, .025)
+    PTL.add_drift(.2)
+    PTL.add_lens_ideal(.2, 1.0, .025)
+    PTL.add_drift(.1)
+    PTL.add_lens_ideal(.2, 1.0, .025)
+    PTL.add_drift(.2)
+    PTL.add_bender_ideal(np.pi, 1.0, 1.0, .025)
+    PTL.end_lattice()
 
     swarmTracer = SwarmTracer(PTL)
     swarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3, 5.0, 1e-5, num_particles)
@@ -159,7 +159,7 @@ class PhaseSpaceAnalyzer:
         assert all(particle.traced is True for particle in swarm)
         self.swarm = swarm
         self.lattice = lattice
-        self.maxRevs = np.inf
+        self.max_revs = np.inf
 
     def _get_Axis_Index(self, xaxis, yaxis):
         strinNameArr = np.asarray(['y', 'z', 'px', 'py', 'pz', 'NONE'])
@@ -230,7 +230,7 @@ class PhaseSpaceAnalyzer:
                 axes[swarmAxisIndex].scatter(xCoordsArr * unitModifier[0], yCoordsArr * unitModifier[1],
                                              c='blue', alpha=alpha, edgecolors=None, linewidths=0.0)
                 axes[swarmAxisIndex].grid()
-                xSwarmLab, ySwarmLab = self.lattice.get_Lab_Coords_From_Orbit_Distance(xOrbit)
+                xSwarmLab, ySwarmLab = self.lattice.get_lab_coords_from_orbit_distance(xOrbit)
                 self._plot_Lattice_On_Axis(axes[latticeAxisIndex], [xSwarmLab, ySwarmLab])
                 camera.snap()
         plt.tight_layout()
@@ -266,7 +266,7 @@ class PhaseSpaceAnalyzer:
     def _make_SnapShot_XArr(self, numPoints):
         # revolutions: set to -1 for using the largest number possible based on swarm
         xMaxSwarm = self._find_Max_Xorbit_For_Swarm()
-        x_max = min(xMaxSwarm, self.maxRevs * self.lattice.total_length)
+        x_max = min(xMaxSwarm, self.max_revs * self.lattice.total_length)
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
         return np.linspace(xStart, x_max, numPoints)
 
@@ -287,9 +287,9 @@ class PhaseSpaceAnalyzer:
         self._make_Phase_Space_Video_For_X_Array(videoTitle, xSnapShotArr, xaxis, yaxis, alpha, fpsApprox, dpi)
 
     def make_Phase_Space_Movie_Through_Lattice(self, title, xaxis, yaxis, videoLengthSeconds=10.0, fps=30, alpha=.25,
-                                               maxRevs=np.inf, dpi=None):
+                                               max_revs=np.inf, dpi=None):
         # maxVideoLengthSeconds: The video can be no longer than this, but will otherwise shoot for a few fps
-        self.maxRevs = maxRevs
+        self.max_revs = max_revs
         self._check_Axis_Choice(xaxis, yaxis)
         numFrames = int(videoLengthSeconds * fps)
         x_arr = self._make_SnapShot_XArr(numFrames)
@@ -323,7 +323,7 @@ class PhaseSpaceAnalyzer:
         else:
             axis.plot(T_arr, survivalList)
 
-    def plot_Energy_Growth(self, numPoints=100, dpi=150, saveTitle=None, survivingOnly=True):
+    def plot_Energy_Growth(self, numPoints=100, dpi=150, save_title=None, survivingOnly=True):
         if survivingOnly == True:
             fig, axes = plt.subplots(2, 1)
         else:
@@ -356,11 +356,11 @@ class PhaseSpaceAnalyzer:
         else:
             axes[0].set_xlabel('Revolutions')
         axes[0].legend()
-        if saveTitle is not None:
-            plt.savefig(saveTitle, dpi=dpi)
+        if save_title is not None:
+            plt.savefig(save_title, dpi=dpi)
         plt.show()
 
-    def plot_Acceptance_1D_Histogram(self, dimension: str, numBins: int = 10, saveTitle: str = None,
+    def plot_Acceptance_1D_Histogram(self, dimension: str, numBins: int = 10, save_title: str = None,
                                      showInputDist: bool = True,
                                      weightingMethod: str = 'clipped', TMax: float = None, dpi: float = 150,
                                      cAccepted=cmap(cmap.N), cInitial=cmap(0)) -> None:
@@ -370,7 +370,7 @@ class PhaseSpaceAnalyzer:
 
         :param dimension: The particle dimension to plot the acceptance over. y,z,px,py or pz
         :param numBins: Number of bins spanning the range of dimension values
-        :param saveTitle: If not none, the plot is saved with this as the file name.
+        :param save_title: If not none, the plot is saved with this as the file name.
         :param showInputDist: Plot the initial distribution behind the acceptance plot
         :param weightingMethod: Which weighting method to use to represent acceptence.
         :param TMax: When using 'time' as the weightingMethod this is the maximum time for acceptance
@@ -383,7 +383,7 @@ class PhaseSpaceAnalyzer:
         assert weightingMethod in ('clipped', 'time')
 
         self._check_Axis_Choice(dimension, 'NONE')
-        labelList, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(dimension, 'NONE')
+        label_list, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(dimension, 'NONE')
         plotIndex, _ = self._get_Axis_Index(dimension, 'NONE')
         vals = np.array([np.append(particle.qi, particle.pi)[plotIndex] for particle in self.swarm])
         fracSurvived = []
@@ -407,18 +407,18 @@ class PhaseSpaceAnalyzer:
                     label='Initial distribution')
         plt.bar(binEdges[:-1], fracSurvived, width=binEdges[1] - binEdges[0], align='edge', label='Acceptance',
                 color=cAccepted)
-        plt.xlabel(labelList[0])
+        plt.xlabel(label_list[0])
         plt.ylabel("Percent survival to end")
         plt.legend()
         plt.tight_layout()
 
-        if saveTitle is not None:
-            plt.savefig(saveTitle, dpi=dpi)
+        if save_title is not None:
+            plt.savefig(save_title, dpi=dpi)
         plt.show()
 
-    def plot_Acceptance_2D_ScatterPlot(self, xaxis, yaxis, saveTitle=None, alpha=.5, dpi=150):
+    def plot_Acceptance_2D_ScatterPlot(self, xaxis, yaxis, save_title=None, alpha=.5, dpi=150):
         self._check_Axis_Choice(xaxis, yaxis)
-        labelList, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(xaxis, yaxis)
+        label_list, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(xaxis, yaxis)
         from matplotlib.patches import Patch
         xPlotIndex, yPlotIndex = self._get_Axis_Index(xaxis, yaxis)
         for particle in self.swarm:
@@ -434,17 +434,17 @@ class PhaseSpaceAnalyzer:
                                                      label='clipped')]
         plt.title('Phase space acceptance')
         plt.legend(handles=legendList)
-        plt.xlabel(labelList[0])
-        plt.ylabel(labelList[1])
+        plt.xlabel(label_list[0])
+        plt.ylabel(label_list[1])
         plt.tight_layout()
-        if saveTitle is not None:
-            plt.savefig(saveTitle, dpi=dpi)
+        if save_title is not None:
+            plt.savefig(save_title, dpi=dpi)
         plt.show()
 
-    def plot_Acceptance_2D_Histrogram(self, xaxis, yaxis, TMax, saveTitle=None, dpi=150, bins=50, emptyVals=np.nan):
+    def plot_Acceptance_2D_Histrogram(self, xaxis, yaxis, TMax, save_title=None, dpi=150, bins=50, emptyVals=np.nan):
 
         self._check_Axis_Choice(xaxis, yaxis)
-        labelList, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(xaxis, yaxis)
+        label_list, unitModifier = self._get_Axis_Labels_And_Unit_Modifiers(xaxis, yaxis)
         xPlotIndex, yPlotIndex = self._get_Axis_Index(xaxis, yaxis)
 
         xPlotVals, yPlotVals, weights = [], [], []
@@ -464,11 +464,11 @@ class PhaseSpaceAnalyzer:
         plt.title('Phase space acceptance')
         plt.imshow(histogramAcceptance, extent=[binsx.min(), binsx.max(), binsy.min(), binsy.max()], aspect='auto')
         plt.colorbar()
-        plt.xlabel(labelList[0])
-        plt.ylabel(labelList[1])
+        plt.xlabel(label_list[0])
+        plt.ylabel(label_list[1])
         plt.tight_layout()
-        if saveTitle is not None:
-            plt.savefig(saveTitle, dpi=dpi)
+        if save_title is not None:
+            plt.savefig(save_title, dpi=dpi)
         plt.show()
 
     def plot_Standing_Envelope(self):

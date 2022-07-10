@@ -68,7 +68,7 @@ def round_Up_If_Below_Min_Time_Step_Gap(proposedLength: float) -> float:
         return proposedLength
 
 
-def add_Drift_If_Needed(PTL: ParticleTracerLattice, gapLength: float, elBeforeName: str,
+def add_drift_If_Needed(PTL: ParticleTracerLattice, gapLength: float, elBeforeName: str,
                         elAfterName: str, elBefore_rp: float, elAfter_rp: float, ap: float = None) -> None:
     """Sometimes the fringe field gap is enough to accomodate the minimum desired separation between elements.
     Otherwise a gap needs to be added. The drift will have a minimum length, so the total gap may be larger in some
@@ -78,22 +78,22 @@ def add_Drift_If_Needed(PTL: ParticleTracerLattice, gapLength: float, elBeforeNa
     extra_space = gapLength - (el_Fringe_Space(elBeforeName, elBefore_rp) + el_Fringe_Space(elAfterName, elAfter_rp))
     if extra_space > 0:
         ap = min([elBefore_rp, elAfter_rp]) if ap is None else ap
-        PTL.add_Drift(round_Up_If_Below_Min_Time_Step_Gap(extra_space), ap=ap)
+        PTL.add_drift(round_Up_If_Below_Min_Time_Step_Gap(extra_space), ap=ap)
 
 
 def add_Bend_Version_1_2(PTL: ParticleTracerLattice, rp_bend: float) -> None:
     """Single bender element"""
 
-    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
+    PTL.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
 
 
 def add_Bend_Version_3(PTL: ParticleTracerLattice, rp_bend: float) -> None:
     """Two bender elements possibly separated by a drift region for pumping between end/beginning of benders. If fringe
     field region is long enough, no drift region is add"""
 
-    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
-    add_Drift_If_Needed(PTL, system_constants['bendApexGap'], 'bender', 'bender', rp_bend, rp_bend)
-    PTL.add_Halbach_Bender_Sim_Segmented(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
+    PTL.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
+    add_drift_If_Needed(PTL, system_constants['bendApexGap'], 'bender', 'bender', rp_bend, rp_bend)
+    PTL.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
 
 
 def add_Bender(PTL: ParticleTracerLattice, rp_bend: float, which_version: str) -> None:
@@ -115,7 +115,7 @@ def add_Combiner(PTL: ParticleTracerLattice, LmCombiner: float, rpCombiner: floa
     if combinerSeed is not None:
         state = np.random.get_state()
         np.random.seed(combinerSeed)
-    PTL.add_Combiner_Sim_Lens(LmCombiner, rpCombiner, load_beam_offset=loadBeamOffset, layers=1)
+    PTL.add_combiner_sim_lens(LmCombiner, rpCombiner, load_beam_offset=loadBeamOffset, layers=1)
     if combinerSeed is not None:
         np.random.set_state(state)
 
@@ -125,7 +125,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamOffset, rpLensBefor
     """Add gap for vacuum + combiner + gap for optical pumping. Elements before and after must be a lens. """
 
     # gap between combiner and previous lens
-    add_Drift_If_Needed(PTL, system_constants["gap2Min"], 'lens', 'combiner', rpLensBefore, rpCombiner)
+    add_drift_If_Needed(PTL, system_constants["gap2Min"], 'lens', 'combiner', rpLensBefore, rpCombiner)
 
     # -------combiner-------
 
@@ -140,7 +140,7 @@ def add_Combiner_And_OP(PTL, rpCombiner, LmCombiner, loadBeamOffset, rpLensBefor
     OP_Gap = round_Up_If_Below_Min_Time_Step_Gap(OP_Gap)
     OP_Gap = OP_Gap if OP_Gap > system_constants["OP_PumpingRegionLength"] else \
         system_constants["OP_PumpingRegionLength"]
-    PTL.add_Drift(OP_Gap, ap=system_constants["OP_MagAp_" + whichOP_Ap])
+    PTL.add_drift(OP_Gap, ap=system_constants["OP_MagAp_" + whichOP_Ap])
 
 
 def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ring_params: LockedDict,
@@ -152,7 +152,7 @@ def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ring_par
     rp_lens1=ring_params['rpLens1']
 
     # ----from bender output to combiner
-    PTL.add_Halbach_Lens_Sim(rp_lens1, ring_params['L_Lens1'])
+    PTL.add_halbach_lens_sim(rp_lens1, ring_params['L_Lens1'])
 
     # ---combiner + OP magnet-----
     add_Combiner_And_OP(PTL, system_constants['rpCombiner'], ring_params['LmCombiner'], ring_params['loadBeamOffset'],
@@ -160,7 +160,7 @@ def add_First_RaceTrack_Straight_Version1_3(PTL: ParticleTracerLattice, ring_par
 
     # ---from OP to bender input---
 
-    PTL.add_Halbach_Lens_Sim(rp_lens2, ring_params['L_Lens2'])
+    PTL.add_halbach_lens_sim(rp_lens2, ring_params['L_Lens2'])
 
 
 def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ring_params: LockedDict,
@@ -170,16 +170,16 @@ def add_First_RaceTrack_Straight_Version2(PTL: ParticleTracerLattice, ring_param
      """
 
     # ----from bender output to combiner
-    PTL.add_Halbach_Lens_Sim(ring_params['rpLens1'], ring_params['L_Lens1'])
-    PTL.add_Halbach_Lens_Sim(ring_params['rpLens2'], ring_params['L_Lens2'])
+    PTL.add_halbach_lens_sim(ring_params['rpLens1'], ring_params['L_Lens1'])
+    PTL.add_halbach_lens_sim(ring_params['rpLens2'], ring_params['L_Lens2'])
 
     # ---combiner + OP magnet-----
     add_Combiner_And_OP(PTL, ring_params['rpCombiner'], ring_params['LmCombiner'], ring_params['loadBeamOffset'],
                         ring_params['rpLens2'], ring_params['rpLens3'], options['combinerSeed'])
 
     # ---from OP to bender input---
-    PTL.add_Halbach_Lens_Sim(ring_params['rpLens3'], ring_params['L_Lens3'])
-    PTL.add_Halbach_Lens_Sim(ring_params['rpLens4'], ring_params['L_Lens4'])
+    PTL.add_halbach_lens_sim(ring_params['rpLens3'], ring_params['L_Lens3'])
+    PTL.add_halbach_lens_sim(ring_params['rpLens4'], ring_params['L_Lens4'])
 
 
 def add_First_Racetrack_Straight(PTL: ParticleTracerLattice, ring_params: LockedDict, which_version: str,
@@ -203,20 +203,20 @@ def add_Second_Racetrack_Straight_Version_Any(PTL: ParticleTracerLattice, rp_len
 
     # ---------gap 5-----  bender->lens
 
-    add_Drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens3_4, rp_bend)
+    add_drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens3_4, rp_bend)
 
     # -------lens 3-----------
-    PTL.add_Halbach_Lens_Sim(rp_lens3_4, None, constrain=True)
+    PTL.add_halbach_lens_sim(rp_lens3_4, None, constrain=True)
 
     # ---------gap 6------ lens -> lens
-    add_Drift_If_Needed(PTL, system_constants["observationGap"], 'lens', 'lens', rp_lens3_4, rp_lens3_4)
+    add_drift_If_Needed(PTL, system_constants["observationGap"], 'lens', 'lens', rp_lens3_4, rp_lens3_4)
 
     # ---------lens 4-------
-    PTL.add_Halbach_Lens_Sim(rp_lens3_4, None, constrain=True)
+    PTL.add_halbach_lens_sim(rp_lens3_4, None, constrain=True)
 
     # ------gap 7------ lens-> bender
 
-    add_Drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens3_4, rp_bend)
+    add_drift_If_Needed(PTL, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens3_4, rp_bend)
 
 
 def make_Ring(ring_params: LockedDict, which_version: str, options: Optional[dict]) -> RingLattice:
@@ -253,7 +253,7 @@ def make_Ring(ring_params: LockedDict, which_version: str, options: Optional[dic
     add_Bender(PTL, rp_bend, which_version)
 
     # ----done---
-    PTL.end_Lattice(constrain=True)
+    PTL.end_lattice(constrain=True)
 
     ring_params.assert_All_Entries_Accessed_And_Reset_Counter()
 
@@ -281,11 +281,11 @@ def make_Injector_Version_Any(injector_params: LockedDict, options: dict = None)
 
     # -----gap between source and first lens-----
 
-    add_Drift_If_Needed(PTL, gap1, 'none', 'lens', np.inf, injector_params["rp1"])  # hacky
+    add_drift_If_Needed(PTL, gap1, 'none', 'lens', np.inf, injector_params["rp1"])  # hacky
 
     # ---- first lens------
 
-    PTL.add_Halbach_Lens_Sim(injector_params["rp1"], injector_params["L1"])
+    PTL.add_halbach_lens_sim(injector_params["rp1"], injector_params["L1"])
 
     # -----gap with valve--------------
 
@@ -293,20 +293,20 @@ def make_Injector_Version_Any(injector_params: LockedDict, options: dict = None)
     gap2 = gap2 - gap_valve
     if gap2 < 0:  # this is approximately true. I am ignoring that there is space in the fringe fields
         raise InjectorGeometryError
-    PTL.add_Drift(gap2, ap=injector_params["rp1"])
-    PTL.add_Drift(gap_valve, ap=system_constants["lens1ToLens2_Valve_Ap"],
+    PTL.add_drift(gap2, ap=injector_params["rp1"])
+    PTL.add_drift(gap_valve, ap=system_constants["lens1ToLens2_Valve_Ap"],
                   outer_half_width=system_constants["lens1ToLens2_Inject_Valve_OD"] / 2)
 
     # ---------------------
 
-    PTL.add_Halbach_Lens_Sim(injector_params["rp2"], injector_params["L2"])
+    PTL.add_halbach_lens_sim(injector_params["rp2"], injector_params["L2"])
 
-    PTL.add_Drift(gap3, ap=injector_params["rp2"])
+    PTL.add_drift(gap3, ap=injector_params["rp2"])
 
     add_Combiner(PTL, injector_params["LmCombiner"], system_constants["rpCombiner"], injector_params["loadBeamOffset"],
                  options['combinerSeed'])
 
-    PTL.end_Lattice(constrain=False)
+    PTL.end_lattice(constrain=False)
 
     injector_params.assert_All_Entries_Accessed_And_Reset_Counter()
 
@@ -334,7 +334,7 @@ def make_Ring_Surrogate_For_Injection_Version_1(injector_params: LockedDict,
 
     add_First_RaceTrack_Straight_Version1_3(PTL, raceTrackParams, options, whichOP_Ap='Injection')
     raceTrackParams.assert_All_Entries_Accessed_And_Reset_Counter()
-    PTL.end_Lattice(constrain=False)
+    PTL.end_lattice(constrain=False)
     return PTL
 
 

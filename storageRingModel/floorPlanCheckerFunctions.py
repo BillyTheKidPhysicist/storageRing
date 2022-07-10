@@ -72,7 +72,7 @@ def storage_ring_system_components(model) -> list[ShapelyObject]:
     """Make list of shapely objects representing outer dimensions of magnets and vacuum tubes of storage ring system.
     """
 
-    first_el = model.lattice_injector.elList[0]
+    first_el = model.lattice_injector.el_list[0]
     r1_ring = model.convert_position_injector_to_ring_frame(first_el.r1)
     n1_ring = model.convert_momentum_injector_to_ring_frame(first_el.nb)
 

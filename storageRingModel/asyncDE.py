@@ -2,40 +2,21 @@ import numpy as np
 import skopt
 import random
 import time
-import numbers
 import multiprocess as multiprocessing
 import scipy.optimize as spo
 import scipy.interpolate as spi
+from helperTools import low_discrepancy_sample
 
-#todo: clean up and make PEP-8 compliant
-
-def low_Discrepancy_Sample(bounds, num: int) -> np.ndarray:
-    """
-    Make a low discrepancy sample (ie well spread)
-
-    :param bounds: sequence of lower and upper bounds of the sampling
-    :param num: number of samples. powers of two are best for nice sobol properties
-    :return:
-    """
-
-    from scipy.stats.qmc import Sobol
-    bounds = np.array(bounds).astype(float)
-    samples = np.array(Sobol(len(bounds), scramble=True).random(num))
-    scaleFactors = bounds[:, 1] - bounds[:, 0]
-    offsets = bounds[:, 0]
-    for i, sample in enumerate(samples):
-        samples[i] = sample * scaleFactors + offsets
-    return samples
 
 
 HUGE_INT = int(1e12)
+real_number=(int,float)
 
-
-class asyncSolver:
+class AsyncSolver:
     def __init__(self, workers):
         self.jobs = []
-        if workers == None or isinstance(workers, int):
-            if workers == None:
+        if workers is None or isinstance(workers, int):
+            if workers is None:
                 numProcesses = multiprocessing.cpu_count()
             elif isinstance(workers, int):
                 numProcesses = workers
@@ -45,16 +26,16 @@ class asyncSolver:
         else:  # for using other apply_async type methods
             self.pool = workers
 
-    def add_Jobs(self, job):
+    def add_jobs(self, job):
         self.jobs.append(self.pool.apply_async(job))
 
-    def get_Job(self, wait=.05):
+    def get_job(self, wait=.05):
         # work thorugh the list of jobs
         assert len(self.jobs) > 0
         while True:
             time.sleep(wait)  # without this I would be ripping through the list
             job = self.jobs.pop(0)
-            if job.ready() == True:  # try first entry
+            if job.ready() is True:  # try first entry
                 return job.get()
             else:
                 self.jobs.append(job)
@@ -74,30 +55,30 @@ class RBF_Predictor:
         self.surrogate = None
 
     def train(self):
-        scaledCoords = self.scale(self.coords)
-        self.surrogate = spi.RBFInterpolator(scaledCoords, self.vals, smoothing=1e-3)
+        scaled_coords = self.scale(self.coords)
+        self.surrogate = spi.RBFInterpolator(scaled_coords, self.vals, smoothing=1e-3)
 
     def scale(self, X):
         assert len(X.shape) == 2
-        xScaled = (X - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
-        return xScaled
+        x_scaled = (X - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
+        return x_scaled
 
     def descale(self, X):
         assert len(X.shape) == 2
-        xOriginal = (self.bounds[:, 1] - self.bounds[:, 0]) * X + self.bounds[:, 0]
-        return xOriginal
+        x_original = (self.bounds[:, 1] - self.bounds[:, 0]) * X + self.bounds[:, 0]
+        return x_original
 
     def predict(self, nSample=10_000, w=None):
         self.train()
         if w is None:
             w = np.sqrt(np.random.rand())  # weight towards explotation
         assert 0 <= w <= 1
-        scaledCoords = self.scale(self.coords)
+        scaled_coords = self.scale(self.coords)
 
         def surrogate(x):
             val = self.surrogate([x])[0]
             if w != 1:
-                nearestDist = np.min(np.linalg.norm(scaledCoords - x, axis=1))
+                nearestDist = np.min(np.linalg.norm(scaled_coords - x, axis=1))
                 cost = w * val + (1 - w) * (1 - nearestDist)
             else:  # no nearest distance being used
                 cost = val
@@ -106,8 +87,8 @@ class RBF_Predictor:
         # surrogate =lambda x: self.surrogate([x]) #obnoxious format demands for rbf
         bounds = [(0, 1)] * len(self.bounds)
         sol = spo.differential_evolution(surrogate, bounds, tol=1e-6, atol=1e-6, maxiter=nSample, mutation=1.0)
-        xOptimal = self.descale(np.asarray([sol.x]))[0]
-        return xOptimal
+        x_optimal = self.descale(np.asarray([sol.x]))[0]
+        return x_optimal
 
 
 class Member:
@@ -122,10 +103,10 @@ class Member:
         self.func = func
         self.DNA = DNA
         self.grown = False
-        self.hasChild = False
+        self.has_child = False
         self.firstGen = False
         self.dead = False
-        self.parentIsAlive = None
+        self.parent_is_alive = None
         self.fitness = None
         self.cost = None
         self.parent = None
@@ -138,21 +119,21 @@ class Member:
         string += 'cost: ' + repr(self.cost)
         return string
 
-    def grow(self, knownCost=None):
-        assert self.grown == False
-        if knownCost is not None:
-            cost = knownCost
+    def grow(self, known_cost=None):
+        assert self.grown is False
+        if known_cost is not None:
+            cost = known_cost
         else:
             if callable(self.DNA) == True:  # the DNA is a function to get the DNA. This is usually a surrogate method
                 self.DNA = self.DNA()
             cost = self.func(self.DNA)
-        assert isinstance(cost, numbers.Number), str(repr(self.DNA))
+        assert isinstance(cost, real_number), str(repr(self.DNA))
         self.cost = cost
         self.fitness = -cost
         self.grown = True
         return self
 
-    def absorb_Clone(self, cloneMember):
+    def absorb_clone(self, cloneMember):
         self.grown = cloneMember.grown
         self.fitness = cloneMember.fitness
         self.cost = cloneMember.cost
@@ -161,176 +142,176 @@ class Member:
 
 class Population:
     def __init__(self):
-        self.adultMembers = []
-        self.childMembers = []
-        self.memberHistory = []  # list of all members
+        self.adult_members = []
+        self.child_members = []
+        self.member_history = []  # list of all members
 
-    def add_Adult(self, member: Member):
-        assert member.grown == True
-        self.adultMembers.append(member)
+    def add_adult(self, member: Member):
+        assert member.grown is True
+        self.adult_members.append(member)
 
     def add_child(self, member: Member):
-        assert member.grown == False
-        self.childMembers.append(member)
+        assert member.grown is False
+        self.child_members.append(member)
 
-    def remove_Child(self, member: Member):
-        assert member.grown == True
-        assert (member.firstGen == True or member.parent is not None)
-        self.childMembers.remove(member)  # child grew up into adult. it will try and challenge adult
+    def remove_child(self, member: Member):
+        assert member.grown is True
+        assert (member.firstGen is True or member.parent is not None)
+        self.child_members.remove(member)  # child grew up into adult. it will try and challenge adult
 
     def remove_adult(self, member: Member):
-        assert member.grown == True and (member.hasChild == True or member.parent is not None)  # lost to child
-        self.adultMembers.remove(member)
+        assert member.grown is True and (member.has_child is True or member.parent is not None)  # lost to child
+        self.adult_members.remove(member)
 
-    def num_Adults(self):
-        return len(self.adultMembers)
+    def num_adults(self):
+        return len(self.adult_members)
 
-    def num_Childs(self):
-        return len(self.childMembers)
+    def num_childs(self):
+        return len(self.child_members)
 
-    def get_Viable_Breeders(self):
+    def get_viable_breeders(self):
         members = []
-        for adultMember in self.adultMembers:
-            if adultMember.hasChild == True or adultMember.firstGen == True:
-                members.append(adultMember)
+        for adult_member in self.adult_members:
+            if adult_member.has_child or adult_member.firstGen:
+                members.append(adult_member)
         return members
 
-    def num_Breedable_Adults(self):
-        return len(self.get_Viable_Breeders())
+    def num_breedable_adults(self):
+        return len(self.get_viable_breeders())
 
-    def get_Most_Fit_Member(self, viableBreeder=False):
-        if viableBreeder == True:
-            memberList = self.get_Viable_Breeders()
+    def get_most_fit_member(self, viable_breeder=False):
+        if viable_breeder:
+            members = self.get_viable_breeders()
         else:
-            memberList = self.adultMembers
-        fitness = [mem.fitness for mem in memberList]
-        return memberList[np.argmax(fitness)]
+            members = self.adult_members
+        fitness = [mem.fitness for mem in members]
+        return members[np.argmax(fitness)]
 
-    def get_And_Update_Original_Member(self, possibleCloneMemb):
+    def get_and_update_original_member(self, possibleCloneMemb):
         # if possibleCloneMemb is a clone, replace all instances of the original
-        for memberList in (self.childMembers, self.adultMembers):
-            for i in range(len(memberList)):
-                if memberList[i].ID == possibleCloneMemb.ID:  # could be true if not a clone, but go ahead
-                    memberList[i].absorb_Clone(possibleCloneMemb)  # member is now replaced
-                    return memberList[i]
+        for members in (self.child_members, self.adult_members):
+            for i in range(len(members)):
+                if members[i].ID == possibleCloneMemb.ID:  # could be true if not a clone, but go ahead
+                    members[i].absorb_clone(possibleCloneMemb)  # member is now replaced
+                    return members[i]
         raise Exception()  # loop should find at least a clone or an original
 
 
-class asyncDE:
-    def __init__(self, func, numMembers, bounds, maxEvals=None, timeOut_Seconds=None, initialVals=None,
-                 surrogateMethodProb=0.0, disp=True, tol=None, workers=None, saveData=None):
-        assert numMembers >= 5
+class AsyncDE:
+    def __init__(self, func, num_members, bounds, max_evals=None, time_out_seconds=None, initial_vals=None,
+                 surrogate_method_prob=0.0, disp=True, tol=None, workers=None, save_data=None):
+        assert num_members >= 5
         for bound in bounds:
             assert len(bound) == 2 and bound[1] > bound[0]
         bounds = np.asarray(bounds).astype(float)
         if not isinstance(bounds, np.ndarray): bounds = np.asarray(bounds)
-        assert saveData is None or isinstance(saveData, str)
-        self.initialVals = [] if initialVals is None else initialVals
-        self.numMembers = numMembers
-        self.numEvals = 0
+        assert save_data is None or isinstance(save_data, str)
+        self.initial_vals = [] if initial_vals is None else initial_vals
+        self.num_members = num_members
+        self.num_evals = 0
         self.disp = disp
-        self.saveData = saveData
-        assert (timeOut_Seconds is not None) ^ (maxEvals is not None) ^ (tol is not None)
-        self.maxEvals = maxEvals if maxEvals is not None else HUGE_INT
-        self.timeOut = timeOut_Seconds if timeOut_Seconds is not None else np.inf
+        self.save_data = save_data
+        assert (time_out_seconds is not None) ^ (max_evals is not None) ^ (tol is not None)
+        self.max_evals = max_evals if max_evals is not None else HUGE_INT
+        self.time_out = time_out_seconds if time_out_seconds is not None else np.inf
         self.tol = tol if tol is not None else -np.inf
-        self.mutationFactor = (.5, 1.0)
-        self.crossProbability = .7
+        self.mutation_factor = (.5, 1.0)
+        self.cross_probability = .7
         self.func = func
         self.bounds = bounds
-        self.asyncManager = asyncSolver(workers)
+        self.async_manager = AsyncSolver(workers)
         self.population = Population()
-        self.surrogateMethodProb = surrogateMethodProb  # try surrogate method instead of breeding this fraction of time
-        self.currentID = 0  # ID tracker to tag each member. If I don't do this they get all mixed up in parallel code
+        self.surrogate_method_prob = surrogate_method_prob  # try surrogate method instead of breeding this fraction of time
+        self.current_ID = 0  # ID tracker to tag each member. If I don't do this they get all mixed up in parallel code
         # because they get cloned so the original member doens't get updated, only its clone does
 
-    def generate_Initial_Coords(self, num):
-        initialCoords = low_Discrepancy_Sample(self.bounds, num)
-        return initialCoords
+    def generate_initial_coords(self, num):
+        initial_coords = low_discrepancy_sample(self.bounds, num)
+        return initial_coords
 
-    def initialize_Population(self):
+    def initialize_population(self):
 
-        assert len(self.initialVals) <=self.numMembers
-        for initialVal in self.initialVals:
-            assert len(initialVal) == 2
-            DNA, cost = initialVal
+        assert len(self.initial_vals) <=self.num_members
+        for initial_val in self.initial_vals:
+            assert len(initial_val) == 2
+            DNA, cost = initial_val
             assert len(DNA) == len(self.bounds)
             if cost is None:
-                newChild = Member(self.func, DNA, tag=self.currentID)
-                newChild.firstGen = True
-                newChild.parentIsAlive = False
-                self.population.add_child(newChild)
-                self.asyncManager.add_Jobs(newChild.grow)
+                new_child = Member(self.func, DNA, tag=self.current_ID)
+                new_child.firstGen = True
+                new_child.parent_is_alive = False
+                self.population.add_child(new_child)
+                self.async_manager.add_jobs(new_child.grow)
             else:  # already grown member
-                newAdult = Member(self.func, DNA, tag=self.currentID)
-                newAdult.grow(knownCost=cost)
-                newAdult.firstGen = True
-                self.population.add_Adult(newAdult)
+                new_adult = Member(self.func, DNA, tag=self.current_ID)
+                new_adult.grow(known_cost=cost)
+                new_adult.firstGen = True
+                self.population.add_adult(new_adult)
         self.evolve() #initial population needs to be breed
 
-        numRandom = self.numMembers - len(self.initialVals)
-        initialCoords = self.generate_Initial_Coords(numRandom)
-        for coord in initialCoords:
-            newChild = Member(self.func, coord, tag=self.currentID)
-            self.currentID += 1
-            newChild.firstGen = True
-            newChild.parentIsAlive = False
-            self.population.add_child(newChild)
-            self.asyncManager.add_Jobs(newChild.grow)
+        num_random = self.num_members - len(self.initial_vals)
+        initial_coords = self.generate_initial_coords(num_random)
+        for coord in initial_coords:
+            new_child = Member(self.func, coord, tag=self.current_ID)
+            self.current_ID += 1
+            new_child.firstGen = True
+            new_child.parent_is_alive = False
+            self.population.add_child(new_child)
+            self.async_manager.add_jobs(new_child.grow)
 
-    def update_Population(self):
-        adultMember_Clone = self.asyncManager.get_Job()  # pool returns a "clone"
-        adultMember = self.population.get_And_Update_Original_Member(adultMember_Clone)
-        self.population.add_Adult(adultMember)
-        self.population.remove_Child(adultMember)
-        self.population.memberHistory.append(adultMember)
-        self.numEvals += 1
+    def update_population(self):
+        adult_member_clone = self.async_manager.get_job()  # pool returns a "clone"
+        adult_member = self.population.get_and_update_original_member(adult_member_clone)
+        self.population.add_adult(adult_member)
+        self.population.remove_child(adult_member)
+        self.population.member_history.append(adult_member)
+        self.num_evals += 1
 
     def evolve(self):
         # attempt to defeat a parent and add a new member
-        random.shuffle(self.population.adultMembers)
-        for adultMember in self.population.adultMembers:
-            if adultMember.firstGen == True and adultMember.hasChild == False and self.population.num_Breedable_Adults() >= 5:
+        random.shuffle(self.population.adult_members)
+        for adult_member in self.population.adult_members:
+            if adult_member.firstGen and not adult_member.has_child and self.population.num_breedable_adults() >= 5:
                 # childless first gen needs its first child to be bread
-                adultFirstGenMember = adultMember
-                newChildMember = self.breed_New_Member(adultFirstGenMember)
-                adultFirstGenMember.hasChild = True  # first gen now has a child
-                self.population.add_child(newChildMember)
-                self.asyncManager.add_Jobs(newChildMember.grow)
-            elif adultMember.parentIsAlive == True and self.population.num_Breedable_Adults() >= 5:
+                adult_first_gen_member = adult_member
+                new_child_member = self.breed_new_member(adult_first_gen_member)
+                adult_first_gen_member.has_child = True  # first gen now has a child
+                self.population.add_child(new_child_member)
+                self.async_manager.add_jobs(new_child_member.grow)
+            elif adult_member.parent_is_alive and self.population.num_breedable_adults() >= 5:
                 # new adult offspring can now challenger parent
-                adultOffspringMember = adultMember
-                if self.offspring_Wins(adultOffspringMember) == True:  # new adult offspring wins
-                    self.population.remove_adult(adultOffspringMember.parent)  # parent is discarded
-                    adultOffspringMember.parentIsAlive = False  # offspring's parent was defeated
-                    adultOffspringMember.parent.dead = True  # parent is now dead
-                    adultOffspringMember.parent = None  # it now has no parent
-                    newChild = self.breed_New_Member(adultOffspringMember)  # offspring produces a new child
-                    adultOffspringMember.hasChild = True
-                    self.population.add_child(newChild)
-                    self.asyncManager.add_Jobs(newChild.grow)
+                adult_offspring_member = adult_member
+                if self.offspring_wins(adult_offspring_member) is True:  # new adult offspring wins
+                    self.population.remove_adult(adult_offspring_member.parent)  # parent is discarded
+                    adult_offspring_member.parent_is_alive = False  # offspring's parent was defeated
+                    adult_offspring_member.parent.dead = True  # parent is now dead
+                    adult_offspring_member.parent = None  # it now has no parent
+                    new_child = self.breed_new_member(adult_offspring_member)  # offspring produces a new child
+                    adult_offspring_member.has_child = True
+                    self.population.add_child(new_child)
+                    self.async_manager.add_jobs(new_child.grow)
                 else:  # offspring lost. Make new offspring
-                    self.population.remove_adult(adultOffspringMember)  # offspring is discarded because it lost
-                    adultOffspringMember.dead = True  # offspring is now dead
-                    newChild = self.breed_New_Member(
-                        adultOffspringMember.parent)  # offspring parent produces a new child
-                    self.population.add_child(newChild)
-                    self.asyncManager.add_Jobs(newChild.grow)
+                    self.population.remove_adult(adult_offspring_member)  # offspring is discarded because it lost
+                    adult_offspring_member.dead = True  # offspring is now dead
+                    new_child = self.breed_new_member(
+                        adult_offspring_member.parent)  # offspring parent produces a new child
+                    self.population.add_child(new_child)
+                    self.async_manager.add_jobs(new_child.grow)
 
-    def dithered_Mutation_Factor(self):
-        return np.random.random_sample() * (self.mutationFactor[1] - self.mutationFactor[0]) + self.mutationFactor[0]
+    def dithered_mutation_factor(self):
+        return np.random.random_sample() * (self.mutation_factor[1] - self.mutation_factor[0]) + self.mutation_factor[0]
 
-    def offspring_Wins(self, offspringMember):
-        assert offspringMember.parentIsAlive == True and offspringMember.grown == True
+    def offspring_wins(self, offspringMember):
+        assert offspringMember.parent_is_alive == True and offspringMember.grown == True
         assert np.isnan(offspringMember.fitness) == False and np.isnan(offspringMember.parent.fitness) == False
         if offspringMember.fitness > offspringMember.parent.fitness:
             return True
         else:
             return False
 
-    def create_Mutant_DNA(self, targetMember: Member):
-        viableBreeders = self.population.get_Viable_Breeders()
-        bestMember = self.population.get_Most_Fit_Member(viableBreeder=True)
+    def create_mutant_DNA(self, targetMember: Member):
+        viableBreeders = self.population.get_viable_breeders()
+        bestMember = self.population.get_most_fit_member(viable_breeder=True)
         viableBreeders.remove(bestMember)
         if targetMember in viableBreeders:
             viableBreeders.remove(targetMember)
@@ -340,25 +321,25 @@ class asyncDE:
         x1 = bestMember.DNA
         x2 = memB.DNA
         x3 = memC.DNA
-        x4 = x1 + self.dithered_Mutation_Factor() * (x2 - x3)
+        x4 = x1 + self.dithered_mutation_factor() * (x2 - x3)
         xNew = targetMember.DNA.copy()
         # new DNA may be out of bounds, so clip
         x4[x4 < self.bounds[:, 0]] = self.bounds[:, 0][x4 < self.bounds[:, 0]]
         x4[x4 > self.bounds[:, 1]] = self.bounds[:, 1][x4 > self.bounds[:, 1]]
         # mitosis! (sort of)
-        crossOverIndices = np.random.rand(len(self.bounds)) < self.crossProbability
+        crossOverIndices = np.random.rand(len(self.bounds)) < self.cross_probability
         xNew[crossOverIndices] = x4[crossOverIndices]  # replace the crossover genes
         return xNew
 
-    def create_Random_DNA(self):
+    def create_random_DNA(self):
         DNAList = []
         for bound in self.bounds:
             DNAList.append(np.random.rand() * (bound[1] - bound[0]) + bound[0])
         return np.asarray(DNAList)
 
-    def create_Predictor_Model(self):
-        coordsTrain = np.asarray([mem.DNA for mem in self.population.memberHistory])
-        valsTrain = np.asarray([mem.cost for mem in self.population.memberHistory])
+    def create_predictor_model(self):
+        coordsTrain = np.asarray([mem.DNA for mem in self.population.member_history])
+        valsTrain = np.asarray([mem.cost for mem in self.population.member_history])
         if np.any(valsTrain == np.inf):
             raise Exception('You cant use surrogate model with infinite cost functions')
         if len(coordsTrain.shape) != 2:
@@ -366,106 +347,106 @@ class asyncDE:
         predictor = RBF_Predictor(coordsTrain, valsTrain, self.bounds)
         return predictor.predict
 
-    def breed_New_Member(self, adultMember):
+    def breed_new_member(self, adult_member):
         # newAdultMember: The soon to be parent new adult
-        assert adultMember.grown == True
-        if np.random.rand() < self.surrogateMethodProb and self.numEvals > 5 * len(self.bounds):
-            newChildDNA = self.create_Predictor_Model()
+        assert adult_member.grown == True
+        if np.random.rand() < self.surrogate_method_prob and self.num_evals > 5 * len(self.bounds):
+            newChildDNA = self.create_predictor_model()
         else:
-            newChildDNA = self.create_Mutant_DNA(adultMember)
-        newChildMember = Member(self.func, newChildDNA, tag=self.currentID)
-        self.currentID += 1
-        newChildMember.parentIsAlive = True
-        newChildMember.parent = adultMember
-        return newChildMember
+            newChildDNA = self.create_mutant_DNA(adult_member)
+        new_child_member = Member(self.func, newChildDNA, tag=self.current_ID)
+        self.current_ID += 1
+        new_child_member.parent_is_alive = True
+        new_child_member.parent = adult_member
+        return new_child_member
 
-    def found_Poisson_Pill(self) -> bool:
+    def found_poisson_pill(self) -> bool:
         try:
             open('poisonPill.txt')
             return True
         except:
             return False
 
-    def get_Population_Variability(self):
-        if self.population.num_Adults() < 2:
+    def get_population_variability(self):
+        if self.population.num_adults() < 2:
             return None
-        DNAArr = np.asarray([mem.DNA for mem in self.population.adultMembers])
+        DNAArr = np.asarray([mem.DNA for mem in self.population.adult_members])
         variability = np.std(DNAArr, axis=0) / (self.bounds[:, 1] - self.bounds[:, 0])
         return variability
 
-    def tolerance_Met(self):
-        costArr = np.asarray([mem.cost for mem in self.population.adultMembers])
-        if sum([cost == np.inf for cost in costArr]):  # any infinites prevent tolerance being met
+    def tolerance_met(self):
+        cost_arr = np.asarray([mem.cost for mem in self.population.adult_members])
+        if sum([cost == np.inf for cost in cost_arr]):  # any infinites prevent tolerance being met
             return False
-        if len(costArr) >= self.numMembers:
-            meanCost = np.mean(costArr)
-            window = (meanCost - self.tol, meanCost + self.tol)
-            numSatisfied = sum(costArr[costArr > window[0]] < window[1])
-            if numSatisfied / self.numMembers >= .9:
+        if len(cost_arr) >= self.num_members:
+            mean_cost = np.mean(cost_arr)
+            window = (mean_cost - self.tol, mean_cost + self.tol)
+            num_satisfied = sum(cost_arr[cost_arr > window[0]] < window[1])
+            if num_satisfied / self.num_members >= .9:
                 return True
             else:
                 return False
 
-    def resave_Progress(self):
-        costArr = np.asarray([mem.cost for mem in self.population.memberHistory])
-        DNA_Arr = np.asarray([mem.DNA for mem in self.population.memberHistory])
-        historyArr = np.column_stack((DNA_Arr, costArr))
+    def resave_progress(self):
+        cost_arr = np.asarray([mem.cost for mem in self.population.member_history])
+        DNA_Arr = np.asarray([mem.DNA for mem in self.population.member_history])
+        history_arr = np.column_stack((DNA_Arr, cost_arr))
         try:
-            np.savetxt(self.saveData, historyArr)
+            np.savetxt(self.save_data, history_arr)
         except:
-            print('error encountered with file saving!! proceeding')
+            raise IOError('error encountered with file saving!! proceeding')
 
     def solve(self):
-        self.initialize_Population()
+        self.initialize_population()
         t0 = time.time()
         while True:
-            self.update_Population()
-            if self.numEvals >= self.maxEvals or self.timeOut <= time.time() - t0 or self.tolerance_Met() \
-                    or self.found_Poisson_Pill():
-                if self.saveData is not None:
-                    self.resave_Progress()
-                print('finished with total evals: ', self.numEvals)
+            self.update_population()
+            if self.num_evals >= self.max_evals or self.time_out <= time.time() - t0 or self.tolerance_met() \
+                    or self.found_poisson_pill():
+                if self.save_data is not None:
+                    self.resave_progress()
+                print('finished with total evals: ', self.num_evals)
                 break
             self.evolve()
-            if self.numEvals % self.numMembers == 0:
-                if self.disp == True:
-                    print('------ITERATIONS: ', self.numEvals)
-                    print("POPULATION VARIABILITY: " + str(self.get_Population_Variability()))
+            if self.num_evals % self.num_members == 0:
+                if self.disp is True:
+                    print('------ITERATIONS: ', self.num_evals)
+                    print("POPULATION VARIABILITY: " + str(self.get_population_variability()))
                     print('BEST MEMBER BELOW')
-                    print(self.population.get_Most_Fit_Member())
-                if self.saveData is not None:
-                    self.resave_Progress()
-            assert self.population.num_Adults() <= self.numMembers
-            assert self.population.num_Childs() <= self.numMembers
-        self.asyncManager.close()
-        if self.saveData is not None:
-            self.resave_Progress()
+                    print(self.population.get_most_fit_member())
+                if self.save_data is not None:
+                    self.resave_progress()
+            assert self.population.num_adults() <= self.num_members
+            assert self.population.num_childs() <= self.num_members
+        self.async_manager.close()
+        if self.save_data is not None:
+            self.resave_progress()
         return self.population
 
-def load_Previous_Population(num,file):
+def load_previous_population(num,file):
     data = np.loadtxt(file)
     X = data[:, :len(data[0]) - 1]
     vals = data[:, -1]
 
-    indexSort = np.argsort(vals)[:num]
+    index_sort = np.argsort(vals)[:num]
 
-    population = [(DNA, cost) for DNA, cost in zip(X[indexSort], vals[indexSort])]
+    population = [(DNA, cost) for DNA, cost in zip(X[index_sort], vals[index_sort])]
     return population
 
-def solve_Async(func, bounds, popsize, timeOut_Seconds=None, initialVals=None, savePopulation=None,
-                surrogateMethodProb=0.0,
-                disp=True, maxEvals=None, tol=None, workers=None, saveData=None,reloadPopulation: str=None) -> Member:
-    if reloadPopulation is not None:
-        assert initialVals is None
-        initialVals=load_Previous_Population(popsize,reloadPopulation)
+def solve_async(func, bounds, popsize, time_out_seconds=None, initial_vals=None, save_population=None,
+                surrogate_method_prob=0.0,
+                disp=True, max_evals=None, tol=None, workers=None, save_data=None,reload_population: str=None) -> Member:
+    if reload_population is not None:
+        assert initial_vals is None
+        initial_vals=load_previous_population(popsize,reload_population)
     np.set_printoptions(precision=1000)
-    solver = asyncDE(func, popsize, bounds, timeOut_Seconds=timeOut_Seconds, initialVals=initialVals,
-                     surrogateMethodProb=surrogateMethodProb, disp=disp, maxEvals=maxEvals, tol=tol, workers=workers,
-                     saveData=saveData)
+    solver = AsyncDE(func, popsize, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
+                     surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol, workers=workers,
+                     save_data=save_data)
     pop = solver.solve()
-    if savePopulation is not None:
-        assert type(savePopulation) == str
+    if save_population is not None:
+        assert type(save_population) == str
         import pickle
-        with open(savePopulation, 'wb') as file:
+        with open(save_population, 'wb') as file:
             pickle.dump(pop, file)
-    return pop.get_Most_Fit_Member()
+    return pop.get_most_fit_member()

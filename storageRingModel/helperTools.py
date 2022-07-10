@@ -18,37 +18,37 @@ def tool_Parallel_Process(
         resultsAsArray: bool = False,
         processes: int = -1,
         reRandomize: bool = True,
-        reapplyArgs: Optional[int] = None,
+        reapply_args: Optional[int] = None,
         extraArgs: lst_tup_arr_type = None,
         extraKeyWordArgs: Optional[dict] = None
 ) -> Union[list, np.ndarray]:
-    extraArgs_Constant = tuple() if extraArgs is None else extraArgs
-    extraKeyWordArgs_Constant = dict() if extraKeyWordArgs is None else extraKeyWordArgs
-    noPositionalArgs = True if args is None else False
-    assert isinstance(extraKeyWordArgs_Constant, dict) and isinstance(
-        extraArgs_Constant, (list, tuple, np.ndarray)
+    extra_args_constant = tuple() if extraArgs is None else extraArgs
+    extra_key_word_args_constant = dict() if extraKeyWordArgs is None else extraKeyWordArgs
+    no_positional_args = True if args is None else False
+    assert isinstance(extra_key_word_args_constant, dict) and isinstance(
+        extra_args_constant, (list, tuple, np.ndarray)
     )
     assert isinstance(func, Callable)
 
     def wrapper(arg, seed):
         if reRandomize == True:
             np.random.seed(seed)
-        if noPositionalArgs == True:
-            return func(*extraArgs_Constant, **extraKeyWordArgs_Constant)
+        if no_positional_args == True:
+            return func(*extra_args_constant, **extra_key_word_args_constant)
         else:
-            return func(arg, *extraArgs_Constant, **extraKeyWordArgs_Constant)
+            return func(arg, *extra_args_constant, **extra_key_word_args_constant)
 
     assert type(processes) == int and processes >= -1
-    assert (type(reapplyArgs) == int and reapplyArgs >= 1) or reapplyArgs is None
-    argsIter = (args,) * reapplyArgs if reapplyArgs is not None else args
-    seedArr = int(time.time()) + np.arange(len(argsIter))
-    poolIter = zip(argsIter, seedArr)
+    assert (type(reapply_args) == int and reapply_args >= 1) or reapply_args is None
+    args_iter = (args,) * reapply_args if reapply_args is not None else args
+    seed_arr = int(time.time()) + np.arange(len(args_iter))
+    pool_iter = zip(args_iter, seed_arr)
     processes = mp.cpu_count() if processes == -1 else processes
     if processes > 1:
         with mp.Pool(processes, maxtasksperchild=10) as pool:
-            results = pool.starmap(wrapper, poolIter)
+            results = pool.starmap(wrapper, pool_iter)
     elif processes == 1:
-        results = [func(arg, *extraArgs_Constant, **extraKeyWordArgs_Constant) for arg in argsIter]
+        results = [func(arg, *extra_args_constant, **extra_key_word_args_constant) for arg in args_iter]
     else:
         raise ValueError
     results = np.array(results) if resultsAsArray == True else results
@@ -59,22 +59,22 @@ def tool_Make_Image_Cartesian(
         func: Callable,
         xGridEdges: lst_tup_arr_type,
         yGridEdges: lst_tup_arr_type,
-        extraArgs: lst_tup_arr_type = None,
-        extraKeyWordArgs=None,
-        arrInput=False,
+        extra_args: lst_tup_arr_type = None,
+        extra_key_word_args=None,
+        arr_input=False,
 ) -> tuple[np.ndarray, list]:
-    extraArgs = tuple() if extraArgs is None else extraArgs
-    extraKeyWordArgs = dict() if extraKeyWordArgs is None else extraKeyWordArgs
-    assert isinstance(extraKeyWordArgs, dict) and isinstance(extraArgs, (list, tuple, np.ndarray))
+    extra_args = tuple() if extra_args is None else extra_args
+    extra_key_word_args = dict() if extra_key_word_args is None else extra_key_word_args
+    assert isinstance(extra_key_word_args, dict) and isinstance(extra_args, (list, tuple, np.ndarray))
     assert isinstance(xGridEdges, (list, tuple, np.ndarray)) and isinstance(yGridEdges, (list, tuple, np.ndarray))
     assert isinstance(func, Callable)
     coords = np.array(np.meshgrid(xGridEdges, yGridEdges)).T.reshape(-1, 2)
-    if arrInput == True:
+    if arr_input == True:
         print("using single array input to make image data")
-        vals = func(coords, *extraArgs)
+        vals = func(coords, *extra_args)
     else:
         print("looping over function inputs to make image data")
-        vals = np.asarray([func(*coord, *extraArgs, **extraKeyWordArgs) for coord in coords])
+        vals = np.asarray([func(*coord, *extra_args, **extra_key_word_args) for coord in coords])
     image = vals.reshape(len(xGridEdges), len(yGridEdges))
     image = np.rot90(image)
     extent = [min(xGridEdges), max(xGridEdges), min(yGridEdges), max(yGridEdges)]
@@ -86,10 +86,10 @@ def tool_Dense_Curve(x: lst_tup_arr_type, y: lst_tup_arr_type, numPoints: int = 
     import scipy.interpolate as spi
     x = np.array(x) if isinstance(x, np.ndarray) == False else x
     y = np.array(y) if isinstance(y, np.ndarray) == False else y
-    FWHM_Func = spi.RBFInterpolator(x[:, None], y[:, None], smoothing=smoothing)
-    xDense = np.linspace(x.min(), x.max(), numPoints)
-    yDense = np.ravel(FWHM_Func(xDense[:, None]))
-    return xDense, yDense
+    FWHM_func = spi.RBFInterpolator(x[:, None], y[:, None], smoothing=smoothing)
+    x_dense = np.linspace(x.min(), x.max(), numPoints)
+    y_dense = np.ravel(FWHM_func(x_dense[:, None]))
+    return x_dense, y_dense
 
 
 def radians(degrees: float):

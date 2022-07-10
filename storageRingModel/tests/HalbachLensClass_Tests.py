@@ -97,10 +97,10 @@ class LayertestHelper:
                                         [8.1041300350840118e-05, 1.7963843761049603e-01, 0.0]])
         rtest = np.asarray([[.02, .02, 1.0]])
         z, width, length, rp = 1.0, .02, .5, .05
-        layer1 = Layer(rp, width, length, position=(0.0, 0.0, z), rMagnetShift=1e-3 * np.random.random_sample((12, 1)))
-        layer2 = Layer(rp, width, length, position=(0.0, 0.0, z), dimShift=1e-3 * np.random.random_sample((12, 3)))
-        layer3 = Layer(rp, width, length, position=(0.0, 0.0, z), thetaShift=1e-3 * np.random.random_sample((12, 1)))
-        layer4 = Layer(rp, width, length, position=(0.0, 0.0, z), phiShift=1e-3 * np.random.random_sample((12, 1)))
+        layer1 = Layer(rp, width, length, position=(0.0, 0.0, z), r_magnet_shift=1e-3 * np.random.random_sample((12, 1)))
+        layer2 = Layer(rp, width, length, position=(0.0, 0.0, z), dim_shift=1e-3 * np.random.random_sample((12, 3)))
+        layer3 = Layer(rp, width, length, position=(0.0, 0.0, z), theta_shift=1e-3 * np.random.random_sample((12, 1)))
+        layer4 = Layer(rp, width, length, position=(0.0, 0.0, z), phi_shift=1e-3 * np.random.random_sample((12, 1)))
         BVecEachLens = []
         for layer, BVecError0 in zip([layer1, layer2, layer3, layer4], BVecErrorEachLens_0):
             B_vec = layer.B_vec(rtest)
@@ -115,7 +115,7 @@ class HalbachLenstestHelper:
     def __init__(self):
         self.rp = 5e-2
         self.length = .15
-        self.magnetWidth = .0254
+        self.magnet_width = .0254
 
     def run_tests(self):
         self.test1()
@@ -132,10 +132,10 @@ class HalbachLenstestHelper:
 
     def test1(self):
         # test that concentric layers work as expected
-        lensAB = HalbachLens((self.rp, self.rp + self.magnetWidth), (self.magnetWidth, self.magnetWidth * 1.5),
+        lensAB = HalbachLens((self.rp, self.rp + self.magnet_width), (self.magnet_width, self.magnet_width * 1.5),
                              self.length)
-        lensA = HalbachLens(self.rp, self.magnetWidth, self.length)
-        lensB = HalbachLens(self.rp + self.magnetWidth, self.magnetWidth * 1.5, self.length)
+        lensA = HalbachLens(self.rp, self.magnet_width, self.length)
+        lensB = HalbachLens(self.rp + self.magnet_width, self.magnet_width * 1.5, self.length)
         x_arr = np.linspace(-self.rp * .3, self.rp * .3, 10)
         coords = np.asarray(np.meshgrid(x_arr, x_arr, x_arr)).T.reshape(-1, 3)
         coords[:, 2] += self.length / 3  # break symmetry of test points
@@ -172,8 +172,8 @@ class HalbachLenstestHelper:
         BNormsVals_STD_Error = 0.11653023297363536
         magnetWidth1, magnetWidth2 = .0254, .0254 * 1.5
         lens = HalbachLens((self.rp, self.rp + .0254), (magnetWidth1, magnetWidth2), self.length,
-                           useStandardMagErrors=True
-                           , sameSeed=True)
+                           use_standard_mag_errors=True
+                           , same_seed=True)
         x_arr = np.linspace(-self.rp * .5, self.rp * .5)
         coords = np.asarray(np.meshgrid(x_arr, x_arr, 0.0)).T.reshape(-1, 3)
         BNormsVals_STD = np.std(lens.B_norm(coords))
@@ -184,8 +184,8 @@ class HalbachLenstestHelper:
 
     def test4(self):
         # test that the a single layer lens has the same field as a single layer
-        lens = HalbachLens(self.rp, self.magnetWidth, self.length)
-        layer = Layer(self.rp, self.magnetWidth, self.length)
+        lens = HalbachLens(self.rp, self.magnet_width, self.length)
+        layer = Layer(self.rp, self.magnet_width, self.length)
         x_arr = np.linspace(-self.rp * .5, self.rp * .5, 20)
         testCoords = np.asarray(list(itertools.product(x_arr, x_arr, x_arr)))
         BNormsValsLayer_STD = np.std(layer.B_norm(testCoords))
@@ -195,11 +195,11 @@ class HalbachLenstestHelper:
     def test5(self):
         # test that slices of the lens results in same field values without magnetostatic method of moments, and the
         # length and coordinates work
-        lensSingle = HalbachLens(self.rp, self.magnetWidth, self.length)
-        lensSliced = HalbachLens(self.rp, self.magnetWidth, self.length, numDisks=10)
-        lengthCounted = sum(layer.length for layer in lensSliced.layerList)
+        lensSingle = HalbachLens(self.rp, self.magnet_width, self.length)
+        lensSliced = HalbachLens(self.rp, self.magnet_width, self.length, numDisks=10)
+        lengthCounted = sum(layer.length for layer in lensSliced.layer_list)
         assert within_Tol(lensSliced.length, lengthCounted) and within_Tol(lensSliced.length, lensSliced.length)
-        zCenter = sum(layer.position[2] for layer in lensSliced.layerList) / lensSliced.numSlices
+        zCenter = sum(layer.position[2] for layer in lensSliced.layer_list) / lensSliced.numSlices
         assert within_Tol(zCenter, 0.0)
         x_arr = np.linspace(-self.rp * .5, self.rp * .5, 20)
         testCoords = np.asarray(list(itertools.product(x_arr, x_arr, x_arr)))
@@ -208,18 +208,18 @@ class HalbachLenstestHelper:
 
     def test6(self):
         # test that magnet errors change field values
-        lensPerfect = HalbachLens(self.rp, self.magnetWidth, self.length)
+        lensPerfect = HalbachLens(self.rp, self.magnet_width, self.length)
         np.random.seed(42)
-        lensError = HalbachLens(self.rp, self.magnetWidth, self.length, useStandardMagErrors=True)
+        lensError = HalbachLens(self.rp, self.magnet_width, self.length, use_standard_mag_errors=True)
         np.random.seed(42)
-        lensErrorSliced = HalbachLens(self.rp, self.magnetWidth, self.length, useStandardMagErrors=True, numDisks=10)
+        lensErrorSliced = HalbachLens(self.rp, self.magnet_width, self.length, use_standard_mag_errors=True, numDisks=10)
         self.test_All_Three_Are_Different(lensPerfect, lensError, lensErrorSliced)
 
     def test7(self):
         # test that magnetostatic method of moments (MOM) changes field values
-        lensNaive = HalbachLens(self.rp, self.magnetWidth, self.length)
-        lensMOM = HalbachLens(self.rp, self.magnetWidth, self.length, applyMethodOfMoments=True)
-        lensMOMSliced = HalbachLens(self.rp, self.magnetWidth, self.length, applyMethodOfMoments=True, numDisks=10)
+        lensNaive = HalbachLens(self.rp, self.magnet_width, self.length)
+        lensMOM = HalbachLens(self.rp, self.magnet_width, self.length, use_method_of_moments=True)
+        lensMOMSliced = HalbachLens(self.rp, self.magnet_width, self.length, use_method_of_moments=True, numDisks=10)
         self.test_All_Three_Are_Different(lensNaive, lensMOM, lensMOMSliced)
 
     def test8(self):
@@ -254,14 +254,14 @@ class SegmentedBenderHalbachHelper:
     def make_Bender_Test_Coords(self, bender: SegmentedBenderHalbach) -> np.ndarray:
         """Coords for testing bender that span the angular length and a little more."""
         ucAngle, rb, rp = bender.UCAngle, bender.rb, bender.rp
-        thetaArr = np.linspace(bender.lensAnglesArr.min() - 2 * ucAngle, bender.lensAnglesArr.max() + 2 * ucAngle,
+        theta_arr = np.linspace(bender.lens_angles_arr.min() - 2 * ucAngle, bender.lens_angles_arr.max() + 2 * ucAngle,
                                2 * bender.numLenses)
         rArr = np.linspace(rb - rp / 2, rb + rp / 2, 5)
         y_arr = np.linspace(-rp / 2, rp / 2, 6)
-        coordsPolar = np.array(list(itertools.product(thetaArr, rArr, y_arr)))
-        x_arr, zArr = np.cos(coordsPolar[:, 0]) * coordsPolar[:, 1], np.sin(coordsPolar[:, 0]) * coordsPolar[:, 1]
+        coordsPolar = np.array(list(itertools.product(theta_arr, rArr, y_arr)))
+        x_arr, z_arr = np.cos(coordsPolar[:, 0]) * coordsPolar[:, 1], np.sin(coordsPolar[:, 0]) * coordsPolar[:, 1]
         y_arr = coordsPolar[:, 2]
-        coords = np.column_stack((x_arr, y_arr, zArr))
+        coords = np.column_stack((x_arr, y_arr, z_arr))
         return coords
 
     def test_Bender_Approx(self, bender: SegmentedBenderHalbach) -> None:
@@ -289,10 +289,10 @@ class SegmentedBenderHalbachHelper:
         Lm, rb, rp = .0254, .9, .011
         ucAngle = .6 * Lm / 1.0
         # -------bender starting at theta=0
-        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, numLenses=130, positiveAngleMagnetsOnly=True)
+        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, numLenses=130, use_pos_ang_mags_only=True)
         self.test_Bender_Approx(bender)
         # ------bender symmetric about theta=0
-        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, numLenses=80, positiveAngleMagnetsOnly=False)
+        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, numLenses=80, use_pos_ang_mags_only=False)
         self.test_Bender_Approx(bender)
 
 

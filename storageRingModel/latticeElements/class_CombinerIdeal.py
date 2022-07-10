@@ -11,11 +11,11 @@ class CombinerIdeal(BaseElement):
     # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
     # angle is decided by tracing particles through the combiner and finding the bending angle.
 
-    def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, sizeScale: float):
+    def __init__(self, PTL, Lm: float, c1: float, c2: float, apL: float, apR: float, apZ: float, size_scale: float):
         super().__init__(PTL)
         self.field_fact = -1.0 if self.PTL.lattice_type == 'injector' else 1.0
-        self.sizeScale = sizeScale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
-        # use sizeScale=2.0
+        self.size_scale = size_scale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
+        # use size_scale=2.0
         self.apR = apR
         self.apL = apL
         self.apz = apZ
@@ -35,9 +35,9 @@ class CombinerIdeal(BaseElement):
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         from latticeElements.combiner_characterizer import characterize_CombinerIdeal
-        self.apR, self.apL, self.apz, self.Lm = [val * self.sizeScale for val in
+        self.apR, self.apL, self.apz, self.Lm = [val * self.size_scale for val in
                                                  (self.apR, self.apL, self.apz, self.Lm)]
-        self.c1, self.c2 = self.c1 / self.sizeScale, self.c2 / self.sizeScale
+        self.c1, self.c2 = self.c1 / self.size_scale, self.c2 / self.size_scale
         self.Lb = self.Lm  # length of segment after kink after the inlet
         # self.fast_field_helper = get_Combiner_Ideal([self.c1, self.c2, np.nan, self.Lb,
         #                                                   self.apL, self.apR, np.nan, np.nan])

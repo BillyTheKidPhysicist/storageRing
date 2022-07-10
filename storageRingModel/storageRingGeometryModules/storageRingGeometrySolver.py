@@ -59,31 +59,31 @@ class StorageRingGeometryConstraintsSolver:
         Take 1D tuple of parameters, and break apart into tuple of each paramter (bending radius, number of magnets in
         bender, and length of lens)
 
-        :param params: storage ring params. (radius_i,numMagnets_i,...,lensLength_j,...) where i is number of benders
+        :param params: storage ring params. (radius_i,num_magnets_i,...,lensLength_j,...) where i is number of benders
             and j is number of length tunable lenses
-        :return: seperate tuples of params ((radius_i...),(numMagnets_i,...),(lensLenth_j,...))
+        :return: seperate tuples of params ((radius_i...),(num_magnets_i,...),(lensLenth_j,...))
         """
 
         radiusIndexFirt, numMagsIndexFirst, numParamsPerBend, numBends = 0, 1, 2, self.storageRing.numBenders
         assert numBends != 0  # does not work without benders
         radiusTuple = tuple(params[radiusIndexFirt:numParamsPerBend * numBends:numParamsPerBend])
-        numMagnetsTuple = tuple(params[numMagsIndexFirst:numParamsPerBend * numBends:numParamsPerBend])
+        num_magnetsTuple = tuple(params[numMagsIndexFirst:numParamsPerBend * numBends:numParamsPerBend])
         lensLengthTuple = tuple(params[numParamsPerBend * numBends:])
-        return radiusTuple, numMagnetsTuple, lensLengthTuple
+        return radiusTuple, num_magnetsTuple, lensLengthTuple
 
     def round_Integer_Params(self, params: realNumberTuple) -> realNumberTuple:
         """
         differential_evolution only works on floats. So integer parameters (number of magnets) must be rounded
 
-        :param params: storage ring params. (radius_i,numMagnets_i,...,lensLength_j,...) where i is number of benders
+        :param params: storage ring params. (radius_i,num_magnets_i,...,lensLength_j,...) where i is number of benders
             and j is number modifiable lenses
-        :return: params with numMagnets_i rounded to integer
+        :return: params with num_magnets_i rounded to integer
         """
 
-        radiusTuple, numMagnetsTuple, lensLengthTuple = self.separate_Params(params)
-        numMagnetsTuple = tuple(round(numMags) for numMags in numMagnetsTuple)
+        radiusTuple, num_magnetsTuple, lensLengthTuple = self.separate_Params(params)
+        num_magnetsTuple = tuple(round(numMags) for numMags in num_magnetsTuple)
         # trick to remake flattened list with integer parameters rounded
-        params = [[radius, numMags] for radius, numMags in zip(radiusTuple, numMagnetsTuple)]
+        params = [[radius, numMags] for radius, numMags in zip(radiusTuple, num_magnetsTuple)]
         params.append(list(lensLengthTuple))
         params = tuple(itertools.chain(*params))  # flatten list
         return params
@@ -94,14 +94,14 @@ class StorageRingGeometryConstraintsSolver:
         params and shape for updating elements. differential_evolution only works with float so integer values need to
         be rounded to integers from floats
 
-        :param params: (radius_i,numMagnets_i,...,lensLength_j,...) where i is number of benders and j is number of
+        :param params: (radius_i,num_magnets_i,...,lensLength_j,...) where i is number of benders and j is number of
                     modifiable lenses
-        :return: ( ((radius_i,numMagnets_i),...) , (lensLength_j,...) )
+        :return: ( ((radius_i,num_magnets_i),...) , (lensLength_j,...) )
         """
 
         params = self.round_Integer_Params(params)
-        radiusTuple, numMagnetsTuple, lensLengthTuple = self.separate_Params(params)
-        benderParams = tuple((radius, numMags) for radius, numMags in zip(radiusTuple, numMagnetsTuple))
+        radiusTuple, num_magnetsTuple, lensLengthTuple = self.separate_Params(params)
+        benderParams = tuple((radius, numMags) for radius, numMags in zip(radiusTuple, num_magnetsTuple))
         lensParams = lensLengthTuple
         return benderParams, lensParams
 
@@ -111,8 +111,8 @@ class StorageRingGeometryConstraintsSolver:
         bendingParams, lensParams = self.shape_And_Round_Params(params)
         assert len(bendingParams) == self.storageRing.numBenders
         for i, benderParams in enumerate(bendingParams):
-            radius, numMagnets = benderParams
-            self.storageRing.benders[i].set_Number_Magnets(numMagnets)
+            radius, num_magnets = benderParams
+            self.storageRing.benders[i].set_Number_Magnets(num_magnets)
             if self.storageRing.numBenders == 2:
                 self.storageRing.benders[i].set_Radius(radius)
             elif self.storageRing.numBenders == 4:
@@ -141,10 +141,10 @@ class StorageRingGeometryConstraintsSolver:
         """Cost for number of magnets in each bender being different than each other"""
 
         benderParams, _ = self.shape_And_Round_Params(params)
-        numMagnetsList = [numMagnets for _, numMagnets in benderParams]
-        assert all(isinstance(num, int) for num in numMagnetsList)
+        num_magnetsList = [num_magnets for _, num_magnets in benderParams]
+        assert all(isinstance(num, int) for num in num_magnetsList)
         weight = 1  # different numbers of magnets isn't so bad
-        cost = weight * sum([abs(a - b) for a, b in itertools.combinations(numMagnetsList, 2)])
+        cost = weight * sum([abs(a - b) for a, b in itertools.combinations(num_magnetsList, 2)])
         return cost
 
     def get_Radius_Cost(self, params: floatTuple) -> float:
@@ -167,8 +167,8 @@ class StorageRingGeometryConstraintsSolver:
         anglePerBenderApprox = (2 * np.pi - self.storageRing.combiner.kinkAngle) / self.storageRing.numBenders
         unitCellAngleApprox = self.storageRing.benders[0].lengthSegment / self.targetRadius  # each bender has
         # same segment length
-        numMagnetsApprox = round(anglePerBenderApprox / unitCellAngleApprox)
-        bounds = [(self.targetRadius * .95, self.targetRadius * 1.05), (numMagnetsApprox * .9, numMagnetsApprox * 1.1)]
+        num_magnetsApprox = round(anglePerBenderApprox / unitCellAngleApprox)
+        bounds = [(self.targetRadius * .95, self.targetRadius * 1.05), (num_magnetsApprox * .9, num_magnetsApprox * 1.1)]
         bounds = bounds * self.storageRing.numBenders
         if self.isSameLengthTuneLenses:
             if len(self.tunedLenses) >= 1:

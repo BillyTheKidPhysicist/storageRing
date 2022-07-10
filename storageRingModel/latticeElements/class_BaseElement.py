@@ -254,25 +254,25 @@ class BaseElement:
         assert data.shape[1] == 7 and len(data) > 2 ** 3
         x_arr = np.unique(data[:, 0])
         y_arr = np.unique(data[:, 1])
-        zArr = np.unique(data[:, 2])
-        assert all(not np.any(np.isnan(arr)) for arr in (x_arr, y_arr, zArr))
+        z_arr = np.unique(data[:, 2])
+        assert all(not np.any(np.isnan(arr)) for arr in (x_arr, y_arr, z_arr))
 
         num_x = x_arr.shape[0]
         num_y = y_arr.shape[0]
-        num_z = zArr.shape[0]
+        num_z = z_arr.shape[0]
         FxMatrix = np.empty((num_x, num_y, num_z))
         FyMatrix = np.empty((num_x, num_y, num_z))
         FzMatrix = np.empty((num_x, num_y, num_z))
         VMatrix = np.zeros((num_x, num_y, num_z))
         x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
         yIndices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
-        zIndices = np.argwhere(data[:, 2][:, None] == zArr)[:, 1]
+        zIndices = np.argwhere(data[:, 2][:, None] == z_arr)[:, 1]
         FxMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 3]
         FyMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 4]
         FzMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 5]
         VMatrix[x_indices, yIndices, zIndices] = SIMULATION_MAGNETON * data[:, 6]
         VFlat, FxFlat, FyFlat, FzFlat = VMatrix.ravel(), FxMatrix.ravel(), FyMatrix.ravel(), FzMatrix.ravel()
-        return x_arr, y_arr, zArr, FxFlat, FyFlat, FzFlat, VFlat
+        return x_arr, y_arr, z_arr, FxFlat, FyFlat, FzFlat, VFlat
 
     def shape_field_data_2D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
         """2D version of shape_field_data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""

@@ -129,9 +129,9 @@ class Bend(Shape):
     def get_Plot_Coords(self) -> tuple[np.ndarray, np.ndarray]:
         assert self.is_Placed()
         angleIn = np.arctan2(self.n_in[1], self.n_in[0]) - np.pi / 2
-        angleArr = np.linspace(0, -self.bendingAngle, 10_000) + angleIn
-        xVals = self.radius * np.cos(angleArr) + self.benderCenter[0]
-        yVals = self.radius * np.sin(angleArr) + self.benderCenter[1]
+        angle_arr = np.linspace(0, -self.bendingAngle, 10_000) + angleIn
+        xVals = self.radius * np.cos(angle_arr) + self.benderCenter[0]
+        yVals = self.radius * np.sin(angle_arr) + self.benderCenter[1]
         return xVals, yVals
 
     def place(self, pos_in: np.ndarray, n_in: np.ndarray) -> None:  # pylint: disable=arguments-differ
@@ -150,15 +150,15 @@ class Bend(Shape):
 class SlicedBend(Bend):
     """Bending geometry, but with the geometry composed of integer numbers of segments"""
 
-    def __init__(self, lengthSegment: float, numMagnets: Optional[int], magnetDepth: float, radius: float):
+    def __init__(self, lengthSegment: float, num_magnets: Optional[int], magnetDepth: float, radius: float):
         assert lengthSegment > 0.0
-        assert (numMagnets > 0 and isinstance(numMagnets, int)) if numMagnets is not None else True
+        assert (num_magnets > 0 and isinstance(num_magnets, int)) if num_magnets is not None else True
         assert 0.0 <= magnetDepth < .1 and radius > 10 * magnetDepth  # this wouldn't make sense
         self.lengthSegment = lengthSegment
-        self.numMagnets = numMagnets
+        self.num_magnets = num_magnets
         self.magnetDepth = magnetDepth
         self.radius = radius
-        self.bendingAngle = self.get_Arc_Angle() if numMagnets is not None else None
+        self.bendingAngle = self.get_Arc_Angle() if num_magnets is not None else None
         super().__init__(radius, self.bendingAngle)
 
 
@@ -166,15 +166,15 @@ class SlicedBend(Bend):
         """Get arc angle (bending angle) of bender"""
 
         unitCellAngle = get_Unit_Cell_Angle(self.lengthSegment,self.radius,self.magnetDepth)
-        bendingAngle = 2 * unitCellAngle * self.numMagnets
+        bendingAngle = 2 * unitCellAngle * self.num_magnets
         assert 0 < bendingAngle < 2 * np.pi
         return bendingAngle
 
-    def set_Number_Magnets(self, numMagnets: int) -> None:
+    def set_Number_Magnets(self, num_magnets: int) -> None:
         """Set number of magnets (half number of unit cells) in the bender"""
 
-        assert numMagnets > 0 and isinstance(numMagnets, int)
-        self.numMagnets = numMagnets
+        assert num_magnets > 0 and isinstance(num_magnets, int)
+        self.num_magnets = num_magnets
         self.bendingAngle = self.get_Arc_Angle()  # radians
 
     def set_Radius(self, radius: float) -> None:
@@ -184,9 +184,9 @@ class SlicedBend(Bend):
 
 class CappedSlicedBend(SlicedBend):
 
-    def __init__(self, lengthSegment: float, numMagnets: Optional[int],  # pylint: disable=too-many-arguments
+    def __init__(self, lengthSegment: float, num_magnets: Optional[int],  # pylint: disable=too-many-arguments
                  magnetDepth: float, lengthCap: float, radius: float):
-        super().__init__(lengthSegment, numMagnets, magnetDepth, radius)
+        super().__init__(lengthSegment, num_magnets, magnetDepth, radius)
         self.lengthCap = lengthCap
         self.caps: list[Line] = [Line(self.lengthCap), Line(self.lengthCap)]
 

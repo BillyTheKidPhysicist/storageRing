@@ -16,32 +16,32 @@ def is_coord_in_vacuum(x: float, y: float, z: float, params) -> bool:
 @numba.njit(cache=False)
 def _force_Func_Inner(y: float, z: float, field_data) -> tupleOf3Floats:
     """Wrapper for interpolation of force fields of plane at center lens. see self.force"""
-    y_arr, zArr, FyArr, FzArr, V_arr = field_data
+    y_arr, z_arr, FyArr, Fz_arr, V_arr = field_data
     Fx = 0.0
-    Fy = interp2D(y, z, y_arr, zArr, FyArr)
-    Fz = interp2D(y, z, y_arr, zArr, FzArr)
+    Fy = interp2D(y, z, y_arr, z_arr, FyArr)
+    Fz = interp2D(y, z, y_arr, z_arr, Fz_arr)
     return Fx, Fy, Fz
 
 
 @numba.njit(cache=False)
 def _force_Func_Outer(x, y, z, field_data) -> tupleOf3Floats:
     """Wrapper for interpolation of force fields at ends of lens. see force"""
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = field_data
-    Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
+    x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = field_data
+    Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
     return Fx, Fy, Fz
 
 @numba.njit(cache=False)
 def _magnetic_potential_Func_Fringe( x: float, y: float, z: float, field_data) -> float:
     """Wrapper for interpolation of magnetic fields at ends of lens. see magnetic_potential"""
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = field_data
-    V = scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
+    x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = field_data
+    V = scalar_interp3D(x, y, z, x_arr, y_arr, z_arr, V_arr)
     return V
 
 @numba.njit(cache=False)
 def _magnetic_potential_Func_Inner( x: float, y: float, z: float,field_data) -> float:
     """Wrapper for interpolation of magnetic fields of plane at center lens.see magnetic_potential"""
-    y_arr, zArr, FyArr, FzArr, V_arr = field_data
-    V = interp2D(y, z, y_arr, zArr, V_arr)
+    y_arr, z_arr, FyArr, Fz_arr, V_arr = field_data
+    V = interp2D(y, z, y_arr, z_arr, V_arr)
     return V
 
 

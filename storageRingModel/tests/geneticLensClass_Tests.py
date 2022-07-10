@@ -8,8 +8,8 @@ class testHelper:
         self.numericTol = 1e-14  # same approach should be this accurate on different machines
         self.algoTol = 1e-9  # different approaches should give the same result, but algorithms might differ
         x_arr = np.linspace(-self.rp * .5, self.rp * .5, 11)
-        zArr = np.linspace(-self.length, self.length, 30)
-        self.coords = np.asarray(np.meshgrid(x_arr, x_arr, zArr)).T.reshape(-1, 3)
+        z_arr = np.linspace(-self.length, self.length, 30)
+        self.coords = np.asarray(np.meshgrid(x_arr, x_arr, z_arr)).T.reshape(-1, 3)
 
     def run_tests(self):
         self.test1()

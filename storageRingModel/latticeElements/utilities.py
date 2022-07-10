@@ -44,9 +44,9 @@ def halbach_magnet_width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_
     halfAngle = 2 * np.pi / 24
     maxMagnetWidth = rp * np.tan(halfAngle) * 2
     widthReductin = magnetSeparation / np.cos(halfAngle)
-    magnetWidth = maxMagnetWidth - widthReductin
-    magnetWidth = round_down_to_nearest_valid_mag_width(magnetWidth) if use_standard_sizes else magnetWidth
-    return magnetWidth
+    magnet_width = maxMagnetWidth - widthReductin
+    magnet_width = round_down_to_nearest_valid_mag_width(magnet_width) if use_standard_sizes else magnet_width
+    return magnet_width
 
 
 def get_halbach_layers_radii_and_magnet_widths(rp_first: RealNum, numConcentricLayers: int,
@@ -66,12 +66,12 @@ def get_halbach_layers_radii_and_magnet_widths(rp_first: RealNum, numConcentricL
     return tuple(rp_layers), tuple(magnet_widths)
 
 
-def max_tube_radius_in_segmented_bend(rb: float, rp: float, Lm: float, tubeWallThickness: float,
+def max_tube_radius_in_segmented_bend(rb: float, rp: float, Lm: float, tube_wall_thickness: float,
                                       use_standard_sizes: bool=False) -> float:
     """What is the maximum size that will fit in a segmented bender and respect the geometry"""
-    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tubeWallThickness < rp
+    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tube_wall_thickness < rp
     radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
-    maximumTubeRadius = rb - radiusCorner - tubeWallThickness
+    maximumTubeRadius = rb - radiusCorner - tube_wall_thickness
     maximumTubeRadius=maximumTubeRadius if not use_standard_sizes else round_down_to_nearest_valid_tube_OD(2*maximumTubeRadius)/2.0
     assert maximumTubeRadius > 0.0
     return maximumTubeRadius

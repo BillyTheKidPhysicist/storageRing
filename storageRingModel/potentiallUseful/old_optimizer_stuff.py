@@ -1,6 +1,6 @@
 def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIndices: list_array_tuple,
                            tuningChoice: str, whichKnobs: str) -> None:
-    if max(tuningElementIndices) >= len(self.lattice_ring.elList) - 1: raise Exception(
+    if max(tuningElementIndices) >= len(self.lattice_ring.el_list) - 1: raise Exception(
         "element indices out of bounds")
     if len(tuningBounds) != len(tuningElementIndices): raise Exception(
         "Bounds do not match number of tuned elements")
@@ -8,19 +8,19 @@ def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIn
     if not (combinerRing.Lm == combinerLat.Lm and combinerRing.ap == combinerLat.ap and combinerRing.output_offset ==
             combinerLat.output_offset):
         raise Exception('Combiners are different between the two lattices')
-    injectorTuningElements = [self.lattice_injector.elList[index] for index in self.injectTuneElIndices]
+    injectorTuningElements = [self.lattice_injector.el_list[index] for index in self.injectTuneElIndices]
     if not all(isinstance(el, Drift) for el in injectorTuningElements):
         raise Exception("injector tuning elements must be drift region")
     if tuningChoice == 'field':
         for elIndex in tuningElementIndices:
-            el = self.lattice_ring.elList[elIndex]
+            el = self.lattice_ring.el_list[elIndex]
             if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:
                 raise Exception("For field tuning elements must be LensIdeal or HalbachLensSim")
     elif tuningChoice == 'spacing':
         for elIndex in tuningElementIndices:
-            elBefore, elAfter = self.lattice_ring.get_Element_Before_And_After(self.lattice_ring.elList[elIndex])
-            tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
-            if (isinstance(elBefore, Drift) and isinstance(elAfter, Drift)) != True:
+            el_before, el_after = self.lattice_ring.get_element_before_and_after(self.lattice_ring.el_list[elIndex])
+            tunableLength = (el_before.L + el_after.L) - 2 * self.minElementLength
+            if (isinstance(el_before, Drift) and isinstance(el_after, Drift)) != True:
                 raise Exception("For spacing tuning neighboring elements must be Drift elements")
             if tunableLength < 0.0:
                 raise Exception("Tunable elements are too short for length tuning. Min total length is "
@@ -39,7 +39,7 @@ def initialize_Optimizer(self, tuningElementIndices: list_array_tuple, tuningCho
     self.tuningBounds = ringTuningBounds.copy()
     if self.whichKnobs == 'all':
         self.tuningBounds.extend(injectorTuningBounds)
-    self.tunedElementList = [self.lattice_ring.elList[index] for index in tuningElementIndices]
+    self.tunedElementList = [self.lattice_ring.el_list[index] for index in tuningElementIndices]
     self.tuningChoice = tuningChoice
     if self.sameSeedForSearch == True:
         np.random.seed(42)
@@ -73,7 +73,7 @@ def _fast_Minimize(self):
     useSurrogate, use_energy_correction = [True, False]
     sol_Surrogate = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, tol=self.tolerance,
                                                polish=False, args=(useSurrogate, use_energy_correction),
-                                               maxiter=self.maxEvals // (
+                                               maxiter=self.max_evals // (
                                                        self.optimalPopSize * len(self.tuningBounds)),
                                                popsize=self.optimalPopSize, init='halton')
     return sol_Surrogate
@@ -90,7 +90,7 @@ def _accurate_Minimize(self):
     useSurrogateScipyOptimer = False
     sol = spo.differential_evolution(self.mode_Match_Cost, self.tuningBounds, polish=False, x0=XInitial,
                                      tol=self.tolerance,
-                                     maxiter=self.maxEvals // (self.optimalPopSize * len(self.tuningBounds)),
+                                     maxiter=self.max_evals // (self.optimalPopSize * len(self.tuningBounds)),
                                      args=(useSurrogateScipyOptimer, use_energy_correction), popsize=self.optimalPopSize,
                                      init='halton')
     return sol
@@ -152,8 +152,8 @@ def update_Injector_Lattice(self, X: list_array_tuple):
     raise NotImplementedError
     assert len(X) == 2
     assert X[0] > 0.0 and X[1] > 0.0
-    self.lattice_injector.elList[self.injectTuneElIndices[0]].set_length(X[0])
-    self.lattice_injector.elList[self.injectTuneElIndices[1]].set_length(X[1])
+    self.lattice_injector.el_list[self.injectTuneElIndices[0]].set_length(X[0])
+    self.lattice_injector.el_list[self.injectTuneElIndices[1]].set_length(X[1])
     self.lattice_injector.build_lattice()
 def update_Ring_Lattice(self, X: list_array_tuple) -> None:
     assert len(X) == 2
@@ -169,19 +169,19 @@ def update_Ring_Field_Values(self, X: list_array_tuple) -> None:
         el.field_fact = arg
 def update_Ring_Spacing(self, X: list_array_tuple) -> None:
     raise NotImplementedError
-    for elCenter, spaceFracElBefore in zip(self.tunedElementList, X):
-        self.move_Element_Longitudinally(elCenter, spaceFracElBefore)
+    for el_center, spaceFracElBefore in zip(self.tunedElementList, X):
+        self.move_Element_Longitudinally(el_center, spaceFracElBefore)
     self.lattice_ring.build_lattice()
-def move_Element_Longitudinally(self, elCenter: Element, spaceFracElBefore: float) -> None:
+def move_Element_Longitudinally(self, el_center: Element, spaceFracElBefore: float) -> None:
     assert 0 <= spaceFracElBefore <= 1.0
-    elBefore, elAfter = self.lattice_ring.get_Element_Before_And_After(elCenter)
-    assert isinstance(elBefore, Drift) and isinstance(elAfter, Drift)
-    totalBorderingElLength = elBefore.L + elAfter.L
-    tunableLength = (elBefore.L + elAfter.L) - 2 * self.minElementLength
+    el_before, el_after = self.lattice_ring.get_element_before_and_after(el_center)
+    assert isinstance(el_before, Drift) and isinstance(el_after, Drift)
+    totalBorderingElLength = el_before.L + el_after.L
+    tunableLength = (el_before.L + el_after.L) - 2 * self.minElementLength
     LBefore = spaceFracElBefore * tunableLength + self.minElementLength
     LAfter = totalBorderingElLength - LBefore
-    elBefore.set_length(LBefore)
-    elAfter.set_length(LAfter)
+    el_before.set_length(LBefore)
+    el_after.set_length(LAfter)
 def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     self.update_Ring_And_Injector(X)
     maxInitialTransversePos = 1e-3

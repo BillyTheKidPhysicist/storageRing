@@ -99,7 +99,7 @@ class SwarmTracer:
 
     def initialize_Observed_Collector_Swarm_Probability_Weighted(self, capture_diam: float, collector_output_angle: float,
                                                                  num_particles: float, gammaSpace: float = 3.5e-3,
-                                                                 sameSeed: bool = False, upperSymmetry: bool = False,
+                                                                 same_seed: bool = False, upperSymmetry: bool = False,
                                                                  probabilityMin: float = 0.01) -> Swarm:
         # this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
         # swarm that is well spread out in space, then weighitng each particle by it's probability according to the
@@ -122,7 +122,7 @@ class SwarmTracer:
         p_longitudinal_max = 1e-3
         p_long_bounds = (p_longitudinal_min, p_longitudinal_max)
         swarm_evenly_spread = self.initalize_PseudoRandom_Swarm_In_Phase_Space(capture_diam / 2.0, p_trans_max, p_long_bounds,
-                                                                             num_particles, same_seed=sameSeed,
+                                                                             num_particles, same_seed=same_seed,
                                                                              upper_symmetry=upperSymmetry)
         probabilities = []
         for particle in swarm_evenly_spread:
@@ -221,12 +221,12 @@ class SwarmTracer:
         return swarm
 
     def initialize_point_source_swarm(self, source_angle: float, num_particles: int, smallXOffset: bool = True,
-                                      sameSeed: bool = False) -> Swarm:
+                                      same_seed: bool = False) -> Swarm:
         p0 = self.lattice.speed_nominal  # the momentum of each particle
         q_trans_bounds, px_bounds = 1e-12, 1e-12  # force to a point spatialy, and no speed spread
         p_trans_bounds = np.tan(source_angle) * p0
         swarm_pseudo_random = self.initalize_PseudoRandom_Swarm_In_Phase_Space(q_trans_bounds, p_trans_bounds, px_bounds, num_particles,
-                                                                             same_seed=sameSeed, circular=True,
+                                                                             same_seed=same_seed, circular=True,
                                                                              small_x_offset=smallXOffset)
         for particle in swarm_pseudo_random:
             px, py, pz = particle.pi

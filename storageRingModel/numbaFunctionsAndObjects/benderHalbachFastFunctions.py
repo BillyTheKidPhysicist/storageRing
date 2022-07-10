@@ -11,7 +11,7 @@ from numbaFunctionsAndObjects.utilities import nanArr7Tuple, full_arctan2
 def cartesian_To_Center(x, y, z, params):
     """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
     evaluation by interpolator"""
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,num_magnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
 
     if x > 0.0 and -Lcap <= y <= 0.0:
         s = Lcap + y
@@ -114,7 +114,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z,ang,ucAng):
 def is_coord_in_vacuum(x, y, z,params):
     phi = full_arctan2(y, x)  # calling a fast numba version that is global
 
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,num_magnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     if phi < ang:  # if particle is inside bending angle region
         return (np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2 < ap ** 2
     else:  # if outside bender's angle range
@@ -131,7 +131,7 @@ def is_coord_in_vacuum(x, y, z,params):
 def magnetic_potential(x0, y0, z0,params,field_data):
     # magnetic potential at point q in element frame
     # q: particle's position in element frame
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,num_magnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData = field_data
     x, y, z = x0, y0, z0
     if not is_coord_in_vacuum(x, y, z,params):
@@ -142,7 +142,7 @@ def magnetic_potential(x0, y0, z0,params,field_data):
         revs = int((ang - phi) / ucAng)  # number of revolutions through unit cell
         if revs == 0 or revs == 1:
             position = 'FIRST'
-        elif revs == numMagnets * 2 - 1 or revs == numMagnets * 2 - 2:
+        elif revs == num_magnets * 2 - 1 or revs == num_magnets * 2 - 2:
             position = 'LAST'
         else:
             position = 'INNER'
@@ -194,7 +194,7 @@ def force(x0, y0, z0,params,field_data):
     # force at point q in element frame
     # q: particle's position in element frame
     x, y, z = x0, y0, z0
-    rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
+    rb, ap, Lcap, ang,num_magnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
     fieldDataSeg,fieldDataInternal,fieldDataCap,fieldPerturbationData=field_data
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
@@ -207,7 +207,7 @@ def force(x0, y0, z0,params,field_data):
             revs = int(psi / ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
-            elif revs == numMagnets * 2 - 1 or revs == numMagnets * 2 - 2:
+            elif revs == num_magnets * 2 - 1 or revs == num_magnets * 2 - 2:
                 position = 'LAST'
             else:
                 position = 'INNER'

@@ -7,7 +7,7 @@ from numbaFunctionsAndObjects import combinerSimFastFunction
 
 class CombinerSim(CombinerIdeal):
 
-    def __init__(self, PTL, combinerFileName: str, mode: str, sizeScale: float = 1.0):
+    def __init__(self, PTL, combinerFileName: str, mode: str, size_scale: float = 1.0):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
         # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
@@ -16,12 +16,12 @@ class CombinerSim(CombinerIdeal):
         # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         # doubling dimensions halves the gradient
         assert mode in ('injector', 'storageRing')
-        assert sizeScale > 0 and isinstance(combinerFileName, str)
+        assert size_scale > 0 and isinstance(combinerFileName, str)
         Lm = .187
         apL = .015
         apR = .025
         apZ = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, sizeScale)
+        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, size_scale)
         self.fringeSpace = 5 * 1.1e-2
         self.combinerFileName = combinerFileName
 
@@ -29,8 +29,8 @@ class CombinerSim(CombinerIdeal):
         data = np.asarray(pd.read_csv(self.combinerFileName, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
-        data[:, :3] = data[:, :3] * self.sizeScale  # scale the dimensions
-        data[:, 3:6] = data[:, 3:6] / self.sizeScale  # scale the field gradient
+        data[:, :3] = data[:, :3] * self.size_scale  # scale the dimensions
+        data[:, 3:6] = data[:, 3:6] / self.size_scale  # scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
         field_data = self.shape_field_data_3D(data)
@@ -39,10 +39,10 @@ class CombinerSim(CombinerIdeal):
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         from latticeElements.combiner_characterizer import characterize_CombinerSim
-        self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
-        self.apL = self.apL * self.sizeScale
-        self.apR = self.apR * self.sizeScale
-        self.apz = self.apz * self.sizeScale
+        self.space = self.fringeSpace * self.size_scale  # extra space past the hard edge on either end to account for fringe fields
+        self.apL = self.apL * self.size_scale
+        self.apR = self.apR * self.size_scale
+        self.apz = self.apz * self.size_scale
 
         inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
         self.L = self.Lo = trajectoryLength

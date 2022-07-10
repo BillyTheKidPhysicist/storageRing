@@ -63,7 +63,7 @@ class MagneticLens(MagneticOptic):
         position=(self.Lm/2.0+self.x_in_offset, 0, 0)
         orientation=Rot.from_rotvec([0, np.pi / 2.0, 0.0])
         magnets = HalbachLens(self.rp_layers, self.magnet_widths, self.Lm, self.magnet_grade,
-                            applyMethodOfMoments=True, useStandardMagErrors=magnet_errors,
+                            use_method_of_moments=True, use_standard_mag_errors=magnet_errors,
                             numDisks=self.num_disks(magnet_errors), use_solenoid_field=self.use_solenoid,
                             orientation=orientation,position=position)
         return magnets

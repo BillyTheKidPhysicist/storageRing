@@ -6,21 +6,21 @@ assert HalbachLensSim.fringe_frac_outer == 1.5
 
 swarmShift_x=0.0372 * 1.5 - 0.03
 def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identical bumper, but does not end the lattice
-    assert PTL.initialLocation[0] == 0.0 and PTL.initialLocation[1] == 0.0
+    assert PTL.initial_location[0] == 0.0 and PTL.initial_location[1] == 0.0
     intitialValues=(PTL.use_standard_mag_size,PTL.use_standard_tube_OD)
     PTL.use_standard_mag_size, PTL.use_standard_tube_OD = (False,False)
-    PTL.initialLocation = (0.0, 0.012)
-    PTL.add_Halbach_Lens_Sim((0.0242, 0.0372), 0.321, magnetWidth=(0.0127, 0.01905))
-    PTL.add_Drift(0.1274, .04, inputTiltAngle=0.1803, outputTiltAngle=0.0753)
-    PTL.add_Halbach_Lens_Sim(0.0183, 0.1564)
-    PTL.add_Drift(0.085, .04)
+    PTL.initial_location = (0.0, 0.012)
+    PTL.add_halbach_lens_sim((0.0242, 0.0372), 0.321, magnet_width=(0.0127, 0.01905))
+    PTL.add_drift(0.1274, .04, input_tilt_angle=0.1803, output_tilt_angle=0.0753)
+    PTL.add_halbach_lens_sim(0.0183, 0.1564)
+    PTL.add_drift(0.085, .04)
     PTL.use_standard_mag_size, PTL.use_standard_tube_OD = intitialValues
     return PTL
 
 # from ParticleTracerLatticeClass import ParticleTracerLattice
 # PTL=ParticleTracerLattice()
 # add_Kevin_Bumper_Elements(PTL)
-# PTL.end_Lattice()
+# PTL.end_lattice()
 
 #  the focus of the big collector magnet is 3 cm before the first magnet, so the initial swarm would look
 #  more like
@@ -39,5 +39,5 @@ def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identic
 #
 #
 # exmaple_bumper = add_Kevin_Bumper_Elements(ParticleTracerLattice(lattice_type='injector', magnet_grade='N52'))
-# exmaple_bumper.end_Lattice()
+# exmaple_bumper.end_lattice()
 # example_swarm_3cm = create_swarm(exmaple_bumper, -0.03, 500)

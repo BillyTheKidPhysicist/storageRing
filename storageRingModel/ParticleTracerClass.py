@@ -62,7 +62,7 @@ class ParticleTracer:
 
     def __init__(self, PTL):
         # lattice: ParticleTracerLattice object typically
-        self.elList = PTL.elList  # list containing the elements in the lattice in order from first to last (order added)
+        self.el_list = PTL.el_list  # list containing the elements in the lattice in order from first to last (order added)
         self.total_lattice_length = PTL.total_length
 
         self.PTL = PTL
@@ -115,7 +115,7 @@ class ParticleTracer:
         if self.particle.clipped is not None:
             self.particle.clipped = False
         LMin = norm_3D(self.particle.pi) * self.h * self.minTimeStepsPerElement
-        for el in self.elList:
+        for el in self.el_list:
             if el.Lo <= LMin:  # have at least a few steps in each element
                 raise Exception('element too short for time steps size')
         if self.particle.qi[0] == 0.0:
@@ -194,7 +194,7 @@ class ParticleTracer:
         """
 
         assert not self.PTL.is_closed
-        el_last = self.elList[-1]
+        el_last = self.el_list[-1]
         # q_el = el_last.transform_lab_coords_into_element_frame(self.q_el)
         # p_el = el_last.transform_Lab_Frame_Vector_Into_Element_Frame(self.p_el)
         if isinstance(el_last, LensIdeal):
@@ -232,7 +232,7 @@ class ParticleTracer:
             self.particle.T = self.T
 
         if not self.PTL.is_closed:
-            if self.currentEl is self.elList[-1] and self.particle.clipped:  # only bother if particle is
+            if self.currentEl is self.el_list[-1] and self.particle.clipped:  # only bother if particle is
                 # in last element
                 self.particle.clipped = self.did_Particle_Survive_To_End()
 
@@ -414,16 +414,16 @@ class ParticleTracer:
             return deltaPx, deltaPy, deltaPz
 
     def which_Element_Lab_Coords(self, q_lab: np.ndarray) -> Optional[Element]:
-        for el in self.elList:
+        for el in self.el_list:
             if el.is_Coord_Inside(el.transform_lab_coords_into_element_frame(q_lab)):
                 return el
         return None
 
     def get_Next_Element(self) -> Element:
-        if self.currentEl.index + 1 >= len(self.elList):
-            nextEl = self.elList[0]
+        if self.currentEl.index + 1 >= len(self.el_list):
+            nextEl = self.el_list[0]
         else:
-            nextEl = self.elList[self.currentEl.index + 1]
+            nextEl = self.el_list[self.currentEl.index + 1]
         return nextEl
 
     def which_Element(self, q_el: np.ndarray) -> Optional[Element]:
@@ -435,7 +435,7 @@ class ParticleTracer:
             return nextEl
         else:
             # now instead look everywhere, except the next element we already checked
-            for el in self.elList:
+            for el in self.el_list:
                 if el is not nextEl:  # don't waste rechecking current element or next element
                     if el.is_Coord_Inside(el.transform_lab_coords_into_element_frame(qElLab)):
                         return el

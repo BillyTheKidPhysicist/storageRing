@@ -3,13 +3,13 @@ from typing import Optional
 
 import numpy as np
 
-from asyncDE import solve_Async
+from asyncDE import solve_async
 from latticeElements.utilities import ElementTooShortError, CombinerDimensionError
 from latticeModels import make_Ring_And_Injector, RingGeometryError, InjectorGeometryError, \
     make_Injector_Version_Any, make_Ring_Surrogate_For_Injection_Version_1
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorRingConstraintsV1,\
     LockedDict
-from octopusOptimizer import octopus__optimize
+from octopusOptimizer import octopus_optimize
 from simpleLineSearch import line__search
 from storageRingModeler import StorageRingModel
 from typeHints import sequence
@@ -63,20 +63,20 @@ def build_Injector_And_Surrrogate(injector_params,options):
 
 
 class Solver:
-    def __init__(self, system, ring_params=None,injector_params=None, use_solenoid_field=False, useCollisions=False,
-                 useEnergyCorrection=False, num_particles=1024, useBumper=False,use_standard_tube_OD=False,
+    def __init__(self, system, ring_params=None,injector_params=None, use_solenoid_field=False, use_collisions=False,
+                 use_energy_correction=False, num_particles=1024, useBumper=False,use_standard_tube_OD=False,
                  use_standard_mag_size=False):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system = system
         self.ring_params = ring_params
         self.injector_params=injector_params
-        self.useCollisions = useCollisions
-        self.useEnergyCorrection = useEnergyCorrection
+        self.use_collisions = use_collisions
+        self.use_energy_correction = use_energy_correction
         self.num_particles = num_particles
-        self.storageRingSystemOptions = {'use_solenoid_field': use_solenoid_field, 'has_bumper': useBumper,
+        self.storage_ring_system_options = {'use_solenoid_field': use_solenoid_field, 'has_bumper': useBumper,
                                          'use_standard_tube_OD':use_standard_tube_OD,'use_standard_mag_size':use_standard_mag_size}
 
-    def unpack_Params(self, params):
+    def unpack_params(self, params):
         ring_params, injector_params = None, None
         if self.system == 'ring':
             ring_params = params
@@ -93,19 +93,19 @@ class Solver:
         return ring_params, injector_params
 
     def build_Lattices(self, params):
-        ring_params, injector_params = self.unpack_Params(params)
+        ring_params, injector_params = self.unpack_params(params)
         if self.system == 'injector_Surrogate_Ring':
-            lattice_ring, lattice_injector = build_Injector_And_Surrrogate(injector_params, options=self.storageRingSystemOptions)
+            lattice_ring, lattice_injector = build_Injector_And_Surrrogate(injector_params, options=self.storage_ring_system_options)
         else:
             system_params = (ring_params, injector_params)
-            lattice_ring, lattice_injector = make_Ring_And_Injector(system_params, '3', options=self.storageRingSystemOptions)
+            lattice_ring, lattice_injector = make_Ring_And_Injector(system_params, '3', options=self.storage_ring_system_options)
         return lattice_ring, lattice_injector
 
     def make_System_Model(self, params):
         lattice_ring, lattice_injector = self.build_Lattices(params)
-        model = StorageRingModel(lattice_ring, lattice_injector, use_collisions=self.useCollisions,
-                                 num_particles_swarm=self.num_particles, use_energy_correction=self.useEnergyCorrection,
-                                 use_bumper=self.storageRingSystemOptions['has_bumper'])
+        model = StorageRingModel(lattice_ring, lattice_injector, use_collisions=self.use_collisions,
+                                 num_particles_swarm=self.num_particles, use_energy_correction=self.use_energy_correction,
+                                 use_bumper=self.storage_ring_system_options['has_bumper'])
         return model
 
     def _solve(self, params: tuple[float, ...]) -> Solution:
@@ -163,7 +163,7 @@ def make_Bounds(expand, keysToNotChange=None, whichBounds='ring') -> np.ndarray:
     return bounds
 
 
-def get_Cost_Function(system: str, ring_params: Optional[tuple],injector_params: Optional[tuple], use_solenoid_field,
+def get_cost_function(system: str, ring_params: Optional[tuple],injector_params: Optional[tuple], use_solenoid_field,
                       useBumper, num_particles,use_standard_tube_OD,use_standard_mag_size) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
@@ -180,20 +180,20 @@ def get_Cost_Function(system: str, ring_params: Optional[tuple],injector_params:
     return cost
 
 
-def _global_Optimize(cost_Function, bounds: sequence, globalTol: float, processes: int, disp: bool) -> tuple[
+def _global_optimize(cost_Function, bounds: sequence, globalTol: float, processes: int, disp: bool) -> tuple[
     float, float]:
     """globally optimize a storage ring model cost function"""
-    member = solve_Async(cost_Function, bounds, 15 * len(bounds), workers=processes,
-                         saveData='optimizerProgress', tol=globalTol, disp=disp)
+    member = solve_async(cost_Function, bounds, 15 * len(bounds), workers=processes,
+                         save_data='optimizerProgress', tol=globalTol, disp=disp)
     xOptimal, costMin = member.DNA, member.cost
     return xOptimal, costMin
 
 
-def _local_Optimize(cost_Function, bounds: sequence, xi: sequence, disp: bool, processes: int,
+def _local_optimize(cost_Function, bounds: sequence, xi: sequence, disp: bool, processes: int,
                     local_optimizer: str, local_search_region: float) -> tuple[tuple[float,...], float]:
     """Locally optimize a storage ring model cost function"""
     if local_optimizer == 'octopus':
-        xOptimal, costMin = octopus__optimize(cost_Function, bounds, xi, disp=disp, processes=processes,
+        xOptimal, costMin = octopus_optimize(cost_Function, bounds, xi, disp=disp, processes=processes,
                                              num_searches_criteria=20, tentacle_length=local_search_region)
     elif local_optimizer == 'simple_line':
         xOptimal, costMin = line__search(cost_Function, xi, 1e-3, bounds,processes=processes)
@@ -213,13 +213,13 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expand
     assert ring_params is not None if system == 'injector_Actual_Ring' else True
     assert injector_params is not None if system in ('ring','both') else True
     bounds = make_Bounds(expandedBounds, whichBounds=system)
-    cost_Function = get_Cost_Function(system, ring_params,injector_params, use_solenoid_field, useBumper, num_particles,
+    cost_Function = get_cost_function(system, ring_params,injector_params, use_solenoid_field, useBumper, num_particles,
                                       use_standard_tube_OD,use_standard_mag_size)
 
     if method == 'global':
-        xOptimal, costMin = _global_Optimize(cost_Function, bounds, globalTol, processes, disp)
+        xOptimal, costMin = _global_optimize(cost_Function, bounds, globalTol, processes, disp)
     else:
-        xOptimal, costMin = _local_Optimize(cost_Function, bounds, xi, disp, processes, local_optimizer,
+        xOptimal, costMin = _local_optimize(cost_Function, bounds, xi, disp, processes, local_optimizer,
                                             local_search_region)
 
     return xOptimal, costMin

@@ -6,13 +6,13 @@ from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp
 @numba.njit()
 def _force_Func(x, y, z,field_data):
     """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr,Varr=field_data
-    return vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
+    x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr,Varr=field_data
+    return vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
 
 @numba.njit()
 def _magnetic_potential_Func( x, y, z,field_data):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = field_data
-    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
+    x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = field_data
+    return scalar_interp3D(x, y, z, x_arr, y_arr, z_arr, V_arr)
 
 @numba.njit()
 def force( x, y, z,params,field_data):

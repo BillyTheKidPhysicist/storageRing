@@ -25,9 +25,9 @@ def make_and_check_arrays_are_odd(x_min, x_max, y_min, y_max, z_min, z_max, numX
     assert x_max > x_min and y_max > y_min and z_max > z_min
     x_arr = np.linspace(x_min, x_max, numX)  # this becomes z in element frame, with sign change
     y_arr = np.linspace(y_min, y_max, numY)  # this remains y in element frame
-    zArr = np.linspace(z_min, z_max, numZ)  # this becomes x in element frame
-    assert not is_even(len(x_arr)) and not is_even(len(y_arr)) and not is_even(len(zArr))
-    return x_arr, y_arr, zArr
+    z_arr = np.linspace(z_min, z_max, numZ)  # this becomes x in element frame
+    assert not is_even(len(x_arr)) and not is_even(len(y_arr)) and not is_even(len(z_arr))
+    return x_arr, y_arr, z_arr
 
 
 class CombinerHalbachLensSim(CombinerIdeal):
@@ -122,8 +122,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         state = np.random.get_state()
         np.random.seed(seed)
         lens = _HalbachLensFieldGenerator(rp_layers, magnet_widths, self.Lm, self.PTL.magnet_grade,
-                                          applyMethodOfMoments=True,
-                                          useStandardMagErrors=self.PTL.use_mag_errors,
+                                          use_method_of_moments=True,
+                                          use_standard_mag_errors=self.PTL.use_mag_errors,
                                           numDisks=numDisks,
                                           use_solenoid_field=self.PTL.use_solenoid_field, position=(lensCenter, 0, 0),
                                           orientation=Rot.from_rotvec([0, np.pi / 2.0, 0.0]))  # must reuse lens
@@ -135,28 +135,28 @@ class CombinerHalbachLensSim(CombinerIdeal):
         assert x_max > x_min
         minPointsX=11
         numPointsX = round_And_Make_Odd(
-            self.PTL.fieldDensityMultiplier * self.pointsPerRadiusX * (x_max - x_min) / self.rp)
+            self.PTL.field_dens_mult * self.pointsPerRadiusX * (x_max - x_min) / self.rp)
         return numPointsX if numPointsX>=minPointsX else minPointsX
 
     def make_Internal_Field_data_symmetry(self) -> tuple[ndarray, ...]:
-        x_arr, y_arr, zArr = self.make_Grid_Coords_Arrays_Internal_Symmetry()
-        field_data = self.make_Field_Data(x_arr, y_arr, zArr)
+        x_arr, y_arr, z_arr = self.make_Grid_Coords_Arrays_Internal_Symmetry()
+        field_data = self.make_Field_Data(x_arr, y_arr, z_arr)
         return field_data
 
     def make_Field_data_full(self) -> tuple[ndarray, ...]:
-        x_arr, y_arr, zArr = self.make_Full_Grid_Coord_Arrays()
-        field_data = self.make_Field_Data(x_arr, y_arr, zArr)
+        x_arr, y_arr, z_arr = self.make_Full_Grid_Coord_Arrays()
+        field_data = self.make_Field_Data(x_arr, y_arr, z_arr)
         return field_data
 
     def make_External_Field_data_symmetry(self) -> tuple[ndarray, ...]:
-        x_arr, y_arr, zArr = self.make_Grid_Coords_Arrays_External_Symmetry()
+        x_arr, y_arr, z_arr = self.make_Grid_Coords_Arrays_External_Symmetry()
         xArrInterp = x_arr.copy()
         assert xArrInterp[
                    -1] - TINY_INTERP_STEP == self.space  # interp must have overshoot of this size for trick below
         # to work
         xArrInterp[-1] -= TINY_INTERP_STEP + INTERP_MAGNET_OFFSET  # to avoid interpolating inside the magnetic
         # material I cheat here by shifting the point the field is calcuated at a tiny bit
-        field_data = self.make_Field_Data(xArrInterp, y_arr, zArr)
+        field_data = self.make_Field_Data(xArrInterp, y_arr, z_arr)
         field_data[0][:] = x_arr
         return field_data
 
@@ -199,7 +199,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         m = abs(np.tan(self.ang))
         y_max = m * z_max + (self.acceptance_width + m * self.Lb) + TINY_INTERP_STEP
         y_min = -y_max
-        numY0 = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.fieldDensityMultiplier)
+        numY0 = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.field_dens_mult)
         numY = round_And_Make_Odd(numY0 * y_max / self.rp)
         numX = self.num_points_x_interp(x_min, x_max)
         numX, numY, numZ = [round_And_Make_Odd(val * 2 - 1) for val in (numX, numY, numZ)]
@@ -210,7 +210,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
-        numY0 = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.fieldDensityMultiplier)
+        numY0 = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.field_dens_mult)
         #todo: something is wrong here with the interp stuff. There is out of bounds error
         x_min = self.space + self.Lm / 2 - (
                 self.Lb + (self.La + self.acceptance_width * sin(abs(self.ang))) * cos(abs(self.ang))) / 2.0
@@ -229,7 +229,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
-        numY = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.fieldDensityMultiplier)
+        numY = numZ = round_And_Make_Odd(self.num_grid_points_r * self.PTL.field_dens_mult)
         x_min = self.space - TINY_INTERP_STEP
         x_max = self.space + self.Lm / 2.0 + TINY_INTERP_STEP
         y_min = -TINY_INTERP_STEP
@@ -240,16 +240,16 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return make_and_check_arrays_are_odd(x_min, x_max, y_min, y_max, z_min, z_max, numX, numY, numZ)
 
     def max_ap_internal_interp_region(self) -> float:
-        _, y_arr, zArr = self.make_Grid_Coords_Arrays_Internal_Symmetry()
-        assert max(np.abs(y_arr)) == max(np.abs(zArr))  # must be same for logic below or using radius
+        _, y_arr, z_arr = self.make_Grid_Coords_Arrays_Internal_Symmetry()
+        assert max(np.abs(y_arr)) == max(np.abs(z_arr))  # must be same for logic below or using radius
         radius_interp_region = max(np.abs(y_arr))
         assert radius_interp_region < self.rp - B_GRAD_STEP_SIZE  # interp must not reach into material for logic below
         ap_maxGoodField = radius_interp_region - np.sqrt(2) * (y_arr[1] - y_arr[0])
         return ap_maxGoodField
 
-    def make_Field_Data(self, x_arr, y_arr, zArr) -> tuple[ndarray, ...]:
+    def make_Field_Data(self, x_arr, y_arr, z_arr) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
-        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, zArr)).T.reshape(-1, 3)
+        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)
         B_norm_grad, B_norm = np.nan * np.zeros((len(volume_coords), 3)), np.nan * np.zeros(len(volume_coords))
         validR = np.linalg.norm(volume_coords[:, 1:], axis=1) <= self.rp - B_GRAD_STEP_SIZE
         validX = np.logical_or(volume_coords[:, 0] < self.space - B_GRAD_STEP_SIZE,

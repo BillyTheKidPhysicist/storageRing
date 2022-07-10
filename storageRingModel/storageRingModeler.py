@@ -26,7 +26,7 @@ def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bum
     """Check that the injector lattice has the expected ordering of elements. Some logic may break if the injector
     is not laid out as expected. """
     expected_elements = (*ELEMENTS_BUMPER, *ELEMENTS_MODE_MATCHER) if has_bumper else ELEMENTS_MODE_MATCHER
-    for el, expected_type in zip(lattice_injector.elList, expected_elements):
+    for el, expected_type in zip(lattice_injector.el_list, expected_elements):
         if not type(el) is expected_type:
             return False
     return True
@@ -106,7 +106,7 @@ class StorageRingModel:
     def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
         lenses = []
-        for i, el in enumerate(self.lattice_ring.elList):
+        for i, el in enumerate(self.lattice_ring.el_list):
             if type(el) is HalbachLensSim:
                 lenses.append(el)
             if i == self.lattice_ring.combiner.index:
@@ -272,7 +272,7 @@ class StorageRingModel:
 
     def get_drift_after_last_lens_injector(self) -> Drift:
         """Get drift element which comes immediately after last lens in injector"""
-        drift = self.lattice_injector.elList[self.injector_lens_indices[-1] + 1]
+        drift = self.lattice_injector.el_list[self.injector_lens_indices[-1] + 1]
         assert type(drift) is Drift
         return drift
 

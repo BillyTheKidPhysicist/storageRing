@@ -81,54 +81,54 @@ def generate_Lattice(configuration):
     # a variety of lattice configurations are tested
     if configuration == '1':
         PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
-        PTL.add_Drift(.25)
-        PTL.add_Halbach_Bender_Sim_Segmented(.0254, .01, 150, 1.0, rOffsetFact=1.015)
-        PTL.add_Lens_Ideal(1.0, 1.0, .01)
-        PTL.add_Halbach_Lens_Sim(.01, 1.0)
-        PTL.add_Drift(.1)
-        PTL.end_Lattice(constrain=False)
+        PTL.add_drift(.25)
+        PTL.add_segmented_halbach_bender(.0254, .01, 150, 1.0, r_offset_fact=1.015)
+        PTL.add_lens_ideal(1.0, 1.0, .01)
+        PTL.add_halbach_lens_sim(.01, 1.0)
+        PTL.add_drift(.1)
+        PTL.end_lattice(constrain=False)
     elif configuration in ('2', '5'):
         PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='injector')
-        PTL.add_Drift(.25)
-        PTL.add_Halbach_Lens_Sim(.01, .5)
-        PTL.add_Drift(.1)
+        PTL.add_drift(.25)
+        PTL.add_halbach_lens_sim(.01, .5)
+        PTL.add_drift(.1)
         if configuration == '2':
-            PTL.add_Combiner_Sim()
+            PTL.add_combiner_sim()
         else:
-            PTL.add_Combiner_Sim_Lens(.1, .02, layers=2)
-        PTL.add_Halbach_Lens_Sim(.01, .5)
-        PTL.end_Lattice()
+            PTL.add_combiner_sim_lens(.1, .02, layers=2)
+        PTL.add_halbach_lens_sim(.01, .5)
+        PTL.end_lattice()
     elif configuration == '3':
         PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
-        PTL.add_Lens_Ideal(1.0, 1.0, .01)
-        PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .01)
-        PTL.add_Lens_Ideal(1.0, 1.0, .01)
-        PTL.add_Bender_Ideal(np.pi, 1.0, 1.0, .01)
-        PTL.end_Lattice()
+        PTL.add_lens_ideal(1.0, 1.0, .01)
+        PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
+        PTL.add_lens_ideal(1.0, 1.0, .01)
+        PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
+        PTL.end_lattice()
     elif configuration in ('4', '6'):
         PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
-        PTL.add_Halbach_Lens_Sim(.01, .5)
+        PTL.add_halbach_lens_sim(.01, .5)
         if configuration == '4':
-            PTL.add_Combiner_Sim()
+            PTL.add_combiner_sim()
         else:
-            PTL.add_Combiner_Sim_Lens(.1, .02, layers=2)
-        PTL.add_Halbach_Lens_Sim(.01, .5)
-        PTL.add_Halbach_Bender_Sim_Segmented(.0254 / 2, .01, None, 1.0, rOffsetFact=1.015)
-        PTL.add_Halbach_Lens_Sim(.01, None, constrain=True)
-        PTL.add_Halbach_Bender_Sim_Segmented(.0254 / 2, .01, None, 1.0, rOffsetFact=1.015)
-        PTL.end_Lattice(constrain=True)
-        PTL.elList[0].update_Field_Fact(.3)
-        PTL.elList[2].update_Field_Fact(.3)
+            PTL.add_combiner_sim_lens(.1, .02, layers=2)
+        PTL.add_halbach_lens_sim(.01, .5)
+        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+        PTL.add_halbach_lens_sim(.01, None, constrain=True)
+        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+        PTL.end_lattice(constrain=True)
+        PTL.el_list[0].update_Field_Fact(.3)
+        PTL.el_list[2].update_Field_Fact(.3)
     else:
         raise Exception('no proper configuration name provided')
     return PTL
 
 
-def TEST_Lattice_Configuration(configuration, fullTest=False, saveData=False, parallel=False):
+def TEST_Lattice_Configuration(configuration, fullTest=False, save_data=False, parallel=False):
     PTL = generate_Lattice(configuration)
     testSwarm = generate_Test_Swarm(PTL)
     TESTName = 'test_' + configuration
-    if saveData == True:
+    if save_data == True:
         _save_TEST_Data(PTL, testSwarm, TESTName)
     elif fullTest == True:
         for use_fast_mode in [True, False]:
@@ -146,7 +146,7 @@ def _save_New_Data():
     tests = ['1', '2', '3', '4', '5', '6']
     for testNum in tests:
         print('Test number ' + testNum)
-        TEST_Lattice_Configuration(testNum, saveData=True)
+        TEST_Lattice_Configuration(testNum, save_data=True)
         print('Saved successfully')
 
 

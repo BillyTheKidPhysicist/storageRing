@@ -237,7 +237,7 @@ def make_Trapezoid_Points(L, theta1, theta2, halfWidth):
 
 def make_Drift_Shapely_Objects(el: Drift):
     """Make shapely objects for drift element. Drift element is trapezoid shaped to allow for tilted input/output"""
-    L, ap, outer_half_width, theta1, theta2 = el.L, el.ap, el.outer_half_width, el.inputTiltAngle, el.outputTiltAngle
+    L, ap, outer_half_width, theta1, theta2 = el.L, el.ap, el.outer_half_width, el.input_tilt_angle, el.output_tilt_angle
     pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
     pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outer_half_width)
     for point in [*pointsInner, *pointsOuter]:
@@ -313,7 +313,7 @@ def make_Element_Shapely_Object(el: Element) -> tuple[Polygon, Polygon]:
     return shapelyOuter, shapelyInner
 
 
-def build_Shapely_Objects(elementList: list[Element]) -> None:
+def build_shapely_objects(elementList: list[Element]) -> None:
     """Build the inner and outer shapely obejcts that represent the 2D geometries of the each element. This is the
     projection of an element onto the horizontal plane that bisects it. Inner geometry repsents vacuum, and outer
      the eternal profile. Ideal elements have to out profile"""

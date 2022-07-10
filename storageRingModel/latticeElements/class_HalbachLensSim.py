@@ -39,8 +39,8 @@ class HalbachLensSim(LensIdeal):
         assert self.fringe_frac_outer == 1.5 and self.fringe_frac_inner_min == 4.0, "May need to change numgrid points if " \
                                                                                "this changes"
         self.rp = min(rp_layers)
-        self.numGridPointsX = round_And_Make_Odd(21 * PTL.fieldDensityMultiplier)
-        self.num_grid_points_r = round_And_Make_Odd(25 * PTL.fieldDensityMultiplier)
+        self.numGridPointsX = round_And_Make_Odd(21 * PTL.field_dens_mult)
+        self.num_grid_points_r = round_And_Make_Odd(25 * PTL.field_dens_mult)
         self.fringeFieldLength = max(rp_layers) * self.fringe_frac_outer
         super().__init__(PTL, L, None, self.rp,
                          None)  # todo: there should be multiple inheritance here for geometries
@@ -167,16 +167,16 @@ class HalbachLensSim(LensIdeal):
         assert not is_even(num_points_xy) and not is_even(num_points_z)
         x_arr = np.linspace(x_min, x_max, num_points_z)
         yArr_Quadrant = np.linspace(y_min, y_max, num_points_xy)
-        zArr_Quadrant = yArr_Quadrant.copy()
-        return x_arr, yArr_Quadrant, zArr_Quadrant
+        z_arr_Quadrant = yArr_Quadrant.copy()
+        return x_arr, yArr_Quadrant, z_arr_Quadrant
 
     def make_unshaped_interp_data_2D(self) -> np.ndarray:
 
         # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
         # save resources
-        x_arr, y_arr, zArr = self.make_Grid_Coord_Arrays(True)
+        x_arr, y_arr, z_arr = self.make_Grid_Coord_Arrays(True)
         lensCenter=self.magnet.Lm/2.0+self.magnet.x_in_offset
-        planeCoords = np.asarray(np.meshgrid(lensCenter, y_arr, zArr)).T.reshape(-1, 3)
+        planeCoords = np.asarray(np.meshgrid(lensCenter, y_arr, z_arr)).T.reshape(-1, 3)
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(planeCoords,B_GRAD_STEP_SIZE,False)
         data2D = np.column_stack((planeCoords[:, 1:], B_norm_grad[:, 1:], B_norm))  # 2D is formated as
         # [[x,y,z,B0Gx,B0Gy,B0],..]
@@ -192,9 +192,9 @@ class HalbachLensSim(LensIdeal):
 
         """
         assert not (use_magnet_errors and useSymmetry)
-        x_arr, y_arr, zArr = self.make_Grid_Coord_Arrays(useSymmetry)
+        x_arr, y_arr, z_arr = self.make_Grid_Coord_Arrays(useSymmetry)
 
-        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, zArr)).T.reshape(-1,3)  # note that these coordinates can have
+        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1,3)  # note that these coordinates can have
         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 
         B_norm_grad, B_norm=self.magnet.get_valid_field_values(volume_coords,B_GRAD_STEP_SIZE,use_magnet_errors)
@@ -211,7 +211,7 @@ class HalbachLensSim(LensIdeal):
         else:
             interp_data_2D = (np.ones(1) * np.nan,) * 5 #dummy data to make Numba happy
 
-        y_arr,zArr=interp_data_3D[1],interp_data_3D[2]
+        y_arr,z_arr=interp_data_3D[1],interp_data_3D[2]
         maxGridSep = np.sqrt(2) * (y_arr[1] - y_arr[0])
         assert self.rp - B_GRAD_STEP_SIZE - maxGridSep > self.maximum_Good_Field_Aperture()
         return interp_data_2D,interp_data_3D
