@@ -4,7 +4,7 @@ import numpy as np
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 
 spec_Combiner_Sim = [
-    ('VArr', numba.float64[::1]),
+    ('V_arr', numba.float64[::1]),
     ('FxArr', numba.float64[::1]),
     ('FyArr', numba.float64[::1]),
     ('FzArr', numba.float64[::1]),
@@ -27,7 +27,7 @@ spec_Combiner_Sim = [
 class CombinerSimFieldHelper_Numba:
 
     def __init__(self, field_data, La, Lb, Lm, space, apL, apR, apz, ang, field_fact):
-        self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr = field_data
+        self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.V_arr = field_data
         self.La = La
         self.Lb = Lb
         self.Lm = Lm
@@ -40,7 +40,7 @@ class CombinerSimFieldHelper_Numba:
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        field_data = self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
+        field_data = self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.V_arr
         return (field_data, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
                 self.field_fact), ()
 
@@ -49,7 +49,7 @@ class CombinerSimFieldHelper_Numba:
         return vec_interp3D(x, y, z, self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr)
 
     def _magnetic_potential_Func(self, x, y, z):
-        return scalar_interp3D(x, y, z, self.x_arr, self.y_arr, self.zArr, self.VArr)
+        return scalar_interp3D(x, y, z, self.x_arr, self.y_arr, self.zArr, self.V_arr)
 
     def force(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):

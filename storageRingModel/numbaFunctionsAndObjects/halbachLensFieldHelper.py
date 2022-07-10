@@ -60,8 +60,8 @@ class LensHalbachFieldHelper_Numba:
         if not useImperfectInterp:
             V = scalar_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd, self.VArrEnd)
         else:
-            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
-            V = scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldPerturbationData
+            V = scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
         return V
 
     def _magnetic_potential_Func_Inner(self, x: float, y: float, z: float) -> float:
@@ -75,7 +75,7 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = vec_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd,
                                          self.FxArrEnd, self.FyArrEnd, self.FzArrEnd)
         else:
-            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
+            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldPerturbationData
             Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 

@@ -42,7 +42,7 @@ class ParticleTracerLattice:
         self.initialLocation = (0.0, 0.0) if initialLocation is None else initialLocation
         self.initialAngle = -np.pi if initialAngle is None else initialAngle
         self.combinerIndex: Optional[int] = None  # the index in the lattice where the combiner is
-        self.totalLength: Optional[float] = None  # total length of lattice, m
+        self.total_length: Optional[float] = None  # total length of lattice, m
         self.jitter_amp = jitter_amp
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.use_mag_errors = use_mag_errors
@@ -53,7 +53,7 @@ class ParticleTracerLattice:
         self.linearElementsToConstraint: list[HalbachLensSim] = []  # elements whos length will be changed when the
         # lattice is constrained to satisfy geometry. Must be inside bending region
 
-        self.isClosed = None  # is the lattice closed, ie end and beginning are smoothly connected?
+        self.is_closed = None  # is the lattice closed, ie end and beginning are smoothly connected?
         self.magnet_grade = magnet_grade
         self.use_solenoid_field = use_solenoid_field
 
@@ -290,14 +290,14 @@ class ParticleTracerLattice:
             if build_field_helpers:
                 el.build_fast_field_helper()
 
-        self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
+        self.is_closed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed
         if self.lattice_type == 'storageRing' and constrain:  # double check
             assert is_Particle_Tracer_Lattice_Closed(self)
         build_Shapely_Objects(self.elList)
-        self.totalLength = 0
+        self.total_length = 0
         for el in self.elList:  # total length of particle's orbit in an element
-            self.totalLength += el.Lo
+            self.total_length += el.Lo
 
     def end_Lattice(self, constrain: bool = False, buildLattice: bool = True) -> None:
         # for element in self.elList:
@@ -344,7 +344,7 @@ class ParticleTracerLattice:
     def get_Lab_Coords_From_Orbit_Distance(self, xPos: np.ndarray) -> tuple[float, float]:
         # xPos: distance along ideal orbit
         assert xPos >= 0.0
-        xPos = xPos % self.totalLength  # xpos without multiple revolutions
+        xPos = xPos % self.total_length  # xpos without multiple revolutions
         xInOrbitFrame = None
         element = None
         cumulativeLen = 0.0
@@ -390,8 +390,8 @@ class ParticleTracerLattice:
                     xy = particle.qi[:2]
                     plt.scatter(*xy, marker='^', s=30, c='blue')
             if showTraceLines:
-                if particle.qArr is not None and len(particle.qArr) > 0:  # if there are lines to show
-                    plt.plot(particle.qArr[:, 0], particle.qArr[:, 1], c=color, alpha=traceLineAlpha)
+                if particle.q_arr is not None and len(particle.q_arr) > 0:  # if there are lines to show
+                    plt.plot(particle.q_arr[:, 0], particle.q_arr[:, 1], c=color, alpha=traceLineAlpha)
 
         for el in self.elList:
             if plotInner:

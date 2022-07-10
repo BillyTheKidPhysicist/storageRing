@@ -11,8 +11,8 @@ def _force_Func(x, y, z,field_data):
 
 @numba.njit()
 def _magnetic_potential_Func( x, y, z,field_data):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = field_data
-    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = field_data
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
 
 @numba.njit()
 def force( x, y, z,params,field_data):

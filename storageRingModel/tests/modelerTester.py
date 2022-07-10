@@ -40,23 +40,23 @@ def test_Modeler():
     for particle_injector, particle_ring in zip(swarm_injector_traced, swarmRingTraced):
         assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
 
-        if particle_injector.qArr is not None and len(particle_injector.qArr) > 1:
-            qInj_RingFrame = np.array([model.convert_position_injector_to_ring_frame(q) for q in particle_injector.qArr])
+        if particle_injector.q_arr is not None and len(particle_injector.q_arr) > 1:
+            qInj_RingFrame = np.array([model.convert_position_injector_to_ring_frame(q) for q in particle_injector.q_arr])
             line = LineString(qInj_RingFrame[:, :2])
             assert any(lens.SO_outer.intersects(line) for lens in lenses) == \
                    model.does_ring_clip_injector_particle(particle_injector)  # test that the
             # method of looking for particle clipping with shapely and without logging agrees with this more
             # straightforward method
 
-            if particle_ring.qArr is not None and len(particle_ring.qArr) > 1:
+            if particle_ring.q_arr is not None and len(particle_ring.q_arr) > 1:
                 # assert particles are on top of each other at handoff between injector and ring, and that they are
                 # very collinear by comparing angle injector with last two position steps to angle of ring by
                 # momentum. This is valid because injector particle is in end of combiner with almost no field, and ring
                 # particle is in drift region
-                assert iscloseAll(particle_ring.qArr[0], qInj_RingFrame[-1], 1e-12)
+                assert iscloseAll(particle_ring.q_arr[0], qInj_RingFrame[-1], 1e-12)
                 slopeInjEnd = (qInj_RingFrame[-1][1] - qInj_RingFrame[-2][1]) / (
                             qInj_RingFrame[-1][0] - qInj_RingFrame[-2][0])
-                slopeRing = particle_ring.pArr[-1][1] / particle_ring.pArr[-1][0]
+                slopeRing = particle_ring.p_arr[-1][1] / particle_ring.p_arr[-1][0]
                 assert isclose(slopeRing, slopeInjEnd, abs_tol=5e-6)
     r2Inj = lattice_injector.combiner.r2
     r2Ring = lattice_ring.combiner.r2

@@ -6,7 +6,7 @@ from helperTools import inch_To_Meter
 realNumber = (float, int, np.float64, np.int64)
 
 
-class lockedDict(dict):
+class LockedDict(dict):
 
     def __init__(self, dictionary: dict):
         super().__init__(dictionary)
@@ -57,7 +57,7 @@ INJECTOR_TUNABILITY_LENGTH = 2e-2
 
 
 # optimal injector parameters
-injectorParamsOptimalAny: lockedDict = lockedDict({
+injectorParamsOptimalAny: LockedDict = LockedDict({
     "L1": 0.05285079,  # length of first lens
     "rp1": 0.01473206,  # bore radius of first lens
     "L2": 0.16540282 ,  # length of first lens
@@ -69,7 +69,7 @@ injectorParamsOptimalAny: lockedDict = lockedDict({
     "gap3": 0.21845571  ##separation between final lens and input to combiner
 })
 
-injectorParamsBoundsAny: lockedDict = lockedDict({
+injectorParamsBoundsAny: LockedDict = LockedDict({
     "L1": (.05, .3),  # length of first lens
     "rp1": (.01, .03),  # bore radius of first lens
     "L2": (.05, .3),  # length of second lens
@@ -81,12 +81,12 @@ injectorParamsBoundsAny: lockedDict = lockedDict({
     "gap3": (.05, .3)  ##separation between final lens and input to combnier
 })
 
-injectorRingConstraintsV1: lockedDict = lockedDict({
+injectorRingConstraintsV1: LockedDict = LockedDict({
     'rp1LensMax': .01
 })
 
 # flange outside diameters
-flange_OD: lockedDict = lockedDict({
+flange_OD: LockedDict = LockedDict({
     '1-1/3': 34e-3,
     '2-3/4': 70e-3,
     '4-1/2': 114e-3
@@ -94,7 +94,7 @@ flange_OD: lockedDict = lockedDict({
 
 standard_Tubing_OD = (3 / 16, 1 / 4, 3 / 8, 1 / 2, 5 / 8, 3 / 4, 1.0)
 
-atomCharacteristic = lockedDict(
+atomCharacteristic = LockedDict(
     {"nominalDesignSpeed": DEFAULT_ATOM_SPEED})  # Elements are placed assuming this is the nominal
 # speed in the ring.
 
@@ -118,7 +118,7 @@ _system_constants = {
     "lens1ToLens2_Valve_Length": inch_To_Meter(3.25),  # includes flanges and screws
     "lens1ToLens2_Inject_Valve_OD": flange_OD['2-3/4']  # outside diameter of valve
 }
-system_constants: lockedDict = lockedDict(_system_constants)
+system_constants: LockedDict = LockedDict(_system_constants)
 
 # --------optimizer bounds-------
 
@@ -127,24 +127,24 @@ system_constants: lockedDict = lockedDict(_system_constants)
 
 # version 1 bounds
 # simple model with [lens,combiner,lens,bender,lens,lens,bender]
-optimizerBounds_V1_3: lockedDict = lockedDict({
-    'rpLens3_4': (.005, .03),
+optimizerBounds_V1_3: LockedDict = LockedDict({
+    'rp_lens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
     # 'rpLens2': (.02, .04),
-    'rpBend': (.005, .01),
+    'rp_bend': (.005, .01),
     'L_Lens1': (.05, .5),
     'L_Lens2': (.3, .7)
 })
 
 # version 2 bounds
 # more complicated model with 2 lens on either side of combiner
-optimizerBounds_V2: lockedDict = lockedDict({
-    'rpLens3_4': (.005, .03),
+optimizerBounds_V2: LockedDict = LockedDict({
+    'rp_lens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax'] * 2),
     'rpLens2': (.005, injectorRingConstraintsV1['rp1LensMax']),
     'rpLens3': (.01, .04),
     'rpLens4': (.01, .04),
-    'rpBend': (.005, .01),
+    'rp_bend': (.005, .01),
     'L_Lens1': (.1, .4),
     'L_Lens2': (.1, .4),
     'L_Lens3': (.1, .4),
@@ -152,14 +152,14 @@ optimizerBounds_V2: lockedDict = lockedDict({
 })
 
 # as of June 23, solution 6
-ringParamsOptimal_V3 = lockedDict({
-    'rpLens3_4': 0.02102425839849725,
+ringParamsOptimal_V3 = LockedDict({
+    'rp_lens3_4': 0.02102425839849725,
     'rpLens1': .01,
-    'rpBend': 0.00759624174653381,
+    'rp_bend': 0.00759624174653381,
     'L_Lens1': 0.441164241347491,
     'L_Lens2': 0.46839105549798354
 })
 
-constants_V1_3=lockedDict({
+constants_V1_3=LockedDict({
     "rpLens2":.04
 })

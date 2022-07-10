@@ -63,12 +63,11 @@ class ParticleTracer:
     def __init__(self, PTL):
         # lattice: ParticleTracerLattice object typically
         self.elList = PTL.elList  # list containing the elements in the lattice in order from first to last (order added)
-        self.totalLatticeLength = PTL.totalLength
+        self.total_lattice_length = PTL.total_length
 
         self.PTL = PTL
 
         self.use_collisions = None
-        self.T_CollisionLast = 0.0  # time since last collision
         self.accelerated = None
 
         self.T = None  # total time elapsed
@@ -78,14 +77,12 @@ class ParticleTracer:
         self.elHasChanged = False  # to record if the particle has changed to another element in the previous step
         self.E0 = None  # total initial energy of particle
 
-        self.numRevs = 0  # tracking numbre of times particle comes back to wear it started
-
         self.particle = None  # particle object being traced
         self.use_fast_mode = None  # wether to use the fast and memory light version that doesn't record parameters of the particle
         self.q_el = None  # this is in the element frame
         self.p_el = None  # this is in the element frame
         self.currentEl = None
-        self.forceLast = None  # the last force value. this is used to save computing time by reusing force
+        self.force_last = None  # the last force value. this is used to save computing time by reusing force
 
         self.use_fast_mode = None  # wether to log particle positions
         self.T0 = None  # total time to trace
@@ -129,7 +126,7 @@ class ParticleTracer:
         self.particle.data_logging = not self.use_fast_mode  # if using fast mode, there will NOT be logging
         self.logTracker = 0
         if self.log_phase_space_coords:
-            self.particle.elPhaseSpaceLog.append((self.particle.qi.copy(), self.particle.pi.copy()))
+            self.particle.el_phase_space_log.append((self.particle.qi.copy(), self.particle.pi.copy()))
         if self.currentEl is None:
             self.particle.clipped = True
         else:
@@ -166,7 +163,7 @@ class ParticleTracer:
             raise Exception('Particle has previously been traced. Tracing a second time is not supported')
         self.particle = particle
         if self.particle.clipped:  # some particles may come in clipped so ignore them
-            self.particle.finished(self.currentEl, self.q_el, self.p_el, totalLatticeLength=0)
+            self.particle.finished(self.currentEl, self.q_el, self.p_el, total_lattice_length=0)
             return self.particle
         self.use_fast_mode = fast_mode
         self.h = h
@@ -175,14 +172,14 @@ class ParticleTracer:
         self.accelerated = accelerated
         if self.particle.clipped:  # some a particles may be clipped after initializing them because they were about
             # to become clipped
-            self.particle.finished(self.currentEl, self.q_el, self.p_el, totalLatticeLength=0, clippedImmediately=True)
+            self.particle.finished(self.currentEl, self.q_el, self.p_el, total_lattice_length=0, clippedImmediately=True)
             return particle
         self.time_Step_Loop()
-        self.forceLast = None  # reset last force to zero
-        self.particle.finished(self.currentEl, self.q_el, self.p_el, totalLatticeLength=self.totalLatticeLength)
+        self.force_last = None  # reset last force to zero
+        self.particle.finished(self.currentEl, self.q_el, self.p_el, total_lattice_length=self.total_lattice_length)
 
         if self.log_phase_space_coords:
-            self.particle.elPhaseSpaceLog.append((self.particle.qf, self.particle.pf))
+            self.particle.el_phase_space_log.append((self.particle.qf, self.particle.pf))
 
         return self.particle
 
@@ -196,13 +193,13 @@ class ParticleTracer:
         :return: wether particle has survived to end or not
         """
 
-        assert not self.PTL.isClosed
-        elLast = self.elList[-1]
-        # q_el = elLast.transform_lab_coords_into_element_frame(self.q_el)
-        # p_el = elLast.transform_Lab_Frame_Vector_Into_Element_Frame(self.p_el)
-        if isinstance(elLast, LensIdeal):
-            timeStepToEnd = (elLast.L - self.q_el[0]) / self.p_el[0]
-        elif isinstance(elLast, CombinerIdeal):
+        assert not self.PTL.is_closed
+        el_last = self.elList[-1]
+        # q_el = el_last.transform_lab_coords_into_element_frame(self.q_el)
+        # p_el = el_last.transform_Lab_Frame_Vector_Into_Element_Frame(self.p_el)
+        if isinstance(el_last, LensIdeal):
+            timeStepToEnd = (el_last.L - self.q_el[0]) / self.p_el[0]
+        elif isinstance(el_last, CombinerIdeal):
             timeStepToEnd = self.q_el[0] / -self.p_el[0]
         else:
             print('not implemented, falling back to previous behaviour')
@@ -212,7 +209,7 @@ class ParticleTracer:
             clipped = True
         else:
             qElEnd = self.q_el + .99 * timeStepToEnd * self.p_el
-            clipped = not elLast.is_Coord_Inside(qElEnd)
+            clipped = not el_last.is_Coord_Inside(qElEnd)
         return clipped
 
     def time_Step_Loop(self) -> None:
@@ -234,9 +231,9 @@ class ParticleTracer:
             self.T += self.h
             self.particle.T = self.T
 
-        if not self.PTL.isClosed:
-            if self.currentEl is self.elList[
-                -1] and self.particle.clipped:  # only bother if particle is in last element
+        if not self.PTL.is_closed:
+            if self.currentEl is self.elList[-1] and self.particle.clipped:  # only bother if particle is
+                # in last element
                 self.particle.clipped = self.did_Particle_Survive_To_End()
 
     def multi_Step_Verlet(self) -> None:
@@ -295,10 +292,10 @@ class ParticleTracer:
         # possible
         q_el = self.q_el  # q old or q sub n
         p_el = self.p_el  # p old or p sub n
-        if not self.elHasChanged and self.forceLast is not None:  # if the particle is inside the lement it was in
+        if not self.elHasChanged and self.force_last is not None:  # if the particle is inside the lement it was in
             # last time step, and it's not the first time step, then recycle the force. The particle is starting at the
             # same position it stopped at last time, thus same force
-            F = self.forceLast
+            F = self.force_last
         else:  # the last force is invalid because the particle is at a new position
             F = self.currentEl.force(q_el)
             F[2] = F[2] - GRAVITATIONAL_ACCELERATION  # simulated mass is 1kg always
@@ -319,7 +316,7 @@ class ParticleTracer:
 
         self.q_el = qEl_n
         self.p_el = pEl_n
-        self.forceLast = F_n  # record the force to be recycled
+        self.force_last = F_n  # record the force to be recycled
         self.elHasChanged = False
 
     def check_If_Particle_Is_Outside_And_Handle_Edge_Event(self, qEl_Next: np.ndarray, q_el: np.ndarray, p_el: np.ndarray) \
@@ -339,7 +336,7 @@ class ParticleTracer:
                     qEl_Next)  # use the old  element for transform
                 pElLab = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(
                     p_el)  # use the old  element for transform
-                self.particle.elPhaseSpaceLog.append((qElLab, pElLab))
+                self.particle.el_phase_space_log.append((qElLab, pElLab))
             nextEl = self.get_Next_Element()
             q_nextEl, p_nextEl = self.transform_To_Next_Element(qEl_Next, p_el, nextEl)
             if not nextEl.is_Coord_Inside(q_nextEl):
@@ -373,7 +370,7 @@ class ParticleTracer:
                 pElLab = self.currentEl.transform_Element_Frame_Vector_Into_Lab_Frame(
                     p_el)  # use the old  element for transform
                 if self.log_phase_space_coords:
-                    self.particle.elPhaseSpaceLog.append((qElLab, pElLab))
+                    self.particle.el_phase_space_log.append((qElLab, pElLab))
                 self.currentEl = nextEl
                 self.particle.current_el = nextEl
                 self.q_el = self.currentEl.transform_lab_coords_into_element_frame(

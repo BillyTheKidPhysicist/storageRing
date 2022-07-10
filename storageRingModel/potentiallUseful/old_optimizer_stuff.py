@@ -185,7 +185,7 @@ def move_Element_Longitudinally(self, elCenter: Element, spaceFracElBefore: floa
 def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     self.update_Ring_And_Injector(X)
     maxInitialTransversePos = 1e-3
-    T_Max = 1.1 * minRevsToTest * self.lattice_ring.totalLength / self.lattice_ring.speed_nominal
+    T_Max = 1.1 * minRevsToTest * self.lattice_ring.total_length / self.lattice_ring.speed_nominal
     swarmTestInitial = self.swarm_tracer_ring.initialize_stablity_testing_swarm(maxInitialTransversePos)
     swarmTestAtCombiner = self.swarm_tracer_ring.move_Swarm_To_Combiner_Output(swarmTestInitial)
     swarmTestTraced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,

@@ -16,12 +16,12 @@ def find_Optimal_Offset_Factor(self, rp: float, rb: float, Lm: float, parallel: 
         particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.speed_nominal, 0.0, 0.0]))
         particleTracer = ParticleTracer(lattice_ring)
         particle = particleTracer.trace(particle, h, 1.0, use_fast_mode=False)
-        qoArr = particle.qoArr
-        particleAngEl = np.arctan2(qoArr[-1][1],
-                                   qoArr[-1][0])  # very close to zero, or negative, if particle made it to
+        qo_arr = particle.qo_arr
+        particleAngEl = np.arctan2(qo_arr[-1][1],
+                                   qo_arr[-1][0])  # very close to zero, or negative, if particle made it to
         # end
         if particleAngEl < .01:
-            error = np.std(1e6 * particle.qoArr[:, 1])
+            error = np.std(1e6 * particle.qo_arr[:, 1])
             return error
         else:
             return np.nan

@@ -47,22 +47,22 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         return self.field_fact, ()
 
     def _force_Func_Internal(self, x, y, z):
-        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldDataInternal
         Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _force_Func_External(self, x, y, z):
-        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldDataExternal
         Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _magnetic_potential_Func_Internal(self, x, y, z):
-        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
-        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldDataInternal
+        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
 
     def _magnetic_potential_Func_External(self, x, y, z):
-        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
-        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = self.fieldDataExternal
+        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
 
     def force(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):

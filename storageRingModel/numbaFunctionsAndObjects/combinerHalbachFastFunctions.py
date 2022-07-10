@@ -9,22 +9,22 @@ from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp
 
 @numba.njit()
 def _force_Func_Internal( x, y, z,fieldDataInternal):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = fieldDataInternal
     Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
     return Fx, Fy, Fz
 @numba.njit()
 def _force_Func_External( x, y, z,fieldDataExternal):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = fieldDataExternal
     Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
     return Fx, Fy, Fz
 @numba.njit()
 def _magnetic_potential_Func_Internal( x, y, z,fieldDataInternal):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
-    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = fieldDataInternal
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
 @numba.njit()
 def _magnetic_potential_Func_External( x, y, z,fieldDataExternal):
-    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
-    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, V_arr = fieldDataExternal
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, V_arr)
 
 #todo: I think this is unnecesary
 @numba.njit()

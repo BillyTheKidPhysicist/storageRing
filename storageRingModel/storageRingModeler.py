@@ -80,11 +80,11 @@ class StorageRingModel:
         Make a shapely line object from an injector particle. If the injector particle was clipped right away
         (starting outside the vacuum for example), None is returned"""
         assert particle.traced
-        if len(particle.elPhaseSpaceLog) <= 1:
+        if len(particle.el_phase_space_log) <= 1:
             return None
         else:
             q_list = []
-            for q, _ in particle.elPhaseSpaceLog:
+            for q, _ in particle.el_phase_space_log:
                 q_ring_frame_xy = self.convert_position_injector_to_ring_frame(q)[:2]
                 q_list.append(q_ring_frame_xy)
             line = LineString(q_list)
@@ -194,16 +194,16 @@ class StorageRingModel:
         for particle_injector, particle_ring in zip(swarm_injector_traced, swarm_ring_traced):
             assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
             color = 'r' if particle_ring.clipped else 'g'
-            q_arr_injector = particle_injector.qArr if len(particle_injector.qArr) != 0 else \
+            q_arr_injector = particle_injector.q_arr if len(particle_injector.q_arr) != 0 else \
                 np.array([particle_injector.qi])
             q_arr_ring = np.array([self.convert_position_injector_to_ring_frame(q) for q in q_arr_injector])
             plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
             if particle_injector.clipped:  # if clipped in injector, plot last location
                 plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color)
-            if particle_ring.qArr is not None and len(particle_ring.qArr) > 1:  # if made to ring
-                plt.plot(particle_ring.qArr[:, 0], particle_ring.qArr[:, 1], c=color, alpha=.3)
+            if particle_ring.q_arr is not None and len(particle_ring.q_arr) > 1:  # if made to ring
+                plt.plot(particle_ring.q_arr[:, 0], particle_ring.q_arr[:, 1], c=color, alpha=.3)
                 if not particle_injector.clipped:  # if not clipped in injector plot last ring location
-                    plt.scatter(particle_ring.qArr[-1, 0], particle_ring.qArr[-1, 1], marker='x', zorder=100, c=color)
+                    plt.scatter(particle_ring.q_arr[-1, 0], particle_ring.q_arr[-1, 1], marker='x', zorder=100, c=color)
         plt.show()
 
     def mode_match(self, floor_plan_cost_cutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:
@@ -257,7 +257,7 @@ class StorageRingModel:
     def swarm_flux_mult_percent_of_max(self, swarm_traced: Swarm) -> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         # all particles survived through the lattice.
-        max_flux_mult = self.T * self.lattice_ring.speed_nominal / self.lattice_ring.totalLength
+        max_flux_mult = self.T * self.lattice_ring.speed_nominal / self.lattice_ring.total_length
         flux_mult_perc = 1e2 * swarm_traced.weighted_flux_mult() / max_flux_mult
         assert 0.0 <= flux_mult_perc <= 100.0
         return flux_mult_perc

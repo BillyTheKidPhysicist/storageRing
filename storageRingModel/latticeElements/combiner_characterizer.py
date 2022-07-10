@@ -47,9 +47,9 @@ def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleoutput_
         qList.append(q)
         pList.append(p)
     assert qFinal[2] == 0.0  # only interested in xy plane bending, expected to be zero
-    qArr = np.asarray(qList)
-    pArr = np.asarray(pList)
-    return qArr, pArr
+    q_arr = np.asarray(qList)
+    p_arr = np.asarray(pList)
+    return q_arr, p_arr
 
 
 def calculateTrajectory_Length(qTracedArr: np.ndarray) -> float:
@@ -70,14 +70,14 @@ def make_Halbahc_Combiner_Force_Function(el) -> Callable:
     return force_Func
 
 
-def input_Angle(pArr) -> float:
-    px, py, _ = pArr[-1]
+def input_Angle(p_arr) -> float:
+    px, py, _ = p_arr[-1]
     return np.arctan(py / px)
 
 
-def closet_Approach_To_Lens_Corner(el: CombinerHalbachLensSim, qArr: np.ndarray):
+def closet_Approach_To_Lens_Corner(el: CombinerHalbachLensSim, q_arr: np.ndarray):
     lensCorner = np.array([el.space + el.Lm + FLAT_WALL_VACUUM_THICKNESS, -el.ap, 0.0])
-    return np.min(np.linalg.norm(qArr - lensCorner, axis=1))
+    return np.min(np.linalg.norm(q_arr - lensCorner, axis=1))
 
 
 def characterize_CombinerIdeal(el: CombinerIdeal):
@@ -87,11 +87,11 @@ def characterize_CombinerIdeal(el: CombinerIdeal):
         assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
         return np.array(combiner_Ideal_Force(*q, el.Lm, el.c1, el.c2))
 
-    qArr, pArr = compute_Particle_Trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
-    assert isclose(qArr[-1, 0], el.Lm) and isclose(qArr[0, 0], 0.0)
-    trajectoryLength = calculateTrajectory_Length(qArr)
-    inputAngle = input_Angle(pArr)
-    inputOffset = qArr[-1, 1]
+    q_arr, p_arr = compute_Particle_Trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
+    assert isclose(q_arr[-1, 0], el.Lm) and isclose(q_arr[0, 0], 0.0)
+    trajectoryLength = calculateTrajectory_Length(q_arr)
+    inputAngle = input_Angle(p_arr)
+    inputOffset = q_arr[-1, 1]
     assert trajectoryLength > el.Lm
     return inputAngle, inputOffset, trajectoryLength
 
@@ -101,14 +101,14 @@ def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, par
         'HIGH_FIELD_SEEKING' if el.field_fact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
     particleOffset = el.output_offset if particleOffset is None else particleOffset
     force_Func = make_Halbahc_Combiner_Force_Function(el)
-    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
+    q_arr, p_arr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
                                              particleoutput_offsetStart=particleOffset, atomState=atomState)
 
-    assert isclose(qArr[-1, 0], el.Lm + 2 * el.space) and isclose(qArr[0, 0], 0.0)
-    minBeamLensSep = closet_Approach_To_Lens_Corner(el, qArr)
-    trajectoryLength = calculateTrajectory_Length(qArr)
-    inputAngle = input_Angle(pArr)
-    inputOffset = qArr[-1, 1]
+    assert isclose(q_arr[-1, 0], el.Lm + 2 * el.space) and isclose(q_arr[0, 0], 0.0)
+    minBeamLensSep = closet_Approach_To_Lens_Corner(el, q_arr)
+    trajectoryLength = calculateTrajectory_Length(q_arr)
+    inputAngle = input_Angle(p_arr)
+    inputOffset = q_arr[-1, 1]
     return inputAngle, inputOffset, trajectoryLength, minBeamLensSep
 
 
@@ -124,10 +124,10 @@ def characterize_CombinerSim(el: CombinerSim):
         F[2] = 0.0
         return F
 
-    qArr, pArr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
-    assert isclose(qArr[-1, 0], 2 * el.space + el.Lm) and isclose(qArr[0, 0], 0.0)
-    trajectoryLength = calculateTrajectory_Length(qArr)
-    inputAngle = input_Angle(pArr)
-    inputOffset = qArr[-1, 1]
+    q_arr, p_arr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
+    assert isclose(q_arr[-1, 0], 2 * el.space + el.Lm) and isclose(q_arr[0, 0], 0.0)
+    trajectoryLength = calculateTrajectory_Length(q_arr)
+    inputAngle = input_Angle(p_arr)
+    inputOffset = q_arr[-1, 1]
     assert trajectoryLength > el.Lm
     return inputAngle, inputOffset, trajectoryLength

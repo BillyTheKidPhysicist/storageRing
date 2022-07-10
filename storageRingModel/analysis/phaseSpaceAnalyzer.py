@@ -65,19 +65,19 @@ class SwarmSnapShot:
         if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
             E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
             particleSnapShot.E = E
-            particleSnapShot.deltaE = E - particle.EArr[0].copy()
+            particleSnapShot.deltaE = E - particle.E_arr[0].copy()
             particleSnapShot.qo = qo
             particleSnapShot.po = po
             particleSnapShot.q=q
             particleSnapShot.p=p
             particleSnapShot.clipped = False
-        elif particle.qoArr is not None:
-            particleSnapShot.qo = particle.qoArr[-1].copy()
-            particleSnapShot.po = particle.poArr[-1].copy()
+        elif particle.qo_arr is not None:
+            particleSnapShot.qo = particle.qo_arr[-1].copy()
+            particleSnapShot.po = particle.po_arr[-1].copy()
             particleSnapShot.pf = particle.pf.copy()
             particleSnapShot.qf = particle.qf.copy()
-            particleSnapShot.E = particle.EArr[-1].copy()
-            particleSnapShot.deltaE = particleSnapShot.E - particle.EArr[0]
+            particleSnapShot.E = particle.E_arr[-1].copy()
+            particleSnapShot.deltaE = particleSnapShot.E - particle.E_arr[0]
             particleSnapShot.clipped = True
         return particleSnapShot
 
@@ -88,9 +88,9 @@ class SwarmSnapShot:
 
     def _check_If_Particle_Can_Be_Interpolated(self, particle, x):
         # this assumes orbit coordinates
-        if particle.qoArr is None or len(particle.qoArr) == 0 or particle.T<=self.min_Survival_T:
+        if particle.qo_arr is None or len(particle.qo_arr) == 0 or particle.T<=self.min_Survival_T:
             return False  # clipped immediately probably
-        elif particle.qoArr[-1, 0] > x > particle.qoArr[0, 0]:
+        elif particle.qo_arr[-1, 0] > x > particle.qo_arr[0, 0]:
             return True
         else:
             return False
@@ -100,25 +100,25 @@ class SwarmSnapShot:
         return num
 
     def _get_Phase_Space_Coords_And_Energy_SnapShot(self, particle, xSnapShot):
-        qoArr = particle.qoArr  # position in orbit coordinates
-        poArr = particle.poArr
-        EArr = particle.EArr
-        assert xSnapShot < qoArr[-1, 0]
-        indexBefore = np.argmax(qoArr[:, 0] > xSnapShot) - 1
-        qo1 = qoArr[indexBefore]
-        qo2 = qoArr[indexBefore + 1]
+        qo_arr = particle.qo_arr  # position in orbit coordinates
+        po_arr = particle.po_arr
+        E_arr = particle.E_arr
+        assert xSnapShot < qo_arr[-1, 0]
+        indexBefore = np.argmax(qo_arr[:, 0] > xSnapShot) - 1
+        qo1 = qo_arr[indexBefore]
+        qo2 = qo_arr[indexBefore + 1]
         stepFraction = (xSnapShot - qo1[0]) / (qo2[0] - qo1[0])
-        qoSnapShot = self._interpolate_Array(qoArr, indexBefore, stepFraction)
-        poSnapShot = self._interpolate_Array(poArr, indexBefore, stepFraction)
+        qoSnapShot = self._interpolate_Array(qo_arr, indexBefore, stepFraction)
+        poSnapShot = self._interpolate_Array(po_arr, indexBefore, stepFraction)
         if np.any(np.isnan(poSnapShot)):
             print(qoSnapShot,poSnapShot)
             print(particle.T,indexBefore,stepFraction)
-            print(poArr[indexBefore-1],poArr[indexBefore],poArr[indexBefore+1])
-            print(qoArr[indexBefore-1],qoArr[indexBefore],qoArr[indexBefore+1])
+            print(po_arr[indexBefore-1],po_arr[indexBefore],po_arr[indexBefore+1])
+            print(qo_arr[indexBefore-1],qo_arr[indexBefore],qo_arr[indexBefore+1])
         assert not np.any(np.isnan(poSnapShot))
-        ESnapShot = self._interpolate_Array(EArr, indexBefore, stepFraction)
-        qLabSnapShot=self._interpolate_Array(particle.qArr, indexBefore, stepFraction)
-        pLabSnapShot=self._interpolate_Array(particle.pArr, indexBefore, stepFraction)
+        ESnapShot = self._interpolate_Array(E_arr, indexBefore, stepFraction)
+        qLabSnapShot=self._interpolate_Array(particle.q_arr, indexBefore, stepFraction)
+        pLabSnapShot=self._interpolate_Array(particle.p_arr, indexBefore, stepFraction)
         return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
     def _interpolate_Array(self, arr, indexBegin, stepFraction):
@@ -178,23 +178,23 @@ class PhaseSpaceAnalyzer:
         # find the maximum longitudinal distance a particle has traveled
         x_max = 0.0
         for particle in self.swarm:
-            if len(particle.qoArr) > 0:
-                x_max = max([x_max, particle.qoArr[timeStep, 0]])
+            if len(particle.qo_arr) > 0:
+                x_max = max([x_max, particle.qo_arr[timeStep, 0]])
         return x_max
 
     def _find_Inclusive_Min_XOrbit_For_Swarm(self):
         # find the smallest x that as ahead of all particles, ie inclusive
         x_min = 0.0
         for particle in self.swarm:
-            if len(particle.qoArr) > 0:
-                x_min = max([x_min, particle.qoArr[0, 0]])
+            if len(particle.qo_arr) > 0:
+                x_min = max([x_min, particle.qo_arr[0, 0]])
         return x_min
 
     def _make_SnapShot_Position_Arr_At_Same_X(self, xVideoPoint):
         x_max = self._find_Max_Xorbit_For_Swarm()
-        revolutionsMax = int((x_max - xVideoPoint) / self.lattice.totalLength)
+        revolutionsMax = int((x_max - xVideoPoint) / self.lattice.total_length)
         assert revolutionsMax > 0
-        x_arr = np.arange(revolutionsMax + 1) * self.lattice.totalLength + xVideoPoint
+        x_arr = np.arange(revolutionsMax + 1) * self.lattice.total_length + xVideoPoint
         return x_arr
 
     def _plot_Lattice_On_Axis(self, ax, plotPointCoords=None):
@@ -221,8 +221,8 @@ class PhaseSpaceAnalyzer:
                 break
             else:
                 xCoordsArr, yCoordsArr = self._get_Plot_Data_From_SnapShot(snapShotPhaseSpaceCoords, xaxis, yaxis)
-                revs = int(xOrbit / self.lattice.totalLength)
-                deltaX = xOrbit - revs * self.lattice.totalLength
+                revs = int(xOrbit / self.lattice.total_length)
+                deltaX = xOrbit - revs * self.lattice.total_length
                 axes[swarmAxisIndex].text(0.1, 1.01,
                                           'Revolutions: ' + str(revs) + ', Distance along revolution: ' + str(
                                               np.round(deltaX, 2)) + 'm'
@@ -266,7 +266,7 @@ class PhaseSpaceAnalyzer:
     def _make_SnapShot_XArr(self, numPoints):
         # revolutions: set to -1 for using the largest number possible based on swarm
         xMaxSwarm = self._find_Max_Xorbit_For_Swarm()
-        x_max = min(xMaxSwarm, self.maxRevs * self.lattice.totalLength)
+        x_max = min(xMaxSwarm, self.maxRevs * self.lattice.total_length)
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
         return np.linspace(xStart, x_max, numPoints)
 
@@ -278,9 +278,9 @@ class PhaseSpaceAnalyzer:
         # valid selections for xaxis and yaxis are ['y','z','px','py','pz']. Do not confuse plot axis with storage ring
         # axis. Storage ring axis has x being the distance along orbi, y perpindicular and horizontal, z perpindicular to
         # floor
-        assert xVideoPoint < self.lattice.totalLength
+        assert xVideoPoint < self.lattice.total_length
         self._check_Axis_Choice(xaxis, yaxis)
-        numFrames = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.totalLength)
+        numFrames = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.total_length)
         fpsApprox = min(int(numFrames / videoLengthSeconds), 1)
         print(fpsApprox, numFrames)
         xSnapShotArr = self._make_SnapShot_Position_Arr_At_Same_X(xVideoPoint)
@@ -304,24 +304,24 @@ class PhaseSpaceAnalyzer:
 
         TSurvivedArr = np.asarray(TSurvivedList)
         numTPoints = 1000
-        TArr = np.linspace(0.0, TMax, numTPoints)
-        TArr = TArr[:-1]  # exlcude last point because all particles are clipped there
+        T_arr = np.linspace(0.0, TMax, numTPoints)
+        T_arr = T_arr[:-1]  # exlcude last point because all particles are clipped there
         survivalList = []
-        for T in TArr:
+        for T in T_arr:
             num_particlesurvived = np.sum(TSurvivedArr > T)
             survival = 100 * num_particlesurvived / self.swarm.num_Particles()
             survivalList.append(survival)
-        TRev = self.lattice.totalLength / self.lattice.speed_nominal
+        TRev = self.lattice.total_length / self.lattice.speed_nominal
         if axis is None:
             plt.title('Percent particle survival versus revolution time')
-            plt.plot(TArr, survivalList)
+            plt.plot(T_arr, survivalList)
             plt.xlabel('Time,s')
             plt.ylabel('Survival, %')
             plt.axvline(x=TRev, c='black', linestyle=':', label='One Rev')
             plt.legend()
             plt.show()
         else:
-            axis.plot(TArr, survivalList)
+            axis.plot(T_arr, survivalList)
 
     def plot_Energy_Growth(self, numPoints=100, dpi=150, saveTitle=None, survivingOnly=True):
         if survivingOnly == True:
@@ -345,7 +345,7 @@ class PhaseSpaceAnalyzer:
             EList_RMS.append(E_RMS)
             EList_Mean.append(np.mean(deltaESnapShot))
             EList_Max.append(np.max(deltaESnapShot))
-        revArr = xSnapShotArr[:len(EList_RMS)] / self.lattice.totalLength
+        revArr = xSnapShotArr[:len(EList_RMS)] / self.lattice.total_length
         axes[0].plot(revArr, EList_RMS, label='RMS')
         axes[0].plot(revArr, EList_Mean, label='mean')
         axes[0].set_ylabel('Energy change, sim units \n (Mass Li=1.0) ')
@@ -473,10 +473,10 @@ class PhaseSpaceAnalyzer:
 
     def plot_Standing_Envelope(self):
         raise Exception('This is broken because I am trying to use ragged arrays basically')
-        maxCompletedRevs = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.totalLength)
+        maxCompletedRevs = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.total_length)
         assert maxCompletedRevs > 1
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
-        x_max = self.lattice.totalLength
+        x_max = self.lattice.total_length
         numEnvPoints = 50
         xSnapShotArr = np.linspace(xStart, x_max, numEnvPoints)
         yCoordIndex = 1
@@ -485,7 +485,7 @@ class PhaseSpaceAnalyzer:
         for revNumber in range(maxCompletedRevs):
             revCoordsList = []
             for xOrbit in xSnapShotArr:
-                xOrbit += self.lattice.totalLength * revNumber
+                xOrbit += self.lattice.total_length * revNumber
                 snapShotPhaseSpaceCoords = SwarmSnapShot(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
                 revCoordsList.append(snapShotPhaseSpaceCoords[:, yCoordIndex])
             envelopeData = np.column_stack((envelopeData, revCoordsList))

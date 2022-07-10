@@ -284,7 +284,7 @@ class LensIdealTestHelper(ElementTestHelper):
         particle = Particle(qi=np.asarray([-1e-14, self.rp / 2.0, 0.]))
         particle = particleTracer.trace(particle, 1e-6, 1.0)
         yi, yf, pyf = particle.qi[1], particle.qf[1], particle.pf[1]
-        yRMS, pyRMS = np.std(particle.qArr[:, 1]), np.std(particle.pArr[:, 1])
+        yRMS, pyRMS = np.std(particle.q_arr[:, 1]), np.std(particle.p_arr[:, 1])
         K = 2 * SIMULATION_MAGNETON * self.Bp / (particle.pi[0] ** 2 * self.rp ** 2)
         phi = np.sqrt(K) * self.L
         yfTheory, pyfTheory = yi * np.cos(phi), -abs(particle.pi[0]) * yi * np.sin(phi) * np.sqrt(K)
