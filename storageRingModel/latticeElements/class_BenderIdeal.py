@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import full_Arctan
+from latticeElements.utilities import full_arctan2
 from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
 
 from numbaFunctionsAndObjects import benderIdealFastFunctions
@@ -51,7 +51,7 @@ class BenderIdeal(BaseElement):
         self.ro = None  # bending radius of orbit, ie rb + rOffset.
         self.r0 = None  # coordinates of center of bender, minus any caps
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.output_offset = sqrt(
@@ -61,7 +61,7 @@ class BenderIdeal(BaseElement):
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
         numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.field_fact)
 
         force_args = (numba_func_constants, )
@@ -70,13 +70,13 @@ class BenderIdeal(BaseElement):
 
         self.assign_numba_functions(benderIdealFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
-    def fill_Post_Constrained_Parameters(self):
+    def fill_post_constrained_parameters(self):
         self.fill_In_And_Out_Rotation_Matrices()
 
     def fill_In_And_Out_Rotation_Matrices(self):
         rot = self.theta - self.ang + np.pi / 2
-        self.ROut = Rot.from_rotvec([0.0, 0.0, rot]).as_matrix()[:2, :2]
-        self.RIn = Rot.from_rotvec([0.0, 0.0, -rot]).as_matrix()[:2, :2]
+        self.R_Out = Rot.from_rotvec([0.0, 0.0, rot]).as_matrix()[:2, :2]
+        self.R_In = Rot.from_rotvec([0.0, 0.0, -rot]).as_matrix()[:2, :2]
 
     def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
@@ -94,7 +94,7 @@ class BenderIdeal(BaseElement):
     def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
         qo = q_el.copy()
-        phi = self.ang - full_Arctan(qo)  # angle swept out by particle in trajectory. This is zero
+        phi = self.ang - full_arctan2(qo)  # angle swept out by particle in trajectory. This is zero
         # when the particle first enters
         ds = self.ro * phi
         qos = ds
@@ -112,7 +112,7 @@ class BenderIdeal(BaseElement):
         yLab = self.ro * sin(phi)
         zLab = zo
         q_lab = np.asarray([xLab, yLab, zLab])
-        q_lab[:2] = self.ROut @ q_lab[:2]
+        q_lab[:2] = self.R_Out @ q_lab[:2]
         q_lab += self.r0
         return q_lab
 

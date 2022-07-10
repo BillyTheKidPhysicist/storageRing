@@ -128,11 +128,11 @@ def is_coord_in_vacuum(x, y, z,params):
             # if on the westwards side
 
 @numba.njit()
-def magnetic_potential(x0, y0, z0,params,fieldData):
+def magnetic_potential(x0, y0, z0,params,field_data):
     # magnetic potential at point q in element frame
     # q: particle's position in element frame
     rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
-    fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData = fieldData
+    fieldDataSeg, fieldDataInternal, fieldDataCap, fieldPerturbationData = field_data
     x, y, z = x0, y0, z0
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
@@ -190,12 +190,12 @@ def update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z):
     raise NotImplementedError
 
 @numba.njit()
-def force(x0, y0, z0,params,fieldData):
+def force(x0, y0, z0,params,field_data):
     # force at point q in element frame
     # q: particle's position in element frame
     x, y, z = x0, y0, z0
     rb, ap, Lcap, ang,numMagnets, ucAng,M_ang, RIn_Ang, M_uc, field_fact, useFieldPerturbations = params
-    fieldDataSeg,fieldDataInternal,fieldDataCap,fieldPerturbationData=fieldData
+    fieldDataSeg,fieldDataInternal,fieldDataCap,fieldPerturbationData=field_data
     FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
     #todo: I think I need to get rid of this symmetry stuff for the magnet imperfections to work right
     z = abs(z)

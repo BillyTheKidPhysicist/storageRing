@@ -15,7 +15,7 @@ B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_OFFSET = 1.5 * B_GRAD_STEP_SIZE
 TINY_INTERP_STEP = 1e-12
 
-def round_Down_To_Imperial(value: RealNum) -> float:
+def round_down_to_imperial(value: RealNum) -> float:
     """Round 'value' down to its nearest imperial multiple of 1/16 inch"""
     minMult = inch_To_Meter(1 / 16)
     assert minMult <= value
@@ -28,17 +28,17 @@ def round_Down_To_Imperial(value: RealNum) -> float:
 
 def round_down_to_nearest_valid_mag_width(width_proposed: RealNum) -> float:
     """Given a proposed magnet width, round down the nearest available width (in L x width x width)"""
-    width_rounded=round_Down_To_Imperial(width_proposed)
+    width_rounded=round_down_to_imperial(width_proposed)
     assert width_rounded <= inch_To_Meter(1.5)
     return width_rounded
 
 
 def round_down_to_nearest_valid_tube_OD(OD_proposed: RealNum) -> float:
     """Given a proposed tube OD, round down the nearest available OD """
-    return round_Down_To_Imperial(OD_proposed)
+    return round_down_to_imperial(OD_proposed)
 
 
-def halbach_Magnet_Width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
+def halbach_magnet_width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
                          use_standard_sizes: bool = False) -> RealNum:
     assert rp > 0.0
     halfAngle = 2 * np.pi / 24
@@ -49,24 +49,24 @@ def halbach_Magnet_Width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_
     return magnetWidth
 
 
-def get_Halbach_Layers_Radii_And_Magnet_Widths(rp_first: RealNum, numConcentricLayers: int,
+def get_halbach_layers_radii_and_magnet_widths(rp_first: RealNum, numConcentricLayers: int,
                                                magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
                                                use_standard_sizes: bool = False) -> tuple[FloatTuple, FloatTuple]:
     """Given a starting bore radius, construct the maximum magnet widths to build the specified number of concentric
     layers"""
     assert rp_first > 0.0 and isinstance(numConcentricLayers, int)
-    rpLayers = []
-    magnetWidths = []
+    rp_layers = []
+    magnet_widths = []
     for _ in range(numConcentricLayers):
-        next_rpLayer = rp_first + sum(magnetWidths)
-        rpLayers.append(next_rpLayer)
-        nextMagnetWidth = halbach_Magnet_Width(next_rpLayer, magnetSeparation=magnetSeparation,
+        next_rpLayer = rp_first + sum(magnet_widths)
+        rp_layers.append(next_rpLayer)
+        nextMagnetWidth = halbach_magnet_width(next_rpLayer, magnetSeparation=magnetSeparation,
                                                use_standard_sizes=use_standard_sizes)
-        magnetWidths.append(nextMagnetWidth)
-    return tuple(rpLayers), tuple(magnetWidths)
+        magnet_widths.append(nextMagnetWidth)
+    return tuple(rp_layers), tuple(magnet_widths)
 
 
-def max_Tube_Radius_In_Segmented_Bend(rb: float, rp: float, Lm: float, tubeWallThickness: float,
+def max_tube_radius_in_segmented_bend(rb: float, rp: float, Lm: float, tubeWallThickness: float,
                                       use_standard_sizes: bool=False) -> float:
     """What is the maximum size that will fit in a segmented bender and respect the geometry"""
     assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tubeWallThickness < rp
@@ -83,7 +83,7 @@ def min_Bore_Radius_From_Tube_OD(tube_OD: float, rb: float, Lm: float) -> float:
     return rp
 
 
-def full_Arctan(q: np.ndarray):
+def full_arctan2(q: np.ndarray):
     """Compute angle spanning 0 to 2pi degrees as expected from x and y where q=numpy.array([x,y,z])"""
     assert len(q) == 3 and q.ndim == 1
     phi = atan2(q[1], q[0])
@@ -98,14 +98,14 @@ def get_Unit_Cell_Angle(lengthSegment: float, radius: float, segmentWidth: float
     return np.arctan(.5 * lengthSegment / (radius - segmentWidth))  # radians
 
 
-def is_Even(x: int) -> bool:
+def is_even(x: int) -> bool:
     """Test if a number is even"""
     assert type(x) is int and x > 0
     return True if x % 2 == 0 else False
 
 
-def mirror_Across_Angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, float]:
-    """mirror_Across_Angle x and y across a line at angle "ang" that passes through the origin"""
+def mirror_across_angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, float]:
+    """mirror_across_angle x and y across a line at angle "ang" that passes through the origin"""
     m = np.tan(ang)
     d = (x + y * m) / (1 + m ** 2)
     xMirror = 2 * d - x

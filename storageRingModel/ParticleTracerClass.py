@@ -110,7 +110,7 @@ class ParticleTracer:
             r02 = el2.r2
         else:
             r02 = el2.r1
-        return _transform_To_Next_Element(q, p, r01, r02, el1.ROut, el2.RIn)
+        return _transform_To_Next_Element(q, p, r01, r02, el1.R_Out, el2.R_In)
 
     def initialize(self) -> None:
         # prepare for a single particle to be traced

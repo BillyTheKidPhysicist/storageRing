@@ -14,7 +14,7 @@ spec_Combiner_Halbach = [
     ('ap', numba.float64),
     ('ang', numba.float64),
     ('field_fact', numba.float64),
-    ('extraFieldLength', numba.float64),
+    ('extra_field_length', numba.float64),
     ('useSymmetry', numba.boolean),
     ('acceptance_width', numba.float64)
 ]
@@ -22,7 +22,7 @@ spec_Combiner_Halbach = [
 
 class CombinerHalbachLensSimFieldHelper_Numba:
 
-    def __init__(self, fieldDataInternal, fieldDataExternal, La, Lb, Lm, space, ap, ang, field_fact, extraFieldLength,
+    def __init__(self, fieldDataInternal, fieldDataExternal, La, Lb, Lm, space, ap, ang, field_fact, extra_field_length,
                  useSymmetry, acceptance_width):
         self.fieldDataInternal = fieldDataInternal
         self.fieldDataExternal = fieldDataExternal
@@ -33,36 +33,36 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.ap = ap
         self.ang = ang
         self.field_fact = field_fact
-        self.extraFieldLength = extraFieldLength
+        self.extra_field_length = extra_field_length
         self.useSymmetry = useSymmetry
         self.acceptance_width = acceptance_width
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return (self.fieldDataInternal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.field_fact,
-                self.extraFieldLength, self.useSymmetry, self.acceptance_width), ()
+                self.extra_field_length, self.useSymmetry, self.acceptance_width), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return self.field_fact, ()
 
     def _force_Func_Internal(self, x, y, z):
-        xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
-        Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
+        Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _force_Func_External(self, x, y, z):
-        xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
-        Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
+        Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _magnetic_potential_Func_Internal(self, x, y, z):
-        xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
-        return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataInternal
+        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
 
     def _magnetic_potential_Func_External(self, x, y, z):
-        xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
-        return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+        x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldDataExternal
+        return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
 
     def force(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):
@@ -82,7 +82,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
             y = abs(y)  # confine to upper right quadrant
             z = abs(z)
 
-            if -self.extraFieldLength <= x <= self.space:
+            if -self.extra_field_length <= x <= self.space:
                 # print(x,y,z,self.Lm,self.space)
                 Fx, Fy, Fz = self._force_Func_External(x, y, z)
             elif self.space < x <= symmetryPlaneX:
@@ -116,7 +116,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         z = abs(z)
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
         if self.useSymmetry:
-            if -self.extraFieldLength <= x <= self.space:
+            if -self.extra_field_length <= x <= self.space:
                 V = self._magnetic_potential_Func_External(x, y, z)
             elif self.space < x <= symmetryPlaneX:
                 V = self._magnetic_potential_Func_Internal(x, y, z)

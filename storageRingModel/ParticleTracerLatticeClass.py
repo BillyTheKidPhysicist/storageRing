@@ -23,13 +23,13 @@ benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 class ParticleTracerLattice:
 
     def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storageRing',
-                 jitterAmp: float = 0.0, fieldDensityMultiplier: float = 1.0, use_mag_errors: bool = False,
+                 jitter_amp: float = 0.0, fieldDensityMultiplier: float = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initialLocation: tuple[float, float] = None, initialAngle=None,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool=False, use_standard_tube_OD: bool =False):
         assert fieldDensityMultiplier > 0.0
         if lattice_type != 'storageRing' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
-        if jitterAmp > 5e-3:
+        if jitter_amp > 5e-3:
             raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
                             "depend on this value, and relatively large values were not planned for")
         self.lattice_type = lattice_type  # options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
@@ -43,7 +43,7 @@ class ParticleTracerLattice:
         self.initialAngle = -np.pi if initialAngle is None else initialAngle
         self.combinerIndex: Optional[int] = None  # the index in the lattice where the combiner is
         self.totalLength: Optional[float] = None  # total length of lattice, m
-        self.jitterAmp = jitterAmp
+        self.jitter_amp = jitter_amp
         self.fieldDensityMultiplier = fieldDensityMultiplier
         self.use_mag_errors = use_mag_errors
         self.use_standard_tube_OD=use_standard_tube_OD
@@ -162,9 +162,9 @@ class ParticleTracerLattice:
             fringe fields.
         :return: None
         """
-        rpLayers = rp if isinstance(rp, tuple) else (rp,)
+        rp_layers = rp if isinstance(rp, tuple) else (rp,)
         magnetWidth = (magnetWidth,) if isinstance(magnetWidth, float) else magnetWidth
-        el = HalbachLensSim(self, rpLayers, L, ap, magnetWidth)
+        el = HalbachLensSim(self, rp_layers, L, ap, magnetWidth)
         el.index = len(self.elList)  # where the element is in the lattice
         self.elList.append(el)  # add element to the list holding lattice elements in order
         if constrain == True: self.set_Constrained_Linear_Element(el)
@@ -281,14 +281,14 @@ class ParticleTracerLattice:
         """
 
         for el in self.elList:
-            el.fill_Pre_Constrained_Parameters()
+            el.fill_pre_constrained_parameters()
 
         floorPlan = solve_Floor_Plan(self, constrain)
         update_And_Place_Elements_From_Floor_Plan(self, floorPlan)
         for el in self.elList:
-            el.fill_Post_Constrained_Parameters()
+            el.fill_post_constrained_parameters()
             if build_field_helpers:
-                el.build_fast_field_felper()
+                el.build_fast_field_helper()
 
         self.isClosed = is_Particle_Tracer_Lattice_Closed(self)  # lattice may not have been constrained, but could
         # still be closed

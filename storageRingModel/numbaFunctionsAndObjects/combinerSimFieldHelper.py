@@ -8,8 +8,8 @@ spec_Combiner_Sim = [
     ('FxArr', numba.float64[::1]),
     ('FyArr', numba.float64[::1]),
     ('FzArr', numba.float64[::1]),
-    ('xArr', numba.float64[::1]),
-    ('yArr', numba.float64[::1]),
+    ('x_arr', numba.float64[::1]),
+    ('y_arr', numba.float64[::1]),
     ('zArr', numba.float64[::1]),
     ('La', numba.float64),
     ('Lb', numba.float64),
@@ -26,8 +26,8 @@ spec_Combiner_Sim = [
 # @jitclass(spec)
 class CombinerSimFieldHelper_Numba:
 
-    def __init__(self, fieldData, La, Lb, Lm, space, apL, apR, apz, ang, field_fact):
-        self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr = fieldData
+    def __init__(self, field_data, La, Lb, Lm, space, apL, apR, apz, ang, field_fact):
+        self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr = field_data
         self.La = La
         self.Lb = Lb
         self.Lm = Lm
@@ -40,16 +40,16 @@ class CombinerSimFieldHelper_Numba:
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        fieldData = self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
-        return (fieldData, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
+        field_data = self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr, self.VArr
+        return (field_data, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
                 self.field_fact), ()
 
     def _force_Func(self, x, y, z):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return vec_interp3D(x, y, z, self.xArr, self.yArr, self.zArr, self.FxArr, self.FyArr, self.FzArr)
+        return vec_interp3D(x, y, z, self.x_arr, self.y_arr, self.zArr, self.FxArr, self.FyArr, self.FzArr)
 
     def _magnetic_potential_Func(self, x, y, z):
-        return scalar_interp3D(x, y, z, self.xArr, self.yArr, self.zArr, self.VArr)
+        return scalar_interp3D(x, y, z, self.x_arr, self.y_arr, self.zArr, self.VArr)
 
     def force(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):

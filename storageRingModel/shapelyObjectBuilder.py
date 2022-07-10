@@ -128,7 +128,7 @@ def make_Hexapole_Combiner_Outer_Points(el: Element) -> list[np.ndarray]:
     pointsOuter = [point1, point2, point3, point4, point5, point6, point7, point8, point9, point10, point11,
                    point12]
     for i, point in enumerate(pointsOuter):
-        pointsOuter[i] = el.ROut @ point + el.r2[:2]
+        pointsOuter[i] = el.R_Out @ point + el.r2[:2]
     return pointsOuter
 
 def make_Halbach_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
@@ -161,7 +161,7 @@ def make_Halbach_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
     q8Inner = np.asarray([0, -ap])  # bottom left when theta=0
     pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner, q7Inner, q8Inner]
     for point in pointsInner:
-        point[:] = el.ROut @ point + el.r2[:2]
+        point[:] = el.R_Out @ point + el.r2[:2]
     return pointsInner
 
 def make_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
@@ -189,7 +189,7 @@ def make_Combiner_Inner_Points(el: Element) -> list[np.ndarray]:
     q6Inner = np.asarray([0, -apL])  # bottom left when theta=0
     pointsInner = [q1Inner, q2Inner, q3Inner, q4Inner, q5Inner, q6Inner]
     for point in pointsInner:
-        point[:] = el.ROut @ point + el.r2[:2]
+        point[:] = el.R_Out @ point + el.r2[:2]
     return pointsInner
 
 
@@ -212,7 +212,7 @@ def make_Lens_Shapely_Objects(el: Element) -> tuple[Polygon, Polygon]:
     else:
         pointsOuter = copy.deepcopy(pointsInner)
     for point in [*pointsInner, *pointsOuter]:
-        point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
+        point[:] = el.R_Out @ point + el.r1[:2]  # must modify the original array!
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 
@@ -241,7 +241,7 @@ def make_Drift_Shapely_Objects(el: Drift):
     pointsInner = make_Trapezoid_Points(L, theta1, theta2, ap)
     pointsOuter = make_Trapezoid_Points(L, theta1, theta2, outer_half_width)
     for point in [*pointsInner, *pointsOuter]:
-        point[:] = el.ROut @ point + el.r1[:2]  # must modify the original array!
+        point[:] = el.R_Out @ point + el.r1[:2]  # must modify the original array!
     return Polygon(pointsOuter), Polygon(pointsInner)
 
 

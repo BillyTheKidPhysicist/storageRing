@@ -9,37 +9,37 @@ from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp
 
 @numba.njit()
 def _force_Func_Internal( x, y, z,fieldDataInternal):
-    xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
-    Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
+    Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
     return Fx, Fy, Fz
 @numba.njit()
 def _force_Func_External( x, y, z,fieldDataExternal):
-    xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
-    Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
+    Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
     return Fx, Fy, Fz
 @numba.njit()
 def _magnetic_potential_Func_Internal( x, y, z,fieldDataInternal):
-    xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
-    return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataInternal
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
 @numba.njit()
 def _magnetic_potential_Func_External( x, y, z,fieldDataExternal):
-    xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
-    return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = fieldDataExternal
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
 
 #todo: I think this is unnecesary
 @numba.njit()
-def force( x, y, z,params,fieldData):
+def force( x, y, z,params,field_data):
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan, np.nan, np.nan
     else:
-        return force_Without_isInside_Check(x, y, z,params,fieldData)
+        return force_Without_isInside_Check(x, y, z,params,field_data)
 @numba.njit()
-def force_Without_isInside_Check( x0, y0, z0,params,fieldData):
+def force_Without_isInside_Check( x0, y0, z0,params,field_data):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     # x, y, z = baseClass.misalign_Coords(x0, y0, z0)
-    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
-    fieldDataInternal,fieldDataExternal=fieldData
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extra_field_length = params
+    fieldDataInternal,fieldDataExternal=field_data
     x, y, z = x0, y0, z0
     symmetryPlaneX = Lm / 2 + space  # field symmetry plane location
     if useSymmetry:
@@ -48,7 +48,7 @@ def force_Without_isInside_Check( x0, y0, z0,params,fieldData):
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
 
-        if -extraFieldLength <= x <= space:
+        if -extra_field_length <= x <= space:
             # print(x,y,z,Lm,space)
             Fx, Fy, Fz = _force_Func_External(x, y, z,fieldDataExternal)
         elif space < x <= symmetryPlaneX:
@@ -74,17 +74,17 @@ def force_Without_isInside_Check( x0, y0, z0,params,fieldData):
     Fz *= field_fact
     return Fx, Fy, Fz
 @numba.njit()
-def magnetic_potential( x, y, z,params,fieldData):
+def magnetic_potential( x, y, z,params,field_data):
     if not is_coord_in_vacuum(x, y, z,params):
         return np.nan
     # x, y, z = baseClass.misalign_Coords(x, y, z)
-    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
-    fieldDataInternal, fieldDataExternal = fieldData
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extra_field_length = params
+    fieldDataInternal, fieldDataExternal = field_data
     y = abs(y)  # confine to upper right quadrant
     z = abs(z)
     symmetryPlaneX = Lm / 2 + space  # field symmetry plane location
     if useSymmetry:
-        if -extraFieldLength <= x <= space:
+        if -extra_field_length <= x <= space:
             V = _magnetic_potential_Func_External(x, y, z,fieldDataExternal)
         elif space < x <= symmetryPlaneX:
             V = _magnetic_potential_Func_Internal(x, y, z,fieldDataInternal)
@@ -105,7 +105,7 @@ def magnetic_potential( x, y, z,params,fieldData):
 @numba.njit()
 def is_coord_in_vacuum( x, y, z,params):
     # q: coordinate to test in element's frame
-    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extraFieldLength = params
+    ap, Lm, La,Lb,space,ang,acceptance_width, field_fact, useSymmetry, extra_field_length = params
     standOff = 10e-6  # first valid (non np.nan) interpolation point on face of lens is 1e-6 off the surface of the lens
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)

@@ -33,10 +33,10 @@ class CombinerSim(CombinerIdeal):
         data[:, 3:6] = data[:, 3:6] / self.sizeScale  # scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        fieldData = self.shape_Field_Data_3D(data)
-        return fieldData
+        field_data = self.shape_field_data_3D(data)
+        return field_data
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         from latticeElements.combiner_characterizer import characterize_CombinerSim
         self.space = self.fringeSpace * self.sizeScale  # extra space past the hard edge on either end to account for fringe fields
@@ -55,13 +55,13 @@ class CombinerSim(CombinerIdeal):
         self.inputOffset = inputOffset - np.tan(
             inputAngle) * self.space  # the input offset is measured at the end of the hard edge
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
         numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.field_fact)
 
-        fieldData=self.open_And_Shape_Field_Data()
+        field_data=self.open_And_Shape_Field_Data()
 
-        force_args = (numba_func_constants, fieldData)
-        potential_args = (numba_func_constants, fieldData)
+        force_args = (numba_func_constants, field_data)
+        potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
         self.assign_numba_functions(combinerSimFastFunction, force_args, potential_args, is_coord_in_vacuum_args)

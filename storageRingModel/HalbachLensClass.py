@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_To_Meter, radians, within_Tol, time
-from latticeElements.utilities import max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width
+from latticeElements.utilities import max_tube_radius_in_segmented_bend, halbach_magnet_width
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 tuple3Float = tuple[float, float, float]
@@ -501,7 +501,7 @@ class SegmentedBenderHalbach(Collection):
         self.positiveAngleMagnetsOnly: bool = positiveAngleMagnetsOnly  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
-        self.magnetWidth: float = halbach_Magnet_Width(rp, magnetSeparation=0.0) if magnetWidth is None else magnetWidth
+        self.magnetWidth: float = halbach_magnet_width(rp, magnetSeparation=0.0) if magnetWidth is None else magnetWidth
         assert np.tan(.5 * Lm / (rb - self.magnetWidth)) <= UCAngle  # magnets should not overlap!
         self.numLenses: int = numLenses  # number of lenses in the model
         self.lensList: list[HalbachLens] = []  # list to hold lenses
@@ -665,7 +665,7 @@ class SegmentedBenderHalbach(Collection):
         spin flips. Solenoid wraps around an imaginary vacuum tube such that the wires but up against the inside edge
         of the magnets where they approach the bending radius the closest"""
 
-        coilDiam = METER_TO_mm * 2 * max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm,
+        coilDiam = METER_TO_mm * 2 * max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm,
                                                                        tubeWallThickness=MAGNET_WIRE_DIAM)
         angleStart= self.lensAnglesArr[0] if self.useHalfCapEnd[0] else self.lensAnglesArr[0]-self.UCAngle
         angleEnd=self.lensAnglesArr[-1] if self.useHalfCapEnd[1] else self.lensAnglesArr[-1]+self.UCAngle

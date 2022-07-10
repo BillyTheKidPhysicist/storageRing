@@ -32,7 +32,7 @@ class Drift(LensIdeal):
         self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
         assert self.outer_half_width > ap
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
 
         numba_func_constants = (self.ap,self.L,self.inputTiltAngle,self.outputTiltAngle)
 
@@ -43,6 +43,6 @@ class Drift(LensIdeal):
         self.assign_numba_functions(driftFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.Lo = self.L

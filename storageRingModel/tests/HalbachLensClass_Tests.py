@@ -136,8 +136,8 @@ class HalbachLenstestHelper:
                              self.length)
         lensA = HalbachLens(self.rp, self.magnetWidth, self.length)
         lensB = HalbachLens(self.rp + self.magnetWidth, self.magnetWidth * 1.5, self.length)
-        xArr = np.linspace(-self.rp * .3, self.rp * .3, 10)
-        coords = np.asarray(np.meshgrid(xArr, xArr, xArr)).T.reshape(-1, 3)
+        x_arr = np.linspace(-self.rp * .3, self.rp * .3, 10)
+        coords = np.asarray(np.meshgrid(x_arr, x_arr, x_arr)).T.reshape(-1, 3)
         coords[:, 2] += self.length / 3  # break symmetry of test points
         coords[:, 1] += self.rp / 10.0  # break symmetry of test points
         coords[:, 0] -= self.rp / 8.0  # break symmetry of test points
@@ -154,8 +154,8 @@ class HalbachLenstestHelper:
         # test that the lens is well fit to a parabolic potential
         magnetWidth1, magnetWidth2 = .0254, .0254 * 1.5
         lens = HalbachLens((self.rp, self.rp + .0254), (magnetWidth1, magnetWidth2), self.length)
-        xArr = np.linspace(-self.rp * .9, self.rp * .9)
-        coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
+        x_arr = np.linspace(-self.rp * .9, self.rp * .9)
+        coords = np.asarray(np.meshgrid(x_arr, x_arr, 0.0)).T.reshape(-1, 3)
         rArr = np.linalg.norm(coords[:, :2], axis=1)
         coords = coords[rArr < self.rp]
         rArr = rArr[rArr < self.rp]
@@ -174,8 +174,8 @@ class HalbachLenstestHelper:
         lens = HalbachLens((self.rp, self.rp + .0254), (magnetWidth1, magnetWidth2), self.length,
                            useStandardMagErrors=True
                            , sameSeed=True)
-        xArr = np.linspace(-self.rp * .5, self.rp * .5)
-        coords = np.asarray(np.meshgrid(xArr, xArr, 0.0)).T.reshape(-1, 3)
+        x_arr = np.linspace(-self.rp * .5, self.rp * .5)
+        coords = np.asarray(np.meshgrid(x_arr, x_arr, 0.0)).T.reshape(-1, 3)
         BNormsVals_STD = np.std(lens.B_norm(coords))
         assert BNormsVals_STD != BNormsVals_STD_NoError  # assert magnet errors causes field changes
         assert within_Tol(BNormsVals_STD, BNormsVals_STD_Error)  # assert magnet errors cause same field value
@@ -186,8 +186,8 @@ class HalbachLenstestHelper:
         # test that the a single layer lens has the same field as a single layer
         lens = HalbachLens(self.rp, self.magnetWidth, self.length)
         layer = Layer(self.rp, self.magnetWidth, self.length)
-        xArr = np.linspace(-self.rp * .5, self.rp * .5, 20)
-        testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
+        x_arr = np.linspace(-self.rp * .5, self.rp * .5, 20)
+        testCoords = np.asarray(list(itertools.product(x_arr, x_arr, x_arr)))
         BNormsValsLayer_STD = np.std(layer.B_norm(testCoords))
         BNormsValsLens_STD = np.std(lens.B_norm(testCoords))
         assert within_Tol(BNormsValsLens_STD, BNormsValsLayer_STD)
@@ -201,8 +201,8 @@ class HalbachLenstestHelper:
         assert within_Tol(lensSliced.length, lengthCounted) and within_Tol(lensSliced.length, lensSliced.length)
         zCenter = sum(layer.position[2] for layer in lensSliced.layerList) / lensSliced.numSlices
         assert within_Tol(zCenter, 0.0)
-        xArr = np.linspace(-self.rp * .5, self.rp * .5, 20)
-        testCoords = np.asarray(list(itertools.product(xArr, xArr, xArr)))
+        x_arr = np.linspace(-self.rp * .5, self.rp * .5, 20)
+        testCoords = np.asarray(list(itertools.product(x_arr, x_arr, x_arr)))
         BValsSingle, BValsSliced = lensSingle.B_norm(testCoords), lensSliced.B_norm(testCoords)
         assert iscloseAll(BValsSingle, BValsSliced, numericTol)
 
@@ -227,16 +227,16 @@ class HalbachLenstestHelper:
         memory overflow"""
 
         lens = HalbachLens(.05, .025, .1, numDisks=10)
-        xArr = np.linspace(.01, .01, 10)
-        coords = arr_Product(xArr, xArr, xArr)
+        x_arr = np.linspace(.01, .01, 10)
+        coords = arr_Product(x_arr, x_arr, x_arr)
         BVals_Unsplit = lens.B_norm_grad(coords)
         lens._getB_wrapper = lambda x: HalbachLens._getB_wrapper(lens, x, sizeMax=5)
         BVals_Split = lens.B_norm_grad(coords)
         assert iscloseAll(BVals_Split, BVals_Unsplit, 0.0)  # should be exactly the same
 
     def test_All_Three_Are_Different(self, lens1, lens2, lens3):
-        xArr = np.linspace(-self.rp * .5, self.rp * .5)
-        coords = np.asarray(list(itertools.product(xArr, xArr, [0])))
+        x_arr = np.linspace(-self.rp * .5, self.rp * .5)
+        coords = np.asarray(list(itertools.product(x_arr, x_arr, [0])))
         vals1, vals2, vals3 = [lens.B_norm(coords) for lens in [lens1, lens2, lens3]]
         differenceTol = 1e-6
         for valsA, valsB in [[vals1, vals2], [vals1, vals3], [vals2, vals3]]:
@@ -257,11 +257,11 @@ class SegmentedBenderHalbachHelper:
         thetaArr = np.linspace(bender.lensAnglesArr.min() - 2 * ucAngle, bender.lensAnglesArr.max() + 2 * ucAngle,
                                2 * bender.numLenses)
         rArr = np.linspace(rb - rp / 2, rb + rp / 2, 5)
-        yArr = np.linspace(-rp / 2, rp / 2, 6)
-        coordsPolar = np.array(list(itertools.product(thetaArr, rArr, yArr)))
-        xArr, zArr = np.cos(coordsPolar[:, 0]) * coordsPolar[:, 1], np.sin(coordsPolar[:, 0]) * coordsPolar[:, 1]
-        yArr = coordsPolar[:, 2]
-        coords = np.column_stack((xArr, yArr, zArr))
+        y_arr = np.linspace(-rp / 2, rp / 2, 6)
+        coordsPolar = np.array(list(itertools.product(thetaArr, rArr, y_arr)))
+        x_arr, zArr = np.cos(coordsPolar[:, 0]) * coordsPolar[:, 1], np.sin(coordsPolar[:, 0]) * coordsPolar[:, 1]
+        y_arr = coordsPolar[:, 2]
+        coords = np.column_stack((x_arr, y_arr, zArr))
         return coords
 
     def test_Bender_Approx(self, bender: SegmentedBenderHalbach) -> None:

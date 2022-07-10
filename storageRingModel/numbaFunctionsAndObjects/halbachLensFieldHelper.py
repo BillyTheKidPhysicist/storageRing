@@ -22,7 +22,7 @@ spec_Lens_Halbach = [
     ('Lcap', numba.float64),
     ('ap', numba.float64),
     ('field_fact', numba.float64),
-    ('extraFieldLength', numba.float64),
+    ('extra_field_length', numba.float64),
     ('useFieldPerturbations', numba.boolean)
 ]
 
@@ -30,23 +30,23 @@ spec_Lens_Halbach = [
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self, fieldData, fieldPerturbationData, L, Lcap, ap, extraFieldLength):
+    def __init__(self, field_data, fieldPerturbationData, L, Lcap, ap, extra_field_length):
         self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, self.yArrIn, \
-        self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn = fieldData
+        self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn = field_data
         self.L = L
         self.Lcap = Lcap
         self.ap = ap
         self.field_fact = 1.0
-        self.extraFieldLength = extraFieldLength
+        self.extra_field_length = extra_field_length
         self.useFieldPerturbations = True if fieldPerturbationData is not None else False
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        fieldData = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
+        field_data = self.xArrEnd, self.yArrEnd, self.zArrEnd, self.FxArrEnd, self.FyArrEnd, self.FzArrEnd, self.VArrEnd, \
                     self.yArrIn, self.zArrIn, self.FyArrIn, self.FzArrIn, self.VArrIn
         fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
-        return (fieldData, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extraFieldLength), (self.field_fact,)
+        return (field_data, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extra_field_length), (self.field_fact,)
 
     def set_Internal_State(self, params):
         self.field_fact = params[0]
@@ -60,8 +60,8 @@ class LensHalbachFieldHelper_Numba:
         if not useImperfectInterp:
             V = scalar_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd, self.VArrEnd)
         else:
-            xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
-            V = scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
+            V = scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
         return V
 
     def _magnetic_potential_Func_Inner(self, x: float, y: float, z: float) -> float:
@@ -75,8 +75,8 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = vec_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.zArrEnd,
                                          self.FxArrEnd, self.FyArrEnd, self.FzArrEnd)
         else:
-            xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
-            Fx, Fy, Fz = vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+            x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = self.fieldPerturbationData
+            Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
         return Fx, Fy, Fz
 
     def _force_Func_Inner(self, y: float, z: float) -> tupleOf3Floats:
@@ -119,11 +119,11 @@ class LensHalbachFieldHelper_Numba:
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if -self.extraFieldLength <= x <= self.Lcap:  # at beginning of lens
+        if -self.extra_field_length <= x <= self.Lcap:  # at beginning of lens
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
         elif self.Lcap < x <= self.L - self.Lcap:  # if long enough, model interior as uniform in x
             Fx, Fy, Fz = self._force_Func_Inner(y, z)
-        elif self.L - self.Lcap <= x <= self.L + self.extraFieldLength:  # at end of lens
+        elif self.L - self.Lcap <= x <= self.L + self.extra_field_length:  # at end of lens
             x = self.L - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
             Fx=-Fx
@@ -177,11 +177,11 @@ class LensHalbachFieldHelper_Numba:
         # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)
         z = abs(z)
-        if -self.extraFieldLength <= x <= self.Lcap:
+        if -self.extra_field_length <= x <= self.Lcap:
             V0 = self._magnetic_potential_Func_Fringe(x, y, z)
         elif self.Lcap < x <= self.L - self.Lcap:
             V0 = self._magnetic_potential_Func_Inner(x, y, z)
-        elif 0 <= x <= self.L + self.extraFieldLength:
+        elif 0 <= x <= self.L + self.extra_field_length:
             x = self.L - x
             V0 = self._magnetic_potential_Func_Fringe(x, y, z)
         else:

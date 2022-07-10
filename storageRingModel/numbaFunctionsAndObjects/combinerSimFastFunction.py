@@ -4,24 +4,24 @@ import numpy as np
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 
 @numba.njit()
-def _force_Func(x, y, z,fieldData):
+def _force_Func(x, y, z,field_data):
     """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-    xArr, yArr, zArr, FxArr, FyArr, FzArr,Varr=fieldData
-    return vec_interp3D(x, y, z, xArr, yArr, zArr, FxArr, FyArr, FzArr)
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr,Varr=field_data
+    return vec_interp3D(x, y, z, x_arr, y_arr, zArr, FxArr, FyArr, FzArr)
 
 @numba.njit()
-def _magnetic_potential_Func( x, y, z,fieldData):
-    xArr, yArr, zArr, FxArr, FyArr, FzArr, VArr = fieldData
-    return scalar_interp3D(x, y, z, xArr, yArr, zArr, VArr)
+def _magnetic_potential_Func( x, y, z,field_data):
+    x_arr, y_arr, zArr, FxArr, FyArr, FzArr, VArr = field_data
+    return scalar_interp3D(x, y, z, x_arr, y_arr, zArr, VArr)
 
 @numba.njit()
-def force( x, y, z,params,fieldData):
+def force( x, y, z,params,field_data):
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan, np.nan, np.nan
     else:
-        return force_Without_isInside_Check(x, y, z,params,fieldData)
+        return force_Without_isInside_Check(x, y, z,params,field_data)
 @numba.njit()
-def force_Without_isInside_Check( x, y, z,params, fieldData):
+def force_Without_isInside_Check( x, y, z,params, field_data):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     ang, La, Lb, Lm,apz,apL,apR, space, field_fact = params
@@ -37,14 +37,14 @@ def force_Without_isInside_Check( x, y, z,params, fieldData):
         if z < 0:  # if in the lower plane, need to use symmetry
             z = -z
             zFact = -1  # z force is opposite in lower half
-    Fx, Fy, Fz = _force_Func(x, y, z,fieldData)
+    Fx, Fy, Fz = _force_Func(x, y, z,field_data)
     Fx = field_fact * xFact * Fx
     Fy = field_fact * Fy
     Fz = field_fact * zFact * Fz
     return Fx, Fy, Fz
 
 @numba.njit()
-def magnetic_potential( x, y, z,params,fieldData):
+def magnetic_potential( x, y, z,params,field_data):
     # this function uses the symmetry of the combiner to extract the magnetic potential everywhere.
     ang, La, Lb, Lm,apz,apL,apR, space, field_fact = params
     if 0 <= x <= (Lm / 2 + space):  # if the particle is in the first half of the magnet
@@ -55,7 +55,7 @@ def magnetic_potential( x, y, z,params,fieldData):
                 x - (Lm / 2 + space))  # use the reflection of the particle
         if z < 0:  # if in the lower plane, need to use symmetry
             z = -z
-    return field_fact * _magnetic_potential_Func(x, y, z,fieldData)
+    return field_fact * _magnetic_potential_Func(x, y, z,field_data)
 @numba.njit()
 def is_coord_in_vacuum(x, y, z, params) -> bool:
     # q: coordinate to test in element's frame

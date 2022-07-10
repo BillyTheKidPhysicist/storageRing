@@ -18,8 +18,8 @@ def test1():
 def test2():
     tolF = 5e-5
     tolC = 5e-9
-    xArr = np.linspace(0, np.pi, 100)
-    yDifAnalytic = np.cos(xArr)
+    x_arr = np.linspace(0, np.pi, 100)
+    yDifAnalytic = np.cos(x_arr)
 
     def func(X):
         return np.sin(X[0])
@@ -27,7 +27,7 @@ def test2():
     opt = GradientOptimizer(func, [0], 1, 1, 1, False, False, False, 'central', 100e-6, 1, 'adam')
     yDifNumericF = []
     yDifNumericC = []
-    for x in xArr:
+    for x in x_arr:
         F0F, gradF = opt._forward_Difference_And_F0([x])
         F0C, gradC = opt._central_Difference_And_F0([x])
         yDifNumericF.append(gradF[0])

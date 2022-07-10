@@ -32,7 +32,7 @@ class CombinerIdeal(BaseElement):
         self.inputOffset = None  # offset along y axis of incoming circulating atoms. a particle entering at this offset in
         # the y, with angle self.ang, will exit at x,y=0,0
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         from latticeElements.combiner_characterizer import characterize_CombinerIdeal
         self.apR, self.apL, self.apz, self.Lm = [val * self.sizeScale for val in
@@ -50,7 +50,7 @@ class CombinerIdeal(BaseElement):
         self.L = self.La * np.cos(
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
 
         numba_func_constants=self.c1,self.c2, self.ang, self.La, self.Lb, self.apz, self.apL, self.apR, self.field_fact
 
@@ -96,13 +96,13 @@ class CombinerIdeal(BaseElement):
     def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element"""
         qNew = q_el.copy()
-        qNew[:2] = self.ROut @ qNew[:2] + self.r2[:2]
+        qNew[:2] = self.R_Out @ qNew[:2] + self.r2[:2]
         return qNew
 
     def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element"""
         qNew = q_orbit.copy()
         qNew[0] = -qNew[0]
-        qNew[:2] = self.ROut @ qNew[:2]
+        qNew[:2] = self.R_Out @ qNew[:2]
         qNew += self.r1
         return qNew

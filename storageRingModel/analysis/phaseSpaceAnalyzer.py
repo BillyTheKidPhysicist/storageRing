@@ -176,26 +176,26 @@ class PhaseSpaceAnalyzer:
 
     def _find_Max_Xorbit_For_Swarm(self, timeStep=-1):
         # find the maximum longitudinal distance a particle has traveled
-        xMax = 0.0
+        x_max = 0.0
         for particle in self.swarm:
             if len(particle.qoArr) > 0:
-                xMax = max([xMax, particle.qoArr[timeStep, 0]])
-        return xMax
+                x_max = max([x_max, particle.qoArr[timeStep, 0]])
+        return x_max
 
     def _find_Inclusive_Min_XOrbit_For_Swarm(self):
         # find the smallest x that as ahead of all particles, ie inclusive
-        xMin = 0.0
+        x_min = 0.0
         for particle in self.swarm:
             if len(particle.qoArr) > 0:
-                xMin = max([xMin, particle.qoArr[0, 0]])
-        return xMin
+                x_min = max([x_min, particle.qoArr[0, 0]])
+        return x_min
 
     def _make_SnapShot_Position_Arr_At_Same_X(self, xVideoPoint):
-        xMax = self._find_Max_Xorbit_For_Swarm()
-        revolutionsMax = int((xMax - xVideoPoint) / self.lattice.totalLength)
+        x_max = self._find_Max_Xorbit_For_Swarm()
+        revolutionsMax = int((x_max - xVideoPoint) / self.lattice.totalLength)
         assert revolutionsMax > 0
-        xArr = np.arange(revolutionsMax + 1) * self.lattice.totalLength + xVideoPoint
-        return xArr
+        x_arr = np.arange(revolutionsMax + 1) * self.lattice.totalLength + xVideoPoint
+        return x_arr
 
     def _plot_Lattice_On_Axis(self, ax, plotPointCoords=None):
         for el in self.lattice:
@@ -266,9 +266,9 @@ class PhaseSpaceAnalyzer:
     def _make_SnapShot_XArr(self, numPoints):
         # revolutions: set to -1 for using the largest number possible based on swarm
         xMaxSwarm = self._find_Max_Xorbit_For_Swarm()
-        xMax = min(xMaxSwarm, self.maxRevs * self.lattice.totalLength)
+        x_max = min(xMaxSwarm, self.maxRevs * self.lattice.totalLength)
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
-        return np.linspace(xStart, xMax, numPoints)
+        return np.linspace(xStart, x_max, numPoints)
 
     def make_Phase_Space_Movie_At_Repeating_Lattice_Point(self, videoTitle, xVideoPoint, xaxis='y', yaxis='z',
                                                           videoLengthSeconds=10.0, alpha=.25, dpi=None):
@@ -292,9 +292,9 @@ class PhaseSpaceAnalyzer:
         self.maxRevs = maxRevs
         self._check_Axis_Choice(xaxis, yaxis)
         numFrames = int(videoLengthSeconds * fps)
-        xArr = self._make_SnapShot_XArr(numFrames)
+        x_arr = self._make_SnapShot_XArr(numFrames)
         print('making video')
-        self._make_Phase_Space_Video_For_X_Array(title, xArr, xaxis, yaxis, alpha, fps, dpi)
+        self._make_Phase_Space_Video_For_X_Array(title, x_arr, xaxis, yaxis, alpha, fps, dpi)
 
     def plot_Survival_Versus_Time(self, TMax=None, axis=None):
         TSurvivedList = []
@@ -476,9 +476,9 @@ class PhaseSpaceAnalyzer:
         maxCompletedRevs = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.totalLength)
         assert maxCompletedRevs > 1
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
-        xMax = self.lattice.totalLength
+        x_max = self.lattice.totalLength
         numEnvPoints = 50
-        xSnapShotArr = np.linspace(xStart, xMax, numEnvPoints)
+        xSnapShotArr = np.linspace(xStart, x_max, numEnvPoints)
         yCoordIndex = 1
         envelopeData = np.zeros((numEnvPoints, 1))  # this array will have each row filled with the relevant particle
         # particle parameters for all revolutions.

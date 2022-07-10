@@ -121,9 +121,9 @@ def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, Comb
     theta = theta + 2 * np.pi  # conventino
     combiner.theta = theta
     rot = combiner.theta
-    combiner.ROut = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
+    combiner.R_Out = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
     rot = -rot
-    combiner.RIn = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(combiner.ROut)
+    combiner.R_In = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(combiner.R_Out)
 
 
 def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal],
@@ -148,8 +148,8 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
     if theta < 0:
         theta += np.pi * 2
     element.theta = theta
-    element.ROut = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    element.RIn = np.asarray([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
+    element.R_Out = np.asarray([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+    element.R_In = np.asarray([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
 
 
 def is_Particle_Tracer_Lattice_Closed(PTL) -> bool:

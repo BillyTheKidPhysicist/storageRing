@@ -6,13 +6,13 @@
 #         # super().__init__(PTL, geneticLens.length, geneticLens.maximum_Radius(), np.nan,np.nan,'injector',fillParams=False)
 #         raise NotImplementedError #under construction still
 #         super().__init__(PTL, geneticLens.length, None, geneticLens.maximum_Radius(), ap, 0.0, fillParams=False)
-#         self.fringeFracOuter = 4.0
-#         self.L = geneticLens.length + 2 * self.fringeFracOuter * self.rp
+#         self.fringe_frac_outer = 4.0
+#         self.L = geneticLens.length + 2 * self.fringe_frac_outer * self.rp
 #         self.Lo = None
 #         self.shape = 'STRAIGHT'
 #         self.lens = geneticLens
 #         assert self.lens.minimum_Radius() >= ap
-#         self.fringeFracInnerMin = np.inf  # if the total hard edge magnet length is longer than this value * rp, then it can
+#         self.fringe_frac_inner_min = np.inf  # if the total hard edge magnet length is longer than this value * rp, then it can
 #         # can safely be modeled as a magnet "cap" with a 2D model of the interior
 #         self.self.effectiveLength = None  # if the magnet is very long, to save simulation
 #         # time use a smaller length that still captures the physics, and then model the inner portion as 2D
@@ -35,7 +35,7 @@
 #         numPointsLongitudinal = 31
 #         numPointsTransverse = 31
 #
-#         self.Lm = self.L - 2 * self.fringeFracOuter * self.rp  # hard edge length of magnet
+#         self.Lm = self.L - 2 * self.fringe_frac_outer * self.rp  # hard edge length of magnet
 #         assert np.abs(self.Lm - self.lens.length) < 1e-6
 #         assert self.Lm > 0.0
 #         self.Lo = self.L
@@ -47,21 +47,21 @@
 #         yArr_Quadrant = np.linspace(-TINY_STEP, self.ap + TINY_STEP, numXY)
 #         xArr_Quadrant = np.linspace(-(self.ap + TINY_STEP), TINY_STEP, numXY)
 #
-#         zMin = -TINY_STEP
-#         zMax = self.L / 2 + TINY_STEP
-#         zArr = np.linspace(zMin, zMax, num=numPointsLongitudinal)  # add a little extra so interp works as expected
+#         z_min = -TINY_STEP
+#         z_max = self.L / 2 + TINY_STEP
+#         zArr = np.linspace(z_min, z_max, num=numPointsLongitudinal)  # add a little extra so interp works as expected
 #
 #         # assert (zArr[-1]-zArr[-2])/self.rp<.2, "spatial step size must be small compared to radius"
 #         assert len(xArr_Quadrant) % 2 == 1 and len(yArr_Quadrant) % 2 == 1
 #         assert all((arr[-1] - arr[-2]) / self.rp < .1 for arr in [xArr_Quadrant, yArr_Quadrant]), "" \
 #                                                                "spatial step size must be small compared to radius"
 #
-#         volumeCoords = np.asarray(np.meshgrid(xArr_Quadrant, yArr_Quadrant, zArr)).T.reshape(-1,
+#         volume_coords = np.asarray(np.meshgrid(xArr_Quadrant, yArr_Quadrant, zArr)).T.reshape(-1,
 #                                                                             3)  # note that these coordinates can have
 #         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 #         # input coordinates will be shifted in a wrapper function
-#         B_norm_grad, B_norm = self.lens.B_norm_grad(volumeCoords, return_norm=True)
-#         data3D = np.column_stack((volumeCoords, B_norm_grad, B_norm))
+#         B_norm_grad, B_norm = self.lens.B_norm_grad(volume_coords, return_norm=True)
+#         data3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
 #         self.fill_Field_Func(data3D)
 #         # self.compile_fast_Force_Function()
 #
@@ -73,7 +73,7 @@
 #         raise Exception("under construction")
 #
 #         # if np.isnan(F[0])==False:
-#         #     if q[0]<2*self.rp*self.fringeFracOuter or q[0]>self.L-2*self.rp*self.fringeFracOuter:
+#         #     if q[0]<2*self.rp*self.fringe_frac_outer or q[0]>self.L-2*self.rp*self.fringe_frac_outer:
 #         #         return np.zeros(3)
 #         # F = self.field_fact * np.asarray(F)
 #         # return F

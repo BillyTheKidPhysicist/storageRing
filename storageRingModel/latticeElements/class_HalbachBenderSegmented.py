@@ -12,8 +12,8 @@ from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenera
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
 from helperTools import arr_Product, round_And_Make_Odd
 from latticeElements.class_BenderIdeal import BenderIdeal
-from latticeElements.utilities import TINY_OFFSET, is_Even, mirror_Across_Angle, full_Arctan, \
-    max_Tube_Radius_In_Segmented_Bend, halbach_Magnet_Width, get_Unit_Cell_Angle, B_GRAD_STEP_SIZE, \
+from latticeElements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
+    max_tube_radius_in_segmented_bend, halbach_magnet_width, get_Unit_Cell_Angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_OFFSET, TINY_INTERP_STEP
 from numbaFunctionsAndObjects.fieldHelpers import get_Halbach_Bender
 from typeHints import sequence
@@ -37,7 +37,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     # 3: a model of the input portion of the bender. This portions extends half a magnet length past z=0. Must include
     # enough extra space to account for fringe fields. See docs/images/HalbachBenderSimSegmentedImage3.png
 
-    fringeFracOuter: float = 1.5  # multiple of bore radius to accomodate fringe field
+    fringe_frac_outer: float = 1.5  # multiple of bore radius to accomodate fringe field
 
     numModelLenses: int = 7  # number of lenses in halbach model to represent repeating system. Testing has shown
     # this to be optimal
@@ -53,10 +53,10 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lm = Lm
         self.rp = rp
         self.ap = ap
-        self.magnetWidth = halbach_Magnet_Width(rp, use_standard_sizes=PTL.use_standard_mag_size)
+        self.magnetWidth = halbach_magnet_width(rp, use_standard_sizes=PTL.use_standard_mag_size)
         self.ucAng: Optional[float] = None
         self.rOffsetFact = rOffsetFact  # factor to times the theoretic optimal bending radius by
-        self.Lcap = self.fringeFracOuter * self.rp
+        self.Lcap = self.fringe_frac_outer * self.rp
         self.numMagnets = numMagnets
         self.numPointsBoreAp: int = round_And_Make_Odd(self.numPointsBoreApDefault * self.PTL.fieldDensityMultiplier)
         # This many points should span the bore ap for good field sampling
@@ -64,7 +64,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_Maximum_Aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        ap_maxGeom = max_Tube_Radius_In_Segmented_Bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
+        ap_maxGeom = max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
                                                       use_standard_sizes=self.PTL.use_standard_mag_size)
         # todo: revisit this, I am doubtful of how correct this is
         safetyFactor = .95
@@ -82,7 +82,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         assert 0.0 <= BpFact
         self.field_fact = BpFact
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         self.output_offset = self.find_Optimal_Radial_Offset() * self.rOffsetFact
         self.ro = self.output_offset + self.rb
 
@@ -103,9 +103,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         def offset_Error(rOffset):
             assert abs(rOffset) < self.rp
             r = self.rb + rOffset
-            xArr = r * np.cos(thetaArr)
-            yArr = r * np.sin(thetaArr)
-            coords = np.column_stack((xArr, yArr, zArr))
+            x_arr = r * np.cos(thetaArr)
+            y_arr = r * np.sin(thetaArr)
+            coords = np.column_stack((x_arr, y_arr, zArr))
             F = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
             Fr = np.linalg.norm(F[:, :2], axis=1)
             FCen = np.ones(len(coords)) * m * self.PTL.speed_nominal ** 2 / r
@@ -127,7 +127,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         The unit cell includes half of the magnet and half the gap between the two"""
         return get_Unit_Cell_Angle(self.Lm, self.rb, self.rp + self.magnetWidth)
 
-    def fill_Post_Constrained_Parameters(self) -> None:
+    def fill_post_constrained_parameters(self) -> None:
         self.ap = self.ap if self.ap is not None else self.compute_Maximum_Aperture()
         assert self.ap <= self.compute_Maximum_Aperture()
         self.ucAng = self.get_Unit_Cell_Angle()
@@ -139,14 +139,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lo = self.ang * self.ro + 2 * self.Lcap
         self.outer_half_width = self.rp + self.magnetWidth + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
         """compute field values and build fast numba helper"""
         fieldDataSeg = self.generate_Segment_Field_Data()
         fieldDataInternal = self.generate_Internal_Fringe_Field_Data()
         fieldDataCap = self.generate_Cap_Field_Data()
         fieldDataPerturbation = self.generate_Perturbation_Data() if self.PTL.use_mag_errors else dummy_field_data_empty
         assert np.all(fieldDataCap[0] == fieldDataInternal[0]) and np.all(fieldDataCap[2] == fieldDataInternal[2])
-        fieldData=(fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation)
+        field_data=(fieldDataSeg, fieldDataInternal, fieldDataCap, fieldDataPerturbation)
         useFieldPerturbations = self.PTL.use_mag_errors
 
         m = np.tan(self.ucAng)
@@ -158,26 +158,26 @@ class HalbachBenderSimSegmented(BenderIdeal):
         numba_func_constants=(self.rb,self.ap,self.Lcap,self.ang,self.numMagnets,
                               self.ucAng,M_ang,RIn_Ang,M_uc,self.field_fact,useFieldPerturbations)
 
-        force_args=(numba_func_constants,fieldData)
-        potential_args=(numba_func_constants,fieldData)
+        force_args=(numba_func_constants,field_data)
+        potential_args=(numba_func_constants,field_data)
         is_coord_in_vacuum_args=(numba_func_constants,)
         
 
         self.assign_numba_functions(benderHalbachFastFunctions,force_args,potential_args,is_coord_in_vacuum_args)
 
 
-    def make_Grid_Coords(self, xMin: float, xMax: float, yMin: float, yMax: float) -> np.ndarray:
+    def make_Grid_Coords(self, x_min: float, x_max: float, y_min: float, y_max: float) -> np.ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
-        assert not is_Even(self.numPointsBoreAp)  # points should be odd to there is a point at zero field, if possible
+        assert not is_even(self.numPointsBoreAp)  # points should be odd to there is a point at zero field, if possible
         longitudinalCoordSpacing: float = (.8 * self.rp / 10.0) / self.PTL.fieldDensityMultiplier  # Spacing
         # through unit cell. .8 was carefully chosen
-        numPointsX = round_And_Make_Odd(self.numPointsBoreAp * (xMax - xMin) / self.ap)
-        zMin, zMax = -TINY_INTERP_STEP, (self.ap + TINY_INTERP_STEP)  # same for every part of bender
-        numPointsZ = self.numPointsBoreAp
-        numPointsY = round_And_Make_Odd((yMax - yMin) / longitudinalCoordSpacing)
-        assert (numPointsX + 1) / numPointsZ >= (xMax - xMin) / (zMax - zMin)  # should be at least this ratio
-        xArrArgs, yArrArgs, zArrArgs = (xMin, xMax, numPointsX), (yMin, yMax, numPointsY), (zMin, zMax, numPointsZ)
+        numPointsX = round_And_Make_Odd(self.numPointsBoreAp * (x_max - x_min) / self.ap)
+        z_min, z_max = -TINY_INTERP_STEP, (self.ap + TINY_INTERP_STEP)  # same for every part of bender
+        num_points_z = self.numPointsBoreAp
+        numPointsY = round_And_Make_Odd((y_max - y_min) / longitudinalCoordSpacing)
+        assert (numPointsX + 1) / num_points_z >= (x_max - x_min) / (z_max - z_min)  # should be at least this ratio
+        xArrArgs, yArrArgs, zArrArgs = (x_min, x_max, numPointsX), (y_min, y_max, numPointsY), (z_min, z_max, num_points_z)
         coordArrList = [np.linspace(arrArgs[0], arrArgs[1], arrArgs[2]) for arrArgs in (xArrArgs, yArrArgs, zArrArgs)]
         gridCoords = np.asarray(np.meshgrid(*coordArrList)).T.reshape(-1, 3)
         return gridCoords
@@ -220,7 +220,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         ycArr = np.linspace(-self.ap - TINY_OFFSET, self.ap + TINY_OFFSET,
                             numYc)  # deviation in vertical from center of
         # bender, along y in cartesian
-        assert not is_Even(len(sArr)) and not is_Even(len(xcArr)) and not is_Even(len(ycArr))
+        assert not is_even(len(sArr)) and not is_even(len(xcArr)) and not is_even(len(ycArr))
         coordsCenter = arr_Product(sArr, xcArr, ycArr)
         coords = np.asarray([self.convert_Center_To_Cartesian_Coords(*coordCenter) for coordCenter in coordsCenter])
         return coordsCenter, coords
@@ -237,17 +237,17 @@ class HalbachBenderSimSegmented(BenderIdeal):
         valsPerturbation = valsImperfect - valsPerfect
         valsPerturbation[np.isnan(valsPerturbation)] = 0.0
         interpData = np.column_stack((coordsCenter, valsPerturbation))
-        interpData = self.shape_Field_Data_3D(interpData)
+        interpData = self.shape_field_data_3D(interpData)
 
         return interpData
 
     def generate_Cap_Field_Data(self) -> tuple[np.ndarray, ...]:
         # x and y bounds should match with internal fringe bounds
-        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP
-        xMax = self.rb + self.ap + TINY_INTERP_STEP
-        yMin = -(self.Lcap + TINY_INTERP_STEP)
-        yMax = TINY_INTERP_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
+        x_min = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP
+        x_max = self.rb + self.ap + TINY_INTERP_STEP
+        y_min = -(self.Lcap + TINY_INTERP_STEP)
+        y_max = TINY_INTERP_STEP
+        fieldCoords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
         validIndices = np.sqrt((fieldCoords[:, 0] - self.rb) ** 2 + fieldCoords[:, 2] ** 2) < self.rp - B_GRAD_STEP_SIZE
         lens = self.build_Bender(True, (True, False))
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
@@ -256,11 +256,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
         """An magnet slices are required to model the region going from the cap to the repeating unit cell,otherwise
         there is too large of an energy discontinuity"""
         # x and y bounds should match with cap bounds
-        xMin = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP  # inward enough to account for the tilt
-        xMax = self.rb + self.ap + TINY_INTERP_STEP
-        yMin = -TINY_INTERP_STEP
-        yMax = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
+        x_min = (self.rb - self.ap) * cos(2 * self.ucAng) - TINY_INTERP_STEP  # inward enough to account for the tilt
+        x_max = self.rb + self.ap + TINY_INTERP_STEP
+        y_min = -TINY_INTERP_STEP
+        y_max = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
+        fieldCoords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
         lens = self.build_Bender(True, (True, False))
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 3)
         return self.compute_Valid_Field_Data(lens, fieldCoords, validIndices)
@@ -304,11 +304,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def generate_Segment_Field_Data(self) -> tuple[np.ndarray, ...]:
         """Internal repeating unit cell segment. This is modeled as a tilted portion with angle self.ucAng to the
         z axis, with its bottom face at z=0 alinged with the xy plane. In magnet frame coordinates"""
-        xMin = (self.rb - self.ap) * cos(self.ucAng) - TINY_INTERP_STEP
-        xMax = self.rb + self.ap + TINY_INTERP_STEP
-        yMin = -TINY_INTERP_STEP
-        yMax = tan(self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
-        fieldCoords = self.make_Grid_Coords(xMin, xMax, yMin, yMax)
+        x_min = (self.rb - self.ap) * cos(self.ucAng) - TINY_INTERP_STEP
+        x_max = self.rb + self.ap + TINY_INTERP_STEP
+        y_min = -TINY_INTERP_STEP
+        y_max = tan(self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
+        fieldCoords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
 
         validIndices = self.get_Valid_Indices_Internal(fieldCoords, 1)
         lens = self.build_Bender(False, (False, False))
@@ -325,7 +325,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                  validIndices: sequence) -> tuple[np.ndarray, ...]:
         BNormGradArr, BNormArr = self.compute_Valid_Field_Vals(lens, fieldCoords, validIndices)
         fieldDataUnshaped = np.column_stack((fieldCoords, BNormGradArr, BNormArr))
-        return self.shape_Field_Data_3D(fieldDataUnshaped)
+        return self.shape_field_data_3D(fieldDataUnshaped)
 
     def build_Bender(self, positiveAngleOnly: bool, useHalfCapEnd: tuple[bool, bool], methodOfMoments: bool = True,
                      numLenses: int = None, use_mag_errors: bool = False):
@@ -347,12 +347,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
             - 'ARC' in the bending arc between input and output caps
         Return 'NONE' if not inside the bender"""
 
-        angle = full_Arctan(q_el)
+        angle = full_arctan2(q_el)
         if 0 <= angle <= self.ang:
             return 'ARC'
         capNames = ['IN', 'OUT']
         for name in capNames:
-            xCap, yCap = mirror_Across_Angle(q_el[0], q_el[1], self.ang / 2.0) if name == 'IN' else q_el[:2]
+            xCap, yCap = mirror_across_angle(q_el[0], q_el[1], self.ang / 2.0) if name == 'IN' else q_el[:2]
             if (self.rb - self.ap < xCap < self.rb + self.ap) and (0 > yCap > -self.Lcap):
                 return name
         return 'NONE'
@@ -361,14 +361,14 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
         whichSection = self.in_Which_Section_Of_Bender(q_el)
         if whichSection == 'ARC':
-            phi = self.ang - full_Arctan(q_el)
+            phi = self.ang - full_arctan2(q_el)
             xo = sqrt(q_el[0] ** 2 + q_el[1] ** 2) - self.ro
             so = self.ro * phi + self.Lcap  # include the distance traveled throught the end cap
         elif whichSection == 'OUT':
             so = self.Lcap + self.ang * self.ro + (-q_el[1])
             xo = q_el[0] - self.ro
         elif whichSection == 'IN':
-            xMirror, yMirror = mirror_Across_Angle(q_el[0], q_el[1], self.ang / 2.0)
+            xMirror, yMirror = mirror_across_angle(q_el[0], q_el[1], self.ang / 2.0)
             so = self.Lcap + yMirror
             xo = xMirror - self.ro
         else:
@@ -386,7 +386,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         elif whichSection == 'OUT':
             pso, pxo = -p_el[1], p_el[0]
         elif whichSection == 'IN':
-            pxo, pso = mirror_Across_Angle(p_el[0], p_el[1], self.ang / 2.0)
+            pxo, pso = mirror_across_angle(p_el[0], p_el[1], self.ang / 2.0)
         else:
             raise ValueError
         pOrbit = np.array([pso, pxo, q_el[-2]])

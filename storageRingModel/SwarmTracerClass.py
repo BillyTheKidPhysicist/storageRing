@@ -270,7 +270,7 @@ class SwarmTracer:
         if copy_swarm == True:
             swarm = swarm.copy()
 
-        R = self.lattice.combiner.RIn.copy()  # matrix to rotate into combiner frame
+        R = self.lattice.combiner.R_In.copy()  # matrix to rotate into combiner frame
         r2 = self.lattice.combiner.r2.copy()  # position of the outlet of the combiner
         r2 += self.combiner_Output_Offset_Shift()
 

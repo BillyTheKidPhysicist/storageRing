@@ -28,13 +28,13 @@ class LensIdeal(BaseElement):
         self.ap = rp if ap is None else ap  # size of apeture radially
         self.K = None
 
-    def fill_Pre_Constrained_Parameters(self) -> None:
+    def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.K = self.field_fact * (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         if self.L is not None:
             self.Lo = self.L
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
 
         numba_func_constants=self.K,self.L,self.ap,self.field_fact
         force_args = (numba_func_constants,)
@@ -60,7 +60,7 @@ class LensIdeal(BaseElement):
     def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         qNew = q_orbit.copy()
-        qNew[:2] = self.ROut @ qNew[:2]
+        qNew[:2] = self.R_Out @ qNew[:2]
         qNew += self.r1
         return qNew
 

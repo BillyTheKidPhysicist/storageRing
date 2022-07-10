@@ -201,11 +201,11 @@ def low_discrepancy_sample(bounds: lst_tup_arr_type, num: int, seed=None) -> np.
 #             return 3
 #         return 0.0
 #
-#     xArr = np.linspace(-1, 1, 15)
-#     yArr = np.linspace(-1, 1, 5)
-#     image, extent = tool_Make_Image_Cartesian(fake_Func, xArr, yArr, extraArgs=[None])
+#     x_arr = np.linspace(-1, 1, 15)
+#     y_arr = np.linspace(-1, 1, 5)
+#     image, extent = tool_Make_Image_Cartesian(fake_Func, x_arr, y_arr, extraArgs=[None])
 #     assert (
-#         image[len(yArr) - 1, 0] == 1
+#         image[len(y_arr) - 1, 0] == 1
 #         and image[0, 0] == 2
-#         and image[0, len(xArr) - 1] == 3
+#         and image[0, len(x_arr) - 1] == 3
 #     )

@@ -2,7 +2,7 @@ from latticeElements.elements import HalbachLensSim
 from SwarmTracerClass import SwarmTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 
-assert HalbachLensSim.fringeFracOuter == 1.5
+assert HalbachLensSim.fringe_frac_outer == 1.5
 
 swarmShift_x=0.0372 * 1.5 - 0.03
 def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identical bumper, but does not end the lattice

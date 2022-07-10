@@ -11,7 +11,7 @@ import numba
 
 
 
-def wrap_Numba_func(func,args):
+def wrap_numba_func(func,args):
     @numba.njit()
     def func_wrapper(x, y, z):
         return func(x, y, z, *args)
@@ -26,7 +26,7 @@ class BaseElement:
     smoothly move from one to another, and many class variables serves this purpose. An element also contains methods
     for force vectors and magnetic potential at a point in space. It will also contain methods to generate fields values
     and construct itself, which is not always trivial.
-    """
+    """ 
 
     def __init__(self, PTL, ang: float = 0.0, L=None):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
@@ -45,8 +45,8 @@ class BaseElement:
         self.nb: Optional[np.ndarray] = None  # normal vector to beginning (clockwise sense) of element.
         self.ne: Optional[np.ndarray] = None  # normal vector to end (clockwise sense) of element
 
-        self.ROut: Optional[np.ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
-        self.RIn: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
+        self.R_Out: Optional[np.ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
+        self.R_In: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
         self.r1: Optional[np.ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
         self.r2: Optional[np.ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
         self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for
@@ -67,7 +67,7 @@ class BaseElement:
         self.fast_field_helper = None
         self.numba_functions: dict={}
 
-    def build_fast_field_felper(self) -> None:
+    def build_fast_field_helper(self) -> None:
         raise NotImplementedError
 
     def set_field_fact(self, field_fact: bool):
@@ -199,7 +199,7 @@ class BaseElement:
         :return: 3D cartesian vector in element frame,numpy.array([vx,vy,vz])
         """""
         vecNew = vecLab.copy()  # prevent editing
-        vecNew[:2] = self.RIn @ vecNew[:2]
+        vecNew[:2] = self.R_In @ vecNew[:2]
         return vecNew
 
     def transform_Element_Frame_Vector_Into_Lab_Frame(self, vecEl: np.ndarray) -> np.ndarray:
@@ -210,7 +210,7 @@ class BaseElement:
         :return: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz])
         """
         vecNew = vecEl.copy()  # prevent editing
-        vecNew[:2] = self.ROut @ vecNew[:2]
+        vecNew[:2] = self.R_Out @ vecNew[:2]
         return vecNew
 
     def is_Coord_Inside(self, q_el: np.ndarray) -> bool:
@@ -223,23 +223,22 @@ class BaseElement:
         return self.numba_functions['is_coord_in_vacuum'](*q_el)  # will raise NotImplementedError if called
 
     def assign_numba_functions(self,func_module,force_args,potential_args,is_coord_in_vacuum_args)-> None:
-        self.numba_functions['force']=wrap_Numba_func(func_module.force,force_args)
-        self.numba_functions['magnetic_potential']=wrap_Numba_func(func_module.magnetic_potential,potential_args)
-        self.numba_functions['is_coord_in_vacuum']=wrap_Numba_func(func_module.is_coord_in_vacuum,is_coord_in_vacuum_args)
+        self.numba_functions['force']=wrap_numba_func(func_module.force,force_args)
+        self.numba_functions['magnetic_potential']=wrap_numba_func(func_module.magnetic_potential,potential_args)
+        self.numba_functions['is_coord_in_vacuum']=wrap_numba_func(func_module.is_coord_in_vacuum,is_coord_in_vacuum_args)
 
-
-    def fill_Pre_Constrained_Parameters(self):
+    def fill_pre_constrained_parameters(self):
         """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely
         objects, and positions still need to be solved for/computed after this point. Most elements call compute all
         their internal parameters before the floorplan is solved, but lenses may have length unspecified and bending
         elements may have bending angle or number of magnets unspecified for example"""
         raise NotImplementedError
 
-    def fill_Post_Constrained_Parameters(self):
+    def fill_post_constrained_parameters(self):
         """Fill internal parameters after constrained lattice layout is solved. See fill_Pre_Constrainted_Parameters.
         At this point everything about the geometry of the element is specified"""
 
-    def shape_Field_Data_3D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
+    def shape_field_data_3D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
         """
         Shape 3D field data for fast linear interpolation method
 
@@ -253,50 +252,50 @@ class BaseElement:
         (Fx,Fy,Fz,V)
         """
         assert data.shape[1] == 7 and len(data) > 2 ** 3
-        xArr = np.unique(data[:, 0])
-        yArr = np.unique(data[:, 1])
+        x_arr = np.unique(data[:, 0])
+        y_arr = np.unique(data[:, 1])
         zArr = np.unique(data[:, 2])
-        assert all(not np.any(np.isnan(arr)) for arr in (xArr, yArr, zArr))
+        assert all(not np.any(np.isnan(arr)) for arr in (x_arr, y_arr, zArr))
 
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        numz = zArr.shape[0]
-        FxMatrix = np.empty((numx, numy, numz))
-        FyMatrix = np.empty((numx, numy, numz))
-        FzMatrix = np.empty((numx, numy, numz))
-        VMatrix = np.zeros((numx, numy, numz))
-        xIndices = np.argwhere(data[:, 0][:, None] == xArr)[:, 1]
-        yIndices = np.argwhere(data[:, 1][:, None] == yArr)[:, 1]
+        num_x = x_arr.shape[0]
+        num_y = y_arr.shape[0]
+        num_z = zArr.shape[0]
+        FxMatrix = np.empty((num_x, num_y, num_z))
+        FyMatrix = np.empty((num_x, num_y, num_z))
+        FzMatrix = np.empty((num_x, num_y, num_z))
+        VMatrix = np.zeros((num_x, num_y, num_z))
+        x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
+        yIndices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
         zIndices = np.argwhere(data[:, 2][:, None] == zArr)[:, 1]
-        FxMatrix[xIndices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 3]
-        FyMatrix[xIndices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 4]
-        FzMatrix[xIndices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 5]
-        VMatrix[xIndices, yIndices, zIndices] = SIMULATION_MAGNETON * data[:, 6]
+        FxMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 3]
+        FyMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 4]
+        FzMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 5]
+        VMatrix[x_indices, yIndices, zIndices] = SIMULATION_MAGNETON * data[:, 6]
         VFlat, FxFlat, FyFlat, FzFlat = VMatrix.ravel(), FxMatrix.ravel(), FyMatrix.ravel(), FzMatrix.ravel()
-        return xArr, yArr, zArr, FxFlat, FyFlat, FzFlat, VFlat
+        return x_arr, y_arr, zArr, FxFlat, FyFlat, FzFlat, VFlat
 
-    def shape_Field_Data_2D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
-        """2D version of shape_Field_Data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
+    def shape_field_data_2D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
+        """2D version of shape_field_data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
         assert data.shape[1] == 5 and len(data) > 2 ** 3
-        xArr = np.unique(data[:, 0])
-        yArr = np.unique(data[:, 1])
-        numx = xArr.shape[0]
-        numy = yArr.shape[0]
-        BGradxMatrix = np.zeros((numx, numy))
-        BGradyMatrix = np.zeros((numx, numy))
-        B0Matrix = np.zeros((numx, numy))
-        xIndices = np.argwhere(data[:, 0][:, None] == xArr)[:, 1]
-        yIndices = np.argwhere(data[:, 1][:, None] == yArr)[:, 1]
+        x_arr = np.unique(data[:, 0])
+        y_arr = np.unique(data[:, 1])
+        num_x = x_arr.shape[0]
+        num_y = y_arr.shape[0]
+        BGradxMatrix = np.zeros((num_x, num_y))
+        BGradyMatrix = np.zeros((num_x, num_y))
+        B0Matrix = np.zeros((num_x, num_y))
+        x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
+        yIndices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
 
-        BGradxMatrix[xIndices, yIndices] = data[:, 2]
-        BGradyMatrix[xIndices, yIndices] = data[:, 3]
-        B0Matrix[xIndices, yIndices] = data[:, 4]
+        BGradxMatrix[x_indices, yIndices] = data[:, 2]
+        BGradyMatrix[x_indices, yIndices] = data[:, 3]
+        B0Matrix[x_indices, yIndices] = data[:, 4]
         FxMatrix = -SIMULATION_MAGNETON * BGradxMatrix
         FyMatrix = -SIMULATION_MAGNETON * BGradyMatrix
         VMatrix = SIMULATION_MAGNETON * B0Matrix
         VFlat, FxFlat, FyFlat = np.ravel(VMatrix), np.ravel(FxMatrix), np.ravel(FyMatrix)
-        return xArr, yArr, FxFlat, FyFlat, VFlat
+        return x_arr, y_arr, FxFlat, FyFlat, VFlat
 
-    def get_Valid_Jitter_Amplitude(self):
+    def get_valid_jitter_amplitude(self):
         """If jitter (radial misalignment) amplitude is too large, it is clipped."""
-        return self.PTL.jitterAmp
+        return self.PTL.jitter_amp
