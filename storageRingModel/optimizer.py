@@ -207,7 +207,7 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
 
 
 def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expandedBounds=False, globalTol=.005,
-             disp=True, processes=10, local_optimizer='octopus', use_solenoid_field: bool = False,
+             disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None):
     """Optimize a model of the ring and injector"""
