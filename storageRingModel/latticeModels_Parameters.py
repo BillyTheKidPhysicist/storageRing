@@ -130,7 +130,7 @@ optimizerBounds_V1_3: LockedDict = LockedDict({
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
     # 'rpLens2': (.02, .04),
     'rp_bend': (.005, .01),
-    'L_Lens1': (.05, .5),
+    'L_Lens1': (.1, .3),
     'L_Lens2': (.3, .7)
 })
 

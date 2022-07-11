@@ -149,11 +149,11 @@ class GradientOptimizer:
 
     def solve_Grad_Descent(self):
         if self.descentMethod == 'momentum':
-            xOptimal, objOptimal = self.momentum_Method()
+            x_optimal, objOptimal = self.momentum_Method()
         else:
-            xOptimal, objOptimal = self.adam_Method()
+            x_optimal, objOptimal = self.adam_Method()
 
-        return xOptimal, objOptimal
+        return x_optimal, objOptimal
 
 
 def gradient_Descent(funcObj, xi, stepSizeInitial, max_iters, momentumFact=.9, gradMethod='central', disp=False,
@@ -183,8 +183,8 @@ def global_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, max_it
             vals = np.asarray(pool.map(funcObj, samples, chunksize=1))
     else:
         vals = np.asarray([funcObj(x) for x in samples])
-    xOptimal = samples[np.argmin(vals)]
-    result = gradient_Descent(funcObj, xOptimal, stepSizeInitial, max_iters, momentumFact=momentumFact,
+    x_optimal = samples[np.argmin(vals)]
+    result = gradient_Descent(funcObj, x_optimal, stepSizeInitial, max_iters, momentumFact=momentumFact,
                               disp=disp, parallel=parallel, gradMethod=gradMethod, Plot=Plot, gradStepSize=gradStepSize,
                               descentMethod=descentMethod)
     return result

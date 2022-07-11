@@ -45,7 +45,7 @@ def check_and_add_default_values(options: Optional[dict]) -> LockedDict:
     return options
 
 
-def el_Fringe_Space(elementName: str, elementBoreRadius: float) -> float:
+def el_fringe_space(elementName: str, elementBoreRadius: float) -> float:
     """Return the gap between hard edge of element (magnetic material) and end of element model. This gap exists
     to allow the field values to fall to negligeable amounts"""
 
@@ -58,7 +58,7 @@ def el_Fringe_Space(elementName: str, elementBoreRadius: float) -> float:
     return fringe_fracs[elementName] * elementBoreRadius
 
 
-def round_Up_If_Below_Min_Time_Step_Gap(proposedLength: float) -> float:
+def round_up_if_below_min_time_step_gap(proposedLength: float) -> float:
     """Elements have a minimum length dictated by ParticleTracerClass for time stepping considerations. A  reasonable
     value for the time stepping is assumed. If wrong, an error will be thrown in ParticleTracerClass"""
 
@@ -76,10 +76,10 @@ def add_drift_if_needed(lattice: ParticleTracerLattice, gap_length: float, el_be
 
     assert gap_length >= 0 and el_after_rp > 0 and el_before_rp > 0
     extra_space = gap_length - (
-            el_Fringe_Space(el_before_name, el_before_rp) + el_Fringe_Space(el_after_name, el_after_rp))
+            el_fringe_space(el_before_name, el_before_rp) + el_fringe_space(el_after_name, el_after_rp))
     if extra_space > 0:
         ap = min([el_before_rp, el_after_rp]) if ap is None else ap
-        lattice.add_drift(round_Up_If_Below_Min_Time_Step_Gap(extra_space), ap=ap)
+        lattice.add_drift(round_up_if_below_min_time_step_gap(extra_space), ap=ap)
 
 
 def add_bend_version_1_2(lattice: ParticleTracerLattice, rp_bend: float) -> None:
@@ -131,9 +131,9 @@ def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
     # as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
     # without it being a new drift region
-    OP_gap = system_constants["OP_MagWidth"] - (el_Fringe_Space('combiner', rp_combiner)
-                                                + el_Fringe_Space('lens', rp_lens_after))
-    OP_gap = round_Up_If_Below_Min_Time_Step_Gap(OP_gap)
+    OP_gap = system_constants["OP_MagWidth"] - (el_fringe_space('combiner', rp_combiner)
+                                                + el_fringe_space('lens', rp_lens_after))
+    OP_gap = round_up_if_below_min_time_step_gap(OP_gap)
     OP_gap = OP_gap if OP_gap > system_constants["OP_PumpingRegionLength"] else \
         system_constants["OP_PumpingRegionLength"]
     lattice.add_drift(OP_gap, ap=system_constants["OP_MagAp_" + which_OP_ap])
@@ -268,8 +268,8 @@ def make_injector_version_any(injector_params: LockedDict, options: dict = None)
     gap1 = injector_params["gap1"]
     gap2 = injector_params["gap2"]
     gap3 = injector_params["gap3"]
-    gap1 -= el_Fringe_Space('lens', injector_params["rp1"])
-    gap2 -= el_Fringe_Space('lens', injector_params["rp1"]) + el_Fringe_Space('lens', injector_params["rp2"])
+    gap1 -= el_fringe_space('lens', injector_params["rp1"])
+    gap2 -= el_fringe_space('lens', injector_params["rp1"]) + el_fringe_space('lens', injector_params["rp2"])
     if gap2 < system_constants["lens1ToLens2_Inject_Gap"]:
         raise InjectorGeometryError
     if gap1 < system_constants["sourceToLens1_Inject_Gap"]:

@@ -36,14 +36,14 @@ def test_Modeler():
     swarmRingTraced = model.swarm_tracer_ring.trace_swarm_through_lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
                                                                         accelerated=True)
 
-    lenses = model.lenses_before_ring_combiner()
+    clippable_elements = model.all_non_drift_elements_in_ring()
     for particle_injector, particle_ring in zip(swarm_injector_traced, swarmRingTraced):
         assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
 
         if particle_injector.q_arr is not None and len(particle_injector.q_arr) > 1:
             qInj_RingFrame = np.array([model.convert_position_injector_to_ring_frame(q) for q in particle_injector.q_arr])
             line = LineString(qInj_RingFrame[:, :2])
-            assert any(lens.SO_outer.intersects(line) for lens in lenses) == \
+            assert any(lens.SO_outer.intersects(line) for lens in clippable_elements) == \
                    model.does_ring_clip_injector_particle(particle_injector)  # test that the
             # method of looking for particle clipping with shapely and without logging agrees with this more
             # straightforward method

@@ -99,9 +99,8 @@ class StorageRingModel:
         if line is None:  # particle was clipped immediately, but in the injector not in the ring
             return False
         else:
-            lenses_pre_combiner = self.lenses_before_ring_combiner()
-            assert all(type(lens) is HalbachLensSim for lens in lenses_pre_combiner)
-            return any(line.intersects(lens.SO_outer) for lens in lenses_pre_combiner)
+            clippable_element=self.all_non_drift_elements_in_ring()
+            return any(line.intersects(lens.SO_outer) for lens in clippable_element)
 
     def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
@@ -138,20 +137,22 @@ class StorageRingModel:
         shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
         return shapes
 
+    def all_non_drift_elements_in_ring(self):
+        return [el for el in self.lattice_ring if type(el) is not Drift]
+
     def floor_plan_overLap_mm(self) -> float:
         """Find the area overlap between the elements before and including the last injector lens, and the lenses
         between combiner input and adjacent bender output. Overlap of the drift region after the last injector lens is
         handled later by clipping particles on it
         """
-        lenses_pre_combiner = self.lenses_before_ring_combiner()
+        overlap_elements = self.all_non_drift_elements_in_ring()
         injector_shapes = self.injector_shapes_in_lab_frame('exterior')
         injector_shapes_to_compare = injector_shapes[:self.injector_lens_indices[-1] + 1]
-        assert all(type(lens) is HalbachLensSim for lens in lenses_pre_combiner)
         m_to_mm_area = 1e3 ** 2
         area_mm = 0.0
-        for lens in lenses_pre_combiner:  # count up all the area overlap
+        for el in overlap_elements:  # count up all the area overlap
             for shape in injector_shapes_to_compare:  # don't forget to add 1
-                area_mm += lens.SO_outer.intersection(shape).area * m_to_mm_area
+                area_mm += el.SO_outer.intersection(shape).area * m_to_mm_area
         return area_mm
 
     def show_floor_plan(self, which: str = 'exterior', defer_show=False, true_aspect_ratio=True,

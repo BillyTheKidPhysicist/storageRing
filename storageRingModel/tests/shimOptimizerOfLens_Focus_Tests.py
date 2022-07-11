@@ -57,10 +57,10 @@ def test1():
 
     r0, phi0, deltaz0, theta0, psi0 = rp, np.pi / 13, .02, np.pi / 3, np.pi / 7
     argsAB = [L0, r0, phi0, deltaz0, theta0, psi0, r0, phi0, deltaz0, np.pi - theta0, psi0]
-    costAB = shimOptimizerAB.cost_Function(argsAB, True, True)
+    costAB = shimOptimizerAB.cost_func(argsAB, True, True)
 
     argsC = [L0, r0, phi0, deltaz0, theta0, psi0]
-    costC = shimOptimizerC.cost_Function(argsC, True, True)
+    costC = shimOptimizerC.cost_func(argsC, True, True)
 
     costAB_0 = 3.8725999982697887
     costC_0 = 3.87259999828051

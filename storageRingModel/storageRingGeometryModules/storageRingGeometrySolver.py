@@ -229,8 +229,9 @@ class StorageRingGeometryConstraintsSolver:
                 def termination_criteria(x, **kwargs):
                     return self.closed_ring_cost(x) < closed_ring_cost
 
-                sol = differential_evolution(self.cost, bounds, seed=seed, polish=False, maxiter=5_000,
-                                             tol=0.0, atol=0.0, callback=termination_criteria, mutation=.5, disp=False)
+                sol = differential_evolution(self.cost, bounds, seed=seed, polish=False, maxiter=1_000,
+                                             tol=0.0, atol=0.0, callback=termination_criteria, disp=False)
+
                 solution_params = self.round_integer_params(sol.x)
                 if self.closed_ring_cost(solution_params) > closed_ring_cost:
                     raise ExcessiveRingCost

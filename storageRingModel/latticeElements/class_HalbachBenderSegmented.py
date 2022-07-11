@@ -64,7 +64,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
         ap_max_geom = max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
-                                                        use_standard_sizes=self.PTL.use_standard_mag_size)
+                                                        use_standard_sizes=self.PTL.use_standard_tube_OD)
         # todo: revisit this, I am doubtful of how correct this is
         safety_factor = .95
         ap_max_interp = safety_factor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \
