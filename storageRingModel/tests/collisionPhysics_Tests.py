@@ -1,7 +1,7 @@
 from collisionPhysics import max_momentum_1D_in_trap, trim_trans_momentum_to_max, collision_rate, \
     collision_partner_momentum_lens, collision_partner_momentum_bender, trim_longitudinal_momentum_to_max
 from math import isclose
-from helperTools import iscloseAll,tool_Parallel_Process
+from helperTools import is_close_all,parallel_evaluate
 import numpy as np
 from constants import SIMULATION_MAGNETON
 
@@ -39,7 +39,7 @@ def test_collision_Rate():
 
 
 def test_collision_Partner_Momentum_Lens():
-    assert iscloseAll(collision_partner_momentum_lens((0.0, 0.0, 0.0), 210.0, 0.0, .01), (210.0, 0.0, 0.0), 1e-12)
+    assert is_close_all(collision_partner_momentum_lens((0.0, 0.0, 0.0), 210.0, 0.0, .01), (210.0, 0.0, 0.0), 1e-12)
     px, py, pz = collision_partner_momentum_lens((.5, 0.0, 0.0), 210.0, .09, .015)
     assert abs(py) < px and abs(pz) < px and pz != 0.0 and py != 0.0 and px != 0.0
 

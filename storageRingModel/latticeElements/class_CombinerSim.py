@@ -7,7 +7,7 @@ from numbaFunctionsAndObjects import combinerSimFastFunction
 
 class CombinerSim(CombinerIdeal):
 
-    def __init__(self, PTL, combinerFileName: str, mode: str, size_scale: float = 1.0):
+    def __init__(self, PTL, combiner_file_name: str, mode: str, size_scale: float = 1.0):
         # PTL: particle tracing lattice object
         # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
         # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
@@ -15,18 +15,18 @@ class CombinerSim(CombinerIdeal):
         # mode: wether the combiner is functioning as a loader, or a circulator.
         # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
         # doubling dimensions halves the gradient
-        assert mode in ('injector', 'storageRing')
-        assert size_scale > 0 and isinstance(combinerFileName, str)
+        assert mode in ('injector', 'storage_ring')
+        assert size_scale > 0 and isinstance(combiner_file_name, str)
         Lm = .187
-        apL = .015
-        apR = .025
-        apZ = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, apL, apR, apZ, size_scale)
+        ap_left = .015
+        ap_right = .025
+        ap_z = 6e-3
+        super().__init__(PTL, Lm, np.nan, np.nan, ap_left, ap_right, ap_z, size_scale)
         self.fringeSpace = 5 * 1.1e-2
-        self.combinerFileName = combinerFileName
+        self.combiner_file_name = combiner_file_name
 
-    def open_And_Shape_Field_Data(self):
-        data = np.asarray(pd.read_csv(self.combinerFileName, delim_whitespace=True, header=None))
+    def open_and_shape_field_data(self):
+        data = np.asarray(pd.read_csv(self.combiner_file_name, delim_whitespace=True, header=None))
 
         # use the new size scaling to adjust the provided data
         data[:, :3] = data[:, :3] * self.size_scale  # scale the dimensions
@@ -38,27 +38,28 @@ class CombinerSim(CombinerIdeal):
 
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
-        from latticeElements.combiner_characterizer import characterize_CombinerSim
+        from latticeElements.combiner_characterizer import characterize_combiner_sim
         self.space = self.fringeSpace * self.size_scale  # extra space past the hard edge on either end to account for fringe fields
-        self.apL = self.apL * self.size_scale
-        self.apR = self.apR * self.size_scale
+        self.ap_left = self.ap_left * self.size_scale
+        self.ap_right = self.ap_right * self.size_scale
         self.apz = self.apz * self.size_scale
 
-        inputAngle, inputOffset, trajectoryLength = characterize_CombinerSim(self)
-        self.L = self.Lo = trajectoryLength
-        self.ang = inputAngle
-        y0 = inputOffset
+        input_ang, input_offset, trajectory_length = characterize_combiner_sim(self)
+        self.L = self.Lo = trajectory_length
+        self.ang = input_ang
+        y0 = input_offset
         x0 = self.space
-        theta = inputAngle
+        theta = input_ang
         self.La = (y0 + x0 / np.tan(theta)) / (np.sin(theta) + np.cos(theta) ** 2 / np.sin(theta))
 
-        self.inputOffset = inputOffset - np.tan(
-            inputAngle) * self.space  # the input offset is measured at the end of the hard edge
+        self.input_offset = input_offset - np.tan(
+            input_ang) * self.space  # the input offset is measured at the end of the hard edge
 
     def build_fast_field_helper(self) -> None:
-        numba_func_constants = (self.ang, self.La, self.Lb, self.Lm,self.apz,self.apL,self.apR, self.space, self.field_fact)
+        numba_func_constants = (
+        self.ang, self.La, self.Lb, self.Lm, self.apz, self.ap_left, self.ap_right, self.space, self.field_fact)
 
-        field_data=self.open_And_Shape_Field_Data()
+        field_data = self.open_and_shape_field_data()
 
         force_args = (numba_func_constants, field_data)
         potential_args = (numba_func_constants, field_data)
@@ -66,7 +67,7 @@ class CombinerSim(CombinerIdeal):
 
         self.assign_numba_functions(combinerSimFastFunction, force_args, potential_args, is_coord_in_vacuum_args)
 
-    def update_Field_Fact(self, fieldStrengthFact) -> None:
+    def update_field_fact(self, field_strength_fact) -> None:
         raise NotImplementedError
-        self.fast_field_helper.numbaJitClass.field_fact = fieldStrengthFact
-        self.field_fact = fieldStrengthFact
+        self.fast_field_helper.numbaJitClass.field_fact = field_strength_fact
+        self.field_fact = field_strength_fact

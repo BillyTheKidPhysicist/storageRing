@@ -61,8 +61,8 @@
 #         # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
 #         # input coordinates will be shifted in a wrapper function
 #         B_norm_grad, B_norm = self.lens.B_norm_grad(volume_coords, return_norm=True)
-#         data3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
-#         self.fill_Field_Func(data3D)
+#         data_3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
+#         self.fill_Field_Func(data_3D)
 #         # self.compile_fast_Force_Function()
 #
 #         # F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))

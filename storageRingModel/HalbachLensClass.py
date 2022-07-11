@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
-from helperTools import Union, Optional, math, inch_To_Meter, radians, within_Tol, time
+from helperTools import Union, Optional, math, inch_to_meter, radians, within_tol, time
 from latticeElements.utilities import max_tube_radius_in_segmented_bend, halbach_magnet_width
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
@@ -188,8 +188,8 @@ class Collection(_Collection):
 
     def central_diff(self, eval_coords: np.ndarray, return_norm: bool, use_approx: bool, dx: float = 1e-7) -> \
             Union[tuple[np.ndarray, ...], np.ndarray]:
-        assert dx>0.0
-        
+        assert dx > 0.0
+
         def grad(index: int) -> np.ndarray:
             coord_b = eval_coords.copy()  # upper step
             coord_b[:, index] += dx
@@ -232,7 +232,7 @@ class Collection(_Collection):
         return eval_coords_shaped
 
     def B_norm_grad(self, eval_coords: np.ndarray, return_norm: bool = False, diff_method='forward',
-                       use_approx: bool = False, dx: float = 1e-7) -> Union[np.ndarray, tuple]:
+                    use_approx: bool = False, dx: float = 1e-7) -> Union[np.ndarray, tuple]:
         # Return the gradient of the norm of the B field. use forward difference theorom
         # r: (N,3) vector of coordinates or (3) vector of coordinates.
         # return_norm: Wether to return the norm as well as the gradient.
@@ -242,8 +242,8 @@ class Collection(_Collection):
         eval_coords_shaped = self.shape_eval_coords(eval_coords)
 
         assert diff_method in ('central', 'forward')
-        results = self.central_diff(eval_coords_shaped, return_norm, use_approx,dx=dx) if\
-        diff_method == 'central' else self.forward_diff(eval_coords_shaped, return_norm, use_approx,dx=dx)
+        results = self.central_diff(eval_coords_shaped, return_norm, use_approx, dx=dx) if \
+            diff_method == 'central' else self.forward_diff(eval_coords_shaped, return_norm, use_approx, dx=dx)
         if len(eval_coords.shape) == 1:
             if return_norm:
                 [[B_grad_x, B_grad_y, B_grad_z]], [B0] = results
@@ -372,13 +372,13 @@ class HalbachLens(Collection):
 
     def __init__(self, rp: Union[float, tuple], magnet_width: Union[float, tuple], length: float, magnet_grade: str,
                  position: list_tuple_arr = None, orientation: Rotation = None,
-                 numDisks: int = 1, use_method_of_moments=False, use_standard_mag_errors=False,
+                 num_disks: int = 1, use_method_of_moments=False, use_standard_mag_errors=False,
                  use_solenoid_field: bool = False, same_seed=False):
-        #todo: why does initializing with non zero position indicate zero position still
+        # todo: why does initializing with non zero position indicate zero position still
         # todo: Better seeding system
         super().__init__()
         assert length > 0.0
-        assert (isinstance(numDisks, int) and numDisks >= 1)
+        assert (isinstance(num_disks, int) and num_disks >= 1)
         assert isinstance(orientation, (type(None), Rotation))
         assert isinstance(rp, (float, tuple)) and isinstance(magnet_width, (float, tuple))
         position = (0.0, 0.0, 0.0) if position is None else position
@@ -396,7 +396,7 @@ class HalbachLens(Collection):
             raise Exception
         self.same_seed: bool = same_seed
         self.magnet_grade = magnet_grade
-        self.num_disks = numDisks
+        self.num_disks = num_disks
         self.num_layers = len(self.rp)
         self.use_solenoid_field = use_solenoid_field
         self.mur = 1.05
@@ -413,7 +413,8 @@ class HalbachLens(Collection):
                 else:
                     dim_variation, mag_vec_angle_variation, mag_norm_variation = np.zeros((12, 3)), np.zeros(
                         (12, 2)), np.zeros((12, 1))
-                layer = Layer(radius_layer, widthLayer, length, magnet_grade=self.magnet_grade, position=(0, 0, z_layer),
+                layer = Layer(radius_layer, widthLayer, length, magnet_grade=self.magnet_grade,
+                              position=(0, 0, z_layer),
                               R_angle_shift=mag_vec_angle_variation, dim_shift=dim_variation,
                               M_norm_shift_rel=mag_norm_variation, mur=self.mur)
                 self.add(layer)
@@ -431,7 +432,7 @@ class HalbachLens(Collection):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
         if self.same_seed:
             np.random.seed(42)
-        dim_tol = inch_To_Meter(.004)  # dimension variation,inch to meter, +/- meters
+        dim_tol = inch_to_meter(.004)  # dimension variation,inch to meter, +/- meters
         mag_vec_angle_tol = radians(2)  # magnetization vector angle tolerane,degree to radian,, +/- radians
         mag_norm_tol = .0125  # magnetization value tolerance, +/- fraction
         dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
@@ -458,7 +459,7 @@ class HalbachLens(Collection):
          if the lens is composed of slices"""
         length_arr = np.ones(self.num_disks) * self.length / self.num_disks
         z_arr = np.cumsum(length_arr) - .5 * self.length - .5 * self.length / self.num_disks
-        assert within_Tol(np.sum(length_arr), self.length) and within_Tol(np.mean(z_arr), 0.0)
+        assert within_tol(np.sum(length_arr), self.length) and within_tol(np.mean(z_arr), 0.0)
         return z_arr, length_arr
 
     def add_solenoid_coils(self) -> None:
@@ -481,13 +482,13 @@ class SegmentedBenderHalbach(Collection):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 
-    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnet_grade: str, numLenses,
+    def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnet_grade: str, num_lenses,
                  use_half_cap_end: tuple[bool, bool],
-                 use_pos_ang_mags_only: bool = False, use_method_of_moments=False, use_mag_errors: bool = False,
+                 use_pos_mag_angs_only: bool = False, use_method_of_moments=False, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, magnet_width: float = None):
         # todo: by default I think it should be positive angles only
         super().__init__()
-        assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(numLenses, int)
+        assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(num_lenses, int)
         self.use_half_cap_end = (False, False) if use_half_cap_end is None else use_half_cap_end
         self.rp: float = rp  # radius of bore of magnet, ie to the pole
         self.rb: float = rb  # bending radius
@@ -497,12 +498,13 @@ class SegmentedBenderHalbach(Collection):
         self.Lm: float = Lm  # length of single magnet
         self.magnet_grade = magnet_grade
         self.use_solenoid_field = use_solenoid_field
-        self.use_pos_ang_mags_only: bool = use_pos_ang_mags_only  # This is used to model the cap amgnet, and the first full
+        self.use_pos_mag_angs_only: bool = use_pos_mag_angs_only  # This is used to model the cap amgnet, and the first full
         # segment. No magnets can be below z=0, but a magnet can be right at z=0. Very different behavious wether negative
         # or positive
-        self.magnet_width: float = halbach_magnet_width(rp, magnetSeparation=0.0) if magnet_width is None else magnet_width
+        self.magnet_width: float = halbach_magnet_width(rp,
+                                                        magnetSeparation=0.0) if magnet_width is None else magnet_width
         assert np.tan(.5 * Lm / (rb - self.magnet_width)) <= UCAngle  # magnets should not overlap!
-        self.numLenses: int = numLenses  # number of lenses in the model
+        self.num_lenses: int = num_lenses  # number of lenses in the model
         self.lens_list: list[HalbachLens] = []  # list to hold lenses
         self.lens_angles_arr: np.ndarray = self.make_lens_angle_array()
         self.use_method_of_moments = use_method_of_moments
@@ -510,14 +512,14 @@ class SegmentedBenderHalbach(Collection):
         self._build()
 
     def make_lens_angle_array(self) -> np.ndarray:
-        if self.numLenses == 1:
-            if self.use_pos_ang_mags_only:
+        if self.num_lenses == 1:
+            if self.use_pos_mag_angs_only:
                 raise Exception('Not applicable with only 1 magnet')
             angle_arr = np.asarray([0.0])
         else:
-            angle_arr = np.linspace(-2 * self.UCAngle * (self.numLenses - 1) / 2,
-                                   2 * self.UCAngle * (self.numLenses - 1) / 2, num=self.numLenses)
-        angle_arr = angle_arr - angle_arr.min() if self.use_pos_ang_mags_only else angle_arr
+            angle_arr = np.linspace(-2 * self.UCAngle * (self.num_lenses - 1) / 2,
+                                    2 * self.UCAngle * (self.num_lenses - 1) / 2, num=self.num_lenses)
+        angle_arr = angle_arr - angle_arr.min() if self.use_pos_mag_angs_only else angle_arr
         return angle_arr
 
     def lens_length_and_angle_iter(self) -> iter:
@@ -526,7 +528,7 @@ class SegmentedBenderHalbach(Collection):
 
         angle_arr = self.lens_angles_arr.copy()
         assert len(angle_arr) > 1
-        length_magnets = [self.Lm] * self.numLenses
+        length_magnets = [self.Lm] * self.num_lenses
         angle_sep = (angle_arr[1] - angle_arr[0])
         # the first lens (clockwise sense in xz plane) is a half length lens
         length_magnets[0] = length_magnets[0] / 2 if self.use_half_cap_end[0] else length_magnets[0]
@@ -564,7 +566,8 @@ class SegmentedBenderHalbach(Collection):
 
         assert theta_max > theta_min and len(theta_arr.shape) == 1
         assert np.all(theta_arr == theta_arr[np.argsort(theta_arr)])  # must be ascending order
-        index_start = 0 if theta_min - delta_theta < theta_arr.min() else np.argmax(theta_arr > theta_min - delta_theta) - 1
+        index_start = 0 if theta_min - delta_theta < theta_arr.min() else np.argmax(
+            theta_arr > theta_min - delta_theta) - 1
         # remember, index_end is one past the last index!
         index_end = len(theta_arr) if theta_max + delta_theta > theta_arr.max() else np.argmax(
             theta_arr > theta_max + delta_theta)
@@ -575,10 +578,11 @@ class SegmentedBenderHalbach(Collection):
         return index_start, index_end
 
     def get_valid_sub_coord_indices(self, theta_arr: np.ndarray, lens_split_index1: int, len_split_index2: int,
-                                   theta_lower: float, theta_upper: float) -> tuple[int, int]:
+                                    theta_lower: float, theta_upper: float) -> tuple[int, int]:
         """Get indices of field coordinates that lie within theta_lower and theta_upper. If the lens being used is the
         first (last), then all coords before (after) that lens in theta are valid"""
-        if len_split_index2 == len(self.lens_angles_arr) and lens_split_index1 == 0:  # use all coords indices because all
+        if len_split_index2 == len(
+                self.lens_angles_arr) and lens_split_index1 == 0:  # use all coords indices because all
             # lenses are used
             valid_coord_indices = np.ones(len(theta_arr)).astype(bool)
         elif lens_split_index1 == 0:
@@ -614,7 +618,8 @@ class SegmentedBenderHalbach(Collection):
             angle_symmetry_cutoff = 1.5 * np.pi
             assert angular_length < angle_symmetry_cutoff
             assert not np.any(
-                (self.lens_angles_arr < 0) & (self.lens_angles_arr > angle_symmetry_cutoff - 2 * np.pi))  # see docstring
+                (self.lens_angles_arr < 0) & (
+                            self.lens_angles_arr > angle_symmetry_cutoff - 2 * np.pi))  # see docstring
             theta_arr_coords[
                 theta_arr_coords < angle_symmetry_cutoff - 2 * np.pi] += 2 * np.pi  # if an angle is larger than 3.14,
             # arctan2 doesn't know this, and confines angles between -pi to pi. so I assume the bender starts at 0, then
@@ -631,11 +636,13 @@ class SegmentedBenderHalbach(Collection):
             len(theta_arr_coords))  # to track which indices fields are computed for. Only for an assert check
         for i in range(len(split_angles) - 1):
             theta_lower, theta_upper = split_angles[i], split_angles[i + 1]
-            lens_split_index1, lens_split_index2 = self.get_seperated_split_indices(self.lens_angles_arr, lens_border_angle_sep,
-                                                                                theta_lower, theta_upper)
+            lens_split_index1, lens_split_index2 = self.get_seperated_split_indices(self.lens_angles_arr,
+                                                                                    lens_border_angle_sep,
+                                                                                    theta_lower, theta_upper)
             bender_lenses_sub_section = self.lens_list[lens_split_index1:lens_split_index2]
-            valid_coord_indices = self.get_valid_sub_coord_indices(theta_arr_coords, lens_split_index1, lens_split_index2,
-                                                                theta_lower, theta_upper)
+            valid_coord_indices = self.get_valid_sub_coord_indices(theta_arr_coords, lens_split_index1,
+                                                                   lens_split_index2,
+                                                                   theta_lower, theta_upper)
             if sum(valid_coord_indices) > 0:
                 for lens in bender_lenses_sub_section:
                     B_vec[valid_coord_indices] += lens.B_vec(eval_coords[valid_coord_indices])
@@ -664,9 +671,9 @@ class SegmentedBenderHalbach(Collection):
         of the magnets where they approach the bending radius the closest"""
 
         coil_diam = METER_TO_MM * 2 * max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm,
-                                                                       tube_wall_thickness=MAGNET_WIRE_DIAM)
-        angle_start= self.lens_angles_arr[0] if self.use_half_cap_end[0] else self.lens_angles_arr[0]-self.UCAngle
-        angle_end=self.lens_angles_arr[-1] if self.use_half_cap_end[1] else self.lens_angles_arr[-1]+self.UCAngle
+                                                                        tube_wall_thickness=MAGNET_WIRE_DIAM)
+        angle_start = self.lens_angles_arr[0] if self.use_half_cap_end[0] else self.lens_angles_arr[0] - self.UCAngle
+        angle_end = self.lens_angles_arr[-1] if self.use_half_cap_end[1] else self.lens_angles_arr[-1] + self.UCAngle
         circumference = self.rb * (angle_end - angle_start)
         num_coils = max([round(COILS_PER_RADIUS * circumference / self.rp), 1])
         B_dot_dl = SPIN_FLIP_AVOIDANCE_FIELD * circumference  # amperes law

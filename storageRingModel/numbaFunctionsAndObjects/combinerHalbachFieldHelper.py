@@ -5,8 +5,8 @@ from constants import FLAT_WALL_VACUUM_THICKNESS
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, scalar_interp3D
 
 spec_Combiner_Halbach = [
-    ('fieldDataInternal', numba.types.UniTuple(numba.float64[::1], 7)),
-    ('fieldDataExternal', numba.types.UniTuple(numba.float64[::1], 7)),
+    ('field_data_internal', numba.types.UniTuple(numba.float64[::1], 7)),
+    ('field_data_external', numba.types.UniTuple(numba.float64[::1], 7)),
     ('La', numba.float64),
     ('Lb', numba.float64),
     ('Lm', numba.float64),
@@ -15,17 +15,18 @@ spec_Combiner_Halbach = [
     ('ang', numba.float64),
     ('field_fact', numba.float64),
     ('extra_field_length', numba.float64),
-    ('useSymmetry', numba.boolean),
+    ('use_symmetry', numba.boolean),
     ('acceptance_width', numba.float64)
 ]
 
 
 class CombinerHalbachLensSimFieldHelper_Numba:
 
-    def __init__(self, fieldDataInternal, fieldDataExternal, La, Lb, Lm, space, ap, ang, field_fact, extra_field_length,
-                 useSymmetry, acceptance_width):
-        self.fieldDataInternal = fieldDataInternal
-        self.fieldDataExternal = fieldDataExternal
+    def __init__(self, field_data_internal, field_data_external, La, Lb, Lm, space, ap, ang, field_fact,
+                 extra_field_length,
+                 use_symmetry, acceptance_width):
+        self.field_data_internal = field_data_internal
+        self.field_data_external = field_data_external
         self.La = La
         self.Lb = Lb
         self.Lm = Lm
@@ -34,34 +35,34 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         self.ang = ang
         self.field_fact = field_fact
         self.extra_field_length = extra_field_length
-        self.useSymmetry = useSymmetry
+        self.use_symmetry = use_symmetry
         self.acceptance_width = acceptance_width
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.fieldDataInternal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.field_fact,
-                self.extra_field_length, self.useSymmetry, self.acceptance_width), ()
+        return (self.field_data_internal, self.La, self.Lb, self.Lm, self.space, self.ap, self.ang, self.field_fact,
+                self.extra_field_length, self.use_symmetry, self.acceptance_width), ()
 
     def get_Internal_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         return self.field_fact, ()
 
     def _force_Func_Internal(self, x, y, z):
-        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.fieldDataInternal
+        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.field_data_internal
         Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
         return Fx, Fy, Fz
 
     def _force_Func_External(self, x, y, z):
-        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.fieldDataExternal
+        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.field_data_external
         Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
         return Fx, Fy, Fz
 
     def _magnetic_potential_Func_Internal(self, x, y, z):
-        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.fieldDataInternal
+        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.field_data_internal
         return scalar_interp3D(x, y, z, x_arr, y_arr, z_arr, V_arr)
 
     def _magnetic_potential_Func_External(self, x, y, z):
-        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.fieldDataExternal
+        x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.field_data_external
         return scalar_interp3D(x, y, z, x_arr, y_arr, z_arr, V_arr)
 
     def force(self, x, y, z):
@@ -76,7 +77,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
-        if self.useSymmetry:
+        if self.use_symmetry:
             FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
             FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
             y = abs(y)  # confine to upper right quadrant
@@ -115,7 +116,7 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
-        if self.useSymmetry:
+        if self.use_symmetry:
             if -self.extra_field_length <= x <= self.space:
                 V = self._magnetic_potential_Func_External(x, y, z)
             elif self.space < x <= symmetryPlaneX:

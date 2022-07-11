@@ -35,8 +35,7 @@ class LensIdeal(BaseElement):
             self.Lo = self.L
 
     def build_fast_field_helper(self) -> None:
-
-        numba_func_constants=self.K,self.L,self.ap,self.field_fact
+        numba_func_constants = self.K, self.L, self.ap, self.field_fact
         force_args = (numba_func_constants,)
         potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
@@ -45,24 +44,24 @@ class LensIdeal(BaseElement):
 
     def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = q_lab.copy()
-        qNew -= self.r1
-        qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
-        return qNew
+        q_new = q_lab.copy()
+        q_new -= self.r1
+        q_new = self.transform_Lab_Frame_Vector_Into_Element_Frame(q_new)
+        return q_new
 
     def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = q_el.copy()
-        qNew = self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
-        qNew += self.r1
-        return qNew
+        q_new = q_el.copy()
+        q_new = self.transform_Element_Frame_Vector_Into_Lab_Frame(q_new)
+        q_new += self.r1
+        return q_new
 
     def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
-        qNew = q_orbit.copy()
-        qNew[:2] = self.R_Out @ qNew[:2]
-        qNew += self.r1
-        return qNew
+        q_new = q_orbit.copy()
+        q_new[:2] = self.R_Out @ q_new[:2]
+        q_new += self.r1
+        return q_new
 
     def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Element and orbit frame is identical in simple

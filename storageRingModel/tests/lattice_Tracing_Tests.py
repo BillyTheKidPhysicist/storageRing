@@ -14,7 +14,7 @@ V0 = 200.0
 
 def generate_Test_Swarm(PTL):
     swarmTracer = SwarmTracer(PTL)
-    testSwarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(10e-3, 10.0, 5.0, 30, same_seed=42)
+    testSwarm = swarmTracer.initalize_pseudorandom_swarm_in_phase_space(10e-3, 10.0, 5.0, 30, same_seed=True)
     return testSwarm
 
 
@@ -22,7 +22,7 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
     """swarm is traced through the lattice with all fancy features turned off"""
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
-    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, use_fast_mode=False, parallel=False,
+    tracedSwarm = swarmTracer.trace_swarm_through_lattice(testSwarm, 1e-5, .25, use_fast_mode=False, parallel=False,
                                                           accelerated=False)
     testData = []
     for particle in tracedSwarm:
@@ -38,11 +38,11 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, accele
     np.set_printoptions(precision=100)
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
-    tracedSwarm = swarmTracer.trace_Swarm_Through_Lattice(testSwarm, 1e-5, .25, use_fast_mode=use_fast_mode,
+    tracedSwarm = swarmTracer.trace_swarm_through_lattice(testSwarm, 1e-5, .25, use_fast_mode=use_fast_mode,
                                                           accelerated=accelerated,
                                                           parallel=parallel)
     testData = np.loadtxt(TESTDataFilePath)
-    assert tracedSwarm.num_Particles() == testSwarm.num_Particles() and len(testData) == tracedSwarm.num_Particles()
+    assert tracedSwarm.num_particles() == testSwarm.num_particles() and len(testData) == tracedSwarm.num_particles()
     eps = 1e-9  # a small number to represent changes in values that come from different kinds of operations. Because of
     # the nature of digitla computing, the same algorithm done in a different way can give slightly different answers
     # in the last few digits on different computers
@@ -80,7 +80,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, accele
 def generate_Lattice(configuration):
     # a variety of lattice configurations are tested
     if configuration == '1':
-        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
         PTL.add_drift(.25)
         PTL.add_segmented_halbach_bender(.0254, .01, 150, 1.0, r_offset_fact=1.015)
         PTL.add_lens_ideal(1.0, 1.0, .01)
@@ -99,14 +99,14 @@ def generate_Lattice(configuration):
         PTL.add_halbach_lens_sim(.01, .5)
         PTL.end_lattice()
     elif configuration == '3':
-        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
         PTL.add_lens_ideal(1.0, 1.0, .01)
         PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
         PTL.add_lens_ideal(1.0, 1.0, .01)
         PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
         PTL.end_lattice()
     elif configuration in ('4', '6'):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
+        PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
         PTL.add_halbach_lens_sim(.01, .5)
         if configuration == '4':
             PTL.add_combiner_sim()
@@ -117,8 +117,8 @@ def generate_Lattice(configuration):
         PTL.add_halbach_lens_sim(.01, None, constrain=True)
         PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
         PTL.end_lattice(constrain=True)
-        PTL.el_list[0].update_Field_Fact(.3)
-        PTL.el_list[2].update_Field_Fact(.3)
+        PTL.el_list[0].update_field_fact(.3)
+        PTL.el_list[2].update_field_fact(.3)
     else:
         raise Exception('no proper configuration name provided')
     return PTL

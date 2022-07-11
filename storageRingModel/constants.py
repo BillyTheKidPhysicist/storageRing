@@ -13,7 +13,7 @@ where V is the magnetic potential energy of a lithium atom, uB is the Bohr magne
 divided by 1kg, and uB' is the new Bohr magneton. uB' ~ 796.0
 """
 _inch_To_Meter = lambda x: .0254 * x
-gauss_To_Tesla = lambda x: x / 10_000.0
+gauss_to_tesla = lambda x: x / 10_000.0
 
 MASS_LITHIUM_7: float = 1.165034676538e-26  # mass of lithium 7, kg
 MASS_HELIUM: float = 6.64216e-27  # mass of lithium 7, kg
@@ -23,7 +23,7 @@ MAGNETIC_PERMEABILITY: float = 1.25663706212 * 1e-6  # magnetic permeability, SI
 GRAVITATIONAL_ACCELERATION: float = 9.8  # graviational acceleration on earth, nominal, SI
 SIMULATION_MAGNETON: float = BHOR_MAGNETON / MASS_LITHIUM_7  # Simulation units bohr magneton. Described in model docstring
 TUBE_WALL_THICKNESS: float = _inch_To_Meter(.04)  # minimum weldable thickness of a vacuum tube, m
-COMBINER_TUBE_WALL_THICKNESS: float = 2*TUBE_WALL_THICKNESS  # minimum weldable thickness of a vacuum tube, m
+COMBINER_TUBE_WALL_THICKNESS: float = 2 * TUBE_WALL_THICKNESS  # minimum weldable thickness of a vacuum tube, m
 DEFAULT_ATOM_SPEED: float = 210.0  # default speed of atoms, m/s
 MIN_MAGNET_MOUNT_THICKNESS: float = 1e-3  # Nominal minimum material thickness for magnet mount, m. At thinnest point
 FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(1 / 8)  # minimum thickness of a flat wall under vacuum with
@@ -33,7 +33,7 @@ SPACE_BETWEEN_MAGNETS_IN_MOUNT = .25e-3  # space between inside edges of neighbo
 # configuration. Smaller than this and assembly could be infeasible because of magnet/machining tolerances
 
 MAGNET_WIRE_DIAM: float = 500e-6  # this thickness supports ~.5amp/mm^2 (no water cooling) for 5 gauss in a solenoid
-SPIN_FLIP_AVOIDANCE_FIELD = gauss_To_Tesla(3)  # field to prevent majorana splin flips
+SPIN_FLIP_AVOIDANCE_FIELD = gauss_to_tesla(3)  # field to prevent majorana splin flips
 
 CUBIC_METER_TO_CUBIC_INCH = 61023.7  # conversion from cubic meters to cubic inches
 COST_PER_CUBIC_INCH_PERM_MAGNET: float = 34.76  # USD. Per K&J magnetics for N52:

@@ -11,7 +11,7 @@ SMALL_NUMBER = 1e-9
 
 
 class GradientOptimizer:
-    def __init__(self, funcObj, xi, stepSizeInitial, maxIters, momentumFact, disp, Plot, parallel, gradMethod,
+    def __init__(self, funcObj, xi, stepSizeInitial, max_iters, momentumFact, disp, Plot, parallel, gradMethod,
                  gradStepSampSize, maxStepSize, descentMethod):
         if isinstance(xi, np.ndarray) == False:
             xi = np.asarray(xi)
@@ -23,7 +23,7 @@ class GradientOptimizer:
         self.numDim = len(self.xi)
         self.stepSizeInitial = stepSizeInitial
         self.maxStepSize = maxStepSize
-        self.maxIters = maxIters
+        self.max_iters = max_iters
         self.momentumFact = momentumFact
         self.disp = disp
         self.Plot = Plot
@@ -99,7 +99,7 @@ class GradientOptimizer:
     def momentum_Method(self):
         x = self.xi.copy()
         vPrev = np.zeros(self.numDim)
-        for i in range(self.maxIters):
+        for i in range(self.max_iters):
             F0, grad = self._gradient_And_F0(x)
             assert isinstance(F0, float) and len(grad) >= 1
             self.objValHistList.append(F0)
@@ -125,8 +125,8 @@ class GradientOptimizer:
                       'at parameter space point: ' + str(repr(x)),
                       'gradient: ' + str(repr(grad)))
             self._update_Time_Step(v)
-            deltaX = v * self.hFrac
-            x = x + deltaX
+            delta_x = v * self.hFrac
+            x = x + delta_x
         if self.Plot == True:
             plt.plot(self.objValHistList)
             plt.xlabel("Iteration")
@@ -138,7 +138,7 @@ class GradientOptimizer:
         opt = descent.adam(self.stepSizeInitial)
         func = self._forward_Difference_And_F0 if self.gradMethod == 'forward' else self._central_Difference_And_F0
         display = None if self.disp == False else sys.stdout
-        sol = opt.minimize(func, self.xi, maxiter=self.maxIters, display=display)
+        sol = opt.minimize(func, self.xi, maxiter=self.max_iters, display=display)
         if self.Plot == True:
             plt.semilogy(sol['obj'])
             plt.xlabel("Iteration")
@@ -156,17 +156,17 @@ class GradientOptimizer:
         return xOptimal, objOptimal
 
 
-def gradient_Descent(funcObj, xi, stepSizeInitial, maxIters, momentumFact=.9, gradMethod='central', disp=False,
+def gradient_Descent(funcObj, xi, stepSizeInitial, max_iters, momentumFact=.9, gradMethod='central', disp=False,
                      parallel=True, Plot=False, gradStepSize=5e-6, maxStepSize=np.inf, descentMethod='adam'):
-    solver = GradientOptimizer(funcObj, xi, stepSizeInitial, maxIters, momentumFact, disp, Plot, parallel, gradMethod,
+    solver = GradientOptimizer(funcObj, xi, stepSizeInitial, max_iters, momentumFact, disp, Plot, parallel, gradMethod,
                                gradStepSize, maxStepSize, descentMethod)
     return solver.solve_Grad_Descent()
 
 
-def batch_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, maxIters, momentumFact=.9, disp=False,
+def batch_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, max_iters, momentumFact=.9, disp=False,
                            gradMethod='central', maxStepSize=np.inf, descentMethod='adam'):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
-    wrap = lambda x: gradient_Descent(funcObj, x, stepSizeInitial, maxIters, momentumFact=momentumFact,
+    wrap = lambda x: gradient_Descent(funcObj, x, stepSizeInitial, max_iters, momentumFact=momentumFact,
                                       disp=disp
                                       , parallel=False, gradMethod=gradMethod, Plot=False, maxStepSize=maxStepSize)
     with mp.Pool() as pool:
@@ -174,7 +174,7 @@ def batch_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, maxIter
     return results
 
 
-def global_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, maxIters, gradStepSize, momentumFact=.9,
+def global_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, max_iters, gradStepSize, momentumFact=.9,
                             disp=False,
                             gradMethod='central', parallel=True, Plot=False, descentMethod='adam'):
     samples = np.asarray(skopt.sampler.Sobol().generate(bounds, numSamples))
@@ -184,7 +184,7 @@ def global_Gradient_Descent(funcObj, bounds, numSamples, stepSizeInitial, maxIte
     else:
         vals = np.asarray([funcObj(x) for x in samples])
     xOptimal = samples[np.argmin(vals)]
-    result = gradient_Descent(funcObj, xOptimal, stepSizeInitial, maxIters, momentumFact=momentumFact,
+    result = gradient_Descent(funcObj, xOptimal, stepSizeInitial, max_iters, momentumFact=momentumFact,
                               disp=disp, parallel=parallel, gradMethod=gradMethod, Plot=Plot, gradStepSize=gradStepSize,
                               descentMethod=descentMethod)
     return result

@@ -1,23 +1,22 @@
 # pylint: disable= missing-module-docstring
 import copy
 import itertools
-from typing import Union
 
 import numpy as np
 from scipy.optimize import differential_evolution
 
 from storageRingGeometryModules.shapes import Line, Bend, norm_2D  # pylint: disable= import-error
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry  # pylint: disable= import-error
+from typeHints import RealNumTuple, FloatTuple, sequence, IntTuple
 
-realNumber = Union[float, int]
-floatTuple = tuple[float, ...]
-intTuple = tuple[int, ...]
-realNumberTuple = tuple[Union[float, int], ...]
-benderAndLensParams = tuple[tuple[realNumberTuple, ...], floatTuple]
-lst_arr_tple = Union[list, np.ndarray, tuple]
+BenderAndLensParams = tuple[tuple[RealNumTuple, ...], FloatTuple]
 
 
-class NoValidRingConfiguration(Exception):
+class NoValidRingConfiguration(RuntimeError):
+    pass
+
+
+class ExcessiveRingCost(ValueError):
     pass
 
 
@@ -27,34 +26,28 @@ class StorageRingGeometryConstraintsSolver:
     all lenses are assumed to be tunable, only user indicated lenses) that results in a valid closed storage ring
     """
 
-    def __init__(self, storageRing: StorageRingGeometry, radiusTarget: float):
+    def __init__(self, storage_ring: StorageRingGeometry, radius_target: float):
         """
-        :param storageRing: storage ring to solve, which is already roughly closed. A copy is made to
+        :param storage_ring: storage ring to solve, which is already roughly closed. A copy is made to
                 prevent modifiying original
-        :param radiusTarget: Target bending radius of all bending segments. This is approximate because the
+        :param radius_target: Target bending radius of all bending segments. This is approximate because the
             constraints may not allow an exact value, and because this is actually the radius of the bending orbit
         """
 
-        self.storageRing = copy.deepcopy(storageRing)
-        self.targetRadius = radiusTarget
-        self.tunedLenses = self.get_Tuned_Lenses()
-        self.isSameLengthTuneLenses = True
+        self.storage_ring = copy.deepcopy(storage_ring)
+        self.radius_target = radius_target
+        self.tuned_lenses = self.get_tuned_lenses()
+        self.is_same_length_tuned_lenses = True
 
-        assert all(type(shape) is not Bend for shape in self.storageRing)  # not yet supported
+        assert all(type(shape) is not Bend for shape in self.storage_ring)  # not yet supported
 
-    def get_Tuned_Lenses(self) -> tuple[Line]:
+    def get_tuned_lenses(self) -> tuple[Line]:
         """Get lenses(Line objects) that have been marked to have their length tunable to satisfy geometry"""
+        tuned_lenses = tuple([el for el in self.storage_ring if (type(el) is Line and el.constrained)])
+        assert len(tuned_lenses) != 0  # must be at least one length tunable lenses
+        return tuned_lenses
 
-        tunedLenses = []
-        for element in self.storageRing:
-            if type(element) == Line:
-                if element.constrained:
-                    tunedLenses.append(element)
-        assert len(tunedLenses) != 0  # must be at least one length tunable lenses
-        tunedLenses = tuple(tunedLenses)
-        return tunedLenses
-
-    def separate_Params(self, params: realNumberTuple) -> tuple[floatTuple, intTuple, floatTuple]:
+    def separate_params(self, params: RealNumTuple) -> tuple[FloatTuple, IntTuple, FloatTuple]:
         """
         Take 1D tuple of parameters, and break apart into tuple of each paramter (bending radius, number of magnets in
         bender, and length of lens)
@@ -64,14 +57,14 @@ class StorageRingGeometryConstraintsSolver:
         :return: seperate tuples of params ((radius_i...),(num_magnets_i,...),(lensLenth_j,...))
         """
 
-        radiusIndexFirt, numMagsIndexFirst, numParamsPerBend, numBends = 0, 1, 2, self.storageRing.numBenders
-        assert numBends != 0  # does not work without benders
-        radiusTuple = tuple(params[radiusIndexFirt:numParamsPerBend * numBends:numParamsPerBend])
-        num_magnetsTuple = tuple(params[numMagsIndexFirst:numParamsPerBend * numBends:numParamsPerBend])
-        lensLengthTuple = tuple(params[numParamsPerBend * numBends:])
-        return radiusTuple, num_magnetsTuple, lensLengthTuple
+        index_first_radius, index_first_num_mags, num_params_per_bend, num_bends = 0, 1, 2, self.storage_ring.numBenders
+        assert num_bends != 0  # does not work without benders
+        radii = tuple(params[index_first_radius:num_params_per_bend * num_bends:num_params_per_bend])
+        nums_of_magnets = tuple(params[index_first_num_mags:num_params_per_bend * num_bends:num_params_per_bend])
+        lens_lengths = tuple(params[num_params_per_bend * num_bends:])
+        return radii, nums_of_magnets, lens_lengths
 
-    def round_Integer_Params(self, params: realNumberTuple) -> realNumberTuple:
+    def round_integer_params(self, params: RealNumTuple) -> RealNumTuple:
         """
         differential_evolution only works on floats. So integer parameters (number of magnets) must be rounded
 
@@ -80,15 +73,15 @@ class StorageRingGeometryConstraintsSolver:
         :return: params with num_magnets_i rounded to integer
         """
 
-        radiusTuple, num_magnetsTuple, lensLengthTuple = self.separate_Params(params)
-        num_magnetsTuple = tuple(round(numMags) for numMags in num_magnetsTuple)
+        radii, nums_of_magnets, lens_lengths = self.separate_params(params)
+        nums_of_magnets = tuple(round(numMags) for numMags in nums_of_magnets)
         # trick to remake flattened list with integer parameters rounded
-        params = [[radius, numMags] for radius, numMags in zip(radiusTuple, num_magnetsTuple)]
-        params.append(list(lensLengthTuple))
+        params = [[radius, numMags] for radius, numMags in zip(radii, nums_of_magnets)]
+        params.append(list(lens_lengths))
         params = tuple(itertools.chain(*params))  # flatten list
         return params
 
-    def shape_And_Round_Params(self, params: floatTuple) -> benderAndLensParams:
+    def shape_and_round_params(self, params: FloatTuple) -> BenderAndLensParams:
         """
         Take parameters in 1D tuple, in tuple casted form that differential_evolution supplies, and round integer
         params and shape for updating elements. differential_evolution only works with float so integer values need to
@@ -99,64 +92,63 @@ class StorageRingGeometryConstraintsSolver:
         :return: ( ((radius_i,num_magnets_i),...) , (lensLength_j,...) )
         """
 
-        params = self.round_Integer_Params(params)
-        radiusTuple, num_magnetsTuple, lensLengthTuple = self.separate_Params(params)
-        benderParams = tuple((radius, numMags) for radius, numMags in zip(radiusTuple, num_magnetsTuple))
-        lensParams = lensLengthTuple
-        return benderParams, lensParams
+        params = self.round_integer_params(params)
+        radii, nums_of_magnets, lens_lengths = self.separate_params(params)
+        bender_params = tuple((radius, numMags) for radius, numMags in zip(radii, nums_of_magnets))
+        lens_params = lens_lengths
+        return bender_params, lens_params
 
-    def update_Ring(self, params: floatTuple) -> None:
+    def update_ring(self, params: FloatTuple) -> None:
         """Update bender and lens parameters with params in storage ring geometry"""
 
-        bendingParams, lensParams = self.shape_And_Round_Params(params)
-        assert len(bendingParams) == self.storageRing.numBenders
-        for i, benderParams in enumerate(bendingParams):
-            radius, num_magnets = benderParams
-            self.storageRing.benders[i].set_Number_Magnets(num_magnets)
-            if self.storageRing.numBenders == 2:
-                self.storageRing.benders[i].set_Radius(radius)
-            elif self.storageRing.numBenders == 4:
-                radius = bendingParams[i // 2][0]  # both benders in an arc must have same bending radius
-                self.storageRing.benders[i].set_Radius(radius)
+        bending_params, lens_params = self.shape_and_round_params(params)
+        assert len(bending_params) == self.storage_ring.numBenders
+        for i, bender_params in enumerate(bending_params):
+            radius, num_magnets = bender_params
+            self.storage_ring.benders[i].set_number_magnets(num_magnets)
+            if self.storage_ring.numBenders == 2:
+                self.storage_ring.benders[i].set_radius(radius)
+            elif self.storage_ring.numBenders == 4:
+                radius = bending_params[i // 2][0]  # both benders in an arc must have same bending radius
+                self.storage_ring.benders[i].set_radius(radius)
             else:
                 raise NotImplementedError
 
-        if self.isSameLengthTuneLenses:
-            assert len(lensParams) == 1
-            for lens in self.tunedLenses:
-                lens.set_length(lensParams[0])
+        if self.is_same_length_tuned_lenses:
+            assert len(lens_params) == 1
+            for lens in self.tuned_lenses:
+                lens.set_length(lens_params[0])
         else:
             raise NotImplementedError
-        self.storageRing.build()
+        self.storage_ring.build()
 
-    def closed_Ring_Cost(self, params: realNumberTuple) -> float:
+    def closed_ring_cost(self, params: RealNumTuple) -> float:
         """punish if the ring isn't closed"""
 
-        self.update_Ring(params)
-        deltaPos, deltaNormal = self.storageRing.get_End_Separation_Vectors()
-        closedCost = (norm_2D(deltaPos) + norm_2D(deltaNormal))
-        return closedCost
+        self.update_ring(params)
+        delta_pos, delta_normal = self.storage_ring.get_end_separation_vectors()
+        closed_cost = (norm_2D(delta_pos) + norm_2D(delta_normal))
+        return closed_cost
 
-    def number_Magnets_Cost(self, params: floatTuple) -> float:
+    def number_magnets_cost(self, params: FloatTuple) -> float:
         """Cost for number of magnets in each bender being different than each other"""
-
-        benderParams, _ = self.shape_And_Round_Params(params)
-        num_magnetsList = [num_magnets for _, num_magnets in benderParams]
-        assert all(isinstance(num, int) for num in num_magnetsList)
+        bender_params, _ = self.shape_and_round_params(params)
+        nums_of_magnets = [num_magnets for _, num_magnets in bender_params]
+        assert all(isinstance(num, int) for num in nums_of_magnets)
         weight = 1  # different numbers of magnets isn't so bad
-        cost = weight * sum([abs(a - b) for a, b in itertools.combinations(num_magnetsList, 2)])
+        cost = weight * sum([abs(a - b) for a, b in itertools.combinations(nums_of_magnets, 2)])
         return cost
 
-    def get_Radius_Cost(self, params: floatTuple) -> float:
+    def get_radius_cost(self, params: FloatTuple) -> float:
         """Cost for when bender radii differ from target radius"""
 
-        benderParams, _ = self.shape_And_Round_Params(params)
-        radii = self.get_Bender_Params_Radii(benderParams)
+        bender_params, _ = self.shape_and_round_params(params)
+        radii = self.get_bender_params_radii(bender_params)
         weight = 100
-        cost = weight * sum([abs(radius - self.targetRadius) for radius in radii])
+        cost = weight * sum([abs(radius - self.radius_target) for radius in radii])
         return cost
 
-    def get_Bounds(self) -> tuple[tuple[float, float], ...]:
+    def get_bounds(self) -> tuple[tuple[float, float], ...]:
         """
         Get bounds for differential_evolution
 
@@ -164,93 +156,99 @@ class StorageRingGeometryConstraintsSolver:
             magnets, lens length etc.
         """
 
-        anglePerBenderApprox = (2 * np.pi - self.storageRing.combiner.kinkAngle) / self.storageRing.numBenders
-        unitCellAngleApprox = self.storageRing.benders[0].lengthSegment / self.targetRadius  # each bender has
+        angle_per_bender_approx = (2 * np.pi - self.storage_ring.combiner.kinkAngle) / self.storage_ring.numBenders
+        unit_cell_angle_approx = self.storage_ring.benders[0].length_seg / self.radius_target  # each bender has
         # same segment length
-        num_magnetsApprox = round(anglePerBenderApprox / unitCellAngleApprox)
-        bounds = [(self.targetRadius * .95, self.targetRadius * 1.05), (num_magnetsApprox * .9, num_magnetsApprox * 1.1)]
-        bounds = bounds * self.storageRing.numBenders
-        if self.isSameLengthTuneLenses:
-            if len(self.tunedLenses) >= 1:
+        num_magnets_approx = round(angle_per_bender_approx / unit_cell_angle_approx)
+        bounds = [(self.radius_target * .95, self.radius_target * 1.05),
+                  (num_magnets_approx * .9, num_magnets_approx * 1.1)]
+        bounds = bounds * self.storage_ring.numBenders
+        if self.is_same_length_tuned_lenses:
+            if len(self.tuned_lenses) >= 1:
                 bounds.append((.1, 5.0))  # big overshoot
         else:
             raise NotImplementedError
         bounds = tuple(bounds)  # i want this to be immutable
         return bounds
 
-    def cost(self, params: lst_arr_tple) -> float:
+    def cost(self, params: sequence) -> float:
         """Get cost associated with a storage ring configuration from params. Cost comes from ring not being closed from
         end not meeting beginning and/or tangents not being colinear"""
 
-        if not self.is_Within_Radius_Tolerance(params, 1e-2):
-            return np.inf
         params = tuple(params)  # I want this to be immutable for safety
+        if not self.is_within_radius_tol(params, 1e-2):
+            return np.inf
         # punish if ring is not closed and aligned properly
-        closedCost = self.closed_Ring_Cost(params)
+        closed_cost = self.closed_ring_cost(params)
         # punish if magnets or radius are not desired values
-        magCost = self.number_Magnets_Cost(params)
+        mag_cost = self.number_magnets_cost(params)
         # punish if the radius is different from target
-        radiusCost = self.get_Radius_Cost(params)
-        _cost = (1e-12 + closedCost) * (1 + magCost + radiusCost)  # +1e-6*(magCost+radiusCost)
+        radius_cost = self.get_radius_cost(params)
+        _cost = (1e-12 + closed_cost) * (1 + mag_cost + radius_cost)  # +1e-6*(mag_cost+radiusCost)
         assert _cost >= 0.0
         return _cost
 
-    def get_Bender_Params_Radii(self, benderParams: tuple) -> list[float]:
+    def get_bender_params_radii(self, bender_params: tuple) -> list[float]:
         """Get list of bender radius. For two or 4 benders this is a list of 2 radii. This is actually a hack because
         the differential evolution solver is still working with 4 radius, but here I only pick two of them. I don't
         want each bending quadrant to have it's own bending radius"""
 
-        if self.storageRing.numBenders == 2:
-            radii = [radius for radius, _ in benderParams]
-        elif self.storageRing.numBenders == 4:
-            radii = [benderParams[0][0], benderParams[2][0]]
+        if self.storage_ring.numBenders == 2:
+            radii = [radius for radius, _ in bender_params]
+        elif self.storage_ring.numBenders == 4:
+            radii = [bender_params[0][0], bender_params[2][0]]
         else:
             raise ValueError
         return radii
 
-    def is_Within_Radius_Tolerance(self, params: floatTuple, tolerance: float) -> bool:
+    def is_within_radius_tol(self, params: FloatTuple, tolerance: float) -> bool:
         """Are the params within the tolerance of bending radiuses? I don't want each bending radius to be very
         different"""
 
-        benderParams, _ = self.shape_And_Round_Params(params)
-        radii = self.get_Bender_Params_Radii(benderParams)
-        return all(abs(radius - self.targetRadius) < tolerance for radius in radii)
+        bender_params, _ = self.shape_and_round_params(params)
+        radii = self.get_bender_params_radii(bender_params)
+        return all(abs(radius - self.radius_target) < tolerance for radius in radii)
 
-    def solve(self) -> realNumberTuple:
+    def solve(self) -> RealNumTuple:
         """
-        Find parameters that give a valid storage ring configuration. This will deform self.storageRing from its original
+        Find parameters that give a valid storage ring configuration. This will deform self.storage_ring from its original
         configuration!
 
         :return: parametes as (param_i,...) where i is each parameter
         """
 
-        assert self.storageRing.combiner is not None
-        bounds = self.get_Bounds()
-        closedRingCost = 1e-11
-        maxTries = 20
-        i = 0
-        while True:
+        assert self.storage_ring.combiner is not None
+        bounds = self.get_bounds()
+        closed_ring_cost = 1e-11
+        tries, max_tries = 0, 20
+        done = False
+        while not done:
             try:
-                seed = 42 + i  # seed must change for each try, but this is repeatable
-                terminationCriteria = lambda x, **kwargs: self.closed_Ring_Cost(x) < closedRingCost
-                sol = differential_evolution(self.cost, bounds, seed=seed, polish=False, maxiter=5_000,
-                                             tol=0.0, atol=0.0, callback=terminationCriteria, mutation=.5, disp=False)
-                solutionParams = self.round_Integer_Params(sol.x)
-                assert self.closed_Ring_Cost(solutionParams) < closedRingCost
-                break
-            except:
-                i += 1
-                if i == maxTries:
-                    raise NoValidRingConfiguration
-        return solutionParams
+                seed = 42 + tries  # seed must change for each try, but this is repeatable
 
-    def make_Valid_Storage_Ring(self) -> StorageRingGeometry:
+                def termination_criteria(x, **kwargs):
+                    return self.closed_ring_cost(x) < closed_ring_cost
+
+                sol = differential_evolution(self.cost, bounds, seed=seed, polish=False, maxiter=5_000,
+                                             tol=0.0, atol=0.0, callback=termination_criteria, mutation=.5, disp=False)
+                solution_params = self.round_integer_params(sol.x)
+                if self.closed_ring_cost(solution_params) > closed_ring_cost:
+                    raise ExcessiveRingCost
+                else:
+                    done = True
+            except ExcessiveRingCost:
+                tries += 1
+            if tries >= max_tries:
+                raise NoValidRingConfiguration
+        return solution_params
+
+    def make_valid_storage_ring(self) -> StorageRingGeometry:
         """
         solve and return a valid storage ring shape. Not guaranteed to be unique
 
         :return: a valid storage ring. A copy of self.storage ring, which was a copy of the original.
         """
 
-        solutionParams = self.solve()
-        self.update_Ring(solutionParams)
-        return copy.deepcopy(self.storageRing)
+        solution_params = self.solve()
+        self.update_ring(solution_params)
+        return copy.deepcopy(self.storage_ring)

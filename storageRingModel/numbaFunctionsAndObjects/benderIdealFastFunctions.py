@@ -4,11 +4,12 @@ import numpy as np
 from constants import SIMULATION_MAGNETON
 from numbaFunctionsAndObjects.utilities import full_arctan2
 
+
 @numba.njit()
-def magnetic_potential( x, y, z,params):
+def magnetic_potential(x, y, z, params):
     # potential energy at provided coordinates
     # q coords in element frame
-    rb, ap, ang,K, field_fact = params
+    rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
     rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
@@ -19,11 +20,12 @@ def magnetic_potential( x, y, z,params):
     V0 *= field_fact
     return V0
 
+
 @numba.njit()
-def force( x, y, z,params):
+def force(x, y, z, params):
     # force at point q in element frame
     # q: particle's position in element frame
-    rb, ap, ang,K, field_fact = params
+    rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
     rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
@@ -39,8 +41,9 @@ def force( x, y, z,params):
     Fz *= field_fact
     return Fx, Fy, Fz
 
+
 @numba.njit()
-def is_coord_in_vacuum( x, y, z,params):
+def is_coord_in_vacuum(x, y, z, params):
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
     if phi < 0:  # constraint to between zero and 2pi

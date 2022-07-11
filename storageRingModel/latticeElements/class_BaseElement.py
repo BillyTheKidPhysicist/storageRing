@@ -1,21 +1,22 @@
-from typing import Optional,Callable
+from typing import Optional
 
+import numba
 import numpy as np
 from shapely.geometry import Polygon
 
 from constants import SIMULATION_MAGNETON
 
-import numba
 
 # todo: a base geometry inheritance is most logical
 
 
-
-def wrap_numba_func(func,args):
+def wrap_numba_func(func, args):
     @numba.njit()
     def func_wrapper(x, y, z):
         return func(x, y, z, *args)
+
     return func_wrapper
+
 
 class BaseElement:
     """
@@ -26,7 +27,7 @@ class BaseElement:
     smoothly move from one to another, and many class variables serves this purpose. An element also contains methods
     for force vectors and magnetic potential at a point in space. It will also contain methods to generate fields values
     and construct itself, which is not always trivial.
-    """ 
+    """
 
     def __init__(self, PTL, ang: float = 0.0, L=None):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
@@ -64,8 +65,7 @@ class BaseElement:
         self.output_offset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
         self.field_fact: float = 1.0  # factor to modify field values everywhere in space by, including force
-        self.fast_field_helper = None
-        self.numba_functions: dict={}
+        self.numba_functions: dict = {}
 
     def build_fast_field_helper(self) -> None:
         raise NotImplementedError
@@ -73,7 +73,6 @@ class BaseElement:
     def set_field_fact(self, field_fact: bool):
         assert field_fact > 0.0
         self.field_fact = field_fact
-        self.fast_field_helper.field_fact = field_fact
 
     def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float):
         """
@@ -89,7 +88,8 @@ class BaseElement:
         """
 
         raise NotImplementedError
-        self.fast_field_helper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shift_y, shift_z, rot_angle_y, rot_angle_z)
+        self.fast_field_helper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shift_y, shift_z, rot_angle_y,
+                                                                                       rot_angle_z)
 
     def magnetic_potential(self, q_el: np.ndarray) -> float:
         """
@@ -118,7 +118,8 @@ class BaseElement:
         """
         return np.asarray(self.numba_functions['force'](*q_el))  # will raise NotImplementedError if called
 
-    def transform_element_coords_into_global_orbit_frame(self, q_el: np.ndarray, cumulative_length: float) -> np.ndarray:
+    def transform_element_coords_into_global_orbit_frame(self, q_el: np.ndarray,
+                                                         cumulative_length: float) -> np.ndarray:
         """
         Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
         observer/lab cartesian coordinates.
@@ -198,9 +199,9 @@ class BaseElement:
         :param vecLab: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz])
         :return: 3D cartesian vector in element frame,numpy.array([vx,vy,vz])
         """""
-        vecNew = vecLab.copy()  # prevent editing
-        vecNew[:2] = self.R_In @ vecNew[:2]
-        return vecNew
+        vec_new = vecLab.copy()  # prevent editing
+        vec_new[:2] = self.R_In @ vec_new[:2]
+        return vec_new
 
     def transform_Element_Frame_Vector_Into_Lab_Frame(self, vecEl: np.ndarray) -> np.ndarray:
         """
@@ -209,9 +210,9 @@ class BaseElement:
         :param vecEl: 3D cartesian vector in element frame,numpy.array([vx,vy,vz])
         :return: 3D cartesian vector in observer/lab frame,numpy.array([vx,vy,vz])
         """
-        vecNew = vecEl.copy()  # prevent editing
-        vecNew[:2] = self.R_Out @ vecNew[:2]
-        return vecNew
+        vec_new = vecEl.copy()  # prevent editing
+        vec_new[:2] = self.R_Out @ vec_new[:2]
+        return vec_new
 
     def is_Coord_Inside(self, q_el: np.ndarray) -> bool:
         """
@@ -222,10 +223,11 @@ class BaseElement:
         """
         return self.numba_functions['is_coord_in_vacuum'](*q_el)  # will raise NotImplementedError if called
 
-    def assign_numba_functions(self,func_module,force_args,potential_args,is_coord_in_vacuum_args)-> None:
-        self.numba_functions['force']=wrap_numba_func(func_module.force,force_args)
-        self.numba_functions['magnetic_potential']=wrap_numba_func(func_module.magnetic_potential,potential_args)
-        self.numba_functions['is_coord_in_vacuum']=wrap_numba_func(func_module.is_coord_in_vacuum,is_coord_in_vacuum_args)
+    def assign_numba_functions(self, func_module, force_args, potential_args, is_coord_in_vacuum_args) -> None:
+        self.numba_functions['force'] = wrap_numba_func(func_module.force, force_args)
+        self.numba_functions['magnetic_potential'] = wrap_numba_func(func_module.magnetic_potential, potential_args)
+        self.numba_functions['is_coord_in_vacuum'] = wrap_numba_func(func_module.is_coord_in_vacuum,
+                                                                     is_coord_in_vacuum_args)
 
     def fill_pre_constrained_parameters(self):
         """Fill available geometric parameters before constrained lattice layout is solved. Fast field helper, shapely
@@ -260,19 +262,19 @@ class BaseElement:
         num_x = x_arr.shape[0]
         num_y = y_arr.shape[0]
         num_z = z_arr.shape[0]
-        FxMatrix = np.empty((num_x, num_y, num_z))
-        FyMatrix = np.empty((num_x, num_y, num_z))
-        FzMatrix = np.empty((num_x, num_y, num_z))
-        VMatrix = np.zeros((num_x, num_y, num_z))
+        Fx_matrix = np.empty((num_x, num_y, num_z))
+        Fy_matrix = np.empty((num_x, num_y, num_z))
+        Fz_matrix = np.empty((num_x, num_y, num_z))
+        V_matrix = np.zeros((num_x, num_y, num_z))
         x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
-        yIndices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
-        zIndices = np.argwhere(data[:, 2][:, None] == z_arr)[:, 1]
-        FxMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 3]
-        FyMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 4]
-        FzMatrix[x_indices, yIndices, zIndices] = -SIMULATION_MAGNETON * data[:, 5]
-        VMatrix[x_indices, yIndices, zIndices] = SIMULATION_MAGNETON * data[:, 6]
-        VFlat, FxFlat, FyFlat, FzFlat = VMatrix.ravel(), FxMatrix.ravel(), FyMatrix.ravel(), FzMatrix.ravel()
-        return x_arr, y_arr, z_arr, FxFlat, FyFlat, FzFlat, VFlat
+        y_indices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
+        z_indices = np.argwhere(data[:, 2][:, None] == z_arr)[:, 1]
+        Fx_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 3]
+        Fy_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 4]
+        Fz_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 5]
+        V_matrix[x_indices, y_indices, z_indices] = SIMULATION_MAGNETON * data[:, 6]
+        V_Flat, Fx_Flat, Fy_Flat, Fz_Flat = V_matrix.ravel(), Fx_matrix.ravel(), Fy_matrix.ravel(), Fz_matrix.ravel()
+        return x_arr, y_arr, z_arr, Fx_Flat, Fy_Flat, Fz_Flat, V_Flat
 
     def shape_field_data_2D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
         """2D version of shape_field_data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
@@ -281,20 +283,20 @@ class BaseElement:
         y_arr = np.unique(data[:, 1])
         num_x = x_arr.shape[0]
         num_y = y_arr.shape[0]
-        BGradxMatrix = np.zeros((num_x, num_y))
-        BGradyMatrix = np.zeros((num_x, num_y))
-        B0Matrix = np.zeros((num_x, num_y))
+        B_grad_x_matrix = np.zeros((num_x, num_y))
+        B_grad_y_matrix = np.zeros((num_x, num_y))
+        B0_matrix = np.zeros((num_x, num_y))
         x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
-        yIndices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
+        y_indices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
 
-        BGradxMatrix[x_indices, yIndices] = data[:, 2]
-        BGradyMatrix[x_indices, yIndices] = data[:, 3]
-        B0Matrix[x_indices, yIndices] = data[:, 4]
-        FxMatrix = -SIMULATION_MAGNETON * BGradxMatrix
-        FyMatrix = -SIMULATION_MAGNETON * BGradyMatrix
-        VMatrix = SIMULATION_MAGNETON * B0Matrix
-        VFlat, FxFlat, FyFlat = np.ravel(VMatrix), np.ravel(FxMatrix), np.ravel(FyMatrix)
-        return x_arr, y_arr, FxFlat, FyFlat, VFlat
+        B_grad_x_matrix[x_indices, y_indices] = data[:, 2]
+        B_grad_y_matrix[x_indices, y_indices] = data[:, 3]
+        B0_matrix[x_indices, y_indices] = data[:, 4]
+        Fx_matrix = -SIMULATION_MAGNETON * B_grad_x_matrix
+        FyMatrix = -SIMULATION_MAGNETON * B_grad_y_matrix
+        V_matrix = SIMULATION_MAGNETON * B0_matrix
+        V_Flat, Fx_Flat, Fy_Flat = np.ravel(V_matrix), np.ravel(Fx_matrix), np.ravel(FyMatrix)
+        return x_arr, y_arr, Fx_Flat, Fy_Flat, V_Flat
 
     def get_valid_jitter_amplitude(self):
         """If jitter (radial misalignment) amplitude is too large, it is clipped."""

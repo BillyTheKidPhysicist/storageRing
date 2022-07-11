@@ -1,23 +1,10 @@
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 
-from numbaFunctionsAndObjects import driftFastFunctions
-
 from constants import TUBE_WALL_THICKNESS
 from latticeElements.class_LensIdeal import LensIdeal
-from numbaFunctionsAndObjects.fieldHelpers import get_Drift_Field_Helper
-
-# todo: this needs a good scrubbing and refactoring
-
-
-realNumber = (int, float)
-sequence = Union[list, tuple, np.ndarray]
-
-TINY_STEP = 1e-9
-TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
-SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
-MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
+from numbaFunctionsAndObjects import driftFastFunctions
 
 
 class Drift(LensIdeal):
@@ -33,15 +20,13 @@ class Drift(LensIdeal):
         assert self.outer_half_width > ap
 
     def build_fast_field_helper(self) -> None:
-
-        numba_func_constants = (self.ap,self.L,self.input_tilt_angle,self.output_tilt_angle)
+        numba_func_constants = (self.ap, self.L, self.input_tilt_angle, self.output_tilt_angle)
 
         force_args = (numba_func_constants,)
         potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
         self.assign_numba_functions(driftFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
-
 
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""

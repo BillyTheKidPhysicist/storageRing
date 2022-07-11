@@ -10,7 +10,7 @@ from ParticleClass import Swarm
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 
-from helperTools import tool_Parallel_Process
+from helperTools import parallel_evaluate
 
 cmap = plt.get_cmap('viridis')
 
@@ -30,8 +30,8 @@ def make_Test_Swarm_And_Lattice(num_particles=128, totalTime=.1) -> (Swarm, Part
     PTL.end_lattice()
 
     swarmTracer = SwarmTracer(PTL)
-    swarm = swarmTracer.initalize_PseudoRandom_Swarm_In_Phase_Space(5e-3, 5.0, 1e-5, num_particles)
-    swarm = swarmTracer.trace_Swarm_Through_Lattice(swarm, 1e-5, totalTime, use_fast_mode=False, parallel=True,
+    swarm = swarmTracer.initalize_pseudorandom_swarm_in_phase_space(5e-3, 5.0, 1e-5, num_particles)
+    swarm = swarmTracer.trace_swarm_through_lattice(swarm, 1e-5, totalTime, use_fast_mode=False, parallel=True,
                                                     steps_per_logging=4)
     print('swarm and lattice done')
     return swarm, PTL
@@ -154,7 +154,7 @@ class SwarmSnapShot:
 
 class PhaseSpaceAnalyzer:
     def __init__(self, swarm, lattice: ParticleTracerLattice):
-        assert lattice.lattice_type == 'storageRing'
+        assert lattice.lattice_type == 'storage_ring'
         assert all(type(particle.clipped) is bool for particle in swarm)
         assert all(particle.traced is True for particle in swarm)
         self.swarm = swarm
@@ -168,8 +168,8 @@ class PhaseSpaceAnalyzer:
         yAxisIndex = np.argwhere(strinNameArr == yaxis)[0][0] + 1
         return xAxisIndex, yAxisIndex
 
-    def _get_Plot_Data_From_SnapShot(self, snapShotPhaseSpace, xAxis, yAxis):
-        xAxisIndex, yAxisIndex = self._get_Axis_Index(xAxis, yAxis)
+    def _get_Plot_Data_From_SnapShot(self, snapShotPhaseSpace, xAxis, y_axis):
+        xAxisIndex, yAxisIndex = self._get_Axis_Index(xAxis, y_axis)
         xAxisArr = snapShotPhaseSpace[:, xAxisIndex]
         yAxisArr = snapShotPhaseSpace[:, yAxisIndex]
         return xAxisArr, yAxisArr
@@ -222,10 +222,10 @@ class PhaseSpaceAnalyzer:
             else:
                 xCoordsArr, yCoordsArr = self._get_Plot_Data_From_SnapShot(snapShotPhaseSpaceCoords, xaxis, yaxis)
                 revs = int(xOrbit / self.lattice.total_length)
-                deltaX = xOrbit - revs * self.lattice.total_length
+                delta_x = xOrbit - revs * self.lattice.total_length
                 axes[swarmAxisIndex].text(0.1, 1.01,
                                           'Revolutions: ' + str(revs) + ', Distance along revolution: ' + str(
-                                              np.round(deltaX, 2)) + 'm'
+                                              np.round(delta_x, 2)) + 'm'
                                           , transform=axes[swarmAxisIndex].transAxes)
                 axes[swarmAxisIndex].scatter(xCoordsArr * unitModifier[0], yCoordsArr * unitModifier[1],
                                              c='blue', alpha=alpha, edgecolors=None, linewidths=0.0)
@@ -263,12 +263,12 @@ class PhaseSpaceAnalyzer:
             unitModifier.append(1.0)
         return labelsList, unitModifier
 
-    def _make_SnapShot_XArr(self, numPoints):
+    def _make_SnapShot_XArr(self, num_points):
         # revolutions: set to -1 for using the largest number possible based on swarm
         xMaxSwarm = self._find_Max_Xorbit_For_Swarm()
         x_max = min(xMaxSwarm, self.max_revs * self.lattice.total_length)
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
-        return np.linspace(xStart, x_max, numPoints)
+        return np.linspace(xStart, x_max, num_points)
 
     def make_Phase_Space_Movie_At_Repeating_Lattice_Point(self, videoTitle, xVideoPoint, xaxis='y', yaxis='z',
                                                           videoLengthSeconds=10.0, alpha=.25, dpi=None):
@@ -309,7 +309,7 @@ class PhaseSpaceAnalyzer:
         survivalList = []
         for T in T_arr:
             num_particlesurvived = np.sum(TSurvivedArr > T)
-            survival = 100 * num_particlesurvived / self.swarm.num_Particles()
+            survival = 100 * num_particlesurvived / self.swarm.num_particles()
             survivalList.append(survival)
         TRev = self.lattice.total_length / self.lattice.speed_nominal
         if axis is None:
@@ -323,13 +323,13 @@ class PhaseSpaceAnalyzer:
         else:
             axis.plot(T_arr, survivalList)
 
-    def plot_Energy_Growth(self, numPoints=100, dpi=150, save_title=None, survivingOnly=True):
+    def plot_Energy_Growth(self, num_points=100, dpi=150, save_title=None, survivingOnly=True):
         if survivingOnly == True:
             fig, axes = plt.subplots(2, 1)
         else:
             fig, axes = plt.subplots(1, 1)
             axes = [axes]
-        xSnapShotArr = self._make_SnapShot_XArr(numPoints)[:-10]
+        xSnapShotArr = self._make_SnapShot_XArr(num_points)[:-10]
         EList_RMS = []
         EList_Mean = []
         EList_Max = []
@@ -340,7 +340,7 @@ class PhaseSpaceAnalyzer:
             minParticlesForStatistics = 5
             if len(deltaESnapShot) < minParticlesForStatistics:
                 break
-            survivalList.append(100 * snapShot.num_Surviving() / self.swarm.num_Particles())
+            survivalList.append(100 * snapShot.num_Surviving() / self.swarm.num_particles())
             E_RMS = np.std(deltaESnapShot)
             EList_RMS.append(E_RMS)
             EList_Mean.append(np.mean(deltaESnapShot))
@@ -392,10 +392,10 @@ class PhaseSpaceAnalyzer:
         for i in range(len(binEdges) - 1):
             isValidList = (vals > binEdges[i]) & (vals < binEdges[i + 1])
             binParticles = [particle for particle, isValid in zip(self.swarm.particles, isValidList) if isValid]
-            numSurvived = sum([not particle.clipped for particle in binParticles])
+            num_survived = sum([not particle.clipped for particle in binParticles])
             num_particlesInBin.append(len(binParticles))
             if weightingMethod == 'clipped':
-                fracSurvived.append(numSurvived / len(binParticles) if len(binParticles) != 0 else np.nan)
+                fracSurvived.append(num_survived / len(binParticles) if len(binParticles) != 0 else np.nan)
             else:
                 survivalTimes = [particle.T for particle in binParticles]
                 assert len(survivalTimes) == 0 or max(survivalTimes) <= TMax
@@ -426,9 +426,9 @@ class PhaseSpaceAnalyzer:
             assert np.abs(X[0]) < 1e-6
             X = np.append(X, particle.pi.copy())
             xPlot = X[xPlotIndex] * unitModifier[0]
-            yPlot = X[yPlotIndex] * unitModifier[1]
+            y_plot = X[yPlotIndex] * unitModifier[1]
             color = 'red' if particle.clipped == True else 'green'
-            plt.scatter(xPlot, yPlot, c=color, alpha=alpha, edgecolors='none')
+            plt.scatter(xPlot, y_plot, c=color, alpha=alpha, edgecolors='none')
         legendList = [Patch(facecolor='green', edgecolor='green',
                             label='survived'), Patch(facecolor='red', edgecolor='red',
                                                      label='clipped')]

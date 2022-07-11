@@ -19,8 +19,8 @@ spec_Combiner_Ideal = [
     ('c2', numba.float64),
     ('La', numba.float64),
     ('Lb', numba.float64),
-    ('apL', numba.float64),
-    ('apR', numba.float64),
+    ('ap_left', numba.float64),
+    ('ap_right', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
     ('field_fact', numba.float64)
@@ -29,20 +29,20 @@ spec_Combiner_Ideal = [
 
 class CombinerIdealFieldHelper_Numba:
 
-    def __init__(self, c1, c2, La, Lb, apL, apR, apz, ang):
+    def __init__(self, c1, c2, La, Lb, ap_left, ap_right, apz, ang):
         self.c1 = c1
         self.c2 = c2
         self.La = La
         self.Lb = Lb
-        self.apL = apL
-        self.apR = apR
+        self.ap_left = ap_left
+        self.ap_right = ap_right
         self.apz = apz
         self.ang = ang
         self.field_fact = 1.0
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
-        return (self.c1, self.c2, self.La, self.Lb, self.apL, self.apR, self.apz, self.ang), (self.field_fact,)
+        return (self.c1, self.c2, self.La, self.Lb, self.ap_left, self.ap_right, self.apz, self.ang), (self.field_fact,)
 
     def set_Internal_State(self, params):
         self.field_fact = params[0]
@@ -82,7 +82,7 @@ class CombinerIdealFieldHelper_Numba:
             return False
         elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
-            if -self.apL < y < self.apR and -self.apz < z < self.apz:  # if inside the y (width) apeture
+            if -self.ap_left < y < self.ap_right and -self.apz < z < self.apz:  # if inside the y (width) apeture
                 return True
             else:
                 return False
@@ -90,9 +90,9 @@ class CombinerIdealFieldHelper_Numba:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             m = np.tan(self.ang)
-            Y1 = m * x + (self.apR - m * self.Lb)  # upper limit
+            Y1 = m * x + (self.ap_right - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * x + (-self.apL - m * self.Lb)
+            Y3 = m * x + (-self.ap_left - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 return True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'

@@ -19,34 +19,35 @@ spec_Lens_Halbach = [
     ('VArrIn', numba.float64[::1]),
     ('fieldPerturbationData', numba.types.UniTuple(numba.float64[::1], 7)),
     ('L', numba.float64),
-    ('Lcap', numba.float64),
+    ('L_cap', numba.float64),
     ('ap', numba.float64),
     ('field_fact', numba.float64),
     ('extra_field_length', numba.float64),
-    ('useFieldPerturbations', numba.boolean)
+    ('use_field_perturbations', numba.boolean)
 ]
 
 
 class LensHalbachFieldHelper_Numba:
     """Helper for elementPT.HalbachLensSim. Psuedo-inherits from BaseClassFieldHelper"""
 
-    def __init__(self, field_data, fieldPerturbationData, L, Lcap, ap, extra_field_length):
+    def __init__(self, field_data, fieldPerturbationData, L, L_cap, ap, extra_field_length):
         self.xArrEnd, self.yArrEnd, self.z_arrEnd, self.FxArrEnd, self.FyArrEnd, self.Fz_arrEnd, self.VArrEnd, self.yArrIn, \
         self.z_arrIn, self.FyArrIn, self.Fz_arrIn, self.VArrIn = field_data
         self.L = L
-        self.Lcap = Lcap
+        self.L_cap = L_cap
         self.ap = ap
         self.field_fact = 1.0
         self.extra_field_length = extra_field_length
-        self.useFieldPerturbations = True if fieldPerturbationData is not None else False
+        self.use_field_perturbations = True if fieldPerturbationData is not None else False
         self.fieldPerturbationData = fieldPerturbationData if fieldPerturbationData is not None else nanArr7Tuple
 
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         field_data = self.xArrEnd, self.yArrEnd, self.z_arrEnd, self.FxArrEnd, self.FyArrEnd, self.Fz_arrEnd, self.VArrEnd, \
-                    self.yArrIn, self.z_arrIn, self.FyArrIn, self.Fz_arrIn, self.VArrIn
-        fieldPerturbationData = None if not self.useFieldPerturbations else self.fieldPerturbationData
-        return (field_data, fieldPerturbationData, self.L, self.Lcap, self.ap, self.extra_field_length), (self.field_fact,)
+                     self.yArrIn, self.z_arrIn, self.FyArrIn, self.Fz_arrIn, self.VArrIn
+        fieldPerturbationData = None if not self.use_field_perturbations else self.fieldPerturbationData
+        return (field_data, fieldPerturbationData, self.L, self.L_cap, self.ap, self.extra_field_length), (
+        self.field_fact,)
 
     def set_Internal_State(self, params):
         self.field_fact = params[0]
@@ -73,7 +74,7 @@ class LensHalbachFieldHelper_Numba:
         """Wrapper for interpolation of force fields at ends of lens. see self.force"""
         if not useImperfectInterp:
             Fx, Fy, Fz = vec_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.z_arrEnd,
-                                         self.FxArrEnd, self.FyArrEnd, self.Fz_arrEnd)
+                                      self.FxArrEnd, self.FyArrEnd, self.Fz_arrEnd)
         else:
             x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = self.fieldPerturbationData
             Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
@@ -91,7 +92,7 @@ class LensHalbachFieldHelper_Numba:
          Perturbation force is messed up force minus perfect force."""
 
         Fx, Fy, Fz = self._force(x, y, z)
-        if self.useFieldPerturbations:
+        if self.use_field_perturbations:
             deltaFx, deltaFy, deltaFz = self._force_Field_Perturbations(x, y,
                                                                         z)  # extra force from design imperfections
             Fx, Fy, Fz = Fx + deltaFx, Fy + deltaFy, Fz + deltaFz
@@ -119,14 +120,14 @@ class LensHalbachFieldHelper_Numba:
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if -self.extra_field_length <= x <= self.Lcap:  # at beginning of lens
+        if -self.extra_field_length <= x <= self.L_cap:  # at beginning of lens
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
-        elif self.Lcap < x <= self.L - self.Lcap:  # if long enough, model interior as uniform in x
+        elif self.L_cap < x <= self.L - self.L_cap:  # if long enough, model interior as uniform in x
             Fx, Fy, Fz = self._force_Func_Inner(y, z)
-        elif self.L - self.Lcap <= x <= self.L + self.extra_field_length:  # at end of lens
+        elif self.L - self.L_cap <= x <= self.L + self.extra_field_length:  # at end of lens
             x = self.L - x
             Fx, Fy, Fz = self._force_Func_Outer(x, y, z)
-            Fx=-Fx
+            Fx = -Fx
         else:
             raise Exception("Particle outside field region")  # this may be triggered when itentionally misligned
         Fx *= self.field_fact
@@ -153,7 +154,7 @@ class LensHalbachFieldHelper_Numba:
         imperfections. Perturbation potential is messed up potential minus perfect potential."""
 
         V = self._magnetic_potential(x, y, z)
-        if self.useFieldPerturbations:
+        if self.use_field_perturbations:
             deltaV = self._magnetic_potential_Perturbations(x, y, z)  # extra potential from design imperfections
             V += deltaV
         return V
@@ -177,9 +178,9 @@ class LensHalbachFieldHelper_Numba:
         # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)
         z = abs(z)
-        if -self.extra_field_length <= x <= self.Lcap:
+        if -self.extra_field_length <= x <= self.L_cap:
             V0 = self._magnetic_potential_Func_Fringe(x, y, z)
-        elif self.Lcap < x <= self.L - self.Lcap:
+        elif self.L_cap < x <= self.L - self.L_cap:
             V0 = self._magnetic_potential_Func_Inner(x, y, z)
         elif 0 <= x <= self.L + self.extra_field_length:
             x = self.L - x

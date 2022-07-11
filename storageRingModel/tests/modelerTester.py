@@ -3,7 +3,7 @@ import storageRingModeler
 import numpy as np
 from shapely.geometry import LineString
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from helperTools import iscloseAll
+from helperTools import is_close_all
 from math import isclose
 
 
@@ -28,12 +28,12 @@ def test_Modeler():
 
     assert model.floor_plan_cost() == 0  # no overlap between lenses
     model.swarm_injector_initial.particles = model.swarm_injector_initial.particles[:500]
-    swarm_injector_traced = model.swarm_tracer_injector.trace_Swarm_Through_Lattice(
-        model.swarm_injector_initial.quick_Copy(), 1e-5, 1.0,
+    swarm_injector_traced = model.swarm_tracer_injector.trace_swarm_through_lattice(
+        model.swarm_injector_initial.quick_copy(), 1e-5, 1.0,
         use_fast_mode=False, copy_swarm=False, log_phase_space_coords=True, accelerated=True)
     swarmRingInitial = model.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                                copy_particles=True)
-    swarmRingTraced = model.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
+    swarmRingTraced = model.swarm_tracer_ring.trace_swarm_through_lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
                                                                         accelerated=True)
 
     lenses = model.lenses_before_ring_combiner()
@@ -53,7 +53,7 @@ def test_Modeler():
                 # very collinear by comparing angle injector with last two position steps to angle of ring by
                 # momentum. This is valid because injector particle is in end of combiner with almost no field, and ring
                 # particle is in drift region
-                assert iscloseAll(particle_ring.q_arr[0], qInj_RingFrame[-1], 1e-12)
+                assert is_close_all(particle_ring.q_arr[0], qInj_RingFrame[-1], 1e-12)
                 slopeInjEnd = (qInj_RingFrame[-1][1] - qInj_RingFrame[-2][1]) / (
                             qInj_RingFrame[-1][0] - qInj_RingFrame[-2][0])
                 slopeRing = particle_ring.p_arr[-1][1] / particle_ring.p_arr[-1][0]
@@ -61,4 +61,4 @@ def test_Modeler():
     r2Inj = lattice_injector.combiner.r2
     r2Ring = lattice_ring.combiner.r2
     # test that the transform moved coordinates as expected
-    assert iscloseAll(model.convert_position_injector_to_ring_frame(r2Inj), r2Ring, 1e-12)
+    assert is_close_all(model.convert_position_injector_to_ring_frame(r2Inj), r2Ring, 1e-12)

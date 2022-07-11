@@ -1,16 +1,16 @@
-import numpy as np
-import skopt
 import random
 import time
+
 import multiprocess as multiprocessing
-import scipy.optimize as spo
+import numpy as np
 import scipy.interpolate as spi
+import scipy.optimize as spo
+
 from helperTools import low_discrepancy_sample
 
-
-
 HUGE_INT = int(1e12)
-real_number=(int,float)
+real_number = (int, float)
+
 
 class AsyncSolver:
     def __init__(self, workers):
@@ -231,7 +231,7 @@ class AsyncDE:
 
     def initialize_population(self):
 
-        assert len(self.initial_vals) <=self.num_members
+        assert len(self.initial_vals) <= self.num_members
         for initial_val in self.initial_vals:
             assert len(initial_val) == 2
             DNA, cost = initial_val
@@ -247,7 +247,7 @@ class AsyncDE:
                 new_adult.grow(known_cost=cost)
                 new_adult.firstGen = True
                 self.population.add_adult(new_adult)
-        self.evolve() #initial population needs to be breed
+        self.evolve()  # initial population needs to be breed
 
         num_random = self.num_members - len(self.initial_vals)
         initial_coords = self.generate_initial_coords(num_random)
@@ -423,7 +423,8 @@ class AsyncDE:
             self.resave_progress()
         return self.population
 
-def load_previous_population(num,file):
+
+def load_previous_population(num, file):
     data = np.loadtxt(file)
     X = data[:, :len(data[0]) - 1]
     vals = data[:, -1]
@@ -433,15 +434,18 @@ def load_previous_population(num,file):
     population = [(DNA, cost) for DNA, cost in zip(X[index_sort], vals[index_sort])]
     return population
 
+
 def solve_async(func, bounds, popsize, time_out_seconds=None, initial_vals=None, save_population=None,
                 surrogate_method_prob=0.0,
-                disp=True, max_evals=None, tol=None, workers=None, save_data=None,reload_population: str=None) -> Member:
+                disp=True, max_evals=None, tol=None, workers=None, save_data=None,
+                reload_population: str = None) -> Member:
     if reload_population is not None:
         assert initial_vals is None
-        initial_vals=load_previous_population(popsize,reload_population)
+        initial_vals = load_previous_population(popsize, reload_population)
     np.set_printoptions(precision=1000)
     solver = AsyncDE(func, popsize, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
-                     surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol, workers=workers,
+                     surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol,
+                     workers=workers,
                      save_data=save_data)
     pop = solver.solve()
     if save_population is not None:

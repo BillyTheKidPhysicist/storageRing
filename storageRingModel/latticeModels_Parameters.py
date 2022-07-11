@@ -1,7 +1,7 @@
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
-from helperTools import inch_To_Meter
+from helperTools import inch_to_meter
 
 realNumber = (float, int, np.float64, np.int64)
 
@@ -54,16 +54,14 @@ class LockedDict(dict):
 
 INJECTOR_TUNABILITY_LENGTH = 2e-2
 
-
-
 # optimal injector parameters
 injectorParamsOptimalAny: LockedDict = LockedDict({
     "L1": 0.05285079,  # length of first lens
     "rp1": 0.01473206,  # bore radius of first lens
-    "L2": 0.16540282 ,  # length of first lens
+    "L2": 0.16540282,  # length of first lens
     "rp2": 0.02387552,  # bore radius of first lens
-    "LmCombiner": 0.1480253,  # hard edge length of combiner
-    "loadBeamOffset": 0.00820821,  # offset of incoming beam into combiner
+    "Lm_combiner": 0.1480253,  # hard edge length of combiner
+    "load_beam_offset": 0.00820821,  # offset of incoming beam into combiner
     "gap1": 0.09821368,  # separation between source and first lens
     "gap2": 0.2650349,  # separation between two lenses
     "gap3": 0.21845571  ##separation between final lens and input to combiner
@@ -74,8 +72,8 @@ injectorParamsBoundsAny: LockedDict = LockedDict({
     "rp1": (.01, .03),  # bore radius of first lens
     "L2": (.05, .3),  # length of second lens
     "rp2": (.01, .03),  # bore radius of second lens
-    "LmCombiner": (.05, .25),  # hard edge length of combiner
-    "loadBeamOffset": (5e-3, 30e-3),  # assumed diameter of incoming beam
+    "Lm_combiner": (.05, .25),  # hard edge length of combiner
+    "load_beam_offset": (5e-3, 30e-3),  # assumed diameter of incoming beam
     "gap1": (.05, .3),  # separation between source and first lens
     "gap2": (.05, .3),  # separation between two lenses
     "gap3": (.05, .3)  ##separation between final lens and input to combnier
@@ -101,21 +99,21 @@ atomCharacteristic = LockedDict(
 # constraints and parameters of version 1 storage ring/injector
 _system_constants = {
     "Lm": .0254 / 2.0,  # length of individual magnets in bender
-    "gap2Min": inch_To_Meter(4.25),  # from lens to combiner
+    "gap2Min": inch_to_meter(4.25),  # from lens to combiner
     "OP_MagWidth": .065 + 2 * .035,  # account for fringe fields with .02
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping
-    # "bendTubeODMax": inch_To_Meter(3 / 4) ,
-    "rpCombiner": 0.04,
-    'bendApexGap': inch_To_Meter(2.5),
-    "lensToBendGap": inch_To_Meter(2),  # same at each bend to lens joint. Vacuum tube limited
-    "observationGap": inch_To_Meter(2),  # gap required for observing atoms
+    # "bendTubeODMax": inch_to_meter(3 / 4) ,
+    "rp_combiner": 0.04,
+    'bendApexGap': inch_to_meter(2.5),
+    "lensToBendGap": inch_to_meter(2),  # same at each bend to lens joint. Vacuum tube limited
+    "observationGap": inch_to_meter(2),  # gap required for observing atoms
     "rbTarget": 1.0,  # target bending radius
     "sourceToLens1_Inject_Gap": .05,  # gap between source and first lens. Shouldn't have first lens on top of source
-    "lens1ToLens2_Inject_Gap": inch_To_Meter(5.9),  # pumps and valve
-    "lens1ToLens2_Valve_Ap": inch_To_Meter(.75),  # aperture (ID/2) for valve #2 3/4
-    "lens1ToLens2_Valve_Length": inch_To_Meter(3.25),  # includes flanges and screws
+    "lens1ToLens2_Inject_Gap": inch_to_meter(5.9),  # pumps and valve
+    "lens1ToLens2_Valve_Ap": inch_to_meter(.75),  # aperture (ID/2) for valve #2 3/4
+    "lens1ToLens2_Valve_Length": inch_to_meter(3.25),  # includes flanges and screws
     "lens1ToLens2_Inject_Valve_OD": flange_OD['2-3/4']  # outside diameter of valve
 }
 system_constants: LockedDict = LockedDict(_system_constants)
@@ -160,6 +158,6 @@ ringParamsOptimal_V3 = LockedDict({
     'L_Lens2': 0.46839105549798354
 })
 
-constants_V1_3=LockedDict({
-    "rpLens2":.04
+constants_V1_3 = LockedDict({
+    "rpLens2": .04
 })

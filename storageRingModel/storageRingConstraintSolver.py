@@ -2,7 +2,7 @@ from typing import Union
 
 import numpy as np
 
-from helperTools import iscloseAll
+from helperTools import is_close_all
 from latticeElements.elements import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, \
     LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
 from storageRingGeometryModules.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
@@ -31,19 +31,19 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
     L1 = combiner.Lb  # from kink to next bender
     L2 = combiner.La  # from previous bender to kin
     inputAng = combiner.ang
-    inputOffset = combiner.inputOffset
+    input_offset = combiner.input_offset
     output_offset = combiner.output_offset
-    L1 += -(inputOffset + output_offset) / np.tan(inputAng)
-    L2 += - inputOffset * np.sin(inputAng) + (inputOffset + output_offset) / np.sin(inputAng)
+    L1 += -(input_offset + output_offset) / np.tan(inputAng)
+    L2 += - input_offset * np.sin(inputAng) + (input_offset + output_offset) / np.sin(inputAng)
     return Kink(-combiner.ang, L2, L1)
 
 
 def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
-    lengthSegment, Lcap, radius, num_magnets = bender.Lm, bender.Lcap, bender.ro, bender.num_magnets
-    magnetDepth = bender.rp + bender.magnet_width + bender.output_offset #todo: why does this have output_offset??
-    return CappedSlicedBend(lengthSegment, num_magnets, magnetDepth, Lcap, radius)
+    length_seg, L_cap, radius, num_magnets = bender.Lm, bender.L_cap, bender.ro, bender.num_magnets
+    magnet_depth = bender.rp + bender.magnet_width + bender.output_offset  # todo: why does this have output_offset??
+    return CappedSlicedBend(length_seg, num_magnets, magnet_depth, L_cap, radius)
 
 
 def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
@@ -51,7 +51,7 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     representation is of the ideal orbit of a particle loosely speaking, not the centerline of elements."""
     assert not (constrain and PTL.lattice_type == 'injector')
     elements = []
-    firstEl = None
+    first_el = None
     for i, el_PTL in enumerate(PTL):
         if type(el_PTL) in (HalbachLensSim, LensIdeal):
             constrained = True if el_PTL in PTL.linear_elements_to_constrain else False
@@ -67,21 +67,21 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
         else:
             raise Exception
         if i == 0:
-            firstEl = elements[0]
+            first_el = elements[0]
 
     n_in_Initial = -np.array([np.cos(PTL.initialAngle), np.sin(PTL.initialAngle)]) if PTL.initialAngle != -np.pi \
         else np.array([1.0, 0.0])
     pos_in_Initial = np.array(PTL.initial_location)
-    firstEl.place(pos_in_Initial, n_in_Initial)
+    first_el.place(pos_in_Initial, n_in_Initial)
 
-    storageRing = StorageRingGeometry(elements)
+    storage_ring = StorageRingGeometry(elements)
     if constrain:
         targetRadii = _get_Target_Radii(PTL)
-        solver = StorageRingGeometryConstraintsSolver(storageRing, targetRadii)
-        storageRing = solver.make_Valid_Storage_Ring()
+        solver = StorageRingGeometryConstraintsSolver(storage_ring, targetRadii)
+        storage_ring = solver.make_valid_storage_ring()
     else:
-        storageRing.build()
-    return storageRing
+        storage_ring.build()
+    return storage_ring
 
 
 def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSegmented],
@@ -94,10 +94,10 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSe
         bender.num_magnets = shape.num_magnets
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
-    bender.nb = np.array([*shape.n_in, 0])
-    bender.ne = np.array([*shape.n_out, 0])
+    bender.nb = np.array([*shape.norm_in, 0])
+    bender.ne = np.array([*shape.norm_out, 0])
     bender.r0 = np.array([*shape.benderCenter, 0])
-    n = -shape.n_in
+    n = -shape.norm_in
     theta = np.arctan2(n[1], n[0])
     if theta < 0:
         theta += np.pi * 2
@@ -110,20 +110,21 @@ def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, Comb
     assert type(combiner) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
     assert type(shape) is Kink
 
-    n_out_perp = -np.flip(shape.n_out) * np.array([-1, 1])
+    n_out_perp = -np.flip(shape.norm_out) * np.array([-1, 1])
     r2 = (shape.pos_out + n_out_perp * combiner.output_offset)
     combiner.r2 = np.array([*r2, 0.0])
-    r1 = r2 + -shape.n_out * combiner.Lb + shape.n_in * combiner.La
+    r1 = r2 + -shape.norm_out * combiner.Lb + shape.norm_in * combiner.La
     combiner.r1 = np.array([*r1, 0])
-    combiner.nb = np.array([*shape.n_in, 0])
-    combiner.ne = np.array([*shape.n_out, 0])
-    theta = np.arctan2(shape.n_out[1], shape.n_out[0]) - np.pi
+    combiner.nb = np.array([*shape.norm_in, 0])
+    combiner.ne = np.array([*shape.norm_out, 0])
+    theta = np.arctan2(shape.norm_out[1], shape.norm_out[0]) - np.pi
     theta = theta + 2 * np.pi  # conventino
     combiner.theta = theta
     rot = combiner.theta
     combiner.R_Out = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # the rotation matrix for
     rot = -rot
-    combiner.R_In = np.asarray([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(combiner.R_Out)
+    combiner.R_In = np.asarray(
+        [[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])  # np.linalg.inv(combiner.R_Out)
 
 
 def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal],
@@ -136,12 +137,12 @@ def _build_Lattice_Lens_Or_Drift(element: Union[Drift, HalbachLensSim, LensIdeal
 
     element.r1 = np.array([*shape.pos_in, 0])
     element.r2 = np.array([*shape.pos_out, 0])
-    element.nb = np.array([*shape.n_in, 0])
-    element.ne = np.array([*shape.n_out, 0])
+    element.nb = np.array([*shape.norm_in, 0])
+    element.ne = np.array([*shape.norm_out, 0])
     if type(shape) is Line:
-        theta = np.arctan2(shape.n_out[1], shape.n_out[0])
+        theta = np.arctan2(shape.norm_out[1], shape.norm_out[0])
     elif type(shape) is LineWithAngledEnds:
-        n = shape.n_From_Input_To_Output_Pos()
+        n = shape.input_to_output_unit_vec()
         theta = np.arctan2(n[1], n[0])
     else:
         raise NotImplementedError
@@ -157,9 +158,9 @@ def is_particle_tracer_lattice_closed(PTL) -> bool:
 
     elPTL_First, elPTL_Last = PTL.el_list[0], PTL.el_list[-1]
     closedTolerance = 1e-11
-    if not iscloseAll(elPTL_First.nb, -1 * elPTL_Last.ne, closedTolerance):  # normal vector must be same
+    if not is_close_all(elPTL_First.nb, -1 * elPTL_Last.ne, closedTolerance):  # normal vector must be same
         return False
-    if not iscloseAll(elPTL_First.r1, elPTL_Last.r2, closedTolerance):
+    if not is_close_all(elPTL_First.r1, elPTL_Last.r2, closedTolerance):
         return False
     return True
 

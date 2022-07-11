@@ -6,8 +6,8 @@ from latticeElements.elements import CombinerIdeal, CombinerHalbachLensSim, Comb
 from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
 
 
-def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleoutput_offsetStart: float = 0.0,
-                                atomState='LOW_FIELD_SEEKING') -> tuple[np.ndarray, np.ndarray]:
+def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_offset_start: float = 0.0,
+                                atom_state='LOW_FIELD_SEEKER') -> tuple[np.ndarray, np.ndarray]:
     # this computes the output angle and offset for a combiner magnet.
     # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
     # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -17,117 +17,123 @@ def compute_Particle_Trajectory(forceFunc, speed, xStart, xStop, particleoutput_
     # h: timestep
     # lowField: wether to model low or high field seekers
     h = 5e-6
-    particleoutput_offsetStart = -particleoutput_offsetStart  # temporary
-    assert atomState in ('LOW_FIELD_SEEKING', 'HIGH_FIELD_SEEKING')
-    stateFact = 1 if atomState == 'LOW_FIELD_SEEKING' else -1
-    Force = lambda x: forceFunc(x) * stateFact
-    q = np.asarray([xStart, particleoutput_offsetStart, 0.0])
-    p = np.asarray([speed, 0.0, 0.0])
-    qList, pList = [q], [p]
 
-    forcePrev = Force(q)  # recycling the previous force value cut simulation time in half
+    # TODO: WHAT IS THE DEAL WITH THIS?
+    particle_y_offset_start = -particle_y_offset_start  # temporary
+    assert atom_state in ('LOW_FIELD_SEEKER', 'HIGH_FIELD_SEEKER')
+    state_fact = 1 if atom_state == 'LOW_FIELD_SEEKER' else -1
+
+    def force(x):
+        return force_func(x) * state_fact
+
+    q = np.asarray([xStart, particle_y_offset_start, 0.0])
+    p = np.asarray([speed, 0.0, 0.0])
+    q_list, p_list = [q], [p]
+
+    force_prev = force(q)  # recycling the previous force value cut simulation time in half
     while True:
-        F = forcePrev
+        F = force_prev
         q_n = q + p * h + .5 * F * h ** 2
         if q_n[0] > xStop:  # if overshot, go back and walk up to the edge assuming no force
             dr = xStop - q[0]
             dt = dr / p[0]
-            qFinal = q + p * dt
-            F_n = Force(q_n)
+            q_final = q + p * dt
+            F_n = force(q_n)
             assert not np.any(np.isnan(F_n))
             pFinal = p + .5 * (F + F_n) * h
-            qList.append(qFinal)
-            pList.append(pFinal)
+            q_list.append(q_final)
+            p_list.append(pFinal)
             break
-        F_n = Force(q_n)
+        F_n = force(q_n)
         assert not np.any(np.isnan(F_n))
         p_n = p + .5 * (F + F_n) * h
         q, p = q_n, p_n
-        forcePrev = F_n
-        qList.append(q)
-        pList.append(p)
-    assert qFinal[2] == 0.0  # only interested in xy plane bending, expected to be zero
-    q_arr = np.asarray(qList)
-    p_arr = np.asarray(pList)
+        force_prev = F_n
+        q_list.append(q)
+        p_list.append(p)
+    assert q_final[2] == 0.0  # only interested in xy plane bending, expected to be zero
+    q_arr = np.asarray(q_list)
+    p_arr = np.asarray(p_list)
     return q_arr, p_arr
 
 
-def calculateTrajectory_Length(qTracedArr: np.ndarray) -> float:
+def calculate_trajectory_length(qTracedArr: np.ndarray) -> float:
     assert np.all(np.sort(qTracedArr[:, 0]) == qTracedArr[:, 0])  # monotonically increasing
     return float(np.sum(np.sqrt(np.sum((qTracedArr[1:] - qTracedArr[:-1]) ** 2, axis=1))))
 
 
-def make_Halbahc_Combiner_Force_Function(el) -> Callable:
-    lens = el.make_Lens()
+def make_halbach_combiner_force_function(el) -> Callable:
+    lens = el.make_lens()
 
-    def force_Func(q):
+    def force_func(q):
         if el.space < q[0] < el.Lm + el.space:
             assert sqrt(q[1] ** 2 + q[2] ** 2) < el.ap
         F = -SIMULATION_MAGNETON * lens.B_norm_grad(q)
         F[2] = 0.0
         return F
 
-    return force_Func
+    return force_func
 
 
-def input_Angle(p_arr) -> float:
+def input_angle(p_arr) -> float:
     px, py, _ = p_arr[-1]
     return np.arctan(py / px)
 
 
-def closet_Approach_To_Lens_Corner(el: CombinerHalbachLensSim, q_arr: np.ndarray):
-    lensCorner = np.array([el.space + el.Lm + FLAT_WALL_VACUUM_THICKNESS, -el.ap, 0.0])
-    return np.min(np.linalg.norm(q_arr - lensCorner, axis=1))
+def closet_approach_to_lens_corner(el: CombinerHalbachLensSim, q_arr: np.ndarray):
+    lens_corner_coords = np.array([el.space + el.Lm + FLAT_WALL_VACUUM_THICKNESS, -el.ap, 0.0])
+    return np.min(np.linalg.norm(q_arr - lens_corner_coords, axis=1))
 
 
-def characterize_CombinerIdeal(el: CombinerIdeal):
+def characterize_combiner_ideal(el: CombinerIdeal):
     assert type(el) is CombinerIdeal
 
     def force(q):
-        assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
+        assert abs(q[2]) < el.apz and -el.ap_left < q[1] < el.ap_right
         return np.array(combiner_Ideal_Force(*q, el.Lm, el.c1, el.c2))
 
-    q_arr, p_arr = compute_Particle_Trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
+    q_arr, p_arr = compute_particle_trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
     assert isclose(q_arr[-1, 0], el.Lm) and isclose(q_arr[0, 0], 0.0)
-    trajectoryLength = calculateTrajectory_Length(q_arr)
-    inputAngle = input_Angle(p_arr)
-    inputOffset = q_arr[-1, 1]
-    assert trajectoryLength > el.Lm
-    return inputAngle, inputOffset, trajectoryLength
+    trajectory_length = calculate_trajectory_length(q_arr)
+    input_ang = input_angle(p_arr)
+    input_offset = q_arr[-1, 1]
+    assert trajectory_length > el.Lm
+    return input_ang, input_offset, trajectory_length
 
 
-def characterize_CombinerHalbach(el: CombinerHalbachLensSim, atomState=None, particleOffset=None):
-    atomState = (
-        'HIGH_FIELD_SEEKING' if el.field_fact == -1 else 'LOW_FIELD_SEEKING') if atomState is None else atomState
-    particleOffset = el.output_offset if particleOffset is None else particleOffset
-    force_Func = make_Halbahc_Combiner_Force_Function(el)
-    q_arr, p_arr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
-                                             particleoutput_offsetStart=particleOffset, atomState=atomState)
+def characterize_combiner_halbach(el: CombinerHalbachLensSim, atom_state=None, particleOffset=None):
+    atom_state = (
+        'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER') if atom_state is None else atom_state
+    particle_y_offset_start = el.output_offset if particleOffset is None else particleOffset
+    force_func = make_halbach_combiner_force_function(el)
+    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
+                                               particle_y_offset_start=particle_y_offset_start, atom_state=atom_state)
 
     assert isclose(q_arr[-1, 0], el.Lm + 2 * el.space) and isclose(q_arr[0, 0], 0.0)
-    minBeamLensSep = closet_Approach_To_Lens_Corner(el, q_arr)
-    trajectoryLength = calculateTrajectory_Length(q_arr)
-    inputAngle = input_Angle(p_arr)
-    inputOffset = q_arr[-1, 1]
-    return inputAngle, inputOffset, trajectoryLength, minBeamLensSep
+    min_beam_lens_sep = closet_approach_to_lens_corner(el, q_arr)
+    trajectory_length = calculate_trajectory_length(q_arr)
+    input_ang = input_angle(p_arr)
+    input_offset = q_arr[-1, 1]
+    return input_ang, input_offset, trajectory_length, min_beam_lens_sep
 
 
-def characterize_CombinerSim(el: CombinerSim):
+def characterize_combiner_sim(el: CombinerSim):
     from numbaFunctionsAndObjects.combinerSimFastFunction import force_Without_isInside_Check
-    params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.apL, el.apR, el.space, el.field_fact)
+    params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.ap_left, el.ap_right, el.space, el.field_fact)
 
-    field_data = el.open_And_Shape_Field_Data()
-    def force_Func(q):
+    field_data = el.open_and_shape_field_data()
+
+    def force_func(q):
         if el.space < q[0] < el.Lm + el.space:
-            assert abs(q[2]) < el.apz and -el.apL < q[1] < el.apR
-        F = np.array(force_Without_isInside_Check(*q,params,field_data))
+            assert abs(q[2]) < el.apz and -el.ap_left < q[1] < el.ap_right
+        F = np.array(force_Without_isInside_Check(*q, params, field_data))
         F[2] = 0.0
         return F
 
-    q_arr, p_arr = compute_Particle_Trajectory(force_Func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
+    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
     assert isclose(q_arr[-1, 0], 2 * el.space + el.Lm) and isclose(q_arr[0, 0], 0.0)
-    trajectoryLength = calculateTrajectory_Length(q_arr)
-    inputAngle = input_Angle(p_arr)
-    inputOffset = q_arr[-1, 1]
-    assert trajectoryLength > el.Lm
-    return inputAngle, inputOffset, trajectoryLength
+    trajectory_length = calculate_trajectory_length(q_arr)
+    input_ang = input_angle(p_arr)
+    input_offset = q_arr[-1, 1]
+    assert trajectory_length > el.Lm
+    return input_ang, input_offset, trajectory_length

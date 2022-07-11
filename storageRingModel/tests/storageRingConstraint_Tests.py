@@ -1,7 +1,7 @@
 import os
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
-from helperTools import iscloseAll,tool_Parallel_Process
+from helperTools import is_close_all,parallel_evaluate
 import numpy as np
 
 from math import isclose
@@ -20,7 +20,7 @@ testDataFolderPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'t
         PTL.add_segmented_halbach_bender(Lm, rp, num_magnets, rb)
         PTL.end_lattice()
         floor_plan = solve_Floor_Plan(PTL,False)
-        posSep, normSep = floor_plan.get_End_Separation_Vectors()
+        posSep, normSep = floor_plan.get_end_separation_vectors()
         _cost=np.linalg.norm(posSep)+np.linalg.norm(normSep)
         print(rb,_cost)
         return _cost
@@ -60,8 +60,8 @@ def _test_Storage_Ring_Constraint_1():
     PTL_List = [_make_Lattice_1(), _make_Lattice_2()]
     for PTL in PTL_List:
         floor_plan = solve_Floor_Plan(PTL,False)
-        posSep, normSep = floor_plan.get_End_Separation_Vectors()
-        assert iscloseAll(posSep, np.zeros(2), 1e-9) and iscloseAll(normSep, np.zeros(2), 1e-9)
+        posSep, normSep = floor_plan.get_end_separation_vectors()
+        assert is_close_all(posSep, np.zeros(2), 1e-9) and is_close_all(normSep, np.zeros(2), 1e-9)
 
 
 def _test_Storage_Ring_Constraint_2():
@@ -79,15 +79,15 @@ def _test_Storage_Ring_Constraint_2():
     PTL.end_lattice(constrain=True)
     totalBendAngle = PTL.el_list[1].ang + PTL.el_list[3].ang + PTL.el_list[5].ang
     assert isclose(totalBendAngle, 2 * np.pi, abs_tol=1e-11)
-    assert iscloseAll(PTL.el_list[0].r1, PTL.el_list[-1].r2, 1e-11)
-    assert iscloseAll(PTL.el_list[0].nb, -PTL.el_list[-1].ne, 1e-11)
+    assert is_close_all(PTL.el_list[0].r1, PTL.el_list[-1].r2, 1e-11)
+    assert is_close_all(PTL.el_list[0].nb, -PTL.el_list[-1].ne, 1e-11)
 
 
 def _assert_Consraint_Match_Saved_Vals(PTL: ParticleTracerLattice, fileName: str):
     r1_2TestArr = np.loadtxt(os.path.join(testDataFolderPath, fileName))
     r1TestArr, r2TestArr = r1_2TestArr[:, :3], r1_2TestArr[:, 3:]
     for el, r1Test, r2Test in zip(PTL.el_list, r1TestArr, r2TestArr):
-        assert iscloseAll(el.r1,r1Test,1e-14) and iscloseAll(el.r2, r2Test,1e-14)
+        assert is_close_all(el.r1,r1Test,1e-14) and is_close_all(el.r2, r2Test,1e-14)
 
 def save_Results(PTL: ParticleTracerLattice, fileName: str):
     fileName=os.path.join(testDataFolderPath, fileName)
@@ -99,7 +99,7 @@ def save_Results(PTL: ParticleTracerLattice, fileName: str):
 def _test_Storage_Ring_Constraint_3(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 1 lattice in my naming scheme"""
 
-    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
+    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)
@@ -122,7 +122,7 @@ def _test_Storage_Ring_Constraint_3(save=False):
 def _test_Storage_Ring_Constraint_4(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 3 lattice in my naming scheme"""
 
-    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storageRing')
+    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)
@@ -158,4 +158,4 @@ def test_Storage_Ring_Constraints():
     def run(func):
         func()
 
-    tool_Parallel_Process(run, tests)
+    parallel_evaluate(run, tests)

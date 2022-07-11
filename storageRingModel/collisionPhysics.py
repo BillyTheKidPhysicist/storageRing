@@ -9,23 +9,22 @@ described in electronic lab book. Briefly, the model assumptions are:
 """
 # pylint: disable=too-many-locals, too-many-arguments
 from typing import Union
-from typeHints import RealNum
+
 import numba
 import numpy as np
 
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
-# import latticeElements.elementPT
-from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
-    HalbachBenderSimSegmented, Element
 from helperTools import full_arctan2
+# import latticeElements.elementPT
+from latticeElements.elements import HalbachLensSim, Drift, \
+    HalbachBenderSimSegmented, Element
+from typeHints import RealNum
 
-
-full_arctan2=numba.njit(full_arctan2)
+full_arctan2 = numba.njit(full_arctan2)
 
 vec3D = tuple[float, float, float]
 frequency = float
 angle = Union[float, int]
-
 
 
 @numba.njit()

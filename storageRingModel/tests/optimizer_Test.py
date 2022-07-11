@@ -1,5 +1,5 @@
 from optimizer import Solver
-from helperTools import tool_Parallel_Process
+from helperTools import parallel_evaluate
 
 def _test_Ring_Solver():
     xRing = (0.01232265, 0.00998983, 0.03899118, 0.10642821, 0.4949227)
@@ -35,5 +35,5 @@ def _test_Both():
 def poop():
     funcList=[_test_Both,_test_Ring_Solver,_test_Injector_Surrogate_Solver,_test_Injector_Actual_Ring()]
     run=lambda func: func()
-    tool_Parallel_Process(run,funcList)
+    parallel_evaluate(run,funcList)
 poop()

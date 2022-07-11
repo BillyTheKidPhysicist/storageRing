@@ -10,7 +10,7 @@ def test1():
     sphereDiam = .0254
     magnet_width = .0254
     lensBounds = [{'length': (L0 - rp, L0)}]
-    lensParams = [{'rp': rp, 'width': magnet_width}]
+    lens_params = [{'rp': rp, 'width': magnet_width}]
     lensBaseLineParams = [{'rp': rp, 'width': magnet_width, 'length': L0}]
 
     shimAParamBounds = {'r': (rp, rp + magnet_width), 'phi': (0.0, np.pi / 6), 'deltaZ': (0.0, rp),
@@ -29,13 +29,13 @@ def test1():
     shimCLockedParams = {'diameter': sphereDiam, 'shape': 'sphere', 'plane_symmetry': True}
 
     shimOptimizerAB = ShimOptimizer('full', False)
-    shimOptimizerAB.set_Lens(lensBounds, lensParams, lensBaseLineParams)
+    shimOptimizerAB.set_Lens(lensBounds, lens_params, lensBaseLineParams)
     shimOptimizerAB.add_Shim(shimAParamBounds, shimALockedParams)
     shimOptimizerAB.add_Shim(shimBParamBounds, shimBLockedParams)
     shimOptimizerAB.initialize_Optimization()
 
     shimOptimizerC = ShimOptimizer('full', False)
-    shimOptimizerC.set_Lens(lensBounds, lensParams, lensBaseLineParams)
+    shimOptimizerC.set_Lens(lensBounds, lens_params, lensBaseLineParams)
     shimOptimizerC.add_Shim(shimCParamBounds, shimCLockedParams)
     shimOptimizerC.initialize_Optimization()
     shimAParamBounds = shimOptimizerAB.shimsList[0].paramsBounds

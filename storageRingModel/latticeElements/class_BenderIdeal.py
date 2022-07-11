@@ -6,9 +6,8 @@ from scipy.spatial.transform import Rotation as Rot
 from constants import SIMULATION_MAGNETON
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.utilities import full_arctan2
-from numbaFunctionsAndObjects.fieldHelpers import get_Bender_Ideal
-
 from numbaFunctionsAndObjects import benderIdealFastFunctions
+
 
 class BenderIdeal(BaseElement):
     """
@@ -48,7 +47,7 @@ class BenderIdeal(BaseElement):
         self.rb = rb
         self.K = None
         self.shape = 'BEND'
-        self.ro = None  # bending radius of orbit, ie rb + rOffset.
+        self.ro = None  # bending radius of orbit, ie rb + r_offset.
         self.r0 = None  # coordinates of center of bender, minus any caps
 
     def fill_pre_constrained_parameters(self) -> None:
@@ -64,8 +63,8 @@ class BenderIdeal(BaseElement):
     def build_fast_field_helper(self) -> None:
         numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.field_fact)
 
-        force_args = (numba_func_constants, )
-        potential_args = (numba_func_constants, )
+        force_args = (numba_func_constants,)
+        potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
         self.assign_numba_functions(benderIdealFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
@@ -80,16 +79,16 @@ class BenderIdeal(BaseElement):
 
     def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
-        qNew = q_lab - self.r0
-        qNew = self.transform_Lab_Frame_Vector_Into_Element_Frame(qNew)
-        return qNew
+        q_new = q_lab - self.r0
+        q_new = self.transform_Lab_Frame_Vector_Into_Element_Frame(q_new)
+        return q_new
 
     def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
-        qNew = q_el.copy()
-        qNew = self.transform_Element_Frame_Vector_Into_Lab_Frame(qNew)
-        qNew = qNew + self.r0
-        return qNew
+        q_new = q_el.copy()
+        q_new = self.transform_Element_Frame_Vector_Into_Lab_Frame(q_new)
+        q_new = q_new + self.r0
+        return q_new
 
     def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element."""
@@ -120,9 +119,9 @@ class BenderIdeal(BaseElement):
         """Overrides abstract method from Element class. Simple cartesian to cylinderical coordinates"""
 
         x, y = q_el[:2]
-        xDot, yDot, zDot = p_el
+        x_dot, y_dot, z_dot = p_el
         r = sqrt(x ** 2 + y ** 2)
-        rDot = (x * xDot + y * yDot) / r
-        thetaDot = (x * yDot - xDot * y) / r ** 2
-        velocityTangent = -r * thetaDot
-        return np.array([velocityTangent, rDot, zDot])  # tanget, perpindicular horizontal, perpindicular vertical
+        r_dot = (x * x_dot + y * y_dot) / r
+        theta_dot = (x * y_dot - x_dot * y) / r ** 2
+        velocity_tangent = -r * theta_dot
+        return np.array([velocity_tangent, r_dot, z_dot])  # tanget, perpindicular horizontal, perpindicular vertical

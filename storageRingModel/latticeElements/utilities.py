@@ -3,7 +3,7 @@ from math import atan2, floor
 import numpy as np
 
 from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT
-from helperTools import inch_To_Meter
+from helperTools import inch_to_meter
 from typeHints import FloatTuple, RealNum
 
 TINY_STEP = 1e-9
@@ -15,25 +15,26 @@ B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_OFFSET = 1.5 * B_GRAD_STEP_SIZE
 TINY_INTERP_STEP = 1e-12
 
+
 def round_down_to_imperial(value: RealNum) -> float:
     """Round 'value' down to its nearest imperial multiple of 1/16 inch"""
-    minMult = inch_To_Meter(1 / 16)
-    assert minMult <= value
-    multiples = value / minMult
+    min_mult = inch_to_meter(1 / 16)
+    assert min_mult <= value
+    multiples = value / min_mult
     multiples += 1e-12  # when given the exact value, the function can round down because of precision issues, so add
     # a small number
-    value_rounded = minMult * floor(multiples)
+    value_rounded = min_mult * floor(multiples)
     return value_rounded
 
 
 def round_down_to_nearest_valid_mag_width(width_proposed: RealNum) -> float:
     """Given a proposed magnet width, round down the nearest available width (in L x width x width)"""
-    width_rounded=round_down_to_imperial(width_proposed)
-    assert width_rounded <= inch_To_Meter(1.5)
+    width_rounded = round_down_to_imperial(width_proposed)
+    assert width_rounded <= inch_to_meter(1.5)
     return width_rounded
 
 
-def round_down_to_nearest_valid_tube_OD(OD_proposed: RealNum) -> float:
+def round_down_to_nearest_tube_OD(OD_proposed: RealNum) -> float:
     """Given a proposed tube OD, round down the nearest available OD """
     return round_down_to_imperial(OD_proposed)
 
@@ -41,10 +42,10 @@ def round_down_to_nearest_valid_tube_OD(OD_proposed: RealNum) -> float:
 def halbach_magnet_width(rp: RealNum, magnetSeparation: RealNum = SPACE_BETWEEN_MAGNETS_IN_MOUNT,
                          use_standard_sizes: bool = False) -> RealNum:
     assert rp > 0.0
-    halfAngle = 2 * np.pi / 24
-    maxMagnetWidth = rp * np.tan(halfAngle) * 2
-    widthReductin = magnetSeparation / np.cos(halfAngle)
-    magnet_width = maxMagnetWidth - widthReductin
+    half_angle = 2 * np.pi / 24
+    max_magnet_width = rp * np.tan(half_angle) * 2
+    width_reduction = magnetSeparation / np.cos(half_angle)
+    magnet_width = max_magnet_width - width_reduction
     magnet_width = round_down_to_nearest_valid_mag_width(magnet_width) if use_standard_sizes else magnet_width
     return magnet_width
 
@@ -58,23 +59,23 @@ def get_halbach_layers_radii_and_magnet_widths(rp_first: RealNum, numConcentricL
     rp_layers = []
     magnet_widths = []
     for _ in range(numConcentricLayers):
-        next_rpLayer = rp_first + sum(magnet_widths)
-        rp_layers.append(next_rpLayer)
-        nextMagnetWidth = halbach_magnet_width(next_rpLayer, magnetSeparation=magnetSeparation,
-                                               use_standard_sizes=use_standard_sizes)
-        magnet_widths.append(nextMagnetWidth)
+        next_rp_layer = rp_first + sum(magnet_widths)
+        rp_layers.append(next_rp_layer)
+        next_magnet_width = halbach_magnet_width(next_rp_layer, magnetSeparation=magnetSeparation,
+                                                 use_standard_sizes=use_standard_sizes)
+        magnet_widths.append(next_magnet_width)
     return tuple(rp_layers), tuple(magnet_widths)
 
 
 def max_tube_radius_in_segmented_bend(rb: float, rp: float, Lm: float, tube_wall_thickness: float,
-                                      use_standard_sizes: bool=False) -> float:
+                                      use_standard_sizes: bool = False) -> float:
     """What is the maximum size that will fit in a segmented bender and respect the geometry"""
     assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tube_wall_thickness < rp
-    radiusCorner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
-    maximumTubeRadius = rb - radiusCorner - tube_wall_thickness
-    maximumTubeRadius=maximumTubeRadius if not use_standard_sizes else round_down_to_nearest_valid_tube_OD(2*maximumTubeRadius)/2.0
-    assert maximumTubeRadius > 0.0
-    return maximumTubeRadius
+    radius_corner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
+    max_tube_rad = rb - radius_corner - tube_wall_thickness
+    max_tube_rad = max_tube_rad if not use_standard_sizes else round_down_to_nearest_tube_OD(2 * max_tube_rad) / 2.0
+    assert max_tube_rad > 0.0
+    return max_tube_rad
 
 
 def min_Bore_Radius_From_Tube_OD(tube_OD: float, rb: float, Lm: float) -> float:
@@ -92,10 +93,10 @@ def full_arctan2(q: np.ndarray):
     return phi
 
 
-def get_Unit_Cell_Angle(lengthSegment: float, radius: float, segmentWidth: float) -> float:
+def calc_unit_cell_angle(length_seg: float, radius: float, segmentWidth: float) -> float:
     """Get the arc angle associate with a single unit cell. Each lens contains two unit cells."""
-    assert lengthSegment > 0.0 and radius > 0.0 and radius > segmentWidth >= 0.0
-    return np.arctan(.5 * lengthSegment / (radius - segmentWidth))  # radians
+    assert length_seg > 0.0 and radius > 0.0 and radius > segmentWidth >= 0.0
+    return np.arctan(.5 * length_seg / (radius - segmentWidth))  # radians
 
 
 def is_even(x: int) -> bool:
@@ -108,9 +109,9 @@ def mirror_across_angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, fl
     """mirror_across_angle x and y across a line at angle "ang" that passes through the origin"""
     m = np.tan(ang)
     d = (x + y * m) / (1 + m ** 2)
-    xMirror = 2 * d - x
-    yMirror = 2 * d * m - y
-    return xMirror, yMirror
+    x_mirror = 2 * d - x
+    y_mirror = 2 * d * m - y
+    return x_mirror, y_mirror
 
 
 class ElementDimensionError(Exception):

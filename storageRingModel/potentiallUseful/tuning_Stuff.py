@@ -21,12 +21,12 @@ def twist_Knobs(shiftLens1,shiftLens2,lattice):
 import copy
 def make_Injector_With_Longer_First_Drift(extraLength):
     lattice=copy.deepcopy(lattice_injector)
-    firstEl=lattice.el_list[0]
-    firstEl.set_length(firstEl.L+extraLength)
+    first_el=lattice.el_list[0]
+    first_el.set_length(first_el.L+extraLength)
     lattice.build_lattice(False)
     return lattice
 
-from helperTools import tool_Parallel_Process
+from helperTools import parallel_evaluate
 def shifted_Swarm_Cost(loadingShift):
     try:
         PTL_Injector_Long=make_Injector_With_Longer_First_Drift(loadingShift)
@@ -35,4 +35,4 @@ def shifted_Swarm_Cost(loadingShift):
     optimizer = StorageRingModel(lattice_ring, PTL_Injector_Long)
     return optimizer.mode_match(True) #(0.6319767830742709, 5.7820389531454275)
 shifts=np.linspace(-.03,.03,9)
-results=tool_Parallel_Process(shifted_Swarm_Cost,shifts,processes=len(shifts))
+results=parallel_evaluate(shifted_Swarm_Cost,shifts,processes=len(shifts))

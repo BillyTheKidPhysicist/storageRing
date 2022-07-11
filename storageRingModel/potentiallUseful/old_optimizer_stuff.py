@@ -12,13 +12,13 @@ def catch_Optimizer_Errors(self, tuningBounds: list_array_tuple, tuningElementIn
     if not all(isinstance(el, Drift) for el in injectorTuningElements):
         raise Exception("injector tuning elements must be drift region")
     if tuningChoice == 'field':
-        for elIndex in tuningElementIndices:
-            el = self.lattice_ring.el_list[elIndex]
+        for el_index in tuningElementIndices:
+            el = self.lattice_ring.el_list[el_index]
             if (isinstance(el, LensIdeal) and isinstance(el, HalbachLensSim)) != True:
                 raise Exception("For field tuning elements must be LensIdeal or HalbachLensSim")
     elif tuningChoice == 'spacing':
-        for elIndex in tuningElementIndices:
-            el_before, el_after = self.lattice_ring.get_element_before_and_after(self.lattice_ring.el_list[elIndex])
+        for el_index in tuningElementIndices:
+            el_before, el_after = self.lattice_ring.get_element_before_and_after(self.lattice_ring.el_list[el_index])
             tunableLength = (el_before.L + el_after.L) - 2 * self.minElementLength
             if (isinstance(el_before, Drift) and isinstance(el_after, Drift)) != True:
                 raise Exception("For spacing tuning neighboring elements must be Drift elements")
@@ -187,8 +187,8 @@ def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     maxInitialTransversePos = 1e-3
     T_Max = 1.1 * minRevsToTest * self.lattice_ring.total_length / self.lattice_ring.speed_nominal
     swarmTestInitial = self.swarm_tracer_ring.initialize_stablity_testing_swarm(maxInitialTransversePos)
-    swarmTestAtCombiner = self.swarm_tracer_ring.move_Swarm_To_Combiner_Output(swarmTestInitial)
-    swarmTestTraced = self.swarm_tracer_ring.trace_Swarm_Through_Lattice(swarmTestAtCombiner, self.h,
+    swarmTestAtCombiner = self.swarm_tracer_ring.move_swarm_to_combiner_output(swarmTestInitial)
+    swarmTestTraced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarmTestAtCombiner, self.h,
                                                                        T_Max, accelerated=False, use_fast_mode=True,
                                                                        use_collisions=self.use_collisions)
     stable = False

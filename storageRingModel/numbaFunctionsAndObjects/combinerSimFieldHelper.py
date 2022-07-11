@@ -15,8 +15,8 @@ spec_Combiner_Sim = [
     ('Lb', numba.float64),
     ('Lm', numba.float64),
     ('space', numba.float64),
-    ('apL', numba.float64),
-    ('apR', numba.float64),
+    ('ap_left', numba.float64),
+    ('ap_right', numba.float64),
     ('apz', numba.float64),
     ('ang', numba.float64),
     ('field_fact', numba.float64)
@@ -26,14 +26,14 @@ spec_Combiner_Sim = [
 # @jitclass(spec)
 class CombinerSimFieldHelper_Numba:
 
-    def __init__(self, field_data, La, Lb, Lm, space, apL, apR, apz, ang, field_fact):
+    def __init__(self, field_data, La, Lb, Lm, space, ap_left, ap_right, apz, ang, field_fact):
         self.x_arr, self.y_arr, self.z_arr, self.FxArr, self.FyArr, self.Fz_arr, self.V_arr = field_data
         self.La = La
         self.Lb = Lb
         self.Lm = Lm
         self.space = space
-        self.apL = apL
-        self.apR = apR
+        self.ap_left = ap_left
+        self.ap_right = ap_right
         self.apz = apz
         self.ang = ang
         self.field_fact = field_fact
@@ -41,7 +41,7 @@ class CombinerSimFieldHelper_Numba:
     def get_State_Params(self):
         """Helper for a elementPT.Drift. Psuedo-inherits from BaseClassFieldHelper"""
         field_data = self.x_arr, self.y_arr, self.z_arr, self.FxArr, self.FyArr, self.Fz_arr, self.V_arr
-        return (field_data, self.La, self.Lb, self.Lm, self.space, self.apL, self.apR, self.apz, self.ang,
+        return (field_data, self.La, self.Lb, self.Lm, self.space, self.ap_left, self.ap_right, self.apz, self.ang,
                 self.field_fact), ()
 
     def _force_Func(self, x, y, z):
@@ -96,7 +96,7 @@ class CombinerSimFieldHelper_Numba:
             return False
         elif 0 <= x <= self.Lb:  # particle is in the horizontal section (in element frame) that passes
             # through the combiner. Simple square apeture
-            if -self.apL < y < self.apR:  # if inside the y (width) apeture
+            if -self.ap_left < y < self.ap_right:  # if inside the y (width) apeture
                 return True
             else:
                 return False
@@ -104,9 +104,9 @@ class CombinerSimFieldHelper_Numba:
             return False
         else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
             m = np.tan(self.ang)
-            Y1 = m * x + (self.apR - m * self.Lb)  # upper limit
+            Y1 = m * x + (self.ap_right - m * self.Lb)  # upper limit
             Y2 = (-1 / m) * x + self.La * np.sin(self.ang) + (self.Lb + self.La * np.cos(self.ang)) / m
-            Y3 = m * x + (-self.apL - m * self.Lb)
+            Y3 = m * x + (-self.ap_left - m * self.Lb)
             if np.sign(m) < 0.0 and (y < Y1 and y > Y2 and y > Y3):  # if the inlet is tilted 'down'
                 return True
             elif np.sign(m) > 0.0 and (y < Y1 and y < Y2 and y > Y3):  # if the inlet is tilted 'up'

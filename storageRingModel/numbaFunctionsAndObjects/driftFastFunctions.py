@@ -3,7 +3,7 @@ import numpy as np
 
 
 @numba.njit()
-def is_coord_in_vacuum(x, y, z,params):
+def is_coord_in_vacuum(x, y, z, params):
     ap, L, inputAngleTilt, outputAngleTilt = params
     if inputAngleTilt == outputAngleTilt == 0.0:  # drift is a simple cylinder
         return 0 <= x <= L and np.sqrt(y ** 2 + z ** 2) < ap
@@ -29,21 +29,21 @@ def is_coord_in_vacuum(x, y, z,params):
                 else:
                     return False
 
+
 @numba.njit()
-def magnetic_potential(x, y, z,params ):
+def magnetic_potential(x, y, z, params):
     """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
     ap, L, inputAngleTilt, outputAngleTilt = params
-    if not is_coord_in_vacuum(x, y, z,params):
+    if not is_coord_in_vacuum(x, y, z, params):
         return np.nan
     return 0.0
 
+
 @numba.njit()
-def force(x, y, z,params ):
+def force(x, y, z, params):
     """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
-    ap, L, inputAngleTilt, outputAngleTilt=params
-    if not is_coord_in_vacuum(x, y, z,params ):
+    ap, L, inputAngleTilt, outputAngleTilt = params
+    if not is_coord_in_vacuum(x, y, z, params):
         return np.nan, np.nan, np.nan
     else:
         return 0.0, 0.0, 0.0
-
-

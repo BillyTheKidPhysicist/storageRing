@@ -3,7 +3,6 @@ from typing import Iterable, Union, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.interpolate as spi
 
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
@@ -22,17 +21,17 @@ benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
 
 class ParticleTracerLattice:
 
-    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storageRing',
+    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
                  jitter_amp: float = 0.0, field_dens_mult: float = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initialAngle=None,
-                 magnet_grade: str = 'N52', use_standard_mag_size: bool=False, use_standard_tube_OD: bool =False):
+                 magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False):
         assert field_dens_mult > 0.0
-        if lattice_type != 'storageRing' and lattice_type != 'injector':
+        if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
         if jitter_amp > 5e-3:
             raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
                             "depend on this value, and relatively large values were not planned for")
-        self.lattice_type = lattice_type  # options are 'storageRing' or 'injector'. If storageRing, the geometry is the the first element's
+        self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring, the geometry is the the first element's
         # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         # is also at the origin, but seceeding elements follow along the positive x axis
         self.speed_nominal = speed_nominal  # Design particle speed
@@ -46,8 +45,8 @@ class ParticleTracerLattice:
         self.jitter_amp = jitter_amp
         self.field_dens_mult = field_dens_mult
         self.use_mag_errors = use_mag_errors
-        self.use_standard_tube_OD=use_standard_tube_OD
-        self.use_standard_mag_size=use_standard_mag_size
+        self.use_standard_tube_OD = use_standard_tube_OD
+        self.use_standard_mag_size = use_standard_mag_size
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linear_elements_to_constrain: list[HalbachLensSim] = []  # elements whos length will be changed when the
@@ -64,9 +63,9 @@ class ParticleTracerLattice:
 
     def set_constrained_linear_element(self, el: Element) -> None:
         self.linear_elements_to_constrain.append(el)
-        if len(self.linear_elements_to_constrain) > 2: 
+        if len(self.linear_elements_to_constrain) > 2:
             raise ValueError("there can only be 2 constrained linear elements")
-        
+
     def add_combiner_sim(self, size_scale: float = 1.0) -> None:
         """
         Add model of our combiner from COMSOL. rarely used
@@ -96,7 +95,7 @@ class ParticleTracerLattice:
         :param Lm: Hard edge length of magnet, m. Total length of element depends on degree of deflection of nominal
         trajectory
         :param rp: Bore radius of hexapole lens, m
-        :param loadBeamOffset: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
+        :param load_beam_offset: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
         :param layers: Number of concentric layers of magnets
         :return: None
         """
@@ -138,7 +137,7 @@ class ParticleTracerLattice:
         el = HalbachLensSim(self, rp_layers, L, ap, magnet_width)
         el.index = len(self.el_list)  # where the element is in the lattice
         self.el_list.append(el)  # add element to the list holding lattice elements in order
-        if constrain: 
+        if constrain:
             self.set_constrained_linear_element(el)
 
     # def add_Genetic_lens(self,lens: GeneticLens,ap: float)-> None:
@@ -196,9 +195,9 @@ class ParticleTracerLattice:
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
     def add_segmented_halbach_bender(self, Lm: float, rp: float, num_magnets: Optional[int], rb: float,
-                                         r_offset_fact: float = 1.0, ap: float = None) -> None:
+                                     r_offset_fact: float = 1.0, ap: float = None) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        # Lcap: Length of element on the end/input of bender
+        # L_cap: Length of element on the end/input of bender
         # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
         el = HalbachBenderSimSegmented(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
@@ -264,7 +263,7 @@ class ParticleTracerLattice:
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could
         # still be closed
-        if self.lattice_type == 'storageRing' and constrain:  # double check
+        if self.lattice_type == 'storage_ring' and constrain:  # double check
             assert is_particle_tracer_lattice_closed(self)
         build_shapely_objects(self.el_list)
         self.total_length = 0
@@ -291,7 +290,7 @@ class ParticleTracerLattice:
                 if not type(bender1) is type(self.el_list[i]):
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
         if constrain:
-            if self.lattice_type != 'storageRing':
+            if self.lattice_type != 'storage_ring':
                 raise Exception('Constrained lattice must be storage ring type')
             if not len(self.bender_indices) >= 2:
                 raise Exception('THERE MUST BE AT LEAST TWO BENDERS')
@@ -330,9 +329,11 @@ class ParticleTracerLattice:
         return x_lab, y_lab
 
     def show_lattice(self, particle_coords=None, particle=None, swarm=None, show_Rel_Survival=True,
-                     show_trace_lines=True,show_immediately=True,
-                     show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None, final_coords=True,
-                     save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False, plot_inner: bool = True):
+                     show_trace_lines=True, show_immediately=True,
+                     show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
+                     final_coords=True,
+                     save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
+                     plot_inner: bool = True):
         # plot the lattice using shapely. if user provides particle_coords plot that on the graph. If users provides particle
         # or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         # revolutions, then the x marker is not shown
@@ -384,7 +385,7 @@ class ParticleTracerLattice:
         elif particle is not None:  # instead plot from provided particle
             plot_Particle(particle)
         if swarm is not None:
-            max_revs = swarm.longest_Particle_Life_Revolutions()
+            max_revs = swarm.longest_particle_life_revolutions()
             if max_revs == 0.0:  # if it hasn't been traced
                 max_revs = 1.0
             for particle in swarm:
