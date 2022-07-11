@@ -36,7 +36,7 @@ def test_Modeler():
     swarmRingTraced = model.swarm_tracer_ring.trace_swarm_through_lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
                                                                         accelerated=True)
 
-    clippable_elements = model.all_non_drift_elements_in_ring()
+    clippable_elements = model.clippable_elements_in_ring()
     for particle_injector, particle_ring in zip(swarm_injector_traced, swarmRingTraced):
         assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
 

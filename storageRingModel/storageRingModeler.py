@@ -6,15 +6,19 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import Polygon, LineString
 
+from latticeElements.elements import Element
+
 from KevinBumperClass import swarmShift_x
 from ParticleClass import Swarm, Particle
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
 from helperTools import full_arctan2
-from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim
+from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim,CombinerSim,CombinerIdeal
 from latticeModels import make_ring_and_injector
 from latticeModels_Parameters import injectorParamsOptimalAny, ringParamsOptimal_V3, INJECTOR_TUNABILITY_LENGTH
+
+combiners=(CombinerHalbachLensSim,CombinerSim,CombinerIdeal)
 
 # expected elements of injector.
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
@@ -99,8 +103,8 @@ class StorageRingModel:
         if line is None:  # particle was clipped immediately, but in the injector not in the ring
             return False
         else:
-            clippable_element=self.all_non_drift_elements_in_ring()
-            return any(line.intersects(lens.SO_outer) for lens in clippable_element)
+            clippable_elements=self.clippable_elements_in_ring()
+            return any(line.intersects(el.SO_outer) for el in clippable_elements)
 
     def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
         """Get the lens before the combiner but after the bend in the ring. There should be only one lens"""
@@ -137,15 +141,18 @@ class StorageRingModel:
         shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
         return shapes
 
-    def all_non_drift_elements_in_ring(self):
+    def non_drift_elements_in_ring(self)-> list[Element]:
         return [el for el in self.lattice_ring if type(el) is not Drift]
+    
+    def clippable_elements_in_ring(self):
+        return [el for el in self.lattice_ring if not (type(el) is Drift or isinstance(el,combiners))]
 
     def floor_plan_overLap_mm(self) -> float:
         """Find the area overlap between the elements before and including the last injector lens, and the lenses
         between combiner input and adjacent bender output. Overlap of the drift region after the last injector lens is
         handled later by clipping particles on it
         """
-        overlap_elements = self.all_non_drift_elements_in_ring()
+        overlap_elements = self.non_drift_elements_in_ring()
         injector_shapes = self.injector_shapes_in_lab_frame('exterior')
         injector_shapes_to_compare = injector_shapes[:self.injector_lens_indices[-1] + 1]
         m_to_mm_area = 1e3 ** 2
