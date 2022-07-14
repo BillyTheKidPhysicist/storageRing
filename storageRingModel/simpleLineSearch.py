@@ -27,15 +27,17 @@ def find_optimal_value(func, xi, delta, bounds, processes):
 
 def line_search(cost_func, xi, delta_initial, bounds, cost_initial=None, processes=-1):
     x_opt, delta = xi, delta_initial
+    frac_reduction=.75
     cost_opt = cost_initial if cost_initial is not None else cost_func(xi)
-    i, maxiters = 0, 30
-    while i < maxiters:
+    i,failures, maxiters = 0,0, 10
+    while failures < maxiters:
         i += 1
         print('results', cost_opt, delta, repr(x_opt))
         x_opt_new, cost_opt_new = find_optimal_value(cost_func, x_opt, delta, bounds, processes)
         if cost_opt_new >= cost_opt:
-            delta *= .75
+            delta *= frac_reduction
         else:
             x_opt = x_opt_new
             cost_opt = cost_opt_new
+            failures+=1
     return x_opt, cost_opt

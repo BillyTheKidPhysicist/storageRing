@@ -67,15 +67,23 @@ def get_halbach_layers_radii_and_magnet_widths(rp_first: RealNum, numConcentricL
     return tuple(rp_layers), tuple(magnet_widths)
 
 
-def max_tube_radius_in_segmented_bend(rb: float, rp: float, Lm: float, tube_wall_thickness: float,
-                                      use_standard_sizes: bool = False) -> float:
+def max_tube_OR_in_segmented_bend(rb: float, rp: float, Lm: float, use_standard_sizes: bool = False) -> float:
     """What is the maximum size that will fit in a segmented bender and respect the geometry"""
-    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0 and 0 <= tube_wall_thickness < rp
+    assert rb > 0.0 and 0.0 < rp < rb and Lm > 0.0
     radius_corner = np.sqrt((rb - rp) ** 2 + (Lm / 2) ** 2)
-    max_tube_rad = rb - radius_corner - tube_wall_thickness
-    max_tube_rad = max_tube_rad if not use_standard_sizes else round_down_to_nearest_tube_OD(2 * max_tube_rad) / 2.0
-    assert max_tube_rad > 0.0
-    return max_tube_rad
+    max_tube_OR = rb - radius_corner  # outside radius
+    max_standard_tube_OR = round_down_to_nearest_tube_OD(2 * max_tube_OR) / 2.0
+    max_tube_OR = max_standard_tube_OR if use_standard_sizes else max_tube_OR
+    return max_tube_OR
+
+
+def max_tube_IR_in_segmented_bend(rb: float, rp: float, Lm: float, tube_wall_thickness: float,
+                                  use_standard_sizes: bool = False) -> float:
+    "Maximum geometry limited inside radius of a vacuum tube going through the segmented bender"
+    assert 0 <= tube_wall_thickness < rp
+    max_tube_OR = max_tube_OR_in_segmented_bend(rb, rp, Lm, use_standard_sizes=use_standard_sizes)
+    max_tube_IR = max_tube_OR - tube_wall_thickness
+    return max_tube_IR
 
 
 def min_Bore_Radius_From_Tube_OD(tube_OD: float, rb: float, Lm: float) -> float:

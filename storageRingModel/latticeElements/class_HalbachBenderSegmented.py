@@ -11,7 +11,7 @@ from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL
 from helperTools import arr_product, round_and_make_odd
 from latticeElements.class_BenderIdeal import BenderIdeal
 from latticeElements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
-    max_tube_radius_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
+    max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_OFFSET, TINY_INTERP_STEP
 from numbaFunctionsAndObjects import benderHalbachFastFunctions
 from typeHints import sequence
@@ -63,8 +63,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
     def compute_maximum_aperture(self) -> float:
         # beacuse the bender is segmented, the maximum vacuum tube allowed is not the bore of a single magnet
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
-        ap_max_geom = max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
-                                                        use_standard_sizes=self.PTL.use_standard_tube_OD)
+        ap_max_geom = max_tube_IR_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
+                                                    use_standard_sizes=self.PTL.use_standard_tube_OD)
         # todo: revisit this, I am doubtful of how correct this is
         safety_factor = .95
         ap_max_interp = safety_factor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \

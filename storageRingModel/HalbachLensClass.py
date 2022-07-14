@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_to_meter, radians, within_tol, time
-from latticeElements.utilities import max_tube_radius_in_segmented_bend, halbach_magnet_width
+from latticeElements.utilities import  halbach_magnet_width,max_tube_IR_in_segmented_bend
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 Tuple3Float = tuple[float, float, float]
@@ -670,8 +670,8 @@ class SegmentedBenderHalbach(Collection):
         spin flips. Solenoid wraps around an imaginary vacuum tube such that the wires but up against the inside edge
         of the magnets where they approach the bending radius the closest"""
 
-        coil_diam = METER_TO_MM * 2 * max_tube_radius_in_segmented_bend(self.rb, self.rp, self.Lm,
-                                                                        tube_wall_thickness=MAGNET_WIRE_DIAM)
+        coil_diam = METER_TO_MM * 2 * max_tube_IR_in_segmented_bend(self.rb, self.rp, self.Lm,
+                                                                    tube_wall_thickness=MAGNET_WIRE_DIAM/2.0)
         angle_start = self.lens_angles_arr[0] if self.use_half_cap_end[0] else self.lens_angles_arr[0] - self.UCAngle
         angle_end = self.lens_angles_arr[-1] if self.use_half_cap_end[1] else self.lens_angles_arr[-1] + self.UCAngle
         circumference = self.rb * (angle_end - angle_start)

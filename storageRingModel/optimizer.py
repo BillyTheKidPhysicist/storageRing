@@ -10,10 +10,11 @@ from latticeModels import make_ring_and_injector, RingGeometryError, InjectorGeo
 from latticeModels_Parameters import optimizerBounds_V1_3, injectorParamsBoundsAny, injectorRingConstraintsV1, \
     LockedDict
 from octopusOptimizer import octopus_optimize
-from simpleLineSearch import line__search
+from simpleLineSearch import line_search
 from storageRingModeler import StorageRingModel
 from typeHints import sequence
 
+from scipy.optimize import differential_evolution
 
 class Solution:
     """class to hold onto results of each solution"""
@@ -88,7 +89,6 @@ class Solver:
             ring_params = self.ring_params
             injector_params = params
         else:
-            raise NotImplementedError  # something seems weird with the below
             ring_params = params[:len(optimizerBounds_V1_3)]
             injector_params = params[len(optimizerBounds_V1_3):]
         return ring_params, injector_params
@@ -200,7 +200,7 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
         x_optimal, cost_min = octopus_optimize(cost_func, bounds, xi, disp=disp, processes=processes,
                                                num_searches_criteria=20, tentacle_length=local_search_region)
     elif local_optimizer == 'simple_line':
-        x_optimal, cost_min = line__search(cost_func, xi, 1e-3, bounds, processes=processes)
+        x_optimal, cost_min = line_search(cost_func, xi, 1e-3, bounds, processes=processes)
     else:
         raise ValueError
     return x_optimal, cost_min
@@ -215,7 +215,7 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expand
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
     assert ring_params is not None if system == 'injector_Actual_Ring' else True
-    assert injector_params is not None if system in ('ring', 'both') else True
+    assert injector_params is not None if system == 'ring' else True
     bounds = make_bounds(expandedBounds, which_bounds=system)
     cost_func = get_cost_function(system, ring_params, injector_params, use_solenoid_field, use_bumper,
                                   num_particles,
@@ -243,21 +243,3 @@ if __name__ == '__main__':
     main()
 
 
-"""
-
-----------Solution-----------   
-parameters: array([0.025153165715661275, 0.008921455792494704, 0.00945901807497999 ,
-       0.05                , 0.46379142056301526 ])
-cost: 0.7905998670566851
-flux multiplication: 54.52998502532289
-
-
-
-iter 1:
-
-injector: 
-0.15208781577932018 array([0.28552378, 0.0146052 , 0.22421804, 0.02979563, 0.16616535,
-       0.00741861, 0.08236912, 0.25659989, 0.23644295])
-
-
-"""
