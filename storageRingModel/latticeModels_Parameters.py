@@ -33,7 +33,6 @@ class LockedDict(dict):
 
     def __getitem__(self, key):
         """Get key, and record that it was accesed to later it can be checked wether every value was accessed"""
-
         assert key in self._isKeyUsed.keys()
         self._isKeyUsed[key] = True
         return super().__getitem__(key)
@@ -128,7 +127,7 @@ system_constants: LockedDict = LockedDict(_system_constants)
 optimizerBounds_V1_3: LockedDict = LockedDict({
     'rp_lens3_4': (.005, .03),
     'rpLens1': (.005, injectorRingConstraintsV1['rp1LensMax']),
-    'rpLens2': (.02, .04),
+    # 'rpLens2': (.02, .04),
     'rp_bend': (.005, .01),
     'L_Lens1': (.1, .6),
     'L_Lens2': (.1, .7)

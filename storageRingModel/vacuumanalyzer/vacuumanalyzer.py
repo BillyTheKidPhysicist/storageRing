@@ -1,4 +1,5 @@
 import warnings
+from math import pi
 from typing import Union, Iterable
 
 import numpy as np
@@ -9,9 +10,11 @@ then the system of equations of conductance and pump speed are converted to a ma
 supports linear vacuum systems 
 '''
 
-tube_cond_air_fact = 12.1
+tube_cond_air_fact = 12.1  # assumes cm and torr
 
 RealNum = Union[float, int]
+
+R = 8.3145
 
 
 class _Component:
@@ -36,13 +39,14 @@ class _Component:
 
 
 class Tube(_Component):
-    def __init__(self, L: RealNum, inside_diam: RealNum, name: str):
+    def __init__(self, L: RealNum, inside_diam: RealNum, q: RealNum, name: str):
         assert L > 0.0 and inside_diam > 0.0
         if not L >= 3 * inside_diam:
             warnings.warn('Tube length should be several times longer than diam for more accurate results')
         super().__init__(name)
         self.L = L
         self.inside_diam = inside_diam
+        self.Q = q * self.inside_diam * pi * self.L
 
     def C(self) -> float:
         geometric_factor = self.inside_diam ** 3 / self.L
@@ -106,23 +110,18 @@ def get_branches_from_node(branch_node, nodes: list, stop_cond, is_circular) -> 
 class VacuumSystem:
     def __init__(self, is_circular=False):
         self.components: list[Component] = []
-        self.matrix_index: dict[Component, int] = {}
         self.is_circular = is_circular
 
-    def add_tube(self, L: float, inside_diam: float, name: str = 'unassigned'):
-        component = Tube(L, inside_diam, name)
+    def add_tube(self, L: float, inside_diam: float, q: float = 0.0, name: str = 'unassigned'):
+        component = Tube(L, inside_diam, q, name)
         self.components.append(component)
 
     def add_chamber(self, S: float = 0.0, Q: float = 0.0, name: str = 'unassigned'):
         component = Chamber(S, Q, name)
         self.components.append(component)
-        self.matrix_index[component] = len(self.matrix_index)
 
     def num_components(self) -> int:
         return len(self.components)
-
-    def num_chambers(self) -> int:
-        return len(self.chambers())
 
     def chambers(self) -> tuple[Chamber]:
         return tuple([component for component in self if type(component) is Chamber])
@@ -146,44 +145,56 @@ class VacuumSystem:
         return branch_1, branch_2
 
 
+class SolverVacuumSystem(VacuumSystem):
+    def __init__(self, vacuum_system: VacuumSystem):
+        super().__init__(is_circular=vacuum_system.is_circular)
+        self.components = vacuum_system.components
+        self.matrix_index: dict[Component, int] = self.solver_matrix_index_dict(vacuum_system)
+
+    def solver_matrix_index_dict(self, vacuum_system: VacuumSystem) -> dict[Component, int]:
+        chambers = vacuum_system.chambers()
+        indices = range(len(chambers))
+        matrix_index = dict(zip(chambers, indices))
+        return matrix_index
+
+
 def total_conductance(tubes: list[Tube]) -> float:
     return 1 / sum([1 / tube.C() for tube in tubes])
 
 
-def make_Q_matrix(vac_sys: VacuumSystem) -> np.ndarray:
-    Q_mat = np.zeros(vac_sys.num_chambers())
-    for chamber in vac_sys.chambers():
-        idx = vac_sys.matrix_index[chamber]
-        Q_mat[idx] = chamber.Q
-    return Q_mat
+def make_Q_vec(chambers: list[Chamber]) -> np.ndarray:
+    Q_vec = np.array([chamber.Q for chamber in chambers])
+    return Q_vec
 
 
 def is_all_tubes(components: Iterable[Component]) -> bool:
     return all(type(component) is Tube for component in components)
 
 
-def make_C_matrix(vac_sys: VacuumSystem) -> np.ndarray:
-    M = np.zeros((vac_sys.num_chambers(),) * 2)
-    for chamber_a in vac_sys.chambers():
-        idx_a = vac_sys.matrix_index[chamber_a]
+def make_C_matrix(chambers: list[Chamber], solver_vac_sys) -> np.ndarray:
+    M = np.zeros((len(chambers),) * 2)
+    for chamber_a in chambers:
+        idx_a = solver_vac_sys.matrix_index[chamber_a]
         M[idx_a, idx_a] += chamber_a.S
-        branches = vac_sys.branches(chamber_a)
+        branches = solver_vac_sys.branches(chamber_a)
         for branch in branches:
             assert len(branch) != 1  # either no branch, or at least one tube, then a vacuum chamber
             if len(branch) != 0:
                 tubes, chamber_b = branch[:-1], branch[-1]
                 assert is_all_tubes(tubes) and type(chamber_b) is Chamber
-                idx_b = vac_sys.matrix_index[chamber_b]
+                idx_b = solver_vac_sys.matrix_index[chamber_b]
                 C_total = total_conductance(tubes)
                 M[idx_a, idx_b] += -C_total
                 M[idx_a, idx_a] += C_total
     return M
 
 
-def solve_vac_system(vac_sys: VacuumSystem):
-    Q_mat = make_Q_matrix(vac_sys)
-    C = make_C_matrix(vac_sys)
+def solve_vac_system(vacuum_system: VacuumSystem) -> None:
+    solver_vac_sys = SolverVacuumSystem(vacuum_system)
+    chambers = [component for component in solver_vac_sys if type(component) is Chamber]
+    Q_mat = make_Q_vec(chambers)
+    C = make_C_matrix(chambers, solver_vac_sys)
     P = np.linalg.inv(C) @ Q_mat
-    for chamber in vac_sys.chambers():
-        idx = vac_sys.matrix_index[chamber]
+
+    for idx, chamber in enumerate(vacuum_system.chambers()):
         chamber.P = P[idx]
