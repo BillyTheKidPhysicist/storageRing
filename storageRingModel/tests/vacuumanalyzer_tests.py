@@ -1,6 +1,8 @@
 """Test that the vacuum analyzer system"""
 
-from math import isclose
+from math import isclose,pi
+
+import numpy as np
 
 from vacuumanalyzer.vacuumanalyzer import VacuumSystem, solve_vac_system, tube_cond_air_fact
 
@@ -72,3 +74,26 @@ def test_circular_vs_linear():
 
     assert isclose(P_circ[0], P_straight[0], abs_tol=.01)
     assert isclose(P_circ[1], 2 * P_straight[1], abs_tol=.01)
+
+def test_pressure_profile():
+    """Test that the pressure profile along a periodic tube is close the value predicted by theory"""
+    q = 1e-3
+    D = .1
+    L = 10.0
+    S = 1
+    c = 12.4 * D ** 3
+    C_eff = 12 * c / L
+    C = c / L
+    S_eff = 1 / (1 / C_eff + 1 / S)
+    Q = q * D * pi * L
+    P_max = Q * (1 / (8 * C) + 1 / S)
+    P_av = Q / S_eff
+
+    vac_sys = VacuumSystem()
+    vac_sys.add_chamber(S=S, Q=0.)
+    for _ in range(10):
+        vac_sys.add_tube(L, D, num_profile_points=30, q=q)
+        vac_sys.add_chamber(S=S, Q=.0)
+    solve_vac_system(vac_sys)
+    tube = vac_sys.components[11]
+    assert isclose(np.mean(tube.P),P_av,rel_tol=.1) and isclose(np.max(tube.P),P_max,rel_tol=.1)
