@@ -4,13 +4,14 @@ from math import isclose,pi
 
 import numpy as np
 
-from vacuumanalyzer.vacuumanalyzer import VacuumSystem, solve_vac_system, tube_cond_air_fact
+from vacuumanalyzer.vacuumanalyzer import VacuumSystem, solve_vac_system,tube_conductance
 
 
 def test_vacuum_results_with_hand_values():
     # test that differential pumping works as expected
     S1, S2, Q, L, D = 100.0, 1.0, .1, 1.25, .05
-    vac_sys = VacuumSystem()
+    gas_mass=28
+    vac_sys = VacuumSystem(gas_mass_Daltons=gas_mass)
     vac_sys.add_chamber(S=0.0, Q=Q)
     vac_sys.add_tube(L, D)
     vac_sys.add_chamber(S=S1)
@@ -19,7 +20,7 @@ def test_vacuum_results_with_hand_values():
     solve_vac_system(vac_sys)
 
     # approximate values from vacuum calculations. Should be within 1%
-    C = tube_cond_air_fact * D ** 3 / L
+    C=tube_conductance(gas_mass,D,L)
     P1 = Q / C
     P2 = P1 * C / S1
     P3 = P2 * C / S2
@@ -38,7 +39,7 @@ def test_same_vals():
     vac_sys.add_tube(3.0, .25)
     vac_sys.add_chamber(S=100.0)
     solve_vac_system(vac_sys)
-    P_vals = [0.09990057569584081, 0.013623286962657424, 8.58010171965349e-06]
+    P_vals = [0.09989873972504781, 0.013653031647444466, 8.760724330472494e-06]
     assert isclose(P_vals[0], vac_sys.chambers()[0].P)
     assert isclose(P_vals[1], vac_sys.chambers()[1].P)
     assert isclose(P_vals[2], vac_sys.chambers()[2].P)
@@ -64,11 +65,11 @@ def test_circular_vs_linear():
     values"""
     vac_sys = circular_or_linear_system(False)
     P_circ = [chamber.P for chamber in vac_sys.chambers()]
-    P0_circ = [0.9999879147693604, 0.0012085230639635306]
+    P0_circ = [0.9999876873794514, 0.0012312620548606836]
 
     vac_sys = circular_or_linear_system(True)
     P_straight = [chamber.P for chamber in vac_sys.chambers()]
-    P0_straight = [0.9999758590054192, 0.002414099458104502]
+    P0_straight = [0.999975405344194, 0.0024594655806102796]
     assert all(isclose(P, P0) for P, P0 in zip(P_circ, P0_circ))
     assert all(isclose(P, P0) for P, P0 in zip(P_straight, P0_straight))
 

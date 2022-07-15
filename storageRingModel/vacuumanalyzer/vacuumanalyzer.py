@@ -1,6 +1,6 @@
 import copy
 import warnings
-from math import pi
+from math import pi,sqrt
 from typing import Union, Iterable, Any
 
 import numpy as np
@@ -11,11 +11,17 @@ then the system of equations of conductance and pump speed are converted to a ma
 supports linear vacuum systems 
 '''
 
-tube_cond_air_fact = 12.1  # assumes cm and torr
+T_ROOM=293.15
 
 RealNum = Union[float, int]
 
 R = 8.3145
+
+
+def tube_conductance( m_Daltons,inside_diam,L, T=T_ROOM) -> float:
+    geometric_factor = inside_diam ** 3 / L
+    gas_factor = 3.81 * sqrt(T / m_Daltons)
+    return gas_factor * geometric_factor
 
 
 def split_length_into_equal_offset_array(L: RealNum, num_points: int) -> np.ndarray:
@@ -81,10 +87,8 @@ class Tube(_Component):
         self.inside_diam = inside_diam
         self.Q = q * self.inside_diam * pi * self.L
 
-    def C(self) -> float:
-        geometric_factor = self.inside_diam ** 3 / self.L
-        # geometric_factor*=1/(1+(4/3)*self.inside_diam/self.L)
-        return tube_cond_air_fact * geometric_factor
+    def C(self,m_Daltons,T=T_ROOM) -> float:
+        return tube_conductance(m_Daltons,self.inside_diam,self.L,T=T_ROOM)
 
 
 class Chamber(_Component):
@@ -141,9 +145,10 @@ def get_branches_from_node(branch_node, nodes: list, stop_cond, is_circular) -> 
 
 
 class VacuumSystem:
-    def __init__(self, is_circular=False):
+    def __init__(self, is_circular=False, gas_mass_Daltons=28):
         self.components: list[Component] = []
         self.is_circular = is_circular
+        self.gas_mass=gas_mass_Daltons
 
     def add_tube(self, L: float, inside_diam: float, q: float = 0.0, num_profile_points=1, name: str = 'unassigned'):
         component = Tube(L, inside_diam, q=q, num_profile_points=num_profile_points, name=name)
@@ -180,7 +185,7 @@ class VacuumSystem:
 
 class SolverVacuumSystem(VacuumSystem):
     def __init__(self, vacuum_system: VacuumSystem):
-        super().__init__(is_circular=vacuum_system.is_circular)
+        super().__init__(is_circular=vacuum_system.is_circular,gas_mass_Daltons=vacuum_system.gas_mass)
         self.components, self.component_map = self.solver_components_and_map(vacuum_system)
         self.matrix_index: dict[Component, int] = self.solver_matrix_index_dict()
 
@@ -229,8 +234,8 @@ class SolverVacuumSystem(VacuumSystem):
         return solver_components, component_map
 
 
-def total_conductance(tubes: list[Tube]) -> float:
-    return 1 / sum([1 / tube.C() for tube in tubes])
+def total_conductance(tubes: list[Tube],mass_gas) -> float:
+    return 1 / sum([1 / tube.C(mass_gas) for tube in tubes])
 
 
 def make_Q_vec(vac_sys: SolverVacuumSystem) -> np.ndarray:
@@ -254,7 +259,7 @@ def make_C_matrix(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
                 tubes, chamber_b = branch[:-1], branch[-1]
                 assert is_all_tubes(tubes) and type(chamber_b) is Chamber
                 idx_b = solver_vac_sys.matrix_index[chamber_b]
-                C_total = total_conductance(tubes)
+                C_total = total_conductance(tubes,solver_vac_sys.gas_mass)
                 C_matrix[idx_a, idx_b] += -C_total
                 C_matrix[idx_a, idx_a] += C_total
     return C_matrix
