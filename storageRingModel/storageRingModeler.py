@@ -6,19 +6,21 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import Polygon, LineString
 
-from latticeElements.elements import Element
-
 from KevinBumperClass import swarmShift_x
 from ParticleClass import Swarm, Particle
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
 from helperTools import full_arctan2
-from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim,CombinerSim,CombinerIdeal
-from latticeModels import make_ring_and_injector
-from latticeModels_Parameters import injectorParamsOptimalAny, ringParamsOptimal_V3, INJECTOR_TUNABILITY_LENGTH
+from latticeElements.elements import Element
+from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim, CombinerSim, CombinerIdeal
+from latticeModels.injectorModel_1 import injector_params_optimal
+from latticeModels.latticeModelParameters import INJECTOR_TUNABILITY_LENGTH
+from latticeModels.ringModel_1 import ring_params_optimal
 
-combiners=(CombinerHalbachLensSim,CombinerSim,CombinerIdeal)
+combiners = (CombinerHalbachLensSim, CombinerSim, CombinerIdeal)
+
+from latticeModels.systemModel import make_system_model
 
 # expected elements of injector.
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
@@ -103,7 +105,7 @@ class StorageRingModel:
         if line is None:  # particle was clipped immediately, but in the injector not in the ring
             return False
         else:
-            clippable_elements=self.clippable_elements_in_ring()
+            clippable_elements = self.clippable_elements_in_ring()
             return any(line.intersects(el.SO_outer) for el in clippable_elements)
 
     def lenses_before_ring_combiner(self) -> tuple[HalbachLensSim, ...]:
@@ -141,11 +143,11 @@ class StorageRingModel:
         shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
         return shapes
 
-    def non_drift_elements_in_ring(self)-> list[Element]:
+    def non_drift_elements_in_ring(self) -> list[Element]:
         return [el for el in self.lattice_ring if type(el) is not Drift]
-    
+
     def clippable_elements_in_ring(self):
-        return [el for el in self.lattice_ring if not (type(el) is Drift or isinstance(el,combiners))]
+        return [el for el in self.lattice_ring if not (type(el) is Drift or isinstance(el, combiners))]
 
     def floor_plan_overLap_mm(self) -> float:
         """Find the area overlap between the elements before and including the last injector lens, and the lenses
@@ -294,12 +296,11 @@ class StorageRingModel:
         cost = [self.floor_plan_cost()]
 
         drift_after_lens.set_length(L0 + -INJECTOR_TUNABILITY_LENGTH)  # move lens away from combiner
-        self.lattice_injector.build_lattice(False, build_field_helpers=False)  # don't waste time building field helpers
+        self.lattice_injector.build_lattice(False, False)  # don't waste time building field helpers
         cost.append(self.floor_plan_cost())
 
         drift_after_lens.set_length(L0)  # reset
-        self.lattice_injector.build_lattice(False,
-                                            build_field_helpers=False)  # don't waste time building field helpers,
+        self.lattice_injector.build_lattice(False, False)  # don't waste time building field helpers,
         # previous helpers are still saved
         floor_plan_cost = max(cost)
         assert 0.0 <= floor_plan_cost <= 1.0
@@ -313,12 +314,12 @@ class StorageRingModel:
         return swarm_cost
 
 
-def build_storage_ring_model(params, version: str, num_particles: int = 1024, use_collisions: bool = False,
+def build_storage_ring_model(ring_params, injector_params, num_particles: int = 1024, use_collisions: bool = False,
                              use_energy_correction: bool = False, use_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False):
     """Convenience function for building a StorageRingModel"""
     options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper}
-    lattice_ring, lattice_injector = make_ring_and_injector(params, version, options=options)
+    lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, options)
     model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
                              num_particles=num_particles, use_collisions=use_collisions,
                              use_bumper=use_bumper)
@@ -327,8 +328,6 @@ def build_storage_ring_model(params, version: str, num_particles: int = 1024, us
 
 def make_optimal_solution_model(use_bumper: bool = True, use_solenoid_field: bool = True) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
-    ring_params = tuple(ringParamsOptimal_V3.values())
-    injector_params = tuple(injectorParamsOptimalAny.values())
-    system_params = (ring_params, injector_params)
-    model = build_storage_ring_model(system_params, '3', use_bumper=use_bumper, use_solenoid_field=use_solenoid_field)
+    model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, use_bumper=use_bumper,
+                                     use_solenoid_field=use_solenoid_field)
     return model

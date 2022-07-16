@@ -241,7 +241,7 @@ class ParticleTracerLattice:
         self.combiner_index = el.index
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def build_lattice(self, constrain: bool, build_field_helpers: bool = True):
+    def build_lattice(self, constrain: bool, build_field_helpers: bool):
         """Build the specified lattice. This includes:
         - Fill pre constrained parameters derive from simple inputs of length, field strength etc of each element.
         - Solve the floor plan layout. If constrained, solve for bumber of magnets and lengths of bending segment and
@@ -270,12 +270,13 @@ class ParticleTracerLattice:
         for el in self.el_list:  # total length of particle's orbit in an element
             self.total_length += el.Lo
 
-    def end_lattice(self, constrain: bool = False, build_lattice: bool = True) -> None:
+    def end_lattice(self, constrain: bool = False, build_lattice: bool = True,
+                    build_field_helpers: bool = True) -> None:
         # for element in self.el_list:
         #     element.build()
         self.catch_errors(constrain)
         if build_lattice:
-            self.build_lattice(constrain)
+            self.build_lattice(constrain, build_field_helpers)
 
     def catch_errors(self, constrain: bool) -> None:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
