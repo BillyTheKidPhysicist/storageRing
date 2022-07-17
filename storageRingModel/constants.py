@@ -25,6 +25,7 @@ SIMULATION_MAGNETON: float = BHOR_MAGNETON / MASS_LITHIUM_7  # Simulation units 
 TUBE_WALL_THICKNESS: float = _inch_To_Meter(.04)  # minimum weldable thickness of a vacuum tube, m
 COMBINER_TUBE_WALL_THICKNESS: float = 2 * TUBE_WALL_THICKNESS  # minimum weldable thickness of a vacuum tube, m
 DEFAULT_ATOM_SPEED: float = 210.0  # default speed of atoms, m/s
+ROOM_TEMPERATURE: float = 293.15  # room temperature in Kelvin
 MIN_MAGNET_MOUNT_THICKNESS: float = 1e-3  # Nominal minimum material thickness for magnet mount, m. At thinnest point
 FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(1 / 8)  # minimum thickness of a flat wall under vacuum with
 # dimension less  than 1x1 foot

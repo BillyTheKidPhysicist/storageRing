@@ -1,9 +1,13 @@
 import copy
 import warnings
-from math import pi,sqrt
+from math import pi, sqrt
 from typing import Union, Iterable, Any
 
+import matplotlib.pyplot as plt
 import numpy as np
+from vacuumanalyzer.vacuumconstants import rate_coefficients
+
+from constants import ROOM_TEMPERATURE, BOLTZMANN_CONSTANT
 
 '''
 Methods and objects for computing vacuum system performance. A model of a vacuum is created component by component,
@@ -11,14 +15,16 @@ then the system of equations of conductance and pump speed are converted to a ma
 supports linear vacuum systems 
 '''
 
-T_ROOM=293.15
-
 RealNum = Union[float, int]
 
 R = 8.3145
 
 
-def tube_conductance( m_Daltons,inside_diam,L, T=T_ROOM) -> float:
+def is_ascending(vals):
+    return np.all(np.sort(vals) == vals)
+
+
+def tube_conductance(m_Daltons, inside_diam, L, T=ROOM_TEMPERATURE) -> float:
     geometric_factor = inside_diam ** 3 / L
     gas_factor = 3.81 * sqrt(T / m_Daltons)
     return gas_factor * geometric_factor
@@ -87,8 +93,8 @@ class Tube(_Component):
         self.inside_diam = inside_diam
         self.Q = q * self.inside_diam * pi * self.L
 
-    def C(self,m_Daltons,T=T_ROOM) -> float:
-        return tube_conductance(m_Daltons,self.inside_diam,self.L,T=T_ROOM)
+    def C(self, m_Daltons, T=ROOM_TEMPERATURE) -> float:
+        return tube_conductance(m_Daltons, self.inside_diam, self.L, T=ROOM_TEMPERATURE)
 
 
 class Chamber(_Component):
@@ -148,9 +154,11 @@ class VacuumSystem:
     def __init__(self, is_circular=False, gas_mass_Daltons=28):
         self.components: list[Component] = []
         self.is_circular = is_circular
-        self.gas_mass=gas_mass_Daltons
+        self.gas_mass = gas_mass_Daltons
+        self.P_mean = None
 
-    def add_tube(self, L: float, inside_diam: float, q: float = 0.0, num_profile_points=1, name: str = 'unassigned'):
+    def add_tube(self, L: float, inside_diam: float, q: float = 0.0, name: str = 'unassigned'):
+        num_profile_points = 1 if q == 0.0 else 30
         component = Tube(L, inside_diam, q=q, num_profile_points=num_profile_points, name=name)
         self.components.append(component)
 
@@ -185,7 +193,7 @@ class VacuumSystem:
 
 class SolverVacuumSystem(VacuumSystem):
     def __init__(self, vacuum_system: VacuumSystem):
-        super().__init__(is_circular=vacuum_system.is_circular,gas_mass_Daltons=vacuum_system.gas_mass)
+        super().__init__(is_circular=vacuum_system.is_circular, gas_mass_Daltons=vacuum_system.gas_mass)
         self.components, self.component_map = self.solver_components_and_map(vacuum_system)
         self.matrix_index: dict[Component, int] = self.solver_matrix_index_dict()
 
@@ -234,7 +242,7 @@ class SolverVacuumSystem(VacuumSystem):
         return solver_components, component_map
 
 
-def total_conductance(tubes: list[Tube],mass_gas) -> float:
+def total_conductance(tubes: list[Tube], mass_gas) -> float:
     return 1 / sum([1 / tube.C(mass_gas) for tube in tubes])
 
 
@@ -259,7 +267,7 @@ def make_C_matrix(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
                 tubes, chamber_b = branch[:-1], branch[-1]
                 assert is_all_tubes(tubes) and type(chamber_b) is Chamber
                 idx_b = solver_vac_sys.matrix_index[chamber_b]
-                C_total = total_conductance(tubes,solver_vac_sys.gas_mass)
+                C_total = total_conductance(tubes, solver_vac_sys.gas_mass)
                 C_matrix[idx_a, idx_b] += -C_total
                 C_matrix[idx_a, idx_a] += C_total
     return C_matrix
@@ -280,6 +288,24 @@ def update_vacuum_system_with_results(vacuum_system: VacuumSystem, solver_vac_sy
             map_pressure_to_tube(component, tube_split_components)
 
 
+def mean_pressure_in_system(vac_sys: VacuumSystem) -> float:
+    current_x = 0
+    P_vals = []
+    P_x_vals = []
+    for component in vac_sys:
+        if type(component) is Chamber:
+            P_vals.append(component.P)
+            P_x_vals.append(current_x)
+        elif type(component) is Tube:
+            P_vals.extend(component.P)
+            P_x_vals.extend(component.P_x_vals + current_x)
+            current_x += component.L
+    assert is_ascending(P_x_vals)
+    P_integral = np.trapz(P_vals, x=P_x_vals)
+    P_mean = P_integral / (max(P_x_vals) - min(P_x_vals))
+    return P_mean
+
+
 def solve_vac_system(vacuum_system: VacuumSystem) -> None:
     solver_vac_sys = SolverVacuumSystem(vacuum_system)
     Q_mat = make_Q_vec(solver_vac_sys)
@@ -289,3 +315,45 @@ def solve_vac_system(vacuum_system: VacuumSystem) -> None:
         chamber.P = P[idx]
 
     update_vacuum_system_with_results(vacuum_system, solver_vac_sys)
+    vacuum_system.P_mean = mean_pressure_in_system(vacuum_system)
+
+
+def show_vac_sys(vac_sys: VacuumSystem) -> None:
+    current_x = 0
+    P_vals = []
+    P_x_vals = []
+    fig, axs = plt.subplots(2, sharex=True)
+
+    fig.suptitle('Vacuum system simulation')
+    for component in vac_sys:
+        if type(component) is Chamber:
+            axs[1].scatter(current_x, 0, c='red', marker='s', s=100, label='pump')
+            P_vals.append(component.P)
+            P_x_vals.append(current_x)
+        elif type(component) is Tube:
+            axs[1].plot([current_x, current_x + component.L], [0.0, 0.0], c='black', label='tube')
+            P_vals.extend(component.P)
+            P_x_vals.extend(component.P_x_vals + current_x)
+            current_x += component.L
+    assert is_ascending(P_x_vals)
+    assert not np.any(np.isnan(P_vals))
+    axs[0].semilogy(P_x_vals, P_vals)
+    axs[0].grid()
+    axs[1].set_xlabel("Position, cm")
+    axs[0].set_ylabel("Pressure, Torr")
+    axs[1].set_yticks([])
+    handles, labels = plt.gca().get_legend_handles_labels()  # avoid redundant labels
+    my_label = dict(zip(labels, handles))
+    plt.legend(my_label.values(), my_label.keys())
+    plt.subplots_adjust(hspace=.0)
+    plt.show()
+
+
+def vacuum_lifetime(P: float,gas='H2') -> float:
+    """Vacuum lifetime from collisions"""
+    P = 133 * P
+    n = P / (BOLTZMANN_CONSTANT * ROOM_TEMPERATURE)  # convert from Torr to Pascal
+    n = 1e-6 * n  # convert from cubic meter to cubic cm
+    K = rate_coefficients[gas]  # rate constant
+    tau = 1 / (K * n)
+    return tau

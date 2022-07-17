@@ -87,7 +87,7 @@ def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long
     # as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
     # without it being a new drift region
-    OP_gap = system_constants["OP_MagWidth"] - (el_fringe_space('combiner', rp_combiner)
+    OP_gap = system_constants["OP_mag_space"] - (el_fringe_space('combiner', rp_combiner)
                                                 + el_fringe_space('lens', rp_lens_after))
     OP_gap = round_up_if_below_min_time_step_gap(OP_gap)
     # this is to enforce atoms clipping on op magnet. Not ideal solution

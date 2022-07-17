@@ -19,14 +19,13 @@ flange_OD: LockedDict = LockedDict({
     '4-1/2': 114e-3
 })
 
-atom_characteristics = LockedDict(
-    {"nominalDesignSpeed": DEFAULT_ATOM_SPEED})  # Elements are placed assuming this is the nominal
-# speed in the ring.
+atom_characteristics = LockedDict({"nominalDesignSpeed": DEFAULT_ATOM_SPEED})  # Elements are placed assuming this is
+# the nominal speed in the ring.
 
 
 system_constants = LockedDict({
     "Lm": .0254 / 2.0,  # length of individual magnets in bender
-    "OP_MagWidth": .065 + 2 * .035,  # account for fringe fields with .02
+    "OP_mag_space": .065 + 2 * .035,  # account for fringe fields with .02
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping

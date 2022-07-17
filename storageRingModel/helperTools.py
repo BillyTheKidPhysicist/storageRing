@@ -104,6 +104,8 @@ def inch_to_meter(value_in_inches: RealNum) -> float:
     """Convert freedom units to commie units XD"""
     return .0254 * value_in_inches
 
+def meter_to_cm(value_in_meters: RealNum)-> float:
+    return value_in_meters*100.0
 
 def gauss_to_tesla(value_in_gauss: RealNum) -> float:
     """Convert units of gauss to tesla"""

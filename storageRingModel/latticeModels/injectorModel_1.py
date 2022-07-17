@@ -9,7 +9,7 @@ from latticeModels.latticeModelUtilities import LockedDict, InjectorGeometryErro
 
 injector_constants = LockedDict({
     "pre_combiner_gap": inch_to_meter(3.5),  # from lens to combiner
-    "OP_MagWidth": .065 + 2 * .035,  # account for fringe fields with .02
+    "OP_mag_space": .065 + 2 * .035,  # account for fringe fields with .02
     "OP_MagAp_Injection": .022 / 2.0,
     "OP_MagAp_Circulating": .035 / 2.0,
     "OP_PumpingRegionLength": .01,  # distance for effective optical pumping

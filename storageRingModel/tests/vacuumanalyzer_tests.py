@@ -93,7 +93,7 @@ def test_pressure_profile():
     vac_sys = VacuumSystem()
     vac_sys.add_chamber(S=S, Q=0.)
     for _ in range(10):
-        vac_sys.add_tube(L, D, num_profile_points=30, q=q)
+        vac_sys.add_tube(L, D, q=q)
         vac_sys.add_chamber(S=S, Q=.0)
     solve_vac_system(vac_sys)
     tube = vac_sys.components[11]
