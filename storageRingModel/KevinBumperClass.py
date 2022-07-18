@@ -5,6 +5,12 @@ assert HalbachLensSim.fringe_frac_outer == 1.5
 
 swarmShift_x = 0.0372 * 1.5 - 0.03
 
+#todo: paramaterize the below with this
+L_lens1=0.321
+L_lens2=0.1564
+L_gap=0.1274
+rp1=0.0242
+rp2=0.0183
 
 def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identical bumper, but does not end the lattice
     assert PTL.initial_location[0] == 0.0 and PTL.initial_location[1] == 0.0

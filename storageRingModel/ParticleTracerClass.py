@@ -15,6 +15,8 @@ from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderId
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
+class ElementTooShortError(Exception):
+    pass
 
 @numba.njit(numba.float64(numba.float64[:]), cache=False)
 def norm_3D(vec):
@@ -117,7 +119,7 @@ class ParticleTracer:
         LMin = norm_3D(self.particle.pi) * self.h * self.minTimeStepsPerElement
         for el in self.el_list:
             if el.Lo <= LMin:  # have at least a few steps in each element
-                raise Exception('element too short for time steps size')
+                raise ElementTooShort
         if self.particle.qi[0] == 0.0:
             raise Exception("a particle appears to be starting with x=0 exactly. This can cause unpredictable "
                             "behaviour")

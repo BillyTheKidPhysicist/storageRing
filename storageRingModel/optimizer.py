@@ -5,7 +5,8 @@ import numpy as np
 
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from asyncDE import solve_async
-from latticeElements.utilities import ElementTooShortError, CombinerDimensionError
+from latticeElements.utilities import CombinerDimensionError
+from latticeElements.utilities import ElementTooShortError as ElementTooShortErrorFields
 from latticeModels.injectorModel_1 import make_injector_lattice, injector_param_bounds
 from latticeModels.latticeModelUtilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
 from latticeModels.ringModelSurrogate_1 import make_ring_surrogate
@@ -15,6 +16,7 @@ from octopusOptimizer import octopus_optimize
 from simpleLineSearch import line_search
 from storageRingModeler import StorageRingModel
 from typeHints import sequence
+from ParticleTracerClass import ElementTooShortError as ElementTooShortErrorTimeStep
 
 
 class Solution:
@@ -98,6 +100,9 @@ class Solver:
             assert len(ring_params) + len(injector_params) == len(params)
         ring_params = None if ring_params is None else build_lattice_params_dict(ring_params, 'ring')
         injector_params = None if injector_params is None else build_lattice_params_dict(injector_params, 'injector')
+        if ring_params is not None and injector_params is not None:
+            ring_params['Lm_combiner']=injector_params['Lm_combiner']
+            ring_params['load_beam_offset']=injector_params['load_beam_offset']
         return ring_params, injector_params
 
     def build_lattices(self, params):
@@ -135,7 +140,8 @@ class Solver:
         together"""
         try:
             sol = self._solve(params)
-        except (RingGeometryError, InjectorGeometryError, ElementTooShortError, CombinerDimensionError):
+        except (RingGeometryError, InjectorGeometryError, ElementTooShortErrorFields,
+                CombinerDimensionError,ElementTooShortErrorTimeStep):
             sol = invalid_Solution(params)
         except:
             print('exception with:', repr(params))
@@ -237,7 +243,10 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expand
 
 
 def main():
-    optimize('injector_Surrogate_Ring', 'global')
+    injector_params=  (0.10617748477362449 , 0.01924168427615551 , 0.17524745026617014 ,
+       0.025311623781107514, 0.1769771197959241  , 0.00573236996928707 ,
+       0.0881778534132327  , 0.27215737293142345 , 0.16347379419098668 )
+    optimize('ring', 'global',use_bumper=True,injector_params=injector_params)
 
     # print(Solver('ring',injector_params=injector_params,use_standard_tube_OD=True).solve(ring_params))
 
@@ -246,3 +255,13 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+"""
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.10617748477362449 , 0.01924168427615551 , 0.17524745026617014 ,
+       0.025311623781107514, 0.1769771197959241  , 0.00573236996928707 ,
+       0.0881778534132327  , 0.27215737293142345 , 0.16347379419098668 ])
+cost: 0.04559906124553903
+"""

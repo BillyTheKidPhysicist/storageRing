@@ -8,13 +8,13 @@ from latticeModels.latticeModelFunctions import check_and_add_default_values, ad
 from latticeModels.latticeModelParameters import atom_characteristics, system_constants
 from latticeModels.latticeModelUtilities import LockedDict
 from latticeModels.ringModelSurrogate_1 import surrogate_params
-from vacuumanalyzer.vacuumanalyzer import VacuumSystem, solve_vac_system
-from vacuumanalyzer.vacuumconstants import outgassing_rates, ion_pump_speed_factors
+from vacuumanalysis.vacuumanalyzer import VacuumSystem, solve_vac_system
+from vacuumanalysis.vacuumconstants import outgassing_rates, big_ion_pump_speed,small_ion_pump_speed
+from constants import gas_masses
 
 ring_param_bounds: LockedDict = LockedDict({
     'rp_lens3_4': (.005, .03),
     'rp_lens1': (.005, surrogate_params['rp_lens1']),
-    # 'rpLens2': (.02, .04),
     'rp_bend': (.005, .01),
     'L_Lens1': (.1, .6),
     'L_Lens2': (.1, .7)
@@ -23,13 +23,16 @@ ring_param_bounds: LockedDict = LockedDict({
 ring_params_optimal = {
     'rp_lens3_4': 0.02102425839849725,
     'rp_lens1': .01,
-    'rp_lens2': 0.038773002120334694,
     'rp_bend': 0.00759624174653381,
     'L_Lens1': 0.441164241347491,
     'L_Lens2': 0.46839105549798354,
     "Lm_combiner": 0.17047182734978528,
     "load_beam_offset": 0.007187101087953732
 }
+
+ring_constants=LockedDict({
+    'rp_lens2': .04
+})
 
 
 def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracerLattice:
@@ -42,7 +45,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_standard_mag_size=options['use_standard_mag_size'])
-    rp_lens2 = ring_params['rp_lens2']
+    rp_lens2 = ring_constants['rp_lens2']
     rp_lens1 = ring_params['rp_lens1']
     rp_lens3_4 = ring_params['rp_lens3_4']
     rp_bend = ring_params['rp_bend']
@@ -107,6 +110,7 @@ def add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pumps, q):
 
 
 def make_vacuum_model(ring_params: dict) -> VacuumSystem:
+    # todo: I can make this more accurate accounting for chamber width. It's not a single point
     gas_species = 'H2'
     ring_params = LockedDict(ring_params)
     rp_lens1 = meter_to_cm(ring_params['rp_lens1'])
@@ -123,17 +127,14 @@ def make_vacuum_model(ring_params: dict) -> VacuumSystem:
     L_long_connecting_tube = L_lens1 + L_lens2 + Lm_combiner + system_constants["OP_mag_space"]
 
     q = outgassing_rates[gas_species]
-    pump_speed_factor = ion_pump_speed_factors[gas_species]
 
     # pumps can be brough up right to the fact of the tube it appears, so I will not reduce the pumping speed
     # because of some geometric concerns
-    S_small_pumps_rated = 10.0
-    S_big_pump_rated = 200.0
 
-    S_small_pump = pump_speed_factor * S_small_pumps_rated
-    S_big_pump = pump_speed_factor * S_big_pump_rated
+    S_small_pump =  small_ion_pump_speed[gas_species]
+    S_big_pump = big_ion_pump_speed[gas_species]
 
-    vac_sys = VacuumSystem(is_circular=True, gas_mass_Daltons=2.0)
+    vac_sys = VacuumSystem(is_circular=True, gas_mass_Daltons=gas_masses[gas_species])
     vac_sys.add_tube(L_lens1, inside_diam(rp_lens1), q=q)
     vac_sys.add_chamber(S=S_big_pump)
     vac_sys.add_tube(Lm_combiner, inside_diam(rp_combiner), q=q)

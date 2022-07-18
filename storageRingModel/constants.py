@@ -30,6 +30,8 @@ MIN_MAGNET_MOUNT_THICKNESS: float = 1e-3  # Nominal minimum material thickness f
 FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(1 / 8)  # minimum thickness of a flat wall under vacuum with
 # dimension less  than 1x1 foot
 
+gas_masses= {'He':4.0,'H2':2.0}
+
 SPACE_BETWEEN_MAGNETS_IN_MOUNT = .25e-3  # space between inside edges of neighboring magnets in hexapole mount
 # configuration. Smaller than this and assembly could be infeasible because of magnet/machining tolerances
 

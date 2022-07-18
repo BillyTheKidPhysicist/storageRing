@@ -1,11 +1,18 @@
 import numpy as np
 
+import KevinBumperClass as bumper
 from KevinBumperClass import add_Kevin_Bumper_Elements
 from ParticleTracerLatticeClass import ParticleTracerLattice
+from constants import TUBE_WALL_THICKNESS
+from constants import gas_masses
 from helperTools import inch_to_meter
+from helperTools import meter_to_cm
 from latticeModels.latticeModelFunctions import el_fringe_space, add_drift_if_needed, check_and_add_default_values
 from latticeModels.latticeModelParameters import system_constants, atom_characteristics, flange_OD
 from latticeModels.latticeModelUtilities import LockedDict, InjectorGeometryError
+from vacuumanalysis.vacuumanalyzer import VacuumSystem, solve_vac_system
+from vacuumanalysis.vacuumconstants import turbo_pump_speed, diffusion_pump_speed, big_chamber_pressure, \
+    big_ion_pump_speed
 
 injector_constants = LockedDict({
     "pre_combiner_gap": inch_to_meter(3.5),  # from lens to combiner
@@ -100,3 +107,54 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
     injector_params.assert_All_Entries_Accessed_And_Reset_Counter()
 
     return lattice
+
+
+def inside_diam(bore_radius):
+    return 2 * (bore_radius - TUBE_WALL_THICKNESS)
+
+
+def helium_dump_back_gas_load():
+    Q = 3.6e-5  # assuming 1 cm hole located 2 meter from nozzle,60 sccm, and dump chamber is 3 meter from nozzle
+    vac_sys = VacuumSystem(gas_mass_Daltons=gas_masses['He'])
+    vac_sys.add_chamber(Q=Q, S=1000)
+    vac_sys.add_tube(50, 2)
+    vac_sys.add_chamber(S=1000)
+    solve_vac_system(vac_sys)
+    Q_back = vac_sys.components[-1].P * vac_sys.components[-1].S
+    return Q_back
+
+
+def make_vacuum_model(injector_params: dict) -> VacuumSystem:
+    # todo: I can make this more accurate accounting for chamber width. It's not a single point
+
+    gap1 = meter_to_cm(injector_params["gap1"])
+    gap2 = meter_to_cm(injector_params["gap2"])
+    gap3 = meter_to_cm(injector_params["gap3"])
+    rp1, L1 = meter_to_cm(injector_params["rp1"]), meter_to_cm(injector_params["L1"])
+    rp2, L2 = meter_to_cm(injector_params["rp2"]), meter_to_cm(injector_params["L2"])
+
+    first_tube_length_bumper = meter_to_cm(bumper.L_lens1 + bumper.L_gap / 2.0)
+    second_tube_length_bumper = meter_to_cm(bumper.L_lens2 + bumper.L_gap / 2.0)
+
+    first_tube_length_mode_match = L1 + gap1 + gap2 / 2.0
+
+    second_tube_length_mode_match = gap2 / 2.0 + L2
+
+    vac_sys = VacuumSystem(gas_mass_Daltons=gas_masses['He'])
+    vac_sys.add_chamber(P=big_chamber_pressure)
+    # ------bumper section----
+    vac_sys.add_tube(first_tube_length_bumper, meter_to_cm(bumper.rp1))
+    vac_sys.add_chamber(S=diffusion_pump_speed, Q=helium_dump_back_gas_load())
+    vac_sys.add_tube(second_tube_length_bumper, meter_to_cm(bumper.rp2))
+
+    # -----mode match section----
+    S_turbo = turbo_pump_speed
+    vac_sys.add_tube(first_tube_length_mode_match, rp1)
+    vac_sys.add_chamber(S=S_turbo)
+    vac_sys.add_tube(second_tube_length_mode_match, rp2)
+    vac_sys.add_chamber(S=S_turbo)
+    vac_sys.add_tube(gap3, 3.0)  # estimate
+    vac_sys.add_chamber(S=big_ion_pump_speed['He'])
+
+    solve_vac_system(vac_sys)
+    return vac_sys

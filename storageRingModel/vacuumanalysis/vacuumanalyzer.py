@@ -1,13 +1,14 @@
 import copy
 import warnings
 from math import pi, sqrt
+from typing import Optional
 from typing import Union, Iterable, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from vacuumanalyzer.vacuumconstants import rate_coefficients
 
 from constants import ROOM_TEMPERATURE, BOLTZMANN_CONSTANT
+from vacuumanalysis.vacuumconstants import rate_coefficients
 
 '''
 Methods and objects for computing vacuum system performance. A model of a vacuum is created component by component,
@@ -52,23 +53,9 @@ def nan_array(num: int) -> np.ndarray:
     return np.ones(num) * np.nan
 
 
-def is_valid_pressure(value: Union[np.ndarray, RealNum]) -> bool:
-    if type(value) is np.ndarray:
-        return np.all(value >= 0.0)
-    else:
-        return value >= 0.0
-
-
 class _Component:
-    def __init__(self, name: str, P: Union[np.ndarray, RealNum]):
+    def __init__(self, name: str):
         self.name = name
-        self.P = P
-
-    def __setattr__(self, name, value):
-        if name == 'P':
-            if name in self.__dict__:
-                assert is_valid_pressure(value)
-        self.__dict__[name] = value
 
     def __str__(self):
         string = '--Component information-- \n'
@@ -82,25 +69,28 @@ class _Component:
 
 
 class Tube(_Component):
-    def __init__(self, L: RealNum, inside_diam: RealNum, q: RealNum = 0.0, num_profile_points: int = 1,
+    def __init__(self, L: RealNum, inside_diam: RealNum, q: RealNum = 0.0, num_profile_points: int = 30,
                  name: str = 'unassigned'):
         assert L > 0.0 and inside_diam > 0.0
         if not L >= 3 * inside_diam:
             warnings.warn('Tube length should be several times longer than diam for more accurate results')
-        super().__init__(name, nan_array(num_profile_points))
+        super().__init__(name)
         self.P_x_vals = split_length_into_equal_offset_array(L, num_profile_points)
+        self.P = nan_array(num_profile_points)
         self.L = L
         self.inside_diam = inside_diam
         self.Q = q * self.inside_diam * pi * self.L
 
     def C(self, m_Daltons, T=ROOM_TEMPERATURE) -> float:
-        return tube_conductance(m_Daltons, self.inside_diam, self.L, T=ROOM_TEMPERATURE)
+        return tube_conductance(m_Daltons, self.inside_diam, self.L, T=T)
 
 
 class Chamber(_Component):
-    def __init__(self, S: RealNum, Q: RealNum, name: str = 'unassigned'):
-        assert S >= 0.0 and Q >= 0.0
-        super().__init__(name, np.nan)
+    def __init__(self, S: RealNum, Q: RealNum, P: Optional[RealNum], name: str = 'unassigned'):
+        assert not (P is not None and Q > 0.0)
+        assert S >= 0.0 and Q >= 0.0 and (P > 0.0 if P is not None else True)
+        super().__init__(name)
+        self.P = P
         self.S = S
         self.Q = Q
 
@@ -158,12 +148,11 @@ class VacuumSystem:
         self.P_mean = None
 
     def add_tube(self, L: float, inside_diam: float, q: float = 0.0, name: str = 'unassigned'):
-        num_profile_points = 1 if q == 0.0 else 30
-        component = Tube(L, inside_diam, q=q, num_profile_points=num_profile_points, name=name)
+        component = Tube(L, inside_diam, q=q, name=name)
         self.components.append(component)
 
-    def add_chamber(self, S: float = 0.0, Q: float = 0.0, name: str = 'unassigned'):
-        component = Chamber(S, Q, name=name)
+    def add_chamber(self, S: float = 0.0, Q: float = 0.0, name: str = 'unassigned', P: float = None):
+        component = Chamber(S, Q, P, name=name)
         self.components.append(component)
 
     def num_components(self) -> int:
@@ -197,10 +186,12 @@ class SolverVacuumSystem(VacuumSystem):
         self.components, self.component_map = self.solver_components_and_map(vacuum_system)
         self.matrix_index: dict[Component, int] = self.solver_matrix_index_dict()
 
+    def chambers_unsolved_pressure(self):
+        return [chamb for chamb in self.chambers() if chamb.P is None]
+
     def solver_matrix_index_dict(self) -> dict[Component, int]:
-        chambers = self.chambers()
-        indices = range(len(chambers))
-        matrix_index = dict(zip(chambers, indices))
+        indices = range(len(self.chambers_unsolved_pressure()))
+        matrix_index = dict(zip(self.chambers_unsolved_pressure(), indices))
         return matrix_index
 
     def split_tube(self, tube: Tube) -> list[Tube, Chamber]:
@@ -214,7 +205,7 @@ class SolverVacuumSystem(VacuumSystem):
             if component_init is Tube:
                 new_components.append(component_init(L_split, tube.inside_diam, name=tube.name))
             elif component_init is Chamber:
-                new_components.append(component_init(0.0, Q_splits))
+                new_components.append(component_init(0.0, Q_splits, None))
             else:
                 raise NotImplementedError
 
@@ -246,8 +237,20 @@ def total_conductance(tubes: list[Tube], mass_gas) -> float:
     return 1 / sum([1 / tube.C(mass_gas) for tube in tubes])
 
 
-def make_Q_vec(vac_sys: SolverVacuumSystem) -> np.ndarray:
-    Q_vec = np.array([chamber.Q for chamber in vac_sys.chambers()])
+def make_Q_vec(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
+    Q_vec = np.array([chamber.Q for chamber in solver_vac_sys.chambers_unsolved_pressure()])
+    for chamber_a in solver_vac_sys.chambers_unsolved_pressure():
+        assert not (chamber_a.P is not None and chamber_a.Q > 0.0)
+        idx_a = solver_vac_sys.matrix_index[chamber_a]
+        branches = solver_vac_sys.branches(chamber_a)
+        for branch in branches:
+            assert len(branch) != 1  # either no branch, or at least one tube, then a vacuum chamber
+            if len(branch) != 0:
+                tubes, chamber_b = branch[:-1], branch[-1]
+                assert is_all_tubes(tubes) and type(chamber_b) is Chamber
+                if chamber_b.P is not None:
+                    C_total = total_conductance(tubes, solver_vac_sys.gas_mass)
+                    Q_vec[idx_a] = C_total * chamber_b.P
     return Q_vec
 
 
@@ -256,8 +259,8 @@ def is_all_tubes(components: Iterable[Component]) -> bool:
 
 
 def make_C_matrix(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
-    C_matrix = np.zeros((len(solver_vac_sys.chambers()),) * 2)
-    for chamber_a in solver_vac_sys.chambers():
+    C_matrix = np.zeros((len(solver_vac_sys.chambers_unsolved_pressure()),) * 2)
+    for chamber_a in solver_vac_sys.chambers_unsolved_pressure():
         idx_a = solver_vac_sys.matrix_index[chamber_a]
         C_matrix[idx_a, idx_a] += chamber_a.S
         branches = solver_vac_sys.branches(chamber_a)
@@ -266,10 +269,11 @@ def make_C_matrix(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
             if len(branch) != 0:
                 tubes, chamber_b = branch[:-1], branch[-1]
                 assert is_all_tubes(tubes) and type(chamber_b) is Chamber
-                idx_b = solver_vac_sys.matrix_index[chamber_b]
                 C_total = total_conductance(tubes, solver_vac_sys.gas_mass)
-                C_matrix[idx_a, idx_b] += -C_total
                 C_matrix[idx_a, idx_a] += C_total
+                if chamber_b.P is None:
+                    idx_b = solver_vac_sys.matrix_index[chamber_b]
+                    C_matrix[idx_a, idx_b] += -C_total
     return C_matrix
 
 
@@ -311,7 +315,8 @@ def solve_vac_system(vacuum_system: VacuumSystem) -> None:
     Q_mat = make_Q_vec(solver_vac_sys)
     C = make_C_matrix(solver_vac_sys)
     P = np.linalg.inv(C) @ Q_mat
-    for idx, chamber in enumerate(solver_vac_sys.chambers()):
+    for chamber in solver_vac_sys.chambers_unsolved_pressure():
+        idx = solver_vac_sys.matrix_index[chamber]
         chamber.P = P[idx]
 
     update_vacuum_system_with_results(vacuum_system, solver_vac_sys)
@@ -349,7 +354,7 @@ def show_vac_sys(vac_sys: VacuumSystem) -> None:
     plt.show()
 
 
-def vacuum_lifetime(P: float,gas='H2') -> float:
+def vacuum_lifetime(P: float, gas='H2') -> float:
     """Vacuum lifetime from collisions"""
     P = 133 * P
     n = P / (BOLTZMANN_CONSTANT * ROOM_TEMPERATURE)  # convert from Torr to Pascal
