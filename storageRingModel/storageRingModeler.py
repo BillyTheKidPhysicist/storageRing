@@ -1,10 +1,10 @@
 import copy
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 from shapely.affinity import rotate, translate
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import LineString, Polygon
 
 from KevinBumperClass import swarmShift_x
 from ParticleClass import Swarm, Particle
@@ -14,12 +14,13 @@ from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
 from helperTools import full_arctan2
 from latticeElements.elements import Element
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim, CombinerSim, CombinerIdeal
+from latticeElements.trajectoryfunctions import make_trajectory_shape
 from latticeModels.injectorModel_1 import injector_params_optimal
 from latticeModels.latticeModelParameters import INJECTOR_TUNABILITY_LENGTH
 from latticeModels.ringModel_1 import ring_params_optimal
 
 combiners = (CombinerHalbachLensSim, CombinerSim, CombinerIdeal)
-
+Shape = Union[LineString, Polygon]
 from latticeModels.systemModel import make_system_model
 
 # expected elements of injector.
@@ -36,6 +37,13 @@ def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bum
         if not type(el) is expected_type:
             return False
     return True
+
+
+def make_shapes(lattice: ParticleTracerLattice) -> tuple[list[Shape], list[Shape], list[Shape]]:
+    shapes_outer = [el.SO_outer for el in lattice]
+    shapes_inner = [el.SO for el in lattice]
+    shapes_trajectories = [make_trajectory_shape(el) for el in lattice]
+    return shapes_inner, shapes_outer, shapes_trajectories
 
 
 class StorageRingModel:
@@ -119,29 +127,28 @@ class StorageRingModel:
         assert len(lenses) > 0
         return tuple(lenses)
 
-    def injector_shapes_in_lab_frame(self, which_profile: str) -> list[Polygon]:
-        assert which_profile in ('interior', 'exterior')
-        shapes_lab_frame = []
+    def injector_shapes_in_lab_frame(self) -> tuple[list[Shape], list[Shape], list[Shape]]:
+        shapes_inner, shapes_outer, shapes_trajectories = make_shapes(self.lattice_injector)
+        shapes_inner = self.move_injector_shapes_to_lab_frame(shapes_inner)
+        shapes_outer = self.move_injector_shapes_to_lab_frame(shapes_outer)
+        shapes_trajectories = self.move_injector_shapes_to_lab_frame(shapes_trajectories)
+        return shapes_inner, shapes_outer, shapes_trajectories
+
+    def move_injector_shapes_to_lab_frame(self, shapes: list[Shape]) -> list[Shape]:
         ne_Inj, ne_Ring = self.lattice_injector.combiner.ne, self.lattice_ring.combiner.ne
         angle_injector = full_arctan2(ne_Inj[1], ne_Inj[0])
         angle_ring = full_arctan2(ne_Ring[1], ne_Ring[0])
         rotation_angle = angle_ring - angle_injector
         r2_injector = self.lattice_injector.combiner.r2
         r2_ring = self.lattice_ring.combiner.r2
-        for el in self.lattice_injector:
-            SO = copy.copy(el.SO_outer if which_profile == 'exterior' else el.SO)
-            SO = translate(SO, xoff=-r2_injector[0], yoff=-r2_injector[1])
-            SO = rotate(SO, rotation_angle, use_radians=True, origin=(0, 0))
-            SO = translate(SO, xoff=r2_ring[0], yoff=r2_ring[1])
-            shapes_lab_frame.append(SO)
+        shapes_lab_frame = []
+        for shape in shapes:
+            shape = copy.copy(shape)
+            shape = translate(shape, xoff=-r2_injector[0], yoff=-r2_injector[1])
+            shape = rotate(shape, rotation_angle, use_radians=True, origin=(0, 0))
+            shape = translate(shape, xoff=r2_ring[0], yoff=r2_ring[1])
+            shapes_lab_frame.append(shape)
         return shapes_lab_frame
-
-    def floor_plan_shapes(self, whichSide: str) -> list[Polygon]:
-        assert whichSide in ('exterior', 'interior')
-        shapes = []
-        shapes.extend([el.SO_outer if whichSide == 'exterior' else el.SO for el in self.lattice_ring])
-        shapes.extend(self.injector_shapes_in_lab_frame(whichSide))
-        return shapes
 
     def non_drift_elements_in_ring(self) -> list[Element]:
         return [el for el in self.lattice_ring if type(el) is not Drift]
@@ -149,14 +156,14 @@ class StorageRingModel:
     def clippable_elements_in_ring(self):
         return [el for el in self.lattice_ring if not (type(el) is Drift or isinstance(el, combiners))]
 
-    def floor_plan_overLap_mm(self) -> float:
+    def floor_plan_overlap_mm(self) -> float:
         """Find the area overlap between the elements before and including the last injector lens, and the lenses
         between combiner input and adjacent bender output. Overlap of the drift region after the last injector lens is
         handled later by clipping particles on it
         """
         overlap_elements = self.non_drift_elements_in_ring()
-        injector_shapes = self.injector_shapes_in_lab_frame('exterior')
-        injector_shapes_to_compare = injector_shapes[:self.injector_lens_indices[-1] + 1]
+        _, injector_shapes_outer, _ = self.injector_shapes_in_lab_frame()
+        injector_shapes_to_compare = injector_shapes_outer[:self.injector_lens_indices[-1] + 1]
         m_to_mm_area = 1e3 ** 2
         area_mm = 0.0
         for el in overlap_elements:  # count up all the area overlap
@@ -164,11 +171,25 @@ class StorageRingModel:
                 area_mm += el.SO_outer.intersection(shape).area * m_to_mm_area
         return area_mm
 
-    def show_floor_plan(self, which: str = 'exterior', defer_show=False, true_aspect_ratio=True,
-                        linestyle: str = '-', color: str = 'black') -> None:
-        shapes = self.floor_plan_shapes(which)
-        for shape in shapes:
-            plt.plot(*shape.exterior.xy, c=color, linestyle=linestyle)
+    def floor_plan_shapes(self) -> tuple[list[Shape], list[Shape], list[Shape]]:
+        shapes_inner_ring, shapes_outer_ring, shapes_trajectories_ring = make_shapes(self.lattice_ring)
+        shapes_inner_inj, shapes_outer_inj, shapes_trajectories_inj = self.injector_shapes_in_lab_frame()
+        shapes_inner = [*shapes_inner_ring, *shapes_inner_inj]
+        shapes_outer = [*shapes_outer_ring, *shapes_outer_inj]
+        shapes_trajectories = [*shapes_trajectories_ring, *shapes_trajectories_inj]
+        return shapes_inner, shapes_outer, shapes_trajectories
+
+    def show_floor_plan(self, defer_show=False, true_aspect_ratio=True) -> None:
+
+        shapes_system = (make_shapes(self.lattice_ring), self.injector_shapes_in_lab_frame())
+        for [shapes_inner, shapes_outer, shapes_trajectories] in shapes_system:
+            for shape in shapes_inner:
+                plt.plot(*shape.exterior.xy, c='black', linestyle=':')
+            for shape in shapes_outer:
+                plt.plot(*shape.exterior.xy, c='black')
+            for shape in shapes_trajectories:
+                plt.plot(*shape.xy, c='red', linestyle=':')
+
         plt.xlabel('meters')
         plt.ylabel('meters')
         plt.grid()
@@ -182,8 +203,7 @@ class StorageRingModel:
 
     def show_floor_plan_with_trajectories(self, true_aspect_ratio: bool = True, T_max=1.0) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
-        self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio, color='grey')
-        self.show_floor_plan(which='interior', defer_show=True, true_aspect_ratio=true_aspect_ratio, linestyle=':')
+        self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio)
         swarm = Swarm()
         swarm.particles = self.swarm_injector_initial.particles[:100]
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
@@ -274,7 +294,7 @@ class StorageRingModel:
         return flux_mult_perc
 
     def floor_plan_cost(self) -> float:
-        overlap = self.floor_plan_overLap_mm()  # units of mm^2
+        overlap = self.floor_plan_overlap_mm()  # units of mm^2
         factor = 100  # units of mm^2
         cost_overlap = 2 / (1 + np.exp(-overlap / factor)) - 1
         cost = self.max_floor_plan_cost if not does_fit_in_room(self) else cost_overlap

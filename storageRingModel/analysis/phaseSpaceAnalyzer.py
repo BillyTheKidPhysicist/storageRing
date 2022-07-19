@@ -62,6 +62,7 @@ class SwarmSnapShot:
         particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
         particleSnapShot.probability = particle.probability
         particleSnapShot.T=particle.T
+        particleSnapShot.revolutions=particle.revolutions
         if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
             E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
             particleSnapShot.E = E
@@ -78,6 +79,8 @@ class SwarmSnapShot:
             particleSnapShot.qf = particle.qf.copy()
             particleSnapShot.E = particle.E_arr[-1].copy()
             particleSnapShot.deltaE = particleSnapShot.E - particle.E_arr[0]
+            particleSnapShot.clipped = True
+        else: #particle is clipped and there was no logging
             particleSnapShot.clipped = True
         return particleSnapShot
 

@@ -330,9 +330,14 @@ def show_vac_sys(vac_sys: VacuumSystem) -> None:
     fig, axs = plt.subplots(2, sharex=True)
 
     fig.suptitle('Vacuum system simulation')
+    offset_up = True
     for component in vac_sys:
         if type(component) is Chamber:
             axs[1].scatter(current_x, 0, c='red', marker='s', s=100, label='pump')
+            if component.name != 'unassigned':
+                y, rotation = (.005, 30) if offset_up else (-.02, -30)
+                axs[1].annotate(component.name, [current_x, y], rotation=rotation)
+                offset_up = not offset_up
             P_vals.append(component.P)
             P_x_vals.append(current_x)
         elif type(component) is Tube:
@@ -351,6 +356,7 @@ def show_vac_sys(vac_sys: VacuumSystem) -> None:
     my_label = dict(zip(labels, handles))
     plt.legend(my_label.values(), my_label.keys())
     plt.subplots_adjust(hspace=.0)
+    plt.tight_layout()
     plt.show()
 
 

@@ -79,8 +79,8 @@ def storage_ring_system_components(model) -> list[ShapelyObject]:
     angle = np.arctan2(n1_ring[1], n1_ring[0])
     rot_angle = -np.pi - angle
     components = []
-    components_ring_frame = model.floor_plan_shapes('exterior')
-    for component in components_ring_frame:
+    _,components_outer,_ = model.floor_plan_shapes()
+    for component in components_outer:
         component = translate(component, -r1_ring[0], -r1_ring[1])
         component = rotate(component, rot_angle, use_radians=True, origin=(0, 0))
         component = component if model.has_bumper else bumper_guess(component)

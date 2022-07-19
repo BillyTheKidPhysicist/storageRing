@@ -149,7 +149,7 @@ class Solver:
         return sol
 
 
-def make_bounds(expand, keys_to_not_change=None, which_bounds='ring') -> tuple:
+def make_bounds(keys_to_not_change=None, which_bounds='ring',range_factor=1.0) -> tuple:
     """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
     Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
     default list of values to ignore"""
@@ -164,13 +164,14 @@ def make_bounds(expand, keys_to_not_change=None, which_bounds='ring') -> tuple:
         bounds, keys = bounds_injector, keys_injector
     else:
         bounds, keys = np.array([*bounds_ring, *bounds_injector]), [*keys_ring, *keys_injector]
-    if expand:
+    if range_factor!=1.0:
+        assert range_factor>0.0
         keys_to_not_change = () if keys_to_not_change is None else keys_to_not_change
         for key in keys_to_not_change:
             assert key in keys
         for bound, key in zip(bounds, keys):
             if key not in keys_to_not_change:
-                delta = (bound[1] - bound[0]) / 10.0
+                delta = (bound[1] - bound[0]) *range_factor
                 bound[0] -= delta
                 bound[1] += delta
                 bound[0] = 0.0 if bound[0] < 0.0 else bound[0]
@@ -218,7 +219,7 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
     return x_optimal, cost_min
 
 
-def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expandedBounds=False, globalTol=.005,
+def optimize(system, method, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0, globalTol=.005,
              disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None):
@@ -228,7 +229,7 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expand
     assert xi is not None if method == 'local' else True
     assert ring_params is not None if system == 'injector_Actual_Ring' else True
     assert injector_params is not None if system == 'ring' else True
-    bounds = make_bounds(expandedBounds, which_bounds=system)
+    bounds = make_bounds(which_bounds=system,range_factor=bounds_range_factor)
     cost_func = get_cost_function(system, ring_params, injector_params, use_solenoid_field, use_bumper,
                                   num_particles,
                                   use_standard_tube_OD, use_standard_mag_size)
@@ -243,10 +244,14 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, expand
 
 
 def main():
-    injector_params=  (0.10617748477362449 , 0.01924168427615551 , 0.17524745026617014 ,
-       0.025311623781107514, 0.1769771197959241  , 0.00573236996928707 ,
-       0.0881778534132327  , 0.27215737293142345 , 0.16347379419098668 )
-    optimize('ring', 'global',use_bumper=True,injector_params=injector_params)
+    injector_params=  (0.10292652804633401 ,
+       0.019133292571099355, 0.1745890795682889  , 0.025390259563538617,
+       0.17870521130360068 , 0.005403241130422753, 0.08756402835432808 ,
+       0.27198425036419727 , 0.16454110250272902)
+    ring_params=(0.01845651084185148 , 0.009981052511910874, 0.009420981705229028,
+       0.2551471102861459  , 0.4852627362654296)
+    xi=(*ring_params,*injector_params)
+    optimize('both', 'local',use_bumper=True,xi=xi)
 
     # print(Solver('ring',injector_params=injector_params,use_standard_tube_OD=True).solve(ring_params))
 
@@ -258,10 +263,24 @@ if __name__ == '__main__':
 
 
 """
+
+injector: only injector optimizer
 BEST MEMBER BELOW
 ---population member---- 
 DNA: array([0.10617748477362449 , 0.01924168427615551 , 0.17524745026617014 ,
        0.025311623781107514, 0.1769771197959241  , 0.00573236996928707 ,
        0.0881778534132327  , 0.27215737293142345 , 0.16347379419098668 ])
 cost: 0.04559906124553903
+
+
+
+ring: optimizer with injector
+BEST MEMBER BELOW
+---population member---- 
+DNA: array([0.01868819246427924, 0.01               , 0.00943026879837814,
+       0.25977731202276544, 0.4901874693514627 ])
+cost: 0.6840680333795855
+
+
+
 """

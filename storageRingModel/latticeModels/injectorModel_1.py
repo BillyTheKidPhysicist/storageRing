@@ -41,15 +41,15 @@ injector_param_bounds: LockedDict = LockedDict({
 })
 
 injector_params_optimal = LockedDict({
-    "L1": 0.09622282605012868,  # length of first lens
-    "rp1": 0.01,  # bore radius of first lens
-    "L2": 0.24155344028683254,  # length of first lens
-    "rp2": 0.03,  # bore radius of first lens
-    "Lm_combiner": 0.17047182734978528,  # hard edge length of combiner
-    "load_beam_offset": 0.007187101087953732,  # offset of incoming beam into combiner
-    "gap1": 0.06778754563396035,  # separation between source and first lens
-    "gap2": 0.2709792520743716,  # separation between two lenses
-    "gap3": 0.2293989213563593  ##separation between final lens and input to combiner
+    "L1": 0.10617748477362449,  # length of first lens
+    "rp1": 0.01924168427615551,  # bore radius of first lens
+    "L2": 0.17524745026617014,  # length of first lens
+    "rp2": 0.025311623781107514,  # bore radius of first lens
+    "Lm_combiner": 0.1775396197959241,  # hard edge length of combiner
+    "load_beam_offset": 0.00573236996928707,  # offset of incoming beam into combiner
+    "gap1": 0.0881778534132327,  # separation between source and first lens
+    "gap2": 0.27215737293142345,  # separation between two lenses
+    "gap3": 0.16403629419098667  ##separation between final lens and input to combiner
 })
 
 
