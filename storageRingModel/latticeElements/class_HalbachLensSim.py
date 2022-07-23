@@ -64,9 +64,9 @@ class HalbachLensSim(LensIdeal):
     def fill_post_constrained_parameters(self):
         self.set_extra_field_length()
         self.fill_geometric_params()
-        lens_length = self.effective_material_length()
-        self.magnet = MagneticLens(lens_length, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
-                                   self.PTL.use_solenoid_field, self.fringe_frac_outer * self.rp)
+        self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
+                                   self.PTL.use_solenoid_field, self.fringeFieldLength)
+        self.magnet.fill_position_and_orientation_params(self.r1, self.r2, self.nb, self.ne)
 
     def set_length(self, L: float) -> None:
         assert L > 0.0

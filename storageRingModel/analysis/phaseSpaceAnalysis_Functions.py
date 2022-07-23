@@ -133,15 +133,13 @@ def make_phase_space_info(model: StorageRingModel, x0, numStops, Tmax, numPartic
     return phase_space_info, x_positions
 
 
-def get_emittances(phase_space_info: list, periodic_stop_index: int, T_min: float = None, revs_min: int = None,
-                   truncate_x_to_min_survived_T_min=True, extra_constraint_func=None) \
-        -> tuple[list[float], list[float]]:
+def make__is_valid_function(phase_space_info: list, T_min: float = None, revs_min: int = None,
+                            clip_x_to_min_survived_dist=True, extra_constraint_func=None):
     assert all((val >= 0.0 if val is not None else True) for val in [T_min, revs_min])
     x_min = None
     survived_particles_x = [particle.qo[0] for particle in phase_space_info[0][-1] if particle.T > T_min]
-    if truncate_x_to_min_survived_T_min and len(survived_particles_x) != 0:
+    if clip_x_to_min_survived_dist and len(survived_particles_x) != 0:
         x_min = min(survived_particles_x)
-        print(x_min)
 
     def is_valid(particle):
         if particle.clipped:
@@ -157,13 +155,24 @@ def get_emittances(phase_space_info: list, periodic_stop_index: int, T_min: floa
         else:
             return True
 
-    epsy_stops, epsz_stops = [], []
+    return is_valid
+
+
+def get_emittances(phase_space_info: list, periodic_stop_index: int, T_min: float = None, revs_min: int = None,
+                   clip_x_to_min_survived_dist=True, extra_constraint_func=None) \
+        -> tuple[list[float], list[float], list[int]]:
+    is_valid = make__is_valid_function(phase_space_info, T_min=T_min, revs_min=revs_min,
+                                       clip_x_to_min_survived_dist=clip_x_to_min_survived_dist,
+                                       extra_constraint_func=extra_constraint_func)
+
+    epsy_stops, epsz_stops, num_valid = [], [], []
     for particles_at_stop in phase_space_info[periodic_stop_index]:
         particles_valid = list(filter(is_valid, particles_at_stop))
+        num_valid.append(len(particles_valid))
         if len(particles_valid) == 0:
             epsy, epsz = np.nan, np.nan
         else:
             epsy, epsz = emittance_from_particles(particles_valid)
         epsy_stops.append(epsy)
         epsz_stops.append(epsz)
-    return epsy_stops, epsz_stops
+    return epsy_stops, epsz_stops, num_valid

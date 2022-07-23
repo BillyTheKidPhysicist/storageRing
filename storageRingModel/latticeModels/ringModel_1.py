@@ -9,8 +9,8 @@ from latticeModels.latticeModelFunctions import check_and_add_default_values, ad
 from latticeModels.latticeModelParameters import atom_characteristics, system_constants
 from latticeModels.latticeModelUtilities import LockedDict
 from latticeModels.ringModelSurrogate_1 import surrogate_params
-from vacuumanalysis.vacuumanalyzer import VacuumSystem, solve_vac_system
-from vacuumanalysis.vacuumconstants import outgassing_rates, big_ion_pump_speed, small_ion_pump_speed
+from vacuumModeling.vacuumanalyzer import VacuumSystem, solve_vac_system
+from vacuumModeling.vacuumconstants import outgassing_rates, big_ion_pump_speed, small_ion_pump_speed
 
 ring_param_bounds: LockedDict = LockedDict({
     'rp_lens3_4': (.005, .03),
@@ -101,16 +101,17 @@ def inside_diam(bore_radius):
     return 2 * (bore_radius - TUBE_WALL_THICKNESS)
 
 
-def add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pumps, q):
+def add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pumps, q, exclude_end_pump=False):
     vac_sys.add_chamber(S=S_small_pumps, name='bend')
     vac_sys.add_tube(L_split_bend, inside_diam(rp_bend), q=q)
     vac_sys.add_chamber(S=S_small_pumps, name='bend')
     vac_sys.add_tube(L_split_bend, inside_diam(rp_bend), q=q)
-    vac_sys.add_chamber(S=S_small_pumps, name='bend')
+    if not exclude_end_pump:
+        vac_sys.add_chamber(S=S_small_pumps, name='bend')
 
 
 def make_vacuum_model(ring_params: dict) -> VacuumSystem:
-    # todo: I can make this more accurate accounting for chamber width. It's not a single point
+    raise NotImplementedError #need to rework this
     gas_species = 'H2'
     ring_params = LockedDict(ring_params)
     rp_lens1 = meter_to_cm(ring_params['rp_lens1'])
@@ -123,7 +124,7 @@ def make_vacuum_model(ring_params: dict) -> VacuumSystem:
     Lm_combiner = meter_to_cm(ring_params['Lm_combiner'])
     rb = meter_to_cm(system_constants['rbTarget'])
     L_split_bend = pi * rb / 2.0
-    L_tube_after_combiner = system_constants["OP_mag_space"] + L_lens2
+    # L_tube_after_combiner = system_constants["OP_mag_space"] + L_lens2
     L_long_connecting_tube = L_lens1 + L_lens2 + Lm_combiner + system_constants["OP_mag_space"]
 
     q = outgassing_rates[gas_species]
@@ -138,10 +139,10 @@ def make_vacuum_model(ring_params: dict) -> VacuumSystem:
     vac_sys.add_tube(L_lens1, inside_diam(rp_lens1), q=q)
     vac_sys.add_chamber(S=S_big_pump, name='combiner')
     vac_sys.add_tube(Lm_combiner, inside_diam(rp_combiner), q=q)
-    vac_sys.add_tube(L_tube_after_combiner, inside_diam(rp_lens2), q=q)
+    vac_sys.add_tube(L_lens2,inside_diam(rp_lens2),q=q)
     add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pump, q)
     vac_sys.add_tube(L_long_connecting_tube, inside_diam(rp_lens3_4), q=q)
-    add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pump, q)
+    add_split_bend_vacuum(vac_sys, rp_bend, L_split_bend, S_small_pump, q,exclude_end_pump=True)
 
     solve_vac_system(vac_sys)
     return vac_sys

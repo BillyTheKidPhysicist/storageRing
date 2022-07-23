@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import ROOM_TEMPERATURE, BOLTZMANN_CONSTANT
-from vacuumanalysis.vacuumconstants import rate_coefficients
+from vacuumModeling.vacuumconstants import rate_coefficients
 
 '''
 Methods and objects for computing vacuum system performance. A model of a vacuum is created component by component,
@@ -29,6 +29,10 @@ def tube_conductance(m_Daltons, inside_diam, L, T=ROOM_TEMPERATURE) -> float:
     geometric_factor = inside_diam ** 3 / L
     gas_factor = 3.81 * sqrt(T / m_Daltons)
     return gas_factor * geometric_factor
+
+
+def aperture_conductance(m_Daltons, diameter, T=ROOM_TEMPERATURE):
+    return 2.9 * sqrt(T / m_Daltons) * diameter ** 2
 
 
 def split_length_into_equal_offset_array(L: RealNum, num_points: int) -> np.ndarray:
@@ -86,16 +90,34 @@ class Tube(_Component):
 
 
 class Chamber(_Component):
-    def __init__(self, S: RealNum, Q: RealNum, P: Optional[RealNum], name: str = 'unassigned'):
+    def __init__(self, S: RealNum, Q: RealNum, P: Optional[RealNum], name: str = 'unassigned', input_tube: Tube = None):
         assert not (P is not None and Q > 0.0)
         assert S >= 0.0 and Q >= 0.0 and (P > 0.0 if P is not None else True)
         super().__init__(name)
         self.P = P
-        self.S = S
+        self._S = S
         self.Q = Q
+        self.input_tube = input_tube
+
+    def S(self, m_Daltons=None, T=ROOM_TEMPERATURE) -> float:
+        if self._S == 0.0:
+            return 0.0
+        else:
+            C_throat = np.inf if self.input_tube is None else self.input_tube.C(m_Daltons, T=T)
+            speed = 1 / (1 / self._S + 1 / C_throat)
+            return speed
 
 
-Component = Union[Tube, Chamber]
+class Aperture(_Component):
+    def __init__(self, diameter, name: str = 'unassigned'):
+        super().__init__(name)
+        self.diameter = diameter
+
+    def C(self, m_Daltons, T=ROOM_TEMPERATURE) -> float:
+        return aperture_conductance(m_Daltons, self.diameter, T=T)
+
+
+Component = Union[Tube, Chamber, Aperture]
 
 
 def node_index(node, nodes: list) -> int:
@@ -151,8 +173,13 @@ class VacuumSystem:
         component = Tube(L, inside_diam, q=q, name=name)
         self.components.append(component)
 
-    def add_chamber(self, S: float = 0.0, Q: float = 0.0, name: str = 'unassigned', P: float = None):
-        component = Chamber(S, Q, P, name=name)
+    def add_chamber(self, S: float = 0.0, Q: float = 0.0, name: str = 'unassigned', P: float = None,
+                    input_tube: Tube = None):
+        component = Chamber(S, Q, P, name=name, input_tube=input_tube)
+        self.components.append(component)
+
+    def add_aperture(self, diameter: float, name: str = 'unassigned'):
+        component = Aperture(diameter, name=name)
         self.components.append(component)
 
     def num_components(self) -> int:
@@ -212,11 +239,13 @@ class SolverVacuumSystem(VacuumSystem):
         return new_components
 
     def convert_component(self, component: Component) -> Union[list[Component], Component]:
-        if type(component) is Chamber:
+        if type(component) in (Chamber, Aperture):
             solver_version = copy.copy(component)
         elif type(component) is Tube:
             if has_len(component.P):
-                solver_version = self.split_tube(component)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    solver_version = self.split_tube(component)
             else:
                 solver_version = copy.copy(component)
         else:
@@ -233,8 +262,8 @@ class SolverVacuumSystem(VacuumSystem):
         return solver_components, component_map
 
 
-def total_conductance(tubes: list[Tube], mass_gas) -> float:
-    return 1 / sum([1 / tube.C(mass_gas) for tube in tubes])
+def total_conductance(components: list[Component], mass_gas) -> float:
+    return 1 / sum([1 / component.C(mass_gas) for component in components])
 
 
 def make_Q_vec(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
@@ -246,30 +275,30 @@ def make_Q_vec(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
         for branch in branches:
             assert len(branch) != 1  # either no branch, or at least one tube, then a vacuum chamber
             if len(branch) != 0:
-                tubes, chamber_b = branch[:-1], branch[-1]
-                assert is_all_tubes(tubes) and type(chamber_b) is Chamber
+                tubes_and_aps, chamber_b = branch[:-1], branch[-1]
+                assert is_all_tubes_and_aps(tubes_and_aps) and type(chamber_b) is Chamber
                 if chamber_b.P is not None:
-                    C_total = total_conductance(tubes, solver_vac_sys.gas_mass)
+                    C_total = total_conductance(tubes_and_aps, solver_vac_sys.gas_mass)
                     Q_vec[idx_a] = C_total * chamber_b.P
     return Q_vec
 
 
-def is_all_tubes(components: Iterable[Component]) -> bool:
-    return all(type(component) is Tube for component in components)
+def is_all_tubes_and_aps(components: Iterable[Component]) -> bool:
+    return all(type(component) in (Tube, Aperture) for component in components)
 
 
 def make_C_matrix(solver_vac_sys: SolverVacuumSystem) -> np.ndarray:
     C_matrix = np.zeros((len(solver_vac_sys.chambers_unsolved_pressure()),) * 2)
     for chamber_a in solver_vac_sys.chambers_unsolved_pressure():
         idx_a = solver_vac_sys.matrix_index[chamber_a]
-        C_matrix[idx_a, idx_a] += chamber_a.S
+        C_matrix[idx_a, idx_a] += chamber_a.S(m_Daltons=solver_vac_sys.gas_mass)
         branches = solver_vac_sys.branches(chamber_a)
         for branch in branches:
             assert len(branch) != 1  # either no branch, or at least one tube, then a vacuum chamber
             if len(branch) != 0:
-                tubes, chamber_b = branch[:-1], branch[-1]
-                assert is_all_tubes(tubes) and type(chamber_b) is Chamber
-                C_total = total_conductance(tubes, solver_vac_sys.gas_mass)
+                tubes_and_aps, chamber_b = branch[:-1], branch[-1]
+                assert is_all_tubes_and_aps(tubes_and_aps) and type(chamber_b) is Chamber
+                C_total = total_conductance(tubes_and_aps, solver_vac_sys.gas_mass)
                 C_matrix[idx_a, idx_a] += C_total
                 if chamber_b.P is None:
                     idx_b = solver_vac_sys.matrix_index[chamber_b]
@@ -323,11 +352,11 @@ def solve_vac_system(vacuum_system: VacuumSystem) -> None:
     vacuum_system.P_mean = mean_pressure_in_system(vacuum_system)
 
 
-def show_vac_sys(vac_sys: VacuumSystem) -> None:
+def show_vac_sys(vac_sys: VacuumSystem, fig_size=None, save_fig=None, dpi=300) -> None:
     current_x = 0
     P_vals = []
     P_x_vals = []
-    fig, axs = plt.subplots(2, sharex=True)
+    fig, axs = plt.subplots(2, sharex=True, figsize=fig_size)
 
     fig.suptitle('Vacuum system simulation')
     offset_up = True
@@ -357,6 +386,8 @@ def show_vac_sys(vac_sys: VacuumSystem) -> None:
     plt.legend(my_label.values(), my_label.keys())
     plt.subplots_adjust(hspace=.0)
     plt.tight_layout()
+    if save_fig is not None:
+        plt.savefig(save_fig, dpi=dpi)
     plt.show()
 
 

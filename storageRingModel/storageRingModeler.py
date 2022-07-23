@@ -14,7 +14,7 @@ from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
 from helperTools import full_arctan2
 from latticeElements.elements import Element
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim, CombinerSim, CombinerIdeal
-from latticeElements.trajectoryfunctions import make_trajectory_shape
+from latticeElements.orbitTrajectories import make_orbit_shape
 from latticeModels.injectorModel_1 import injector_params_optimal
 from latticeModels.latticeModelParameters import INJECTOR_TUNABILITY_LENGTH
 from latticeModels.ringModel_1 import ring_params_optimal
@@ -42,7 +42,7 @@ def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bum
 def make_shapes(lattice: ParticleTracerLattice) -> tuple[list[Shape], list[Shape], list[Shape]]:
     shapes_outer = [el.SO_outer for el in lattice]
     shapes_inner = [el.SO for el in lattice]
-    shapes_trajectories = [make_trajectory_shape(el) for el in lattice]
+    shapes_trajectories = [make_orbit_shape(el) for el in lattice]
     return shapes_inner, shapes_outer, shapes_trajectories
 
 
@@ -53,7 +53,7 @@ class StorageRingModel:
 
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
-                 use_bumper: bool = False):
+                 use_bumper: bool = False, sim_time_max=100.0):
         assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
@@ -61,7 +61,7 @@ class StorageRingModel:
         self.injector_lens_indices = [i for i, el in enumerate(self.lattice_injector) if type(el) is HalbachLensSim]
         self.swarm_tracer_injector = SwarmTracer(self.lattice_injector)
         self.h = 7.5e-6  # timestep size
-        self.T = 10.0
+        self.T = sim_time_max
         self.swarm_tracer_ring = SwarmTracer(self.lattice_ring)
         self.has_bumper = use_bumper
         self.use_collisions = use_collisions
@@ -179,9 +179,12 @@ class StorageRingModel:
         shapes_trajectories = [*shapes_trajectories_ring, *shapes_trajectories_inj]
         return shapes_inner, shapes_outer, shapes_trajectories
 
-    def show_floor_plan(self, defer_show=False, true_aspect_ratio=True) -> None:
+    def show_floor_plan(self, defer_show=False, true_aspect_ratio=True, save_fig=None, dpi=300,
+                        fig_size=None) -> None:  # todo: change this dumb name
 
         shapes_system = (make_shapes(self.lattice_ring), self.injector_shapes_in_lab_frame())
+        if fig_size is not None:
+            plt.figure(figsize=fig_size)
         for [shapes_inner, shapes_outer, shapes_trajectories] in shapes_system:
             for shape in shapes_inner:
                 plt.plot(*shape.exterior.xy, c='black', linestyle=':')
@@ -195,17 +198,21 @@ class StorageRingModel:
         plt.grid()
         if true_aspect_ratio:
             plt.gca().set_aspect('equal')
+        if save_fig is not None:
+            plt.savefig(save_fig, dpi=dpi)
         if not defer_show:
             plt.show()
 
     def show_system_floor_plan_in_room(self) -> None:
         plot_floor_plan_in_lab(self)
 
-    def show_floor_plan_with_trajectories(self, true_aspect_ratio: bool = True, T_max=1.0) -> None:
+    def show_floor_plan_with_trajectories(self, true_aspect_ratio: bool = True, T_max=1.0, save_fig=None,
+                                          dpi=300, fig_size=None, show_trace_lines=True, num_particles=100,
+                                          parallel=True) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
-        self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio)
+        self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio, fig_size=fig_size)
         swarm = Swarm()
-        swarm.particles = self.swarm_injector_initial.particles[:100]
+        swarm.particles = self.swarm_injector_initial.particles[:num_particles]
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             swarm, self.h, 1.0, parallel=False,
             use_fast_mode=False, copy_swarm=True, accelerated=False, log_phase_space_coords=True,
@@ -217,7 +224,7 @@ class StorageRingModel:
                                                                               copy_particles=True)
         swarm_ring_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_ring_initial, self.h, T_max,
                                                                                use_fast_mode=False,
-                                                                               parallel=False,
+                                                                               parallel=parallel,
                                                                                use_energy_correction=True,
                                                                                steps_per_logging=4,
                                                                                use_collisions=self.use_collisions)
@@ -228,13 +235,17 @@ class StorageRingModel:
             q_arr_injector = particle_injector.q_arr if len(particle_injector.q_arr) != 0 else \
                 np.array([particle_injector.qi])
             q_arr_ring = np.array([self.convert_position_injector_to_ring_frame(q) for q in q_arr_injector])
-            plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
+            if show_trace_lines:
+                plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
             if particle_injector.clipped:  # if clipped in injector, plot last location
                 plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color)
             if particle_ring.q_arr is not None and len(particle_ring.q_arr) > 1:  # if made to ring
-                plt.plot(particle_ring.q_arr[:, 0], particle_ring.q_arr[:, 1], c=color, alpha=.3)
+                if show_trace_lines:
+                    plt.plot(particle_ring.q_arr[:, 0], particle_ring.q_arr[:, 1], c=color, alpha=.3)
                 if not particle_injector.clipped:  # if not clipped in injector plot last ring location
                     plt.scatter(particle_ring.q_arr[-1, 0], particle_ring.q_arr[-1, 1], marker='x', zorder=100, c=color)
+        if save_fig is not None:
+            plt.savefig(save_fig, dpi=dpi)
         plt.show()
 
     def mode_match(self, floor_plan_cost_cutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:

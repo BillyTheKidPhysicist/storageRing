@@ -389,5 +389,5 @@ class HalbachBenderSimSegmented(BenderIdeal):
             pxo, pso = mirror_across_angle(p_el[0], p_el[1], self.ang / 2.0)
         else:
             raise ValueError
-        p_orbit = np.array([pso, pxo, q_el[-2]])
+        p_orbit = np.array([pso, pxo, p_el[2]])
         return p_orbit

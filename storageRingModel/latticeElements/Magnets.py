@@ -12,16 +12,22 @@ Dim1_Arr = np.ndarray
 
 class MagneticOptic:
     def __init__(self, seed: int = None):
-        self.r_in = None  # input of magnet system in lab coordinates.
-        self.r_out = None  # output of magnet system in lab coordinates
+        self.r_in_lab = None  # input of magnet system in lab coordinates.
+        self.r_out_lab = None  # output of magnet system in lab coordinates
+        self.r_in_el = None
+        self.r_out_el = None
+        self.norm_in_lab = None  # input of magnet system in lab coordinates.
+        self.norm_out_lab = None  # output of magnet system in lab coordinates
+        self.norm_in_el = None
+        self.norm_out_el = None
         self.seed = int(time.time()) if seed is None else seed
         self.neighbors: list[MagneticOptic] = []
 
-    def get_magpylib_magnets(self, *args, **kwargs) -> Collection:
+    def get_magpylib_magnets(self, use_magnet_errors) -> Collection:
         with temporary_seed(self.seed):
-            return self._make_magpylib_magnets(*args, **kwargs)
+            return self._make_magpylib_magnets(use_magnet_errors)
 
-    def _make_magpylib_magnets(self, *args, **kwargs) -> Collection:
+    def _make_magpylib_magnets(self, use_magnet_errors) -> Collection:
         raise NotImplemented
 
 
@@ -37,6 +43,15 @@ class MagneticLens(MagneticOptic):
         self.use_solenoid = use_solenoid
 
         self.x_in_offset = x_in_offset
+        self.norm_in_el, self.norm_out_el = np.array([-1.0, 0, 0]), np.array([1.0, 0, 0])
+
+    def fill_position_and_orientation_params(self, r1, r2, nb, ne):
+        self.r_in_el = np.array([self.x_in_offset, 0.0, 0.0])
+        self.r_out_el = np.array([self.x_in_offset + self.Lm, 0.0, 0.0])
+        self.r_in_lab = r1 - self.x_in_offset * nb
+        self.r_out_lab = r2 - self.x_in_offset * ne
+        self.norm_in_lab = nb
+        self.norm_out_lab = ne
 
     def num_disks(self, magnet_errors) -> int:
         if magnet_errors:

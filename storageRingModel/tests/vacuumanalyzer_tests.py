@@ -4,7 +4,7 @@ from math import isclose,pi
 
 import numpy as np
 
-from vacuumanalysis.vacuumanalyzer import VacuumSystem, solve_vac_system,tube_conductance
+from vacuumModeling.vacuumanalyzer import VacuumSystem, solve_vac_system,tube_conductance
 
 
 def test_vacuum_results_with_hand_values():

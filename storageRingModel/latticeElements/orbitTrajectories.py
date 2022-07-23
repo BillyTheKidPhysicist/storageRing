@@ -30,7 +30,7 @@ def convert_center_to_orbit_coords(el: Element, s: RealNum, xc: RealNum, yc: Rea
     return x, y, z
 
 
-def combiner_halbach_xy(el: Element) -> np.ndarray:
+def combiner_halbach_orbit_xy(el: Element) -> np.ndarray:
     atom_state = 'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER'
     force_func = make_halbach_combiner_force_function(el)
     q_arr, _ = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
@@ -42,7 +42,7 @@ def combiner_halbach_xy(el: Element) -> np.ndarray:
     return xy
 
 
-def straight_xy(el: Element) -> np.ndarray:
+def straight_orbit_xy(el: Element) -> np.ndarray:
     xy = np.array([[0.0, 0.0], [el.L, 0.0]])
     for i, coord in enumerate(xy):
         xy[i] = el.R_Out @ coord
@@ -50,7 +50,7 @@ def straight_xy(el: Element) -> np.ndarray:
     return xy
 
 
-def ideal_bend_xy(el: Element) -> np.ndarray:
+def ideal_bendorbit_xy(el: Element) -> np.ndarray:
     angles = np.linspace(0.0, el.ang)
     xy = np.column_stack((el.ro * np.cos(angles), el.ro * np.sin(angles)))
     for i, coord in enumerate(xy):
@@ -68,13 +68,13 @@ def segmented_halbach_bender(el: Element) -> np.ndarray:
     return xy
 
 
-def make_particle_trajectory(el: Element) -> np.ndarray:
+def nominal_particle_trajectory(el: Element) -> np.ndarray:
     if type(el) in (Drift, HalbachLensSim):
-        xy = straight_xy(el)
+        xy = straight_orbit_xy(el)
     elif type(el) is CombinerHalbachLensSim:
-        xy = combiner_halbach_xy(el)
+        xy = combiner_halbach_orbit_xy(el)
     elif type(el) is BenderIdeal:
-        xy = ideal_bend_xy(el)
+        xy = ideal_bendorbit_xy(el)
     elif type(el) is HalbachBenderSimSegmented:
         xy = segmented_halbach_bender(el)
     else:
@@ -82,6 +82,6 @@ def make_particle_trajectory(el: Element) -> np.ndarray:
     return xy
 
 
-def make_trajectory_shape(el: Element) -> LineString:
-    xy = make_particle_trajectory(el)
+def make_orbit_shape(el: Element) -> LineString:
+    xy = nominal_particle_trajectory(el)
     return LineString(xy)
