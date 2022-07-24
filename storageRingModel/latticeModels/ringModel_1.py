@@ -65,7 +65,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
 
     # ---combiner + OP magnet-----
     add_combiner_and_OP(lattice, system_constants['rp_combiner'], ring_params['Lm_combiner'],
-                        ring_params['load_beam_offset'], rp_lens2, options)
+                        ring_params['load_beam_offset'], rp_lens2, options,'Circulating')
 
     # ---lens after combiner---
 
