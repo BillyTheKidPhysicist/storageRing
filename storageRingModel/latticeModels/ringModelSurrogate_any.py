@@ -2,14 +2,15 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from latticeModels.latticeModelFunctions import check_and_add_default_values, add_combiner_and_OP
 from latticeModels.latticeModelParameters import system_constants, atom_characteristics
 from latticeModels.latticeModelUtilities import LockedDict
+from latticeModels.ringModel_1 import ring_constants
 
-surrogate_params = LockedDict({'rp_lens1': .01,
-                               'rp_lens2': .025,
+surrogate_params = LockedDict({'rp_lens1': ring_constants['rp_lens1'],
                                'L_Lens1': .5,
-                               'L_Lens2': .2})
+                               'L_Lens2': .3})
 
 
-def make_ring_surrogate(injector_params: dict,
+
+def make_ring_surrogate_for_injector(injector_params: dict,
                         options: dict = None) -> ParticleTracerLattice:
     """Surrogate model of storage to aid in realism of independent injector optimizing. Benders are exluded. Model
     serves to represent geometric constraints between injector and ring, and to test that if particle that travel
@@ -29,12 +30,11 @@ def make_ring_surrogate(injector_params: dict,
 
     # ---combiner + OP magnet-----
     add_combiner_and_OP(lattice, system_constants['rp_combiner'], injector_params['Lm_combiner'],
-                        injector_params['load_beam_offset'], surrogate_params['rp_lens1'],
-                        surrogate_params['rp_lens2'], options)
+                        injector_params['load_beam_offset'],ring_constants['rp_lens2'], options,'Injection')
 
     # ---lens after combiner---
 
-    lattice.add_halbach_lens_sim(surrogate_params['rp_lens2'], surrogate_params['L_Lens2'])
+    lattice.add_halbach_lens_sim(ring_constants['rp_lens2'], surrogate_params['L_Lens2'])
 
     surrogate_params.assert_All_Entries_Accessed_And_Reset_Counter()
     lattice.end_lattice(constrain=False)

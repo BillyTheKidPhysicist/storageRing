@@ -65,18 +65,23 @@ def round_up_if_below_min_time_step_gap(proposedLength: float) -> float:
         return proposedLength
 
 
-def add_split_bend(lattice, rp_bend):
+def add_split_bend(lattice: ParticleTracerLattice, rp_bend):
     lattice.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
     add_drift_if_needed(lattice, system_constants['bendApexGap'], 'bender', 'bender', rp_bend, rp_bend)
     lattice.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
 
 
-def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_lens_before, rp_lens_after,
-                        options: Optional[dict], which_OP_ap: str = "Circulating") -> None:
-    """Add gap for vacuum + combiner + gap for optical pumping. Elements before and after must be a lens. """
+def add_split_bend_with_lens(lattice: ParticleTracerLattice, rp_bend, rp_lens, L_lens):
+    lattice.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
+    add_drift_if_needed(lattice, system_constants['bendApexGap'], 'bender', 'lens', rp_bend, rp_lens)
+    lattice.add_halbach_lens_sim(rp_lens, L_lens)
+    add_drift_if_needed(lattice, system_constants['bendApexGap'], 'lens', 'bender', rp_lens, rp_bend)
+    lattice.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
 
-    # gap between combiner and previous lens
-    add_drift_if_needed(lattice, system_constants["pre_combiner_gap"], 'lens', 'combiner', rp_lens_before, rp_combiner)
+
+def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_lens_after,
+                        options: Optional[dict], which_OP_ap: str) -> None:
+    """Add combiner + gap for optical pumping. Element after must be a lens. """
 
     # -------combiner-------
 
@@ -88,7 +93,7 @@ def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_
     # as optical pumping region. I am doing it like this because I don't have it coded up yet to include an aperture
     # without it being a new drift region
     OP_gap = system_constants["OP_mag_space"] - (el_fringe_space('combiner', rp_combiner)
-                                                + el_fringe_space('lens', rp_lens_after))
+                                                 + el_fringe_space('lens', rp_lens_after))
     OP_gap = round_up_if_below_min_time_step_gap(OP_gap)
     # this is to enforce atoms clipping on op magnet. Not ideal solution
     OP_gap = OP_gap if OP_gap > system_constants["OP_PumpingRegionLength"] else \

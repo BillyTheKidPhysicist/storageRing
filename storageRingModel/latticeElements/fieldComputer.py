@@ -1,6 +1,3 @@
-
-
-
 from scipy.spatial.transform import Rotation as Rot
 
 # def solve():
@@ -9,10 +6,7 @@ from helperTools import *
 from latticeElements.class_BaseElement import BaseElement
 from latticeElements.elements import HalbachLensSim, Element
 
-# import matplotlib.pyplot as plt
-
-
-valid_els = (HalbachLensSim)
+valid_els = (HalbachLensSim,)
 
 
 def is_valid_interp_el(el):
@@ -36,7 +30,7 @@ def angle(norm):
 
 
 def field_generator_in_different_frame(magnet1, magnet2):
-    magnets = magnet2.get_magpylib_magnets(False)
+    magnets = magnet2.make_magpylib_magnets(False)
     deltar = magnet2.r_in_lab - magnet1.r_in_lab
     theta_pos = angle(-magnet1.norm_in_el) - angle(-magnet1.norm_in_lab)
     R = Rot.from_rotvec([0, 0, theta_pos]).as_matrix()
@@ -45,14 +39,13 @@ def field_generator_in_different_frame(magnet1, magnet2):
     theta_direction = angle(magnet2.norm_in_lab) - angle(magnet1.norm_in_lab)
     R = Rot.from_rotvec([0, 0, theta_direction])
     magnets.rotate(R)
+    return magnets
 
 
-def collect_valid_neighboring_magnets(el):
+def collect_valid_neighboring_magnets(el, lattice):
     if is_valid_interp_el(el):
-        neighboring_magnets = [_el.magnet for _el in PTL if is_valid_neighbors(el, _el)]
+        neighboring_magnets = [_el.magnet for _el in lattice if is_valid_neighbors(el, _el)]
         col = Collection([field_generator_in_different_frame(el.magnet, magnet) for magnet in neighboring_magnets])
-        col.add(el.magnet.get_magpylib_magnets(False))
-        col.show()
+        return col
     else:
-        neighboring_magnets = []
-    return neighboring_magnets
+        return None

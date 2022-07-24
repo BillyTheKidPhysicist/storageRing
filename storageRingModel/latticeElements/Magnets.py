@@ -23,7 +23,7 @@ class MagneticOptic:
         self.seed = int(time.time()) if seed is None else seed
         self.neighbors: list[MagneticOptic] = []
 
-    def get_magpylib_magnets(self, use_magnet_errors) -> Collection:
+    def make_magpylib_magnets(self, use_magnet_errors) -> Collection:
         with temporary_seed(self.seed):
             return self._make_magpylib_magnets(use_magnet_errors)
 
@@ -83,12 +83,14 @@ class MagneticLens(MagneticOptic):
         return valid_indices
 
     def get_valid_field_values(self, coords: np.ndarray, interp_step_size: float, magnet_errors: bool,
-                               interp_rounding_guard: float = 1e-12) -> tuple[B_Vec_Arr, B_Norm_Arr]:
+                               extra_magnets=None,interp_rounding_guard: float = 1e-12) -> tuple[B_Vec_Arr, B_Norm_Arr]:
         assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
         interp_step_size_valid = interp_step_size + interp_rounding_guard
         valid_indices = self.get_valid_coord_indices(coords, interp_step_size_valid)
-        magnets = self.get_magpylib_magnets(magnet_errors)
+        col=Collection([self.make_magpylib_magnets(magnet_errors)])
+        if extra_magnets is not None:
+            col.add(extra_magnets)
         B_norm_grad, B_norm = np.zeros((len(valid_indices), 3)) * np.nan, np.ones(len(valid_indices)) * np.nan
-        B_norm_grad[valid_indices], B_norm[valid_indices] = magnets.B_norm_grad(coords[valid_indices],
+        B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                                 return_norm=True, dx=interp_step_size)
         return B_norm_grad, B_norm

@@ -93,16 +93,12 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
     lattice.add_drift(gap_valve, ap=injector_constants["lens1ToLens2_Valve_Ap"],
                       outer_half_width=injector_constants["lens1ToLens2_Inject_Valve_OD"] / 2)
 
-    # ---------------------
-
     lattice.add_halbach_lens_sim(injector_params["rp2"], injector_params["L2"])
 
     lattice.add_drift(gap3, ap=injector_params["rp2"])
     lattice.add_combiner_sim_lens(injector_params["Lm_combiner"], system_constants["rp_combiner"],
                                   load_beam_offset=injector_params["load_beam_offset"], layers=1,
                                   seed=options['combiner_seed'])
-    import warnings
-    warnings.warn("Need to add more here, this isn't right")
 
     lattice.end_lattice(constrain=False)
 
@@ -117,26 +113,26 @@ def inside_diam(bore_radius):
 
 def helium_dump_back_gas_load():
     Q = 3.6e-5  # assuming 1 cm hole located 2 meter from nozzle,60 sccm, and dump chamber is 3 meter from nozzle
-    dummy_speed=1e9 #assume that none of the helium that wanders back through the tube returns
+    dummy_speed = 1e9  # assume that none of the helium that wanders back through the tube returns
     vac_sys = VacuumSystem(gas_mass_Daltons=gas_masses['He'])
     vac_sys.add_chamber(Q=Q, S=1000)
     vac_sys.add_tube(50, 2)
     vac_sys.add_chamber(S=dummy_speed)
     solve_vac_system(vac_sys)
-    Q_back = vac_sys.components[-1].P * vac_sys.components[-1].S
+    Q_back = vac_sys.components[-1].P * vac_sys.components[-1].S()
     return Q_back
 
 
 def make_vacuum_model(injector_params: dict) -> VacuumSystem:
-    raise NotImplementedError  #need to rework this
-    gas='He'
+    raise NotImplementedError  # need to rework this
+    gas = 'He'
     gap1 = meter_to_cm(injector_params["gap1"])
     gap2 = meter_to_cm(injector_params["gap2"])
     gap3 = meter_to_cm(injector_params["gap3"])
     rp1, L1 = meter_to_cm(injector_params["rp1"]), meter_to_cm(injector_params["L1"])
     rp2, L2 = meter_to_cm(injector_params["rp2"]), meter_to_cm(injector_params["L2"])
-    rp1_bumper=meter_to_cm(bumper.rp1)
-    rp2_bumper=meter_to_cm(bumper.rp2)
+    rp1_bumper = meter_to_cm(bumper.rp1)
+    rp2_bumper = meter_to_cm(bumper.rp2)
 
     first_tube_length_bumper = meter_to_cm(bumper.L_lens1 + bumper.L_gap / 2.0)
     second_tube_length_bumper = meter_to_cm(bumper.L_lens2 + bumper.L_gap / 2.0)

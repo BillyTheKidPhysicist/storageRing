@@ -118,10 +118,10 @@ class SwarmSnapShot:
             print(particle.T,indexBefore,stepFraction)
             print(po_arr[indexBefore-1],po_arr[indexBefore],po_arr[indexBefore+1])
             print(qo_arr[indexBefore-1],qo_arr[indexBefore],qo_arr[indexBefore+1])
-        assert not np.any(np.isnan(poSnapShot))
         ESnapShot = self._interpolate_Array(E_arr, indexBefore, stepFraction)
         qLabSnapShot=self._interpolate_Array(particle.q_arr, indexBefore, stepFraction)
         pLabSnapShot=self._interpolate_Array(particle.p_arr, indexBefore, stepFraction)
+        assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot))
         return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
     def _interpolate_Array(self, arr, indexBegin, stepFraction):

@@ -256,9 +256,12 @@ class ParticleTracerLattice:
 
         floor_plan = solve_Floor_Plan(self, constrain)
         update_and_place_elements_from_floor_plan(self, floor_plan)
+
         for el in self.el_list:
             el.fill_post_constrained_parameters()
+        for el in self.el_list:
             if build_field_helpers:
+                # magnets=collect_valid_neighboring_magnets(el,self)
                 el.build_fast_field_helper()
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could

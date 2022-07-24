@@ -204,7 +204,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         lensElement.fill_pre_constrained_parameters()
         lensElement.r1=lensElement.r2= lensElement.nb= lensElement.ne=np.zeros(3)
         lensElement.fill_post_constrained_parameters()
-        lensElement.build_fast_field_helper()
+        lensElement.build_fast_field_helper(None)
         gridSpacing = lensElement.max_interp_radius() / lensElement.num_grid_points_r
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))

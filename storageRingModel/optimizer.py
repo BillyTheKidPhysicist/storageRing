@@ -8,11 +8,9 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from asyncDE import solve_async
 from latticeElements.utilities import CombinerDimensionError
 from latticeElements.utilities import ElementTooShortError as ElementTooShortErrorFields
-from latticeModels.injectorModel_1 import make_injector_lattice, injector_param_bounds
 from latticeModels.latticeModelUtilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
-from latticeModels.ringModelSurrogate_1 import make_ring_surrogate
-from latticeModels.ringModel_1 import ring_param_bounds
-from latticeModels.systemModel import make_system_model
+from latticeModels.systemModel import make_system_model, get_ring_bounds, get_injector_bounds, \
+    make_surrogate_ring_for_injector, make_injector_lattice
 from octopusOptimizer import octopus_optimize
 from simpleLineSearch import line_search
 from storageRingModeler import StorageRingModel
@@ -52,29 +50,31 @@ def injected_swarm_cost(model) -> float:
     return swarm_cost
 
 
-def build_injector_and_surrrogate(injector_params, options: dict) -> tuple[
+def build_injector_and_surrrogate(injector_params, ring_version, options: dict) -> tuple[
     ParticleTracerLattice, ParticleTracerLattice]:
-    assert len(injector_params) == len(injector_param_bounds)
+    assert len(injector_params) == len(get_injector_bounds())
 
-    lattice_injector = make_injector_lattice(injector_params, options=options)
-    lattice_surrogate = make_ring_surrogate(injector_params, options=options)
+    lattice_injector = make_injector_lattice(injector_params, options)
+    lattice_surrogate = make_surrogate_ring_for_injector(injector_params, ring_version, options)
     assert_combiners_are_same(lattice_injector, lattice_surrogate)
     return lattice_surrogate, lattice_injector
 
 
-def build_lattice_params_dict(params, which: str) -> dict:
+def build_lattice_params_dict(params, which: str, ring_version: str) -> dict:
     assert not isinstance(params, dict) and which in ('ring', 'injector')
-    keys = ring_param_bounds.keys() if which == 'ring' else injector_param_bounds.keys()
+    keys = get_ring_bounds(ring_version).keys() if which == 'ring' else get_injector_bounds().keys()
     assert len(keys) == len(params)
     return dict(zip(keys, params))
 
 
 class Solver:
-    def __init__(self, system, ring_params=None, injector_params=None, use_solenoid_field=False, use_collisions=False,
+    def __init__(self, system, ring_version: str, ring_params=None, injector_params=None, use_solenoid_field=False,
+                 use_collisions=False,
                  use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
                  use_standard_mag_size=False):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system = system
+        self.ring_version = ring_version
         self.ring_params = ring_params
         self.injector_params = injector_params
         self.use_collisions = use_collisions
@@ -95,11 +95,12 @@ class Solver:
             ring_params = self.ring_params
             injector_params = params
         else:
-            ring_params = params[:len(ring_param_bounds)]
-            injector_params = params[-len(injector_param_bounds):]
+            ring_params = params[:len(get_ring_bounds(self.ring_version))]
+            injector_params = params[-len(get_injector_bounds()):]
             assert len(ring_params) + len(injector_params) == len(params)
-        ring_params = None if ring_params is None else build_lattice_params_dict(ring_params, 'ring')
-        injector_params = None if injector_params is None else build_lattice_params_dict(injector_params, 'injector')
+        ring_params = None if ring_params is None else build_lattice_params_dict(ring_params, 'ring', self.ring_version)
+        injector_params = None if injector_params is None else build_lattice_params_dict(injector_params, 'injector',
+                                                                                         self.ring_version)
         if ring_params is not None and injector_params is not None:
             ring_params['Lm_combiner'] = injector_params['Lm_combiner']
             ring_params['load_beam_offset'] = injector_params['load_beam_offset']
@@ -108,10 +109,10 @@ class Solver:
     def build_lattices(self, params):
         ring_params, injector_params = self.unpack_params(params)
         if self.system == 'injector_Surrogate_Ring':
-            lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params,
+            lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params, self.ring_version,
                                                                            options=self.storage_ring_system_options)
         else:
-            lattice_ring, lattice_injector = make_system_model(ring_params, injector_params,
+            lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, self.ring_version,
                                                                self.storage_ring_system_options)
         return lattice_ring, lattice_injector
 
@@ -149,11 +150,13 @@ class Solver:
         return sol
 
 
-def make_bounds(keys_to_not_change=None, which_bounds='ring', range_factor=1.0) -> tuple:
+def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_factor=1.0) -> tuple:
     """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
     Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
     default list of values to ignore"""
     assert which_bounds in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+    ring_param_bounds = get_ring_bounds(ring_version)
+    injector_param_bounds = get_injector_bounds()
     bounds_ring = np.array(list(ring_param_bounds.values()))
     bounds_injector = np.array(list(injector_param_bounds.values()))
     keys_ring = list(ring_param_bounds.keys())
@@ -179,12 +182,14 @@ def make_bounds(keys_to_not_change=None, which_bounds='ring', range_factor=1.0) 
     return tuple(bounds)
 
 
-def get_cost_function(system: str, ring_params: Optional[tuple], injector_params: Optional[tuple], use_solenoid_field,
+def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
+                      use_solenoid_field,
                       use_bumper, num_particles, use_standard_tube_OD, use_standard_mag_size) -> Callable[
     [tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
-    solver = Solver(system, ring_params=ring_params, use_solenoid_field=use_solenoid_field, use_bumper=use_bumper,
+    solver = Solver(system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
+                    use_bumper=use_bumper,
                     num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
                     use_standard_mag_size=use_standard_mag_size, injector_params=injector_params,
                     use_energy_correction=True)
@@ -220,7 +225,8 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
     return x_optimal, cost_min
 
 
-def optimize(system, method, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0, globalTol=.005,
+def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0,
+             globalTol=.005,
              disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None):
@@ -230,8 +236,8 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, bounds
     assert xi is not None if method == 'local' else True
     assert ring_params is not None if system == 'injector_Actual_Ring' else True
     assert injector_params is not None if system == 'ring' else True
-    bounds = make_bounds(which_bounds=system, range_factor=bounds_range_factor)
-    cost_func = get_cost_function(system, ring_params, injector_params, use_solenoid_field, use_bumper,
+    bounds = make_bounds(system, ring_version, range_factor=bounds_range_factor)
+    cost_func = get_cost_function(system, ring_version, ring_params, injector_params, use_solenoid_field, use_bumper,
                                   num_particles,
                                   use_standard_tube_OD, use_standard_mag_size)
 
@@ -245,42 +251,28 @@ def optimize(system, method, xi: tuple = None, ring_params: tuple = None, bounds
 
 
 def main():
-    injector_params = (0.10292652804633401,
-                       0.019133292571099355, 0.1745890795682889, 0.025390259563538617,
-                       0.17870521130360068, 0.005403241130422753, 0.08756402835432808,
-                       0.27198425036419727, 0.16454110250272902)
-    ring_params = (0.01845651084185148, 0.009981052511910874, 0.009420981705229028,
-                   0.2551471102861459, 0.4852627362654296)
-    # xi=(*ring_params,*injector_params)
-    optimize('ring', 'global', use_bumper=True, injector_params=injector_params)
+    injector_params = (0.3, 0.01624404317562657, 0.23788459956313238,
+                       0.03, 0.17809193919623706, 0.007704452870607685,
+                       0.10615316973237765, 0.22492222955994753, 0.22148833301792942)
 
-    # print(Solver('ring',injector_params=injector_params,use_standard_tube_OD=True).solve(ring_params))
-
-    # print(Solver('ring', injector_params=injector_params, use_standard_tube_OD=False).solve(ring_params))
+    optimize('ring', 'global', '2', injector_params=injector_params)
 
 
 if __name__ == '__main__':
     main()
 
-"""
+'''
+iter: 1
 
-injector: only injector optimizer
+------ITERATIONS:  12150
+POPULATION VARIABILITY: [0.0013254038067971286 0.08972152475814882   0.05855418316649445
+ 0.06786038344816106   0.04792458401409157   0.03478099531874918
+ 0.08760829097204124   0.06251256568382411   0.07651957411429648  ]
 BEST MEMBER BELOW
 ---population member---- 
-DNA: array([0.10617748477362449 , 0.01924168427615551 , 0.17524745026617014 ,
-       0.025311623781107514, 0.1769771197959241  , 0.00573236996928707 ,
-       0.0881778534132327  , 0.27215737293142345 , 0.16347379419098668 ])
-cost: 0.04559906124553903
+DNA: array([0.3                 , 0.01624404317562657 , 0.23788459956313238 ,
+       0.03                , 0.17809193919623706 , 0.007704452870607685,
+       0.10615316973237765 , 0.22492222955994753 , 0.22148833301792942 ])
+cost: 0.17247584348578404
 
-
-
-ring: optimizer with injector
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.01868819246427924, 0.01               , 0.00943026879837814,
-       0.25977731202276544, 0.4901874693514627 ])
-cost: 0.6840680333795855
-
-
-
-"""
+'''

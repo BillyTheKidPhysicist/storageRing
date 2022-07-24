@@ -30,8 +30,8 @@ class HalbachLensSim(LensIdeal):
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
-        assert self.fringe_frac_outer == 1.5 and self.fringe_frac_inner_min == 4.0, "May need to change numgrid points if " \
-                                                                                    "this changes"
+        # assert self.fringe_frac_outer == 1.5 and self.fringe_frac_inner_min == 4.0, "May need to change numgrid points if " \
+        #                                                                             "this changes"
         self.rp = min(rp_layers)
         self.numGridPointsX = round_and_make_odd(21 * PTL.field_dens_mult)
         self.num_grid_points_r = round_and_make_odd(25 * PTL.field_dens_mult)
@@ -177,7 +177,8 @@ class HalbachLensSim(LensIdeal):
         # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data_2D
 
-    def make_unshaped_interp_data_3D(self, use_symmetry=True, use_magnet_errors=False) -> np.ndarray:
+    def make_unshaped_interp_data_3D(self, use_symmetry=True, use_magnet_errors=False,
+                                     extra_magnets=None) -> np.ndarray:
         """
         Make 3d field data for interpolation from end of lens region
 
@@ -189,11 +190,10 @@ class HalbachLensSim(LensIdeal):
         assert not (use_magnet_errors and use_symmetry)
         x_arr, y_arr, z_arr = self.make_grid_coord_arrays(use_symmetry)
 
-        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1,
-                                                                               3)  # note that these coordinates can have
-        # the wrong value for z if the magnet length is longer than the fringe field effects. This is intentional and
-
-        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE, use_magnet_errors)
+        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)  # note that these coordinates
+        # can have the wrong value for z if the magnet length is longer than the fringe field effects.
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
+                                                                 use_magnet_errors, extra_magnets=extra_magnets)
         data_3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
 
         return data_3D
@@ -212,18 +212,21 @@ class HalbachLensSim(LensIdeal):
         assert self.rp - B_GRAD_STEP_SIZE - max_grid_sep > self.max_interp_radius()
         return interp_data_2D, interp_data_3D
 
-    def make_interp_data(self, apply_perturbation) -> tuple[tuple, tuple, tuple]:
+    def make_interp_data(self, apply_perturbation, extra_magnets) -> tuple[tuple, tuple, tuple]:
+
         data3D_no_perturb = (np.ones(1) * np.nan,) * 7
 
         field_data_2D, field_data_3D = self.make_interp_data_ideal()
-        field_data_perturbations = self.make_field_perturbation_data() if apply_perturbation else data3D_no_perturb
+        field_data_perturbations = self.make_field_perturbation_data(extra_magnets) if apply_perturbation \
+            else data3D_no_perturb
         return field_data_3D, field_data_2D, field_data_perturbations
 
     def build_fast_field_helper(self) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
-        apply_perturbation = True if self.PTL.use_mag_errors or len(self.magnet.neighbors) > 0 else False
-        field_data = self.make_interp_data(apply_perturbation)
+        extra_magnets = None
+        apply_perturbation = True if self.PTL.use_mag_errors or extra_magnets is not None else False
+        field_data = self.make_interp_data(apply_perturbation, extra_magnets)
 
         numba_func_constants = (
             self.L, self.ap, self.L_cap, self.extra_field_length, self.field_fact, apply_perturbation)
@@ -238,7 +241,7 @@ class HalbachLensSim(LensIdeal):
         F_center = np.linalg.norm(self.force(np.asarray([self.L_cap, self.ap / 2, .0])))
         assert F_edge / F_center < .015
 
-    def make_field_perturbation_data(self) -> tuple:
+    def make_field_perturbation_data(self, extra_magnets) -> tuple:
         """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
         and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
         force is small, and so I can get away with interpolating with low density, while keeping my high density
@@ -246,7 +249,9 @@ class HalbachLensSim(LensIdeal):
         near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of ideal and
         perturbation interpolation"""
         data_3D_unperturbed = self.make_unshaped_interp_data_3D(use_symmetry=False, use_magnet_errors=False)
-        data_3D_perturbed = self.make_unshaped_interp_data_3D(use_symmetry=False, use_magnet_errors=True)
+        data_3D_perturbed = self.make_unshaped_interp_data_3D(use_symmetry=False,
+                                                              use_magnet_errors=self.PTL.use_mag_errors,
+                                                              extra_magnets=extra_magnets)
 
         assert len(data_3D_perturbed) == len(data_3D_unperturbed)
         assert is_close_all(data_3D_perturbed[:, :3], data_3D_unperturbed[:, :3], 1e-12)
@@ -265,7 +270,8 @@ class HalbachLensSim(LensIdeal):
         model increasing or reducing magnet strength """
         warnings.warn("extra field sources are being ignore here. Funcitnality is currently broken")
         self.field_fact = field_strength_fact
-        self.build_fast_field_helper()
+        warnings.warn("this method does not account for neigboring magnets!!")
+        self.build_fast_field_helper(None)
 
     def get_valid_jitter_amplitude(self, Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""

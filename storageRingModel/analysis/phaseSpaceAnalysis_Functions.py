@@ -74,7 +74,7 @@ def transfer_particles_to_new_swarm(swarm_original: Swarm, num_particles: int) -
     return swarm_new
 
 
-def initial_phase_space_info(model: StorageRingModel, info: float, h: float) -> list[Particle]:
+def initial_phase_space_info(model: StorageRingModel, info: list, h: float) -> list[Particle]:
     num_particle = len(info[0])
     swarm_to_trace = model.generate_swarm(num_particle)
     swarm_injector_traced, _ = trace_swarm_through_ring(model, swarm_to_trace, h=h, T=1e-6, parallel=True)
@@ -88,10 +88,10 @@ def initial_phase_space_info(model: StorageRingModel, info: float, h: float) -> 
     return snap.particles
 
 
-def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list, numParticles: int, h: float = 7.5e-6,
-                                      T: float = 10.0, parallel=True) -> list:
+def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list, numParticles: int, h: float ,
+                                      T: float , parallel,swarm_initial) -> list:
     phase_space_info = [[[] for _ in xStops] for xStops in xPositions]
-    swarm_initial = model.generate_swarm(numParticles)
+    swarm_initial = model.generate_swarm(numParticles) if swarm_initial is None else swarm_initial
     numParticlesLeft = numParticles
     worksize = 100
     while numParticlesLeft > 0:
@@ -124,10 +124,11 @@ def make_phase_space_x_positions(model: StorageRingModel, x0, numStops, Tmax) ->
     return x_positions
 
 
-def make_phase_space_info(model: StorageRingModel, x0, numStops, Tmax, numParticles) -> tuple[list, list]:
+def make_phase_space_info(model: StorageRingModel, x0, numStops, Tmax, numParticles,parallel=True,h=None,swarm_initial=None) -> tuple[list, list]:
     x0 = (x0,) if isinstance(x0, (float, int)) else x0
+    h=model.h if h is None else h
     x_positions = make_phase_space_x_positions(model, x0, numStops, Tmax)
-    phase_space_info = get_phase_space_info_at_positions(model, x_positions, numParticles, T=Tmax + 1e-3)
+    phase_space_info = get_phase_space_info_at_positions(model, x_positions, numParticles, h,Tmax + 1e-3,parallel,swarm_initial)
     for x_stop in x_positions:
         x_stop.insert(0, 0)
     return phase_space_info, x_positions

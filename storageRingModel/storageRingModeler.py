@@ -15,13 +15,11 @@ from helperTools import full_arctan2
 from latticeElements.elements import Element
 from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim, CombinerSim, CombinerIdeal
 from latticeElements.orbitTrajectories import make_orbit_shape
-from latticeModels.injectorModel_1 import injector_params_optimal
 from latticeModels.latticeModelParameters import INJECTOR_TUNABILITY_LENGTH
-from latticeModels.ringModel_1 import ring_params_optimal
+from latticeModels.systemModel import get_optimal_ring_params, get_optimal_injector_params, make_system_model
 
 combiners = (CombinerHalbachLensSim, CombinerSim, CombinerIdeal)
 Shape = Union[LineString, Polygon]
-from latticeModels.systemModel import make_system_model
 
 # expected elements of injector.
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
@@ -345,20 +343,24 @@ class StorageRingModel:
         return swarm_cost
 
 
-def build_storage_ring_model(ring_params, injector_params, num_particles: int = 1024, use_collisions: bool = False,
+def build_storage_ring_model(ring_params, injector_params, ring_version, num_particles: int = 1024,
+                             use_collisions: bool = False,
                              use_energy_correction: bool = False, use_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False):
     """Convenience function for building a StorageRingModel"""
     options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper}
-    lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, options)
+    lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
                              num_particles=num_particles, use_collisions=use_collisions,
                              use_bumper=use_bumper)
     return model
 
 
-def make_optimal_solution_model(use_bumper: bool = True, use_solenoid_field: bool = True) -> StorageRingModel:
+def make_optimal_solution_model(ring_version, use_bumper: bool = True,
+                                use_solenoid_field: bool = True) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
-    model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, use_bumper=use_bumper,
+    ring_params_optimal = get_optimal_ring_params(ring_version)
+    injector_params_optimal = get_optimal_injector_params()
+    model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
                                      use_solenoid_field=use_solenoid_field)
     return model
