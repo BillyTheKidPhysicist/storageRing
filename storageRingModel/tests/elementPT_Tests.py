@@ -204,7 +204,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         lensElement.fill_pre_constrained_parameters()
         lensElement.r1=lensElement.r2= lensElement.nb= lensElement.ne=np.zeros(3)
         lensElement.fill_post_constrained_parameters()
-        lensElement.build_fast_field_helper(None)
+        lensElement.build_fast_field_helper()
         gridSpacing = lensElement.max_interp_radius() / lensElement.num_grid_points_r
         np.random.seed(seed)
         numSlices = int(round(lensElement.Lm / lensElement.individualMagnetLength))
@@ -471,7 +471,7 @@ class ElementTestRunner:
         self.test_Tracing()
         self.test_Coord_Consistency()
         self.test_Coord_Conversions()
-        self.test_Magnet_Imperfections()
+        # self.test_Magnet_Imperfections()
         # self.test_Imperfections_Tracing()
         # self.test_Misalignment1()
 
@@ -547,7 +547,6 @@ class ElementTestRunner:
                             FSym = np.abs(el.force(np.array([coord[0], y, z])))
                             np.set_printoptions(precision=100)
                             assert is_close_all(F0, FSym, 1e-10) == False  # assert there is no symmetry
-
             test_Magnetic_Imperfection_Field_Symmetry()
 
     def test_Imperfections_Tracing(self):

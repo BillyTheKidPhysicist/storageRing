@@ -271,7 +271,7 @@ class HalbachLensSim(LensIdeal):
         warnings.warn("extra field sources are being ignore here. Funcitnality is currently broken")
         self.field_fact = field_strength_fact
         warnings.warn("this method does not account for neigboring magnets!!")
-        self.build_fast_field_helper(None)
+        self.build_fast_field_helper()
 
     def get_valid_jitter_amplitude(self, Print=False):
         """If jitter (radial misalignment) amplitude is too large, it is clipped"""

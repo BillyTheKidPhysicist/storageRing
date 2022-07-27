@@ -5,6 +5,7 @@ from HalbachLensClass import HalbachLens
 from helperTools import *
 from helperTools import temporary_seed
 from latticeElements.utilities import MAGNET_ASPECT_RATIO
+from helperTools import temporary_seed
 
 B_Vec_Arr, B_Norm_Arr = np.ndarray, np.ndarray
 Dim1_Arr = np.ndarray
@@ -32,7 +33,7 @@ class MagneticOptic:
 
 
 class MagneticLens(MagneticOptic):
-    def __init__(self, Lm, rp_layers, magnet_widths, magnet_grade, use_solenoid, x_in_offset):
+    def __init__(self, Lm, rp_layers, magnet_widths, magnet_grade, use_solenoid, x_in_offset,seed=None, num_slices=1):
         assert all(rp1 == rp2 for rp1, rp2 in zip(rp_layers, sorted(rp_layers)))
         assert len(rp_layers) == len(magnet_widths)
         super().__init__()
@@ -41,6 +42,8 @@ class MagneticLens(MagneticOptic):
         self.magnet_widths = magnet_widths
         self.magnet_grade = magnet_grade
         self.use_solenoid = use_solenoid
+        self.seed=seed
+        self.num_slices=num_slices
 
         self.x_in_offset = x_in_offset
         self.norm_in_el, self.norm_out_el = np.array([-1.0, 0, 0]), np.array([1.0, 0, 0])
@@ -63,10 +66,12 @@ class MagneticLens(MagneticOptic):
     def _make_magpylib_magnets(self, magnet_errors) -> Collection:
         position = (self.Lm / 2.0 + self.x_in_offset, 0, 0)
         orientation = Rot.from_rotvec([0, np.pi / 2.0, 0.0])
-        magnets = HalbachLens(self.rp_layers, self.magnet_widths, self.Lm, self.magnet_grade,
-                              use_method_of_moments=True, use_standard_mag_errors=magnet_errors,
-                              num_disks=self.num_disks(magnet_errors), use_solenoid_field=self.use_solenoid,
-                              orientation=orientation, position=position)
+
+        with temporary_seed(self.seed): #seed may be None, in which case nothing happens
+            magnets = HalbachLens(self.rp_layers, self.magnet_widths, self.Lm, self.magnet_grade,
+                                  use_method_of_moments=True, use_standard_mag_errors=magnet_errors,
+                                  num_disks=self.num_disks(magnet_errors), use_solenoid_field=self.use_solenoid,
+                                  orientation=orientation, position=position)
         return magnets
 
     def get_valid_coord_indices(self, coords: np.ndarray, interp_step_size: float) -> Dim1_Arr:
@@ -94,3 +99,4 @@ class MagneticLens(MagneticOptic):
         B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                                 return_norm=True, dx=interp_step_size)
         return B_norm_grad, B_norm
+

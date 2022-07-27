@@ -61,6 +61,12 @@ class ParticleTracerLattice:
     def __iter__(self) -> Iterable[Element]:
         return (element for element in self.el_list)
 
+    def __len__(self):
+        return len(self.el_list)
+
+    def __getitem__(self, index):
+        return self.el_list[index]
+
     def set_constrained_linear_element(self, el: Element) -> None:
         self.linear_elements_to_constrain.append(el)
         if len(self.linear_elements_to_constrain) > 2:

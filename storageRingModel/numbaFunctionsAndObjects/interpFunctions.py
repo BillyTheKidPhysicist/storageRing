@@ -145,8 +145,8 @@ def interp2D(xLoc, yLoc, xCoords, yCoords, v_c):
         c10 = v_c[Y * x0 + y1] * (1 - xd) + v_c[Y * x1 + y1] * xd
         c = c00 * (1 - yd) + c10 * yd
     else:
-        # print(xLoc, yLoc)
-        # print(xCoords.min(), xCoords.max())
-        # print(yCoords.min(), yCoords.max())
+        print(xLoc, yLoc)
+        print(xCoords.min(), xCoords.max())
+        print(yCoords.min(), yCoords.max())
         raise Exception('out of bounds')
     return c

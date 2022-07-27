@@ -2,13 +2,15 @@ import warnings
 from math import sin, sqrt, cos, atan, tan, isclose
 from typing import Optional
 
+from latticeElements.Magnets import MagneticLens
+
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from HalbachLensClass import HalbachLens as _HalbachLensFieldGenerator
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
 from helperTools import round_and_make_odd
-from helperTools import temporary_seed
+
 from latticeElements.class_CombinerIdeal import CombinerIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, CombinerDimensionError, \
     CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
@@ -62,6 +64,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.space = None
         self.extra_field_length = 0.0
         self.extraLoadApFrac = 1.5
+        self.magnet: MagneticLens=None
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
         # the center of the inlet to the center of the kink
@@ -82,6 +85,10 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.space = max(rp_layers) * self.outerFringeFrac
         self.ap = self.max_valid_aperture() if self.ap is None else self.ap
         assert self.is_apeture_valid(self.ap)
+
+        seed = DEFAULT_SEED if self.seed is None else self.seed
+        self.magnet=MagneticLens(self.Lm,rp_layers,magnet_widths,self.PTL.magnet_grade,self.PTL.use_solenoid_field,self.space,seed=seed)
+
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section
         # or down
@@ -111,25 +118,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
         ap_max_good_interp_region = self.max_ap_internal_interp_region()
         assert ap_largest_tube < ap_max_good_interp_region
         return ap_largest_tube
-
-    def make_lens(self) -> _HalbachLensFieldGenerator:
-        """Make field generating lens. A seed is required to reproduce the same magnet if magnet errors are being
-        used because this is called multiple times."""
-        rp_layers, magnet_widths = get_halbach_layers_radii_and_magnet_widths(self.rp, self.numLayers)
-        individual_magnet_length_approx = min([(MAGNET_ASPECT_RATIO * min(magnet_widths)), self.Lm])
-        num_disks = 1 if not self.PTL.use_mag_errors else round(self.Lm / individual_magnet_length_approx)
-        lens_center = self.Lm / 2 + self.space
-
-        seed = DEFAULT_SEED if self.seed is None else self.seed
-        with temporary_seed(seed):
-            lens = _HalbachLensFieldGenerator(rp_layers, magnet_widths, self.Lm, self.PTL.magnet_grade,
-                                              use_method_of_moments=True,
-                                              use_standard_mag_errors=self.PTL.use_mag_errors,
-                                              num_disks=num_disks,
-                                              use_solenoid_field=self.PTL.use_solenoid_field,
-                                              position=(lens_center, 0, 0),
-                                              orientation=Rot.from_rotvec([0, np.pi / 2.0, 0.0]))  # must reuse lens
-        return lens
 
     def num_points_x_interp(self, x_min: float, x_max: float) -> int:
         assert x_max > x_min
@@ -255,7 +243,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         valid_x = np.logical_or(volume_coords[:, 0] < self.space - B_GRAD_STEP_SIZE,
                                 volume_coords[:, 0] > self.space + self.Lm - B_GRAD_STEP_SIZE)
         valid_indices = np.logical_or(valid_x, valid_r)  # tricky
-        B_norm_grad[valid_indices], B_norm[valid_indices] = self.make_lens().B_norm_grad(volume_coords[valid_indices],
+        field_generator=self.magnet.make_magpylib_magnets(self.PTL.use_mag_errors)
+        B_norm_grad[valid_indices], B_norm[valid_indices] = field_generator.B_norm_grad(volume_coords[valid_indices],
                                                                                          return_norm=True,
                                                                                          dx=B_GRAD_STEP_SIZE)
         field_data_unshaped = np.column_stack((volume_coords, B_norm_grad, B_norm))
