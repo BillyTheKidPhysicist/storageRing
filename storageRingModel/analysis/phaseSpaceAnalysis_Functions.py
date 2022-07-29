@@ -10,7 +10,7 @@ def trace_swarm_through_ring(model: StorageRingModel, swarm_to_trace: Swarm, h=7
                              parallel=True) -> tuple[Swarm, Swarm]:
     swarm_injector_traced = model.swarm_tracer_injector.trace_swarm_through_lattice(
         swarm_to_trace, h, 1.0, use_fast_mode=False, copy_swarm=True,
-        log_phase_space_coords=True, accelerated=True, use_energy_correction=True)
+        log_el_phase_space_coords=True, accelerated=True, use_energy_correction=True)
     swarm_ring_initial = model.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                            copy_particles=True)
     swarm_traced_ring = model.swarm_tracer_ring.trace_swarm_through_lattice(swarm_ring_initial, h, T,
@@ -23,9 +23,9 @@ def trace_swarm_through_ring(model: StorageRingModel, swarm_to_trace: Swarm, h=7
 
     for particle in swarm_traced_ring:
         assert particle.clipped is not None
-        if particle.qo_arr is not None:
-            particle.qo_arr[:, 0] -= particle.qo_arr[0, 0]
-            particle.qo_arr[:, 0] += xoStart
+        if particle.qo_vals is not None:
+            particle.qo_vals[:, 0] -= particle.qo_vals[0, 0]
+            particle.qo_vals[:, 0] += xoStart
 
     return swarm_injector_traced, swarm_traced_ring
 
@@ -78,7 +78,7 @@ def initial_phase_space_info(model: StorageRingModel, info: list, h: float) -> l
     num_particle = len(info[0])
     swarm_to_trace = model.generate_swarm(num_particle)
     swarm_injector_traced, _ = trace_swarm_through_ring(model, swarm_to_trace, h=h, T=1e-6, parallel=True)
-    x_start = max([particle.qo_arr[0][0] for particle in swarm_injector_traced])
+    x_start = max([particle.qo_vals[0][0] for particle in swarm_injector_traced])
     # match up paremter
     for particle_ring, particle_injector in zip(info[0], swarm_injector_traced):
         particle_injector.T += particle_ring.T

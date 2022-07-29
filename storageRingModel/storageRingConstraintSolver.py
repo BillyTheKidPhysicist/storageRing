@@ -69,7 +69,7 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
         if i == 0:
             first_el = elements[0]
 
-    n_in_Initial = -np.array([np.cos(PTL.initialAngle), np.sin(PTL.initialAngle)]) if PTL.initialAngle != -np.pi \
+    n_in_Initial = -np.array([np.cos(PTL.initial_ang), np.sin(PTL.initial_ang)]) if PTL.initial_ang != -np.pi \
         else np.array([1.0, 0.0])
     pos_in_Initial = np.array(PTL.initial_location)
     first_el.place(pos_in_Initial, n_in_Initial)

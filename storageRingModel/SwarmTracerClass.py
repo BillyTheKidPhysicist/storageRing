@@ -265,47 +265,18 @@ class SwarmTracer:
                 particle.qi += particle.pi * tiny_time_step
         return swarm
 
-    # def _super_fast_trace(self, swarm: Swarm, trace_Particle_Function) -> Swarm:
-    #     # use trick of accessing only the important class variabels and passing those through to reduce pickle time
-    # 
-    #     def fastFunc(compactDict):
-    #         particle = Particle()
-    #         for key, val in compactDict.items():
-    #             setattr(particle, key, val)
-    #         particle = trace_Particle_Function(particle)
-    #         compact_dict_traced = {}
-    #         for key, val in vars(particle).items():
-    #             if val is not None:
-    #                 compact_dict_traced[key] = val
-    #         return compact_dict_traced
-    # 
-    #     compact_dict_list = []
-    #     for particle in swarm:
-    #         compact_dict = {}
-    #         for key, val in vars(particle).items():
-    #             if val is not None:
-    #                 if not (isinstance(val, Iterable) and len(val) == 0):
-    #                     compact_dict[key] = val
-    #         compact_dict_list.append(compact_dict)
-    #     with mp.Pool(mp.cpu_count()) as Pool:
-    #         compact_dict_traced_list = Pool.map(fastFunc, compact_dict_list)
-    #     for particle, compact_dict in zip(swarm.particles, compact_dict_traced_list):
-    #         for key, val in compact_dict.items():
-    #             setattr(particle, key, val)
-    #     return swarm
-
     def trace_swarm_through_lattice(self, swarm: Swarm, h: float, T_max: float, parallel: bool = False,
                                     use_fast_mode: bool = True,
                                     copy_swarm: bool = True, accelerated: bool = False, steps_per_logging: int = 1,
                                     use_energy_correction: bool = False, use_collisions: bool = False,
-                                    log_phase_space_coords: bool = False) -> Swarm:
+                                    log_el_phase_space_coords: bool = False) -> Swarm:
 
         def trace_particle(particle):
             particle_new = self.particle_tracer.trace(particle, h, T_max, fast_mode=use_fast_mode,
                                                       accelerated=accelerated,
                                                       steps_between_logging=steps_per_logging,
                                                       use_energy_correction=use_energy_correction,
-                                                      log_phase_space_coords=log_phase_space_coords,
+                                                      log_el_phase_space_coords=log_el_phase_space_coords,
                                                       use_collisions=use_collisions)
             return particle_new
 

@@ -23,7 +23,7 @@ class ParticleTracerLattice:
 
     def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
                  jitter_amp: float = 0.0, field_dens_mult: float = 1.0, use_mag_errors: bool = False,
-                 use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initialAngle=None,
+                 use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initial_ang=None,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False):
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
@@ -39,7 +39,7 @@ class ParticleTracerLattice:
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.initial_location = (0.0, 0.0) if initial_location is None else initial_location
-        self.initialAngle = -np.pi if initialAngle is None else initialAngle
+        self.initial_ang = -np.pi if initial_ang is None else initial_ang
         self.combiner_index: Optional[int] = None  # the index in the lattice where the combiner is
         self.total_length: Optional[float] = None  # total length of lattice, m
         self.jitter_amp = jitter_amp
@@ -360,10 +360,7 @@ class ParticleTracerLattice:
         plt.close('all')
 
         def plot_Particle(particle, xMarkerSize=default_marker_size):
-            if particle.color is None:  # use default plotting behaviour
-                color = 'red' if particle.clipped else 'green'
-            else:  # else use the specified color
-                color = particle.color
+            color = 'red' if particle.clipped else 'green'
             if show_markers:
                 if particle.qf is not None:
                     xy = particle.qf[:2] if final_coords else particle.qi[:2]
@@ -373,8 +370,8 @@ class ParticleTracerLattice:
                     xy = particle.qi[:2]
                     plt.scatter(*xy, marker='^', s=30, c='blue')
             if show_trace_lines:
-                if particle.q_arr is not None and len(particle.q_arr) > 0:  # if there are lines to show
-                    plt.plot(particle.q_arr[:, 0], particle.q_arr[:, 1], c=color, alpha=trace_line_alpha)
+                if particle.q_vals is not None and len(particle.q_vals) > 0:  # if there are lines to show
+                    plt.plot(particle.q_vals[:, 0], particle.q_vals[:, 1], c=color, alpha=trace_line_alpha)
 
         for el in self.el_list:
             if plot_inner:

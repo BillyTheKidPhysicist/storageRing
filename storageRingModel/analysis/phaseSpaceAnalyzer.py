@@ -66,19 +66,19 @@ class SwarmSnapShot:
         if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
             E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
             particleSnapShot.E = E
-            particleSnapShot.deltaE = E - particle.E_arr[0].copy()
+            particleSnapShot.deltaE = E - particle.E_vals[0].copy()
             particleSnapShot.qo = qo
             particleSnapShot.po = po
             particleSnapShot.q=q
             particleSnapShot.p=p
             particleSnapShot.clipped = False
-        elif particle.qo_arr is not None:
-            particleSnapShot.qo = particle.qo_arr[-1].copy()
-            particleSnapShot.po = particle.po_arr[-1].copy()
+        elif particle.qo_vals is not None:
+            particleSnapShot.qo = particle.qo_vals[-1].copy()
+            particleSnapShot.po = particle.po_vals[-1].copy()
             particleSnapShot.pf = particle.pf.copy()
             particleSnapShot.qf = particle.qf.copy()
-            particleSnapShot.E = particle.E_arr[-1].copy()
-            particleSnapShot.deltaE = particleSnapShot.E - particle.E_arr[0]
+            particleSnapShot.E = particle.E_vals[-1].copy()
+            particleSnapShot.deltaE = particleSnapShot.E - particle.E_vals[0]
             particleSnapShot.clipped = True
         else: #particle is clipped and there was no logging
             particleSnapShot.clipped = True
@@ -91,9 +91,9 @@ class SwarmSnapShot:
 
     def _check_If_Particle_Can_Be_Interpolated(self, particle, x):
         # this assumes orbit coordinates
-        if particle.qo_arr is None or len(particle.qo_arr) == 0 or particle.T<=self.min_Survival_T:
+        if particle.qo_vals is None or len(particle.qo_vals) == 0 or particle.T<=self.min_Survival_T:
             return False  # clipped immediately probably
-        elif particle.qo_arr[-1, 0] > x > particle.qo_arr[0, 0]:
+        elif particle.qo_vals[-1, 0] > x > particle.qo_vals[0, 0]:
             return True
         else:
             return False
@@ -103,9 +103,9 @@ class SwarmSnapShot:
         return num
 
     def _get_Phase_Space_Coords_And_Energy_SnapShot(self, particle, xSnapShot):
-        qo_arr = particle.qo_arr  # position in orbit coordinates
-        po_arr = particle.po_arr
-        E_arr = particle.E_arr
+        qo_arr = particle.qo_vals  # position in orbit coordinates
+        po_arr = particle.po_vals
+        E_arr = particle.E_vals
         assert xSnapShot < qo_arr[-1, 0]
         indexBefore = np.argmax(qo_arr[:, 0] > xSnapShot) - 1
         qo1 = qo_arr[indexBefore]
@@ -119,8 +119,8 @@ class SwarmSnapShot:
             print(po_arr[indexBefore-1],po_arr[indexBefore],po_arr[indexBefore+1])
             print(qo_arr[indexBefore-1],qo_arr[indexBefore],qo_arr[indexBefore+1])
         ESnapShot = self._interpolate_Array(E_arr, indexBefore, stepFraction)
-        qLabSnapShot=self._interpolate_Array(particle.q_arr, indexBefore, stepFraction)
-        pLabSnapShot=self._interpolate_Array(particle.p_arr, indexBefore, stepFraction)
+        qLabSnapShot=self._interpolate_Array(particle.q_vals, indexBefore, stepFraction)
+        pLabSnapShot=self._interpolate_Array(particle.p_vals, indexBefore, stepFraction)
         assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot))
         return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
@@ -181,16 +181,16 @@ class PhaseSpaceAnalyzer:
         # find the maximum longitudinal distance a particle has traveled
         x_max = 0.0
         for particle in self.swarm:
-            if len(particle.qo_arr) > 0:
-                x_max = max([x_max, particle.qo_arr[timeStep, 0]])
+            if len(particle.qo_vals) > 0:
+                x_max = max([x_max, particle.qo_vals[timeStep, 0]])
         return x_max
 
     def _find_Inclusive_Min_XOrbit_For_Swarm(self):
         # find the smallest x that as ahead of all particles, ie inclusive
         x_min = 0.0
         for particle in self.swarm:
-            if len(particle.qo_arr) > 0:
-                x_min = max([x_min, particle.qo_arr[0, 0]])
+            if len(particle.qo_vals) > 0:
+                x_min = max([x_min, particle.qo_vals[0, 0]])
         return x_min
 
     def _make_SnapShot_Position_Arr_At_Same_X(self, xVideoPoint):

@@ -29,7 +29,7 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
         pf = particle.pf if particle.pf is not None else np.nan * np.empty(3)
         qf = particle.qf if particle.qf is not None else np.nan * np.empty(3)
         revolutions = particle.revolutions
-        EFinal = particle.E_arr[-1] if len(particle.E_arr) > 0 else np.nan
+        EFinal = particle.E_vals[-1] if len(particle.E_vals) > 0 else np.nan
         testData.append(np.append(np.append(np.append(qf, pf), revolutions), EFinal))
     np.savetxt(os.path.join(testDataFolderPath, TESTDataFilePath), np.asarray(testData))
 
@@ -61,7 +61,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, accele
             condition = (np.all(np.abs(qf - qTest) < eps) and np.all(np.abs(pf - pTest) < eps) and np.abs(
                 revs - revsTest) < eps)
             if use_fast_mode == False:  # include energy considerations
-                EFinalTraced = tracedSwarm.particles[i].E_arr[-1]
+                EFinalTraced = tracedSwarm.particles[i].E_vals[-1]
                 condition = condition and np.abs(EFinalTest - EFinalTraced) < eps
             if condition == False:
                 print('q:', qf)

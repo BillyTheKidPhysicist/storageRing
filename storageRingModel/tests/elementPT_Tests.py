@@ -284,7 +284,7 @@ class LensIdealTestHelper(ElementTestHelper):
         particle = Particle(qi=np.asarray([-1e-14, self.rp / 2.0, 0.]))
         particle = particleTracer.trace(particle, 1e-6, 1.0)
         yi, yf, pyf = particle.qi[1], particle.qf[1], particle.pf[1]
-        yRMS, pyRMS = np.std(particle.q_arr[:, 1]), np.std(particle.p_arr[:, 1])
+        yRMS, pyRMS = np.std(particle.q_vals[:, 1]), np.std(particle.p_vals[:, 1])
         K = 2 * SIMULATION_MAGNETON * self.Bp / (particle.pi[0] ** 2 * self.rp ** 2)
         phi = np.sqrt(K) * self.L
         yfTheory, pyfTheory = yi * np.cos(phi), -abs(particle.pi[0]) * yi * np.sin(phi) * np.sqrt(K)
@@ -403,6 +403,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             x, y, z = coords_cartesian[index]
             q_el = np.asarray([x, y, z])
             deltaF_el = elDeviation.force(q_el) - elPerfect.force(q_el)
+            print(deltaF_el, deltaF_Direct)
             assert is_close_all(deltaF_el, deltaF_Direct, abstol=1e-6)
             deltaV_El = elDeviation.magnetic_potential(q_el) - elPerfect.magnetic_potential(q_el)
             assert isclose(deltaV_El, deltaV_Direct, abs_tol=1e-6)
@@ -443,7 +444,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
         qf0 = np.array([-2.5204642358260165e-01, 7.0862975445841782e-03, -2.1550523921137185e-04])
         pf0 = np.array([-200.93630228490446, 1.3759172322022248, 7.710850190666924])
-        super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, True)
+        super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
         # test generic conditions of the element
@@ -471,7 +472,7 @@ class ElementTestRunner:
         self.test_Tracing()
         self.test_Coord_Consistency()
         self.test_Coord_Conversions()
-        # self.test_Magnet_Imperfections()
+        self.test_Magnet_Imperfections()
         # self.test_Imperfections_Tracing()
         # self.test_Misalignment1()
 

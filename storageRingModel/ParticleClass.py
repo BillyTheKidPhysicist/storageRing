@@ -31,12 +31,8 @@ class Particle:
         self.pf = None  # final momentum
         self.T = 0  # time of particle in simulation
         self.traced = False  # recored wether the particle has already been sent throught the particle tracer
-        self.color = None  # color that can be added to each particle for plotting
 
-        self.force = None  # current force on the particle
         self.current_el = None  # which element the particle is ccurently in
-        self.current_el_index = None  # Index of the elmenent that the particle is curently in. THis remains unchanged even
-        # after the particle leaves the tracing algorithm and such can be used to record where it clipped
         self.cumulative_length = 0  # total length traveled by the particle IN TERMS of lattice elements. It updates after
         # the particle leaves an element by adding that elements length (particle trajectory length that is)
         self.revolutions = 0  # revolutions particle makd around lattice. Initially zero
@@ -45,23 +41,14 @@ class Particle:
         # false when use_fast_mode is being used in the particle tracer class
         # these lists track the particles momentum, position etc during the simulation if that feature is enable. Later
         # they are converted into arrays
-        self._p_list = []  # List of momentum vectors
-        self._q_list = []  # List of position vector
-        self._qo_list = []  # List of position in orbit frame vectors
-        self._po_list = []
-        self._t_list = []  # kinetic energy list. Each entry contains the element index and corresponding energy
-        self._v_list = []  # potential energy list. Each entry contains the element index and corresponding energy
-        # array versions
-        self.p_arr = None
-        self.p0Arr = None  # array of norm of momentum.
-        self.q_arr = None
-        self.qo_arr = None
-        self.po_arr = None
-        self.T_arr = None
-        self.V_arr = None
-        self.E_arr = None  # total energy
-        self.el_delta_E_dict = {}  # dictionary to hold energy changes that occur traveling through an element. Entries are
-        # element index and list of energy changes for each pass
+        self.p_vals: Optional[np.ndarray, list] = []
+        self.q_vals: Optional[np.ndarray, list] = []
+        self.qo_vals: Optional[np.ndarray, list] = []
+        self.po_vals: Optional[np.ndarray, list] = []
+        self.KE_vals: Optional[np.ndarray, list] = []
+        self.V_vals: Optional[np.ndarray, list] = []
+        self.E_vals: Optional[np.ndarray, list] = []
+
         self.probability = probability  # used for swarm behaviour based on probability
         self.el_phase_space_log = []  # to log the phase space coords at the beginning of each element. Lab frame
         self.total_lattice_length = None
@@ -83,42 +70,20 @@ class Particle:
     def log_params(self, current_el: Element, q_el: np.ndarray, p_el: np.ndarray) -> None:
         q_lab = current_el.transform_element_coords_into_lab_frame(q_el)
         p_lab = current_el.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
-        self._q_list.append(q_lab.copy())
-        self._p_list.append(p_lab.copy())
-        self._t_list.append((current_el.index, np.sum(p_lab ** 2) / 2.0))
+        self.q_vals.append(q_lab.copy())
+        self.p_vals.append(p_lab.copy())
+        self.KE_vals.append(np.sum(p_lab ** 2) / 2.0)
         if current_el is not None:
             q_el = current_el.transform_lab_coords_into_element_frame(q_lab)
-            el_index = current_el.index
-            self._qo_list.append(
+            self.qo_vals.append(
                 current_el.transform_element_coords_into_global_orbit_frame(q_el, self.cumulative_length))
-            self._po_list.append(current_el.transform_element_momentum_into_global_orbit_frame(q_el, p_el))
-            self._v_list.append((el_index, current_el.magnetic_potential(q_el)))
+            self.po_vals.append(current_el.transform_element_momentum_into_global_orbit_frame(q_el, p_el))
+            self.V_vals.append(current_el.magnetic_potential(q_el))
 
     def get_energy(self, current_el: Element, q_el: np.ndarray, p_el: np.ndarray) -> float:
         V = current_el.magnetic_potential(q_el)
         T = np.sum(p_el ** 2) / 2.0
         return T + V
-
-    def fill_energy_array_and_dicts(self) -> None:
-        self.T_arr = np.asarray([entry[1] for entry in self._t_list])
-        self.V_arr = np.asarray([entry[1] for entry in self._v_list])
-        self.E_arr = self.T_arr.copy() + self.V_arr.copy()
-
-        if self.E_arr.shape[0] > 1:
-            element_index_prev = self._t_list[0][0]
-            E_after_entering_el = self.E_arr[0]
-
-            for i, _ in enumerate(self._t_list):
-                if self._t_list[i][0] != element_index_prev:
-                    E_before_leaving_el = self.E_arr[i - 1]
-                    deltaE = E_before_leaving_el - E_after_entering_el
-                    if str(element_index_prev) not in self.el_delta_E_dict:
-                        self.el_delta_E_dict[str(element_index_prev)] = [deltaE]
-                    else:
-                        self.el_delta_E_dict[str(element_index_prev)].append(deltaE)
-                    E_after_entering_el = self.E_arr[i]
-                    element_index_prev = self._t_list[i][0]
-        self._t_list, self._v_list = [], []
 
     def finished(self, current_el: Optional[Element], q_el: np.ndarray, p_el: np.ndarray,
                  total_lattice_length: Optional[float] = None, was_clipped_immediately=False) -> None:
@@ -129,22 +94,17 @@ class Particle:
         if was_clipped_immediately:
             self.qf, self.pf = self.qi.copy(), self.pi.copy()
         if self.data_logging:
-            self.q_arr = np.asarray(self._q_list)
-            self._q_list = []  # save memory
-            self.p_arr = np.asarray(self._p_list)
-            self._p_list = []
-            self.qo_arr = np.asarray(self._qo_list)
-            self._qo_list = []
-            self.po_arr = np.asarray(self._po_list)
-            self._po_list = []
-            if self.p_arr.shape[0] != 0:
-                self.p0Arr = npl.norm(self.p_arr, axis=1)
-            self.fill_energy_array_and_dicts()
+            self.q_vals = np.array(self.q_vals)
+            self.p_vals = np.array(self.p_vals)
+            self.qo_vals = np.asarray(self.qo_vals)
+            self.po_vals = np.asarray(self.po_vals)
+            self.KE_vals = np.array(self.KE_vals)
+            self.V_vals = np.array(self.V_vals)
+            self.E_vals = self.V_vals + self.KE_vals
         if self.current_el is not None:
             self.current_el = current_el
             self.qf = self.current_el.transform_element_coords_into_lab_frame(q_el)
             self.pf = self.current_el.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
-            self.current_el_index = self.current_el.index
             if total_lattice_length is not None:
                 self.total_lattice_length = total_lattice_length
                 qoFinal = self.current_el.transform_element_coords_into_global_orbit_frame(q_el, self.cumulative_length)
@@ -152,20 +112,21 @@ class Particle:
             self.current_el = None  # to save memory
 
     def plot_energies(self, show_only_total_energy: bool = False) -> None:
-        if self.E_arr.shape[0] == 0:
+        if self.E_vals.shape[0] == 0:
             raise Exception('PARTICLE HAS NO LOGGED POSITION')
-        E_arr = self.E_arr
-        T_arr = self.T_arr
-        V_arr = self.V_arr
-        qo_arr = self.qo_arr
+        E_vals = self.E_vals
+        KE_vals = self.KE_vals
+        V_vals = self.V_vals
+        qo_vals = self.qo_vals
         plt.close('all')
         plt.title(
-            'Particle energies vs position. \n Total initial energy is ' + str(np.round(E_arr[0], 1)) + ' energy units')
+            'Particle energies vs position. \n Total initial energy is ' + str(
+                np.round(E_vals[0], 1)) + ' energy units')
         dist_fact = self.total_lattice_length if self.total_lattice_length is not None else 1.0
-        plt.plot(qo_arr[:, 0] / dist_fact, E_arr - E_arr[0], label='E')
+        plt.plot(qo_vals[:, 0] / dist_fact, E_vals - E_vals[0], label='E')
         if not show_only_total_energy:
-            plt.plot(qo_arr[:, 0] / dist_fact, T_arr - T_arr[0], label='T')
-            plt.plot(qo_arr[:, 0] / dist_fact, V_arr - V_arr[0], label='V')
+            plt.plot(qo_vals[:, 0] / dist_fact, KE_vals - KE_vals[0], label='T')
+            plt.plot(qo_vals[:, 0] / dist_fact, V_vals - V_vals[0], label='V')
         plt.ylabel("Energy, simulation units")
         if self.total_lattice_length is not None:
             plt.xlabel("Distance along lattice, revolutions")
@@ -178,17 +139,17 @@ class Particle:
     def plot_orbit_reference_frame_position(self, plot_y_axis: bool = 'y') -> None:
         if plot_y_axis not in ('y', 'z'):
             raise Exception('plot_y_axis MUST BE EITHER \'y\' or \'z\'')
-        if self.qo_arr.shape[0] == 0:
+        if self.qo_vals.shape[0] == 0:
             warnings.warn('Particle has no logged position values')
-            qo_arr = np.zeros((1, 3)) + np.nan
+            qo_vals = np.zeros((1, 3)) + np.nan
         else:
-            qo_arr = self.qo_arr
+            qo_vals = self.qo_vals
         if plot_y_axis == 'y':
-            y_plot = qo_arr[:, 1]
+            y_plot = qo_vals[:, 1]
         else:
-            y_plot = qo_arr[:, 2]
+            y_plot = qo_vals[:, 2]
         plt.close('all')
-        plt.plot(qo_arr[:, 0], y_plot)
+        plt.plot(qo_vals[:, 0], y_plot)
         plt.ylabel('Trajectory offset, m')
         plt.xlabel('Trajectory length, m')
         plt.grid()
@@ -270,7 +231,6 @@ class Swarm:
             assert not particle.traced
             particle_new = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
             particle_new.probability = particle.probability
-            particle_new.color = particle.color
             swarm_new.particles.append(particle_new)
         return swarm_new
 
@@ -318,9 +278,9 @@ class Swarm:
     def plot(self, y_axis: bool = True, z_axis: bool = False) -> None:
         for particle in self.particles:
             if y_axis:
-                plt.plot(particle.qo_arr[:, 0], particle.qo_arr[:, 1], c='red')
+                plt.plot(particle.qo_vals[:, 0], particle.qo_vals[:, 1], c='red')
             if z_axis:
-                plt.plot(particle.qo_arr[:, 0], particle.qo_arr[:, 2], c='blue')
+                plt.plot(particle.qo_vals[:, 0], particle.qo_vals[:, 2], c='blue')
         plt.grid()
         plt.title('ideal orbit displacement. red is y position, blue is z positon. \n total particles: ' +
                   str(len(self.particles)))

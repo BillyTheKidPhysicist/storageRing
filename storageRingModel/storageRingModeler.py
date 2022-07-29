@@ -213,7 +213,7 @@ class StorageRingModel:
         swarm.particles = self.swarm_injector_initial.particles[:num_particles]
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             swarm, self.h, 1.0, parallel=False,
-            use_fast_mode=False, copy_swarm=True, accelerated=False, log_phase_space_coords=True,
+            use_fast_mode=False, copy_swarm=True, accelerated=False, log_el_phase_space_coords=True,
             use_energy_correction=True,
             use_collisions=self.use_collisions)
         for particle in swarm_injector_traced:
@@ -230,18 +230,18 @@ class StorageRingModel:
         for particle_injector, particle_ring in zip(swarm_injector_traced, swarm_ring_traced):
             assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
             color = 'r' if particle_ring.clipped else 'g'
-            q_arr_injector = particle_injector.q_arr if len(particle_injector.q_arr) != 0 else \
+            q_arr_injector = particle_injector.q_vals if len(particle_injector.q_vals) != 0 else \
                 np.array([particle_injector.qi])
             q_arr_ring = np.array([self.convert_position_injector_to_ring_frame(q) for q in q_arr_injector])
             if show_trace_lines:
                 plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
             if particle_injector.clipped:  # if clipped in injector, plot last location
                 plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color)
-            if particle_ring.q_arr is not None and len(particle_ring.q_arr) > 1:  # if made to ring
+            if particle_ring.q_vals is not None and len(particle_ring.q_vals) > 1:  # if made to ring
                 if show_trace_lines:
-                    plt.plot(particle_ring.q_arr[:, 0], particle_ring.q_arr[:, 1], c=color, alpha=.3)
+                    plt.plot(particle_ring.q_vals[:, 0], particle_ring.q_vals[:, 1], c=color, alpha=.3)
                 if not particle_injector.clipped:  # if not clipped in injector plot last ring location
-                    plt.scatter(particle_ring.q_arr[-1, 0], particle_ring.q_arr[-1, 1], marker='x', zorder=100, c=color)
+                    plt.scatter(particle_ring.q_vals[-1, 0], particle_ring.q_vals[-1, 1], marker='x', zorder=100, c=color)
         if save_fig is not None:
             plt.savefig(save_fig, dpi=dpi)
         plt.show()
@@ -289,7 +289,7 @@ class StorageRingModel:
     def trace_through_injector_and_transform_to_ring(self) -> Swarm:
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             self.swarm_injector_initial.copy(), self.h, 1.0, use_fast_mode=True, copy_swarm=False,
-            log_phase_space_coords=True, accelerated=True, use_collisions=self.use_collisions)
+            log_el_phase_space_coords=True, accelerated=True, use_collisions=self.use_collisions)
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                               copy_particles=True)
         return swarm_ring_initial
@@ -357,10 +357,12 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
 
 
 def make_optimal_solution_model(ring_version, use_bumper: bool = True,
-                                use_solenoid_field: bool = True) -> StorageRingModel:
+                                use_solenoid_field: bool = True,use_mag_errors=False,
+                                use_energy_correction: bool = False) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params()
     model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
-                                     use_solenoid_field=use_solenoid_field)
+                                     use_solenoid_field=use_solenoid_field,use_mag_errors=use_mag_errors,
+                                     use_energy_correction=use_energy_correction)
     return model

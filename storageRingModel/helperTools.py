@@ -8,6 +8,7 @@ from typing import Optional, Union, Callable, Any
 
 import multiprocess as mp
 import numpy as np
+from scipy.interpolate import interp1d
 from scipy.stats.qmc import Sobol
 
 from typeHints import RealNum, sequence
@@ -68,7 +69,7 @@ def make_image_cartesian(func: Callable, x_grid_edges: sequence, y_grid_edges: s
     return image, extent
 
 
-def make_dense_curve_1D(x: sequence, y: sequence, num_points: int = 10_000, smoothing: RealNum = 0.0) \
+def make_dense_curve_1D_RBF(x: sequence, y: sequence, num_points: int = 10_000, smoothing: RealNum = 0.0) \
         -> tuple[np.ndarray, np.ndarray]:
     import scipy.interpolate as spi
     x = np.array(x) if isinstance(x, np.ndarray) == False else x
@@ -76,6 +77,12 @@ def make_dense_curve_1D(x: sequence, y: sequence, num_points: int = 10_000, smoo
     FWHM_func = spi.RBFInterpolator(x[:, None], y[:, None], smoothing=smoothing)
     x_dense = np.linspace(x.min(), x.max(), num_points)
     y_dense = np.ravel(FWHM_func(x_dense[:, None]))
+    return x_dense, y_dense
+
+
+def make_dense_curve_1D_linear(x: np.ndarray, y: np.ndarray, num_points: int = 10_000):
+    x_dense = np.linspace(x.min(), x.max(), num_points)
+    y_dense = interp1d(x, y)(x_dense)
     return x_dense, y_dense
 
 
@@ -104,8 +111,10 @@ def inch_to_meter(value_in_inches: RealNum) -> float:
     """Convert freedom units to commie units XD"""
     return .0254 * value_in_inches
 
-def meter_to_cm(value_in_meters: RealNum)-> float:
-    return value_in_meters*100.0
+
+def meter_to_cm(value_in_meters: RealNum) -> float:
+    return value_in_meters * 100.0
+
 
 def gauss_to_tesla(value_in_gauss: RealNum) -> float:
     """Convert units of gauss to tesla"""
