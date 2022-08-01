@@ -67,7 +67,7 @@ class BaseElement:
         self.field_fact: float = 1.0  # factor to modify field values everywhere in space by, including force
         self.numba_functions: dict = {}
 
-    def build_fast_field_helper(self) -> None:
+    def build_fast_field_helper(self, extra_magnets=None) -> None:
         raise NotImplementedError
 
     def set_field_fact(self, field_fact: bool):

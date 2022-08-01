@@ -72,9 +72,9 @@ def test2():
     # test that layer works as expected
     tol = 1e-6
     lensLongitudinalSymmetry = True
-    rp, magnet_width, L0, numLayers = .05, .02, .35, 6
-    lensBounds = [{}] * (numLayers // 2)
-    lensParamsLocked = [{'width': magnet_width, 'length': L0 / numLayers, 'rp': rp} for _ in range(numLayers // 2)]
+    rp, magnet_width, L0, num_layers = .05, .02, .35, 6
+    lensBounds = [{}] * (num_layers // 2)
+    lensParamsLocked = [{'width': magnet_width, 'length': L0 / num_layers, 'rp': rp} for _ in range(num_layers // 2)]
     lensBaseLineParams = [{'rp': rp, 'width': magnet_width, 'length': L0}]
     shimOptimizer = ShimOptimizer('full', lensLongitudinalSymmetry)
     shimOptimizer.set_Lens(lensBounds, lensParamsLocked, lensBaseLineParams)

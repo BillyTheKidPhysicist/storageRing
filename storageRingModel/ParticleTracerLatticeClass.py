@@ -8,6 +8,7 @@ from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
+from latticeElements.wrangleMagnets import collect_valid_neighboring_magpylib_magnets
 from shapelyObjectBuilder import build_shapely_objects
 from storageRingConstraintSolver import is_particle_tracer_lattice_closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
@@ -24,13 +25,16 @@ class ParticleTracerLattice:
     def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
                  jitter_amp: float = 0.0, field_dens_mult: float = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initial_ang=None,
-                 magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False):
+                 magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
+                 include_mag_cross_talk: bool = False):
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
         if jitter_amp > 5e-3:
             raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
                             "depend on this value, and relatively large values were not planned for")
+        if include_mag_cross_talk and use_mag_errors:
+            raise NotImplementedError  # not sure this works.
         self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring, the geometry is the the first element's
         # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
         # is also at the origin, but seceeding elements follow along the positive x axis
@@ -47,6 +51,7 @@ class ParticleTracerLattice:
         self.use_mag_errors = use_mag_errors
         self.use_standard_tube_OD = use_standard_tube_OD
         self.use_standard_mag_size = use_standard_mag_size
+        self.include_mag_cross_talk = include_mag_cross_talk
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linear_elements_to_constrain: list[HalbachLensSim] = []  # elements whos length will be changed when the
@@ -265,10 +270,10 @@ class ParticleTracerLattice:
 
         for el in self.el_list:
             el.fill_post_constrained_parameters()
-        for el in self.el_list:
-            if build_field_helpers:
-                # magnets=collect_valid_neighboring_magnets(el,self)
-                el.build_fast_field_helper()
+        if build_field_helpers:
+            for el in self.el_list:
+                magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
+                el.build_fast_field_helper(extra_magnets=magnets)
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could
         # still be closed

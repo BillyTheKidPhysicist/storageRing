@@ -45,7 +45,7 @@ def el_fringe_space(elementName: str, elementBoreRadius: float) -> float:
     assert elementBoreRadius > 0
     if elementName == 'none':
         return 0.0
-    fringe_fracs = {"combiner": CombinerHalbachLensSim.outerFringeFrac,
+    fringe_fracs = {"combiner": CombinerHalbachLensSim.fringe_frac_outer,
                     "lens": HalbachLensSim.fringe_frac_outer,
                     "bender": HalbachBenderSimSegmented.fringe_frac_outer}
     return fringe_fracs[elementName] * elementBoreRadius

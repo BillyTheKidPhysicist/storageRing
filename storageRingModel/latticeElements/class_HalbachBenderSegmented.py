@@ -12,7 +12,7 @@ from helperTools import arr_product, round_and_make_odd
 from latticeElements.class_BenderIdeal import BenderIdeal
 from latticeElements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
-    INTERP_MAGNET_OFFSET, TINY_INTERP_STEP
+    INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP
 from numbaFunctionsAndObjects import benderHalbachFastFunctions
 from typeHints import sequence
 
@@ -67,7 +67,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
                                                     use_standard_sizes=self.PTL.use_standard_tube_OD)
         # todo: revisit this, I am doubtful of how correct this is
         safety_factor = .95
-        ap_max_interp = safety_factor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_OFFSET) / \
+        ap_max_interp = safety_factor * self.numPointsBoreAp * (self.rp - INTERP_MAGNET_MATERIAL_OFFSET) / \
                         (self.numPointsBoreAp + sqrt(2))
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
@@ -137,7 +137,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.Lo = self.ang * self.ro + 2 * self.L_cap
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
 
-    def build_fast_field_helper(self) -> None:
+    def build_fast_field_helper(self, extra_magnets=None) -> None:
         """compute field values and build fast numba helper"""
         field_data_seg = self.generate_segment_field_data()
         field_data_internal = self.generate_internal_fringe_field_data()
@@ -271,7 +271,7 @@ class HalbachBenderSimSegmented(BenderIdeal):
         y_uc_line = tan(self.ucAng) * x
         minor_radius = sqrt((x - self.rb) ** 2 + z ** 2)
         lens_radius_valid_inner = self.rp - B_GRAD_STEP_SIZE
-        lens_radius_valid_outer = self.rp + self.magnet_width + INTERP_MAGNET_OFFSET
+        lens_radius_valid_outer = self.rp + self.magnet_width + INTERP_MAGNET_MATERIAL_OFFSET
         if abs(y) < (self.Lm + B_GRAD_STEP_SIZE) / 2.0 and \
                 lens_radius_valid_inner <= minor_radius < lens_radius_valid_outer:
             return False

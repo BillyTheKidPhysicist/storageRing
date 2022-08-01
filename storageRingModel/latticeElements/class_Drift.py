@@ -19,7 +19,7 @@ class Drift(LensIdeal):
         self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
         assert self.outer_half_width > ap
 
-    def build_fast_field_helper(self) -> None:
+    def build_fast_field_helper(self, extra_magnets=None) -> None:
         numba_func_constants = (self.ap, self.L, self.input_tilt_angle, self.output_tilt_angle)
 
         force_args = (numba_func_constants,)

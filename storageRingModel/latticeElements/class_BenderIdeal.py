@@ -60,7 +60,7 @@ class BenderIdeal(BaseElement):
             self.L = self.rb * self.ang
             self.Lo = self.ro * self.ang
 
-    def build_fast_field_helper(self) -> None:
+    def build_fast_field_helper(self, extra_magnets=None) -> None:
         numba_func_constants = (self.rb, self.ap, self.ang, self.K, self.field_fact)
 
         force_args = (numba_func_constants,)

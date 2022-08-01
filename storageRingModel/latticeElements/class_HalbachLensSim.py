@@ -3,7 +3,7 @@ from math import tan, sqrt, inf
 from typing import Optional
 
 import numpy as np
-
+from HalbachLensClass import Collection as MagpylibCollection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import is_close_all
 from helperTools import round_and_make_odd
@@ -11,7 +11,7 @@ from latticeElements.Magnets import MagneticLens
 from latticeElements.class_LensIdeal import LensIdeal
 from latticeElements.utilities import MAGNET_ASPECT_RATIO, is_even, \
     ElementTooShortError, halbach_magnet_width, round_down_to_nearest_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
-    INTERP_MAGNET_OFFSET
+    INTERP_MAGNET_MATERIAL_OFFSET
 from numbaFunctionsAndObjects import halbachLensFastFunctions
 
 
@@ -30,12 +30,10 @@ class HalbachLensSim(LensIdeal):
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
-        # assert self.fringe_frac_outer == 1.5 and self.fringe_frac_inner_min == 4.0, "May need to change numgrid points if " \
-        #                                                                             "this changes"
         self.rp = min(rp_layers)
         self.numGridPointsX = round_and_make_odd(21 * PTL.field_dens_mult)
         self.num_grid_points_r = round_and_make_odd(25 * PTL.field_dens_mult)
-        self.fringeFieldLength = max(rp_layers) * self.fringe_frac_outer
+        self.fringe_field_length = max(rp_layers) * self.fringe_frac_outer
         super().__init__(PTL, L, None, self.rp,
                          None)  # todo: there should be multiple inheritance here for geometries
         self.magnet_widths = self.make_or_check_magnet_widths(rp_layers, magnet_widths)
@@ -55,7 +53,7 @@ class HalbachLensSim(LensIdeal):
         imagine two concentric rings on a grid, such that no grid box which has a portion outside the outer ring
         has any portion inside the inner ring. This is to prevent interpolation reaching into magnetic material"""
         # todo: why is this so different from the combiner version? It should be like that version instead
-        ap_max = (self.rp - INTERP_MAGNET_OFFSET) * (1 - sqrt(2) / (self.num_grid_points_r - 1))
+        ap_max = (self.rp - INTERP_MAGNET_MATERIAL_OFFSET) * (1 - sqrt(2) / (self.num_grid_points_r - 1))
         return ap_max
 
     def fill_pre_constrained_parameters(self):
@@ -65,8 +63,8 @@ class HalbachLensSim(LensIdeal):
         self.set_extra_field_length()
         self.fill_geometric_params()
         self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
-                                   self.PTL.use_solenoid_field, self.fringeFieldLength)
-        self.magnet.fill_position_and_orientation_params(self.r1, self.r2, self.nb, self.ne)
+                                   self.PTL.use_solenoid_field, self.fringe_field_length)
+        self.magnet.fill_position_and_orientation_params(self.r1, self.nb)
 
     def set_length(self, L: float) -> None:
         assert L > 0.0
@@ -140,21 +138,20 @@ class HalbachLensSim(LensIdeal):
         mount_thickness = 1e-3  # outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outer_half_width = max(self.rp_layers) + self.magnet_widths[np.argmax(self.rp_layers)] + mount_thickness
 
-    def make_grid_coord_arrays(self, use_symmetry: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def make_grid_coord_arrays(self, use_only_symmetry: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
         tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
         quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
         """
 
-        y_min, y_max = -TINY_INTERP_STEP, self.rp - INTERP_MAGNET_OFFSET
+        y_min, y_max = -TINY_INTERP_STEP, self.rp - INTERP_MAGNET_MATERIAL_OFFSET
         x_min, x_max = -(self.extra_field_length + TINY_INTERP_STEP), self.L_cap + TINY_INTERP_STEP
         num_points_xy, num_points_z = self.num_grid_points_r, self.numGridPointsX
-        if not use_symmetry:  # range will have to fully capture lens.
+        if not use_only_symmetry:  # range will have to fully capture lens.
             y_min = -y_max
             x_max = self.L + self.extra_field_length + TINY_INTERP_STEP
             x_min = -(self.extra_field_length + TINY_INTERP_STEP)
-            assert self.fringe_frac_outer == 1.5  # pointsperslice mildly depends on this value
             points_per_bore_radius = 5
             num_points_z = round_and_make_odd(max([points_per_bore_radius * self.Lm / self.rp, 2 * num_points_z - 1]))
             assert num_points_z < 150  # things might start taking unreasonably long if not careful
@@ -169,16 +166,16 @@ class HalbachLensSim(LensIdeal):
 
         # ignore fringe fields for interior  portion inside then use a 2D plane to represent the inner portion to
         # save resources
-        x_arr, y_arr, z_arr = self.make_grid_coord_arrays(True)
+        _, y_arr, z_arr = self.make_grid_coord_arrays(True)
         lens_center = self.magnet.Lm / 2.0 + self.magnet.x_in_offset
         plane_coords = np.asarray(np.meshgrid(lens_center, y_arr, z_arr)).T.reshape(-1, 3)
-        B_norm_grad, B_norm = self.magnet.get_valid_field_values(plane_coords, B_GRAD_STEP_SIZE, False)
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(plane_coords, B_GRAD_STEP_SIZE)
         data_2D = np.column_stack((plane_coords[:, 1:], B_norm_grad[:, 1:], B_norm))  # 2D is formated as
         # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data_2D
 
-    def make_unshaped_interp_data_3D(self, use_symmetry=True, use_magnet_errors=False,
-                                     extra_magnets=None) -> np.ndarray:
+    def make_unshaped_interp_data_3D(self, use_only_symmetry=True, use_mag_errors=False,
+                                     extra_magnets: list[MagpylibCollection]=None) -> np.ndarray:
         """
         Make 3d field data for interpolation from end of lens region
 
@@ -187,18 +184,18 @@ class HalbachLensSim(LensIdeal):
         longitudinal symmetry. Otherwise, it is exactly half of the lens and fringe fields
 
         """
-        assert not (use_magnet_errors and use_symmetry)
-        x_arr, y_arr, z_arr = self.make_grid_coord_arrays(use_symmetry)
+        assert not (use_mag_errors and use_only_symmetry)
+        x_arr, y_arr, z_arr = self.make_grid_coord_arrays(use_only_symmetry)
 
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)  # note that these coordinates
         # can have the wrong value for z if the magnet length is longer than the fringe field effects.
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
-                                                                 use_magnet_errors, extra_magnets=extra_magnets)
+                                                        use_mag_errors=use_mag_errors, extra_magnets=extra_magnets)
         data_3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
 
         return data_3D
 
-    def make_interp_data_ideal(self) -> tuple[tuple, tuple]:
+    def make_interp_data_unperturbed(self) -> tuple[tuple, tuple]:
         exploit_very_long_lens = True if self.effective_material_length() < self.Lm else False
         interp_data_3D = self.shape_field_data_3D(self.make_unshaped_interp_data_3D())
 
@@ -212,24 +209,23 @@ class HalbachLensSim(LensIdeal):
         assert self.rp - B_GRAD_STEP_SIZE - max_grid_sep > self.max_interp_radius()
         return interp_data_2D, interp_data_3D
 
-    def make_interp_data(self, apply_perturbation, extra_magnets) -> tuple[tuple, tuple, tuple]:
+    def make_interp_data(self, use_only_symmetry, extra_magnets: list[MagpylibCollection]) -> tuple[tuple, tuple, tuple]:
 
         data3D_no_perturb = (np.ones(1) * np.nan,) * 7
 
-        field_data_2D, field_data_3D = self.make_interp_data_ideal()
-        field_data_perturbations = self.make_field_perturbation_data(extra_magnets) if apply_perturbation \
-            else data3D_no_perturb
+        field_data_2D, field_data_3D = self.make_interp_data_unperturbed()
+        field_data_perturbations = data3D_no_perturb if use_only_symmetry else \
+            self.make_field_perturbation_data(extra_magnets)
         return field_data_3D, field_data_2D, field_data_perturbations
 
-    def build_fast_field_helper(self) -> None:
+    def build_fast_field_helper(self, extra_magnets: list[MagpylibCollection]=None) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
-        extra_magnets = None
-        apply_perturbation = True if self.PTL.use_mag_errors or extra_magnets is not None else False
-        field_data = self.make_interp_data(apply_perturbation, extra_magnets)
+        use_only_symmetry = False if (self.PTL.use_mag_errors or extra_magnets is not None) else True
+        field_data = self.make_interp_data(use_only_symmetry, extra_magnets)
 
         numba_func_constants = (
-            self.L, self.ap, self.L_cap, self.extra_field_length, self.field_fact, apply_perturbation)
+            self.L, self.ap, self.L_cap, self.extra_field_length, self.field_fact, use_only_symmetry)
 
         force_args = (numba_func_constants, field_data)
         potential_args = (numba_func_constants, field_data)
@@ -241,16 +237,16 @@ class HalbachLensSim(LensIdeal):
         F_center = np.linalg.norm(self.force(np.asarray([self.L_cap, self.ap / 2, .0])))
         assert F_edge / F_center < .015
 
-    def make_field_perturbation_data(self, extra_magnets) -> tuple:
-        """Make data for fields coming from magnet imperfections and misalingnmet. Imperfect field values are calculated
-        and perfect fiel values are subtracted. The difference is then added later on top of perfect field values. This
-        force is small, and so I can get away with interpolating with low density, while keeping my high density
-        symmetry region. interpolation points inside magnet material are set to zero, so the interpolation may be poor
-        near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of ideal and
-        perturbation interpolation"""
-        data_3D_unperturbed = self.make_unshaped_interp_data_3D(use_symmetry=False, use_magnet_errors=False)
-        data_3D_perturbed = self.make_unshaped_interp_data_3D(use_symmetry=False,
-                                                              use_magnet_errors=self.PTL.use_mag_errors,
+    def make_field_perturbation_data(self, extra_magnets: Optional[list[MagpylibCollection]]) -> tuple:
+        """Make data for fields coming from magnet imperfections, misalingnmets, and cross talk. Imperfect field values
+        are calculatedand perfect fiel values are subtracted. The difference is then added later on top of perfect 
+        field values. This force is small, and so I can get away with interpolating with low density, while keeping my 
+        high density symmetry region. interpolation points inside magnet material are set to zero, so the interpolation
+        may be poor near bore of magnet. This is done to avoid dealing with mistmatch  between good field region of 
+        unperturbed and perturbation interpolation"""
+        data_3D_unperturbed = self.make_unshaped_interp_data_3D(use_only_symmetry=False, use_mag_errors=False)
+        data_3D_perturbed = self.make_unshaped_interp_data_3D(use_only_symmetry=False,
+                                                              use_mag_errors=self.PTL.use_mag_errors,
                                                               extra_magnets=extra_magnets)
 
         assert len(data_3D_perturbed) == len(data_3D_unperturbed)

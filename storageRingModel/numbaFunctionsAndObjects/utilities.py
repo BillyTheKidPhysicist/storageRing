@@ -11,8 +11,9 @@ def full_arctan2(y, x):
     return phi
 
 
-tupleOf3Floats = tuple[float, float, float]
+TupleOf3Floats = tuple[float, float, float]
 nanArr7Tuple = tuple([np.ones(1) * np.nan] * 7)
+DUMMY_FIELD_DATA_3D = (np.ones(1) * np.nan,) * 7
 
 
 class jitclass_Wrapper:
@@ -33,7 +34,7 @@ class jitclass_Wrapper:
 
 
 def misalign_Coords(x: float, y: float, z: float, shift_y: float, shift_z: float, rot_angle_y: float,
-                    rot_angle_z: float) -> tupleOf3Floats:
+                    rot_angle_z: float) -> TupleOf3Floats:
     """Model element misalignment by misaligning coords. First do rotations about (0,0,0), then displace. Element
     misalignment has the opposite applied effect. Force will be needed to be rotated"""
     x, y = np.cos(-rot_angle_z) * x - np.sin(-rot_angle_z) * y, np.sin(-rot_angle_z) * x + np.cos(
@@ -45,7 +46,7 @@ def misalign_Coords(x: float, y: float, z: float, shift_y: float, shift_z: float
     return x, y, z
 
 
-def rotate_Force(Fx: float, Fy: float, Fz: float, rot_angle_y: float, rot_angle_z: float) -> tupleOf3Floats:
+def rotate_Force(Fx: float, Fy: float, Fz: float, rot_angle_y: float, rot_angle_z: float) -> TupleOf3Floats:
     """After rotating and translating coords to model element misalignment, the force must now be rotated as well"""
     Fx, Fy = np.cos(rot_angle_z) * Fx - np.sin(rot_angle_z) * Fy, np.sin(rot_angle_z) * Fx + np.cos(
         rot_angle_z) * Fy  # rotate about z

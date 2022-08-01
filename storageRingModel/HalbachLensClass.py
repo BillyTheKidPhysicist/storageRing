@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_to_meter, radians, within_tol, time
-from latticeElements.utilities import  halbach_magnet_width,max_tube_IR_in_segmented_bend
+from latticeElements.utilities import halbach_magnet_width, max_tube_IR_in_segmented_bend
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 Tuple3Float = tuple[float, float, float]
@@ -112,7 +112,7 @@ class Sphere:
         return arr
 
     def B_symmetry(self, r: np.ndarray, rotations: float, negative_symmetry: float, rotation_angle: float,
-                   planeReflection: float) -> np.ndarray:
+                   plane_reflection: float) -> np.ndarray:
         rot_angle = rotation_angle * rotations
         R = np.array([[np.cos(rot_angle), -np.sin(rot_angle)], [np.sin(rot_angle), np.cos(rot_angle)]])
         r0_sym = self.r0.copy()
@@ -121,7 +121,7 @@ class Sphere:
         m_sym[:2] = R @ m_sym[:2]
         if negative_symmetry:
             m_sym[:2] *= (-1) ** rotations
-        if planeReflection:  # another dipole on the other side of the z=0 line
+        if plane_reflection:  # another dipole on the other side of the z=0 line
             r0_sym[2] = -r0_sym[2]
             m_sym[-1] *= -1
         # plt.quiver(r0_sym[0], r0_sym[1], m_sym[0], m_sym[1])
@@ -136,30 +136,32 @@ class Collection(_Collection):
         super().__init__(*sources, **kwargs)
 
     def rotate(self, rotation, anchor=None, start=-1):
-        super().rotate(rotation, anchor=0.0, start=start)
+        if anchor is not None and not isinstance(anchor, (int, float)):  # make more general
+            anchor = [entry * METER_TO_MM for entry in anchor]
+        super().rotate(rotation, anchor=anchor, start=start)
 
     def move(self, displacement, start="auto"):
         displacement = [entry * METER_TO_MM for entry in displacement]
         for child in self.children_all:
             apply_move(child, displacement)
 
-    def _getB_wrapper(self, evalCoords_mm: np.ndarray, sizeMax: float = 500_000) -> np.ndarray:
+    def _getB_wrapper(self, eval_coords_mm: np.ndarray, size_max: float = 500_000) -> np.ndarray:
         """To reduce ram usage, split the sources up into smaller chunks. A bit slower, but works realy well. Only
         applied to sources when ram usage would be too hight"""
         sources_all = self.sources_all
-        size = len(evalCoords_mm) * len(self.sources_all)
-        splits = min([int(size / sizeMax), len(sources_all)])
+        size = len(eval_coords_mm) * len(self.sources_all)
+        splits = min([int(size / size_max), len(sources_all)])
         splits = 1 if splits < 1 else splits
         split_size = math.ceil(len(sources_all) / splits)
         split_sources = [sources_all[split_size * i:split_size * (i + 1)] for i in range(splits)] if splits > 1 else [
             sources_all]
-        B_vec = np.zeros(evalCoords_mm.shape)
+        B_vec = np.zeros(eval_coords_mm.shape)
         counter = 0
         for sources in split_sources:
             if len(sources) == 0:
                 break
             counter += len(sources)
-            B_vec += getBH_level2(sources, evalCoords_mm, sumup=True, squeeze=True, pixel_agg=None, field="B")
+            B_vec += getBH_level2(sources, eval_coords_mm, sumup=True, squeeze=True, pixel_agg=None, field="B")
         B_vec = B_vec[0] if len(B_vec) == 1 else B_vec
         assert counter == len(sources_all)
         return B_vec
@@ -619,7 +621,7 @@ class SegmentedBenderHalbach(Collection):
             assert angular_length < angle_symmetry_cutoff
             assert not np.any(
                 (self.lens_angles_arr < 0) & (
-                            self.lens_angles_arr > angle_symmetry_cutoff - 2 * np.pi))  # see docstring
+                        self.lens_angles_arr > angle_symmetry_cutoff - 2 * np.pi))  # see docstring
             theta_arr_coords[
                 theta_arr_coords < angle_symmetry_cutoff - 2 * np.pi] += 2 * np.pi  # if an angle is larger than 3.14,
             # arctan2 doesn't know this, and confines angles between -pi to pi. so I assume the bender starts at 0, then
@@ -671,7 +673,7 @@ class SegmentedBenderHalbach(Collection):
         of the magnets where they approach the bending radius the closest"""
 
         coil_diam = METER_TO_MM * 2 * max_tube_IR_in_segmented_bend(self.rb, self.rp, self.Lm,
-                                                                    tube_wall_thickness=MAGNET_WIRE_DIAM/2.0)
+                                                                    tube_wall_thickness=MAGNET_WIRE_DIAM / 2.0)
         angle_start = self.lens_angles_arr[0] if self.use_half_cap_end[0] else self.lens_angles_arr[0] - self.UCAngle
         angle_end = self.lens_angles_arr[-1] if self.use_half_cap_end[1] else self.lens_angles_arr[-1] + self.UCAngle
         circumference = self.rb * (angle_end - angle_start)

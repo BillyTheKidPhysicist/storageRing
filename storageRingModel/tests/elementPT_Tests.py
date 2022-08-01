@@ -403,7 +403,6 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
             x, y, z = coords_cartesian[index]
             q_el = np.asarray([x, y, z])
             deltaF_el = elDeviation.force(q_el) - elPerfect.force(q_el)
-            print(deltaF_el, deltaF_Direct)
             assert is_close_all(deltaF_el, deltaF_Direct, abstol=1e-6)
             deltaV_El = elDeviation.magnetic_potential(q_el) - elPerfect.magnetic_potential(q_el)
             assert isclose(deltaV_El, deltaV_Direct, abs_tol=1e-6)

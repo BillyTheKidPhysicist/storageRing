@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 from numbaFunctionsAndObjects.interpFunctions import vec_interp3D, interp2D, scalar_interp3D
-from numbaFunctionsAndObjects.utilities import tupleOf3Floats, nanArr7Tuple
+from numbaFunctionsAndObjects.utilities import TupleOf3Floats, nanArr7Tuple
 
 spec_Lens_Halbach = [
     ('xArrEnd', numba.float64[::1]),
@@ -70,7 +70,7 @@ class LensHalbachFieldHelper_Numba:
         V = interp2D(y, z, self.yArrIn, self.z_arrIn, self.VArrIn)
         return V
 
-    def _force_Func_Outer(self, x, y, z, useImperfectInterp=False) -> tupleOf3Floats:
+    def _force_Func_Outer(self, x, y, z, useImperfectInterp=False) -> TupleOf3Floats:
         """Wrapper for interpolation of force fields at ends of lens. see self.force"""
         if not useImperfectInterp:
             Fx, Fy, Fz = vec_interp3D(x, y, z, self.xArrEnd, self.yArrEnd, self.z_arrEnd,
@@ -80,14 +80,14 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = vec_interp3D(x, y, z, x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr)
         return Fx, Fy, Fz
 
-    def _force_Func_Inner(self, y: float, z: float) -> tupleOf3Floats:
+    def _force_Func_Inner(self, y: float, z: float) -> TupleOf3Floats:
         """Wrapper for interpolation of force fields of plane at center lens. see self.force"""
         Fx = 0.0
         Fy = interp2D(y, z, self.yArrIn, self.z_arrIn, self.FyArrIn)
         Fz = interp2D(y, z, self.yArrIn, self.z_arrIn, self.Fz_arrIn)
         return Fx, Fy, Fz
 
-    def force(self, x: float, y: float, z: float) -> tupleOf3Floats:
+    def force(self, x: float, y: float, z: float) -> TupleOf3Floats:
         """Force on lithium atom. Functions to combine perfect force and extra force from imperfections.
          Perturbation force is messed up force minus perfect force."""
 
@@ -98,7 +98,7 @@ class LensHalbachFieldHelper_Numba:
             Fx, Fy, Fz = Fx + deltaFx, Fy + deltaFy, Fz + deltaFz
         return Fx, Fy, Fz
 
-    def _force(self, x: float, y: float, z: float) -> tupleOf3Floats:
+    def _force(self, x: float, y: float, z: float) -> TupleOf3Floats:
         """
         Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
 
@@ -136,7 +136,7 @@ class LensHalbachFieldHelper_Numba:
         # Fx, Fy, Fz = self.baseClass.rotate_Force_For_Misalignment(Fx, Fy, Fz)
         return Fx, Fy, Fz
 
-    def _force_Field_Perturbations(self, x0: float, y0: float, z0: float) -> tupleOf3Floats:
+    def _force_Field_Perturbations(self, x0: float, y0: float, z0: float) -> TupleOf3Floats:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan, np.nan, np.nan
         # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)

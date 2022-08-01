@@ -164,6 +164,15 @@ class Swarm:
     def __init__(self):
         self.particles: list[Particle] = []  # list of particles in swarm
 
+    def __iter__(self) -> Iterable[Particle]:
+        return (particle for particle in self.particles)
+
+    def __len__(self):
+        return len(self.particles)
+
+    def __getitem__(self, index):
+        return self.particles[index]
+
     def add_new_particle(self, qi: Optional[np.ndarray] = None, pi: Union[np.ndarray] = None) -> None:
         # add an additional particle to phase space
         # qi: spatial coordinates
@@ -214,12 +223,6 @@ class Swarm:
             return num_survived / len(self.particles)
         else:
             return num_survived
-
-    def __iter__(self) -> Iterable[Particle]:
-        return (particle for particle in self.particles)
-
-    def __len__(self):
-        return len(self.particles)
 
     def copy(self):
         return copy.deepcopy(self)

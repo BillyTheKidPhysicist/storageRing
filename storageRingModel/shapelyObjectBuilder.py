@@ -29,7 +29,7 @@ def make_halbach_lens_outer_points(el: Element) -> list[np.ndarray]:
     assert type(el) is HalbachLensSim
     half_width = el.outer_half_width
     vacuum_tube_outer_width = el.ap + TUBE_WALL_THICKNESS
-    fringe_length = el.fringeFieldLength
+    fringe_length = el.fringe_field_length
     point1 = np.asarray([0.0, vacuum_tube_outer_width])
     point2 = np.asarray([fringe_length, vacuum_tube_outer_width])
     point3 = np.asarray([fringe_length, half_width])
