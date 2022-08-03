@@ -2,8 +2,11 @@ from typing import Optional
 
 import numpy as np
 
+from HalbachLensClass import Collection
 from constants import TUBE_WALL_THICKNESS
+from helperTools import arr_product
 from latticeElements.class_LensIdeal import LensIdeal
+from latticeElements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
 from numbaFunctionsAndObjects import driftFastFunctions
 
 
@@ -19,11 +22,26 @@ class Drift(LensIdeal):
         self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
         assert self.outer_half_width > ap
 
-    def build_fast_field_helper(self, extra_magnets=None) -> None:
-        numba_func_constants = (self.ap, self.L, self.input_tilt_angle, self.output_tilt_angle)
+    def make_field_data(self, extra_magnets: Collection):
 
-        force_args = (numba_func_constants,)
-        potential_args = (numba_func_constants,)
+        if extra_magnets is not None:
+            x_vals = np.linspace(TINY_INTERP_STEP, self.L + TINY_INTERP_STEP, 30)
+            r_vals = np.linspace(-(self.ap + TINY_INTERP_STEP), (self.ap + TINY_INTERP_STEP), 30)
+            coords = arr_product(x_vals, r_vals, r_vals)
+            B_norm_grad, B_norm = extra_magnets.B_norm_grad(coords, return_norm=True, dx=B_GRAD_STEP_SIZE)
+        else:
+            big_pos_val = 1e12  # to prevent almost any chance of out of bounds issue with big drift regions
+            dummy_pos_vals = [-big_pos_val, 0.0, big_pos_val]
+            coords = arr_product(dummy_pos_vals, dummy_pos_vals, dummy_pos_vals)
+            B_norm_grad, B_norm = np.zeros((len(coords), 3)), np.zeros(len(coords))
+        unshaped_data = np.column_stack((coords, B_norm_grad, B_norm))
+        return self.shape_field_data_3D(unshaped_data)
+
+    def build_fast_field_helper(self, extra_magnets: Collection = None) -> None:
+        numba_func_constants = (self.ap, self.L, self.input_tilt_angle, self.output_tilt_angle)
+        field_data = self.make_field_data(extra_magnets)
+        force_args = (numba_func_constants, field_data)
+        potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
         self.assign_numba_functions(driftFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)

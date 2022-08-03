@@ -8,7 +8,7 @@ from constants import DEFAULT_ATOM_SPEED
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
-from latticeElements.wrangleMagnets import collect_valid_neighboring_magpylib_magnets
+from latticeElements.arrangeMagnets import collect_valid_neighboring_magpylib_magnets
 from shapelyObjectBuilder import build_shapely_objects
 from storageRingConstraintSolver import is_particle_tracer_lattice_closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
@@ -288,6 +288,7 @@ class ParticleTracerLattice:
                     build_field_helpers: bool = True) -> None:
         # for element in self.el_list:
         #     element.build()
+        assert len(self)>0
         self.catch_errors(constrain)
         if build_lattice:
             self.build_lattice(constrain, build_field_helpers)

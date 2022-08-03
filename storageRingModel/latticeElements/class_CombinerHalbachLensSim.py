@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from HalbachLensClass import Collection as MagpylibCollection
+from HalbachLensClass import Collection
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
 from helperTools import is_close_all
 from helperTools import round_and_make_odd
@@ -136,7 +136,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         field_data = self.make_field_data(x_arr, y_arr, z_arr)
         return field_data
 
-    def make_full_field_data(self, extra_magnets: list[MagpylibCollection] = None) -> tuple[ndarray, ...]:
+    def make_full_field_data(self, extra_magnets: Collection = None) -> tuple[ndarray, ...]:
         # this does not work because I am not carefully accounting for how the interpolation region intrudes into
         # the end of the magnet when using a full grid
         x_vals, y_vals, z_vals = self.make_full_grid_coord_arrays()
@@ -172,7 +172,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         field_data[0][:] = x_arr
         return field_data
 
-    def build_fast_field_helper(self, extra_magnets: list[MagpylibCollection] = None) -> None:
+    def build_fast_field_helper(self, extra_magnets: Collection = None) -> None:
         self.set_extra_field_length()
         use_symmetry = False if (self.PTL.use_mag_errors or extra_magnets is not None) else True
         if use_symmetry:
@@ -275,7 +275,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         ap_max_interp = radius_interp_region - np.sqrt(2) * (y_arr[1] - y_arr[0])
         return ap_max_interp
 
-    def make_field_data(self, x_arr, y_arr, z_arr, extra_magnets: list[MagpylibCollection] = None,
+    def make_field_data(self, x_arr, y_arr, z_arr, extra_magnets: Collection = None,
                         use_mag_errors: bool = False) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)

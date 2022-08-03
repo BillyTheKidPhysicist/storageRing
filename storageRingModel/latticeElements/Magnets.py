@@ -88,7 +88,7 @@ class MagneticLens(MagneticOptic):
         return valid_indices
 
     def get_valid_field_values(self, coords: np.ndarray, interp_step_size: float, use_mag_errors: bool = False,
-                               extra_magnets: list = None, interp_rounding_guard: float = 1e-12) -> tuple[
+                               extra_magnets: Collection = None, interp_rounding_guard: float = 1e-12) -> tuple[
         B_Vec_Arr, B_Norm_Arr]:
         assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
         interp_step_size_valid = interp_step_size + interp_rounding_guard
@@ -96,6 +96,7 @@ class MagneticLens(MagneticOptic):
         col = Collection([self.make_magpylib_magnets(use_mag_errors)])
         if extra_magnets is not None:
             col.add(extra_magnets)
+            # col.show()
         B_norm_grad, B_norm = np.zeros((len(valid_indices), 3)) * np.nan, np.ones(len(valid_indices)) * np.nan
         B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                             return_norm=True, dx=interp_step_size)

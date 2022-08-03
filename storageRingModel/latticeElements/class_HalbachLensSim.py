@@ -3,7 +3,7 @@ from math import tan, sqrt, inf
 from typing import Optional
 
 import numpy as np
-from HalbachLensClass import Collection as MagpylibCollection
+from HalbachLensClass import Collection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import is_close_all
 from helperTools import round_and_make_odd
@@ -175,7 +175,7 @@ class HalbachLensSim(LensIdeal):
         return data_2D
 
     def make_unshaped_interp_data_3D(self, use_only_symmetry=True, use_mag_errors=False,
-                                     extra_magnets: list[MagpylibCollection]=None) -> np.ndarray:
+                                     extra_magnets: Collection=None) -> np.ndarray:
         """
         Make 3d field data for interpolation from end of lens region
 
@@ -209,7 +209,7 @@ class HalbachLensSim(LensIdeal):
         assert self.rp - B_GRAD_STEP_SIZE - max_grid_sep > self.max_interp_radius()
         return interp_data_2D, interp_data_3D
 
-    def make_interp_data(self, use_only_symmetry, extra_magnets: list[MagpylibCollection]) -> tuple[tuple, tuple, tuple]:
+    def make_interp_data(self, use_only_symmetry, extra_magnets: Collection) -> tuple[tuple, tuple, tuple]:
 
         data3D_no_perturb = (np.ones(1) * np.nan,) * 7
 
@@ -218,7 +218,7 @@ class HalbachLensSim(LensIdeal):
             self.make_field_perturbation_data(extra_magnets)
         return field_data_3D, field_data_2D, field_data_perturbations
 
-    def build_fast_field_helper(self, extra_magnets: list[MagpylibCollection]=None) -> None:
+    def build_fast_field_helper(self, extra_magnets: Collection=None) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
         use_only_symmetry = False if (self.PTL.use_mag_errors or extra_magnets is not None) else True
@@ -237,7 +237,7 @@ class HalbachLensSim(LensIdeal):
         F_center = np.linalg.norm(self.force(np.asarray([self.L_cap, self.ap / 2, .0])))
         assert F_edge / F_center < .015
 
-    def make_field_perturbation_data(self, extra_magnets: Optional[list[MagpylibCollection]]) -> tuple:
+    def make_field_perturbation_data(self, extra_magnets: Optional[Collection]) -> tuple:
         """Make data for fields coming from magnet imperfections, misalingnmets, and cross talk. Imperfect field values
         are calculatedand perfect fiel values are subtracted. The difference is then added later on top of perfect 
         field values. This force is small, and so I can get away with interpolating with low density, while keeping my 
