@@ -10,7 +10,8 @@ INJECTOR_TUNABILITY_LENGTH = 2e-2
 
 DEFAULT_SYSTEM_OPTIONS = LockedDict({'use_mag_errors': False, 'combiner_seed': None, 'use_solenoid_field': False,
                                      'has_bumper': False, 'use_standard_tube_OD': False,
-                                     'use_standard_mag_size': False, 'include_mag_cross_talk_in_ring':False})
+                                     'use_standard_mag_size': False, 'include_mag_cross_talk_in_ring':False,
+                                     'include_misalignments': False})
 
 # flange outside diameters
 flange_OD: LockedDict = LockedDict({

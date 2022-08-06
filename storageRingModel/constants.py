@@ -29,6 +29,7 @@ ROOM_TEMPERATURE: float = 293.15  # room temperature in Kelvin
 MIN_MAGNET_MOUNT_THICKNESS: float = 1e-3  # Nominal minimum material thickness for magnet mount, m. At thinnest point
 FLAT_WALL_VACUUM_THICKNESS: float = _inch_To_Meter(1 / 8)  # minimum thickness of a flat wall under vacuum with
 # dimension less  than 1x1 foot
+ASSEMBLY_TOLERANCE: float= 500e-6 #half a mm in any direction is reasonable
 
 gas_masses= {'He':4.0,'H2':2.0}
 

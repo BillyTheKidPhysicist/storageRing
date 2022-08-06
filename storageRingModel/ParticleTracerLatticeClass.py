@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
+from latticeElements.arrangeMagnets import collect_valid_neighboring_magpylib_magnets
 from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
-from latticeElements.arrangeMagnets import collect_valid_neighboring_magpylib_magnets
 from shapelyObjectBuilder import build_shapely_objects
 from storageRingConstraintSolver import is_particle_tracer_lattice_closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
@@ -26,7 +26,7 @@ class ParticleTracerLattice:
                  jitter_amp: float = 0.0, field_dens_mult: float = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initial_ang=None,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
-                 include_mag_cross_talk: bool = False):
+                 include_mag_cross_talk: bool = False, include_misalignments: bool = False):
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
@@ -52,6 +52,7 @@ class ParticleTracerLattice:
         self.use_standard_tube_OD = use_standard_tube_OD
         self.use_standard_mag_size = use_standard_mag_size
         self.include_mag_cross_talk = include_mag_cross_talk
+        self.include_misalignments = include_misalignments
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linear_elements_to_constrain: list[HalbachLensSim] = []  # elements whos length will be changed when the
@@ -264,7 +265,6 @@ class ParticleTracerLattice:
 
         for el in self.el_list:
             el.fill_pre_constrained_parameters()
-
         floor_plan = solve_Floor_Plan(self, constrain)
         update_and_place_elements_from_floor_plan(self, floor_plan)
 
@@ -288,7 +288,7 @@ class ParticleTracerLattice:
                     build_field_helpers: bool = True) -> None:
         # for element in self.el_list:
         #     element.build()
-        assert len(self)>0
+        assert len(self) > 0
         self.catch_errors(constrain)
         if build_lattice:
             self.build_lattice(constrain, build_field_helpers)

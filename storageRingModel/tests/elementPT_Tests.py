@@ -46,6 +46,7 @@ class PTL_Dummy:
         self.magnet_grade = 'N52'
         self.use_standard_tube_OD = False
         self.use_standard_mag_size = False
+        self.include_misalignments=False
 
 
 class ElementTestHelper:

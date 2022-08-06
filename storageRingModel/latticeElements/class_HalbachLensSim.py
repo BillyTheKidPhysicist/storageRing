@@ -3,6 +3,7 @@ from math import tan, sqrt, inf
 from typing import Optional
 
 import numpy as np
+
 from HalbachLensClass import Collection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import is_close_all
@@ -175,7 +176,8 @@ class HalbachLensSim(LensIdeal):
         return data_2D
 
     def make_unshaped_interp_data_3D(self, use_only_symmetry=True, use_mag_errors=False,
-                                     extra_magnets: Collection=None) -> np.ndarray:
+                                     extra_magnets: Collection = None,
+                                     include_misalignments: bool = False) -> np.ndarray:
         """
         Make 3d field data for interpolation from end of lens region
 
@@ -190,7 +192,9 @@ class HalbachLensSim(LensIdeal):
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)  # note that these coordinates
         # can have the wrong value for z if the magnet length is longer than the fringe field effects.
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
-                                                        use_mag_errors=use_mag_errors, extra_magnets=extra_magnets)
+                                                                 use_mag_errors=use_mag_errors,
+                                                                 extra_magnets=extra_magnets,
+                                                                 include_misalignments=include_misalignments)
         data_3D = np.column_stack((volume_coords, B_norm_grad, B_norm))
 
         return data_3D
@@ -218,10 +222,11 @@ class HalbachLensSim(LensIdeal):
             self.make_field_perturbation_data(extra_magnets)
         return field_data_3D, field_data_2D, field_data_perturbations
 
-    def build_fast_field_helper(self, extra_magnets: Collection=None) -> None:
+    def build_fast_field_helper(self, extra_magnets: Collection = None) -> None:
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
-        use_only_symmetry = False if (self.PTL.use_mag_errors or extra_magnets is not None) else True
+        use_only_symmetry = False if (
+                    self.PTL.use_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
         field_data = self.make_interp_data(use_only_symmetry, extra_magnets)
 
         numba_func_constants = (
@@ -247,17 +252,16 @@ class HalbachLensSim(LensIdeal):
         data_3D_unperturbed = self.make_unshaped_interp_data_3D(use_only_symmetry=False, use_mag_errors=False)
         data_3D_perturbed = self.make_unshaped_interp_data_3D(use_only_symmetry=False,
                                                               use_mag_errors=self.PTL.use_mag_errors,
-                                                              extra_magnets=extra_magnets)
+                                                              extra_magnets=extra_magnets,
+                                                              include_misalignments=self.PTL.include_misalignments)
 
         assert len(data_3D_perturbed) == len(data_3D_unperturbed)
         assert is_close_all(data_3D_perturbed[:, :3], data_3D_unperturbed[:, :3], 1e-12)
 
-        data_3D_perturbed[np.isnan(data_3D_perturbed)] = 0.0
-        data_3D_unperturbed[np.isnan(data_3D_unperturbed)] = 0.0
         coords = data_3D_unperturbed[:, :3]
         field_vals_difference = data_3D_perturbed[:, 3:] - data_3D_unperturbed[:, 3:]
         data_3D_diff = np.column_stack((coords, field_vals_difference))
-        data_3D_diff[np.isnan(data_3D_diff)] = 0.0
+        # data_3D_diff[np.isnan(data_3D_diff)] = 0.0
         data_3D_diff = tuple(self.shape_field_data_3D(data_3D_diff))
         return data_3D_diff
 

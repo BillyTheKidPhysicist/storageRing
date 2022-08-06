@@ -63,7 +63,7 @@ def calculate_trajectory_length(qTracedArr: np.ndarray) -> float:
 
 
 def make_halbach_combiner_force_function(el) -> Callable:
-    lens = el.magnet.make_magpylib_magnets(el.PTL.use_mag_errors)
+    lens = el.magnet.make_magpylib_magnets(False, False)
 
     def force_func(q):
         if el.space < q[0] < el.Lm + el.space:

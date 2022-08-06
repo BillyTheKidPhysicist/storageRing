@@ -347,10 +347,11 @@ class StorageRingModel:
 def build_storage_ring_model(ring_params, injector_params, ring_version, num_particles: int = 1024,
                              use_collisions: bool = False, include_mag_cross_talk: bool = False,
                              use_energy_correction: bool = False, use_mag_errors: bool = False,
-                             use_solenoid_field: bool = True, use_bumper: bool = False):
+                             use_solenoid_field: bool = True, use_bumper: bool = False,
+                             include_misalignments: bool = False):
     """Convenience function for building a StorageRingModel"""
     options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
-               'include_mag_cross_talk_in_ring': include_mag_cross_talk}
+               'include_mag_cross_talk_in_ring': include_mag_cross_talk, 'include_misalignments': include_misalignments}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
                              num_particles=num_particles, use_collisions=use_collisions,
@@ -361,12 +362,14 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
 def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 use_solenoid_field: bool = True, use_mag_errors=False,
                                 use_energy_correction: bool = False,
-                                include_mag_cross_talk: bool = False) -> StorageRingModel:
+                                include_mag_cross_talk: bool = False,
+                                include_misalignments: bool = False) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params()
     model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
                                      use_solenoid_field=use_solenoid_field, use_mag_errors=use_mag_errors,
                                      use_energy_correction=use_energy_correction,
-                                     include_mag_cross_talk=include_mag_cross_talk)
+                                     include_mag_cross_talk=include_mag_cross_talk,
+                                     include_misalignments=include_misalignments)
     return model

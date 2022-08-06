@@ -40,28 +40,9 @@ def angle(norm) -> float:
     return full_arctan2(norm[1], norm[0])
 
 
-def field_generator_in_different_frame(magnet1, magnet2) -> Collection:
-    assert np.all(magnet1.norm_in_el == magnet2.norm_in_el) and np.all(magnet1.norm_out_el == magnet2.norm_out_el)
-    magnets = magnet2.make_magpylib_magnets(False)
-    magnets.move(-magnet2.r_in_el)
-    psi = angle(magnet2.norm_out_lab) - angle(magnet1.norm_out_lab)
-    R = Rot.from_rotvec([0, 0, psi])
-    magnets.rotate(R, anchor=(0, 0, 0))
-    magnets.move(magnet1.r_in_el)
-    deltar_lab = magnet2.r_in_lab - magnet1.r_in_lab
-    theta = -angle(magnet1.norm_out_lab)
-    R = Rot.from_rotvec([0, 0, theta]).as_matrix()
-    deltar_el = R @ deltar_lab
-    magnets.move(deltar_el)
-    if magnet1.combiner:
-        R = Rot.from_rotvec([0, 0.0, np.pi])
-        magnets.rotate(R, anchor=(magnet1.r_in_el + magnet1.r_out_el) / 2.0)
-    return magnets
-
-
-def move_combiner_to_target_frame(el_combiner: CombinerHalbachLensSim, el_target) -> Collection:
+def move_combiner_to_target_frame(el_combiner: CombinerHalbachLensSim, el_target, magnet_options) -> Collection:
     r_in_el = el_combiner.transform_lab_coords_into_element_frame(el_combiner.r1)
-    magnets = el_combiner.magnet.make_magpylib_magnets(False)
+    magnets = el_combiner.magnet.make_magpylib_magnets(*magnet_options)
     magnets.move(-r_in_el)
     theta_el = np.pi + (angle(el_combiner.ne) - angle(el_target.ne))
     R = Rot.from_rotvec([0, 0, theta_el])
@@ -73,8 +54,8 @@ def move_combiner_to_target_frame(el_combiner: CombinerHalbachLensSim, el_target
     return magnets
 
 
-def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element):
-    magnets = el_to_move.magnet.make_magpylib_magnets(False)
+def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element,magnet_options):
+    magnets = el_to_move.magnet.make_magpylib_magnets(*magnet_options)
     if type(el_target) is CombinerHalbachLensSim:  # the combiner is annoying to deal with because I defined the input
         # not at the origin, but rather along the x axis with some y offset
         # move input to 0,0 in el frame
@@ -103,17 +84,18 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element):
         return magnets
 
 
-def field_generator_in_different_frame1(el_to_move: Element, el_target: Element):
+def field_generator_in_different_frame1(el_to_move: Element, el_target: Element, magnet_options: tuple):
     if type(el_to_move) is CombinerHalbachLensSim:
-        return move_combiner_to_target_frame(el_to_move, el_target)
+        return move_combiner_to_target_frame(el_to_move, el_target,magnet_options)
     else:
-        return move_lens_to_target_el_frame(el_to_move, el_target)
+        return move_lens_to_target_el_frame(el_to_move, el_target,magnet_options)
 
 
 def collect_valid_neighboring_magpylib_magnets(el: Element, lattice):
     if is_valid_interp_el(el):
+        magnet_options=(lattice.use_mag_errors,lattice.include_misalignments)
         neighboring_elements = [_el for _el in lattice if is_valid_neighbors(el, _el)]
-        col = Collection([field_generator_in_different_frame1(el_neighb, el) for el_neighb in neighboring_elements])
+        col = Collection([field_generator_in_different_frame1(el_neighb, el,magnet_options) for el_neighb in neighboring_elements])
         return col
     else:
         return None
