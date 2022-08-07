@@ -16,6 +16,7 @@ _inch_To_Meter = lambda x: .0254 * x
 gauss_to_tesla = lambda x: x / 10_000.0
 
 MASS_LITHIUM_7: float = 1.165034676538e-26  # mass of lithium 7, kg
+SIMULATION_MASS: float =1.0
 MASS_HELIUM: float = 6.64216e-27  # mass of lithium 7, kg
 BHOR_MAGNETON: float = 9.274009994e-24  # Bohr magneton, SI
 BOLTZMANN_CONSTANT: float = 1.38064852e-23  # Boltzman constant, SI

@@ -6,15 +6,15 @@ from numbaFunctionsAndObjects.interpFunctions import magnetic_potential_interp_3
 from numbaFunctionsAndObjects.utilities import TupleOf3Floats
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def is_coord_in_vacuum(x: float, y: float, z: float, params) -> bool:
-    L, ap, L_cap, extra_field_length, field_fact, use_only_symmetry = params
+    L, ap, L_cap, field_fact, use_only_symmetry = params
     return 0 <= x <= L and y ** 2 + z ** 2 < ap ** 2
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def force(x: float, y: float, z: float, params, field_data) -> TupleOf3Floats:
-    L, ap, L_cap, extra_field_length, field_fact, use_only_symmetry = params
+    L, ap, L_cap, field_fact, use_only_symmetry = params
     field_data_3D, field_data_2D, field_data_perturbations = field_data
     Fx, Fy, Fz = _force_symmetry(x, y, z, params, field_data_2D, field_data_3D)
     if not use_only_symmetry and not np.isnan(Fx):
@@ -25,7 +25,7 @@ def force(x: float, y: float, z: float, params, field_data) -> TupleOf3Floats:
     return Fx, Fy, Fz
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def _force_symmetry(x: float, y: float, z: float, params, field_data_2D, field_data_3D) -> TupleOf3Floats:
     """
     Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper.
@@ -34,7 +34,7 @@ def _force_symmetry(x: float, y: float, z: float, params, field_data_2D, field_d
     long enough, the inner region is modeled as a single plane as well. (nan,nan,nan) is returned if coordinate
     is outside vacuum tube
     """
-    L, ap, L_cap, extra_field_length, field_fact, use_only_symmetry = params
+    L, ap, L_cap, field_fact, use_only_symmetry = params
 
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan, np.nan, np.nan
@@ -43,11 +43,11 @@ def _force_symmetry(x: float, y: float, z: float, params, field_data_2D, field_d
     Fz_symmetry_fact = 1.0 if z >= 0.0 else -1.0
     y = abs(y)  # confine to upper right quadrant
     z = abs(z)
-    if -extra_field_length <= x <= L_cap:  # at beginning of lens
+    if 0.0 <= x <= L_cap:  # at beginning of lens
         Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_3D)
     elif L_cap < x <= L - L_cap:  # if long enough, model interior as uniform in x
         Fx, Fy, Fz = force_interp_2D(y, z, field_data_2D)
-    elif L - L_cap <= x <= L + extra_field_length:  # at end of lens
+    elif L - L_cap <= x <= L:  # at end of lens
         x = L - x
         Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_3D)
         Fx = -Fx
@@ -60,9 +60,9 @@ def _force_symmetry(x: float, y: float, z: float, params, field_data_2D, field_d
     return Fx, Fy, Fz
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def magnetic_potential(x: float, y: float, z: float, params, field_data) -> float:
-    L, ap, L_cap, extra_field_length, field_fact, use_only_symmetry = params
+    L, ap, L_cap, field_fact, use_only_symmetry = params
     field_data_3D, field_data_2D, field_data_perturbations = field_data
     V = _magnetic_potential_symmetry(x, y, z, params, field_data_2D, field_data_3D)
     if not use_only_symmetry and not np.isnan(V):
@@ -72,7 +72,7 @@ def magnetic_potential(x: float, y: float, z: float, params, field_data) -> floa
     return V
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def _magnetic_potential_symmetry(x: float, y: float, z: float, params, field_data_2D, field_data_3D) -> float:
     """
     Magnetic potential energy of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper
@@ -83,17 +83,17 @@ def _magnetic_potential_symmetry(x: float, y: float, z: float, params, field_dat
     is outside vacuum tube
 
     """
-    L, ap, L_cap, extra_field_length, field_fact, use_only_symmetry = params
+    L, ap, L_cap, field_fact, use_only_symmetry = params
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan
     # x, y, z = baseClass.misalign_Coords(x, y, z)
     y = abs(y)
     z = abs(z)
-    if -extra_field_length <= x <= L_cap:
+    if 0.0 <= x <= L_cap:
         V0 = magnetic_potential_interp_3D(x, y, z, field_data_3D)
     elif L_cap < x <= L - L_cap:
         V0 = magnetic_potential_interp_2D(x, y, z, field_data_2D)
-    elif 0 <= x <= L + extra_field_length:
+    elif 0 <= x <= L:
         x = L - x
         V0 = magnetic_potential_interp_3D(x, y, z, field_data_3D)
     else:

@@ -1,5 +1,4 @@
-import warnings
-from math import sin, sqrt, cos, atan, tan, isclose
+from math import sin, cos, tan, isclose
 from typing import Optional
 
 import numpy as np
@@ -15,9 +14,9 @@ from latticeElements.utilities import CombinerDimensionError, \
     TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from numbaFunctionsAndObjects import combinerHalbachFastFunctions
 from numbaFunctionsAndObjects.utilities import DUMMY_FIELD_DATA_3D
+from typeHints import ndarray
 
 DEFAULT_SEED = 42
-ndarray = np.ndarray
 
 
 # todo: think much more carefully about interp offset stuff and how it affects aperture, and in which direction it is
@@ -60,7 +59,6 @@ class CombinerHalbachLensSim(CombinerIdeal):
         self.magnet_widths = None
         self.field_fact: float = -1.0 if PTL.lattice_type == 'injector' else 1.0
         self.space = None
-        self.extra_field_length = 0.0
         self.magnet: MagneticLens = None
 
         self.La = None  # length of segment between inlet and straight section inside the combiner. This length goes from
@@ -148,7 +146,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         x_vals_temp[x_ind_mag_min] -= INTERP_MAGNET_MATERIAL_OFFSET
         x_vals_temp[x_ind_mag_max] += INTERP_MAGNET_MATERIAL_OFFSET
         field_data = self.make_field_data(x_vals_temp, y_vals, z_vals, extra_magnets=extra_magnets,
-                                          use_mag_errors=self.PTL.use_mag_errors)
+                                          use_mag_errors=self.PTL.use_mag_errors,
+                                          include_misalignments=self.PTL.include_misalignments)
         field_data[0][:] = x_vals  # replace the values
         return field_data
 
@@ -173,8 +172,8 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return field_data
 
     def build_fast_field_helper(self, extra_magnets: Collection = None) -> None:
-        self.set_extra_field_length()
-        use_symmetry = False if (self.PTL.use_mag_errors or extra_magnets is not None) else True
+        use_symmetry = False if (
+                self.PTL.use_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
         if use_symmetry:
             field_data_internal = self.make_internal_symmetry_field_data()
             field_data_external = self.make_external_symmetry_field_data()
@@ -186,7 +185,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
         field_data = (field_data_internal, field_data_external, field_data_full)
 
         numba_func_constants = (self.ap, self.Lm, self.La, self.Lb, self.space, self.ang, self.acceptance_width,
-                                self.field_fact, use_symmetry, self.extra_field_length)
+                                self.field_fact, use_symmetry)
 
         # todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
 
@@ -276,12 +275,13 @@ class CombinerHalbachLensSim(CombinerIdeal):
         return ap_max_interp
 
     def make_field_data(self, x_arr, y_arr, z_arr, extra_magnets: Collection = None,
-                        use_mag_errors: bool = False) -> tuple[ndarray, ...]:
+                        use_mag_errors: bool = False, include_misalignments: bool = False) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
                                                                  use_mag_errors=use_mag_errors,
-                                                                 extra_magnets=extra_magnets)
+                                                                 extra_magnets=extra_magnets,
+                                                                 include_misalignments=include_misalignments)
         field_data_unshaped = np.column_stack((volume_coords, B_norm_grad, B_norm))
         field_data = self.shape_field_data_3D(field_data_unshaped)
         return field_data
@@ -301,48 +301,18 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def update_field_fact(self, field_strength_fact) -> None:
         raise NotImplementedError
 
-    def get_valid_jitter_amplitude(self, show_warnings=True) -> float:
-        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
-        assert self.PTL.jitter_amp >= 0.0
-        jitter_amp_proposed = self.PTL.jitter_amp
-        max_jitter_amp = self.max_ap_internal_interp_region() - self.ap
-        jitter_amp = max_jitter_amp if jitter_amp_proposed > max_jitter_amp else jitter_amp_proposed
-        if show_warnings:
-            if jitter_amp_proposed == max_jitter_amp and jitter_amp_proposed != 0.0:
-                warnings.warn('jitter amplitude of:' + str(jitter_amp_proposed) +
-                              ' clipped to maximum value:' + str(max_jitter_amp))
-
-        return jitter_amp
-
-    def set_extra_field_length(self) -> None:
-        """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
-        is too large for good field region, extra length is clipped. Misalignment is a translational and/or rotational,
-        so extra length needs to be accounted for in the case of rotational."""
-        jitter_amp = self.get_valid_jitter_amplitude(show_warnings=True)
-        tiltMax1D = atan(jitter_amp / self.L)  # Tilt in x,y can be higher but I only need to consider 1D
-        # because interpolation grid is square
-        assert tiltMax1D < .05  # insist small angle approx
-        self.extra_field_length = self.rp * np.tan(tiltMax1D) * 1.5  # safety factor
-
-    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float) -> None:
-        """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
-        interpolation"""
-        raise NotImplementedError  # need to reimplement the accomodate jitter stuff
-
-        assert abs(rot_angle_z) < .05 and abs(rot_angle_z) < .05  # small angle
-        totalshift_y = shift_y + np.tan(rot_angle_z) * self.L
-        totalshift_z = shift_z + np.tan(rot_angle_y) * self.L
-        totalShift = sqrt(totalshift_y ** 2 + totalshift_z ** 2)
-        maxShift = self.get_valid_jitter_amplitude()
-        if maxShift == 0.0 and self.PTL.jitter_amp != 0.0:
-            warnings.warn("No jittering was accomodated for, so their will be no effect")
-        if totalShift > maxShift:
-            show_warnings('Misalignment is moving particles to bad field region, misalingment will be clipped')
-            reductionFact = .95 * maxShift / totalShift  # safety factor
-            show_warnings('proposed', totalShift, 'new', reductionFact * totalShift)
-            shift_y, shift_z, rot_angle_y, rot_angle_z = [val * reductionFact for val in
-                                                          [shift_y, shift_z, rot_angle_y, rot_angle_z]]
-        self.fast_field_helper.numbaJitClass.update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z)
+    # def get_valid_jitter_amplitude(self, show_warnings=True) -> float:
+    #     """If jitter (radial misalignment) amplitude is too large, it is clipped"""
+    #     assert self.PTL.jitter_amp >= 0.0
+    #     jitter_amp_proposed = self.PTL.jitter_amp
+    #     max_jitter_amp = self.max_ap_internal_interp_region() - self.ap
+    #     jitter_amp = max_jitter_amp if jitter_amp_proposed > max_jitter_amp else jitter_amp_proposed
+    #     if show_warnings:
+    #         if jitter_amp_proposed == max_jitter_amp and jitter_amp_proposed != 0.0:
+    #             warnings.warn('jitter amplitude of:' + str(jitter_amp_proposed) +
+    #                           ' clipped to maximum value:' + str(max_jitter_amp))
+    #
+    #     return jitter_amp
 
     def find_Ideal_Offset(self) -> float:
         """use newton's method to find where the vertical translation of the combiner wher the minimum seperation

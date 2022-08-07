@@ -1,6 +1,8 @@
 from typing import Protocol
 from typing import Union
 
+import numpy as np
+
 
 class sequence(Protocol):
     """This type captures the features that are common between a list, tuple, array and dict. Surprisingly this
@@ -25,3 +27,5 @@ FloatTuple = tuple[float, ...]
 IntTuple = tuple[int, ...]
 
 RealNumTuple = tuple[RealNum, ...]
+
+ndarray=np.ndarray

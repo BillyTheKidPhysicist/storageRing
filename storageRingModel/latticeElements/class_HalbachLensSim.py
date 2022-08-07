@@ -1,5 +1,5 @@
 import warnings
-from math import tan, sqrt, inf
+from math import sqrt, inf
 from typing import Optional
 
 import numpy as np
@@ -44,7 +44,6 @@ class HalbachLensSim(LensIdeal):
         self.rp_layers = rp_layers  # can be multiple bore radius for different layers
         self.Lm = None
         self.L_cap: Optional[float] = None  # todo: ridiculous and confusing name
-        self.extra_field_length: Optional[float] = None  # extra field added to end of lens to account misalignment
         self.individualMagnetLength = None
         self.magnet = None
         # or down
@@ -61,7 +60,6 @@ class HalbachLensSim(LensIdeal):
         pass
 
     def fill_post_constrained_parameters(self):
-        self.set_extra_field_length()
         self.fill_geometric_params()
         self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
                                    self.PTL.use_solenoid_field, self.fringe_field_length)
@@ -82,15 +80,6 @@ class HalbachLensSim(LensIdeal):
         ap_largest_interp = self.max_interp_radius()
         ap_valid = ap_largest_tube if ap_largest_tube < ap_largest_interp else ap_largest_interp
         return ap_valid
-
-    def set_extra_field_length(self) -> None:
-        """Set factor that extends field interpolation along length of lens to allow for misalignment. If misalignment
-        is too large for good field region, extra length is clipped"""
-
-        jitter_amp = self.get_valid_jitter_amplitude(Print=True)
-        tilt_max = np.arctan(jitter_amp / self.L)
-        assert 0.0 <= tilt_max < .1  # small angle. Not sure if valid outside that range
-        self.extra_field_length = self.rp * tilt_max * 1.5  # safety factor for approximations
 
     def effective_material_length(self) -> float:
         """If a lens is very long, then longitudinal symmetry can possibly be exploited because the interior region
@@ -147,12 +136,12 @@ class HalbachLensSim(LensIdeal):
         """
 
         y_min, y_max = -TINY_INTERP_STEP, self.rp - INTERP_MAGNET_MATERIAL_OFFSET
-        x_min, x_max = -(self.extra_field_length + TINY_INTERP_STEP), self.L_cap + TINY_INTERP_STEP
+        x_min, x_max = -TINY_INTERP_STEP, self.L_cap + TINY_INTERP_STEP
         num_points_xy, num_points_z = self.num_grid_points_r, self.numGridPointsX
         if not use_only_symmetry:  # range will have to fully capture lens.
             y_min = -y_max
-            x_max = self.L + self.extra_field_length + TINY_INTERP_STEP
-            x_min = -(self.extra_field_length + TINY_INTERP_STEP)
+            x_max = self.L + TINY_INTERP_STEP
+            x_min = -TINY_INTERP_STEP
             points_per_bore_radius = 5
             num_points_z = round_and_make_odd(max([points_per_bore_radius * self.Lm / self.rp, 2 * num_points_z - 1]))
             assert num_points_z < 150  # things might start taking unreasonably long if not careful
@@ -226,11 +215,10 @@ class HalbachLensSim(LensIdeal):
         """Generate magnetic field gradients and norms for numba jitclass field helper. Low density sampled imperfect
         data may added on top of high density symmetry exploiting perfect data. """
         use_only_symmetry = False if (
-                    self.PTL.use_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
+                self.PTL.use_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
         field_data = self.make_interp_data(use_only_symmetry, extra_magnets)
 
-        numba_func_constants = (
-            self.L, self.ap, self.L_cap, self.extra_field_length, self.field_fact, use_only_symmetry)
+        numba_func_constants = (self.L, self.ap, self.L_cap, self.field_fact, use_only_symmetry)
 
         force_args = (numba_func_constants, field_data)
         potential_args = (numba_func_constants, field_data)
@@ -272,39 +260,3 @@ class HalbachLensSim(LensIdeal):
         self.field_fact = field_strength_fact
         warnings.warn("this method does not account for neigboring magnets!!")
         self.build_fast_field_helper()
-
-    def get_valid_jitter_amplitude(self, Print=False):
-        """If jitter (radial misalignment) amplitude is too large, it is clipped"""
-        jitter_amp_proposed = self.PTL.jitter_amp
-        assert jitter_amp_proposed >= 0.0
-        max_jitter_amp = self.max_interp_radius() - self.ap
-        if max_jitter_amp == 0.0 and jitter_amp_proposed != 0.0:
-            print('Aperture is set to maximum, no room to misalign element')
-        jitter_amp = max_jitter_amp if jitter_amp_proposed > max_jitter_amp else jitter_amp_proposed
-        if Print:
-            if jitter_amp_proposed == max_jitter_amp and jitter_amp_proposed != 0.0:
-                print(
-                    'jitter amplitude of:' + str(jitter_amp_proposed) + ' clipped to maximum value:' + str(
-                        max_jitter_amp))
-        return jitter_amp
-
-    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float) -> None:
-        """Overrides abstract method from Element. Add catches for ensuring particle stays in good field region of
-        interpolation"""
-
-        raise NotImplementedError
-
-        if self.PTL.jitter_amp == 0.0 and self.PTL.jitter_amp != 0.0:
-            warnings.warn("No jittering was accomodated for, so their will be no effect")
-        assert abs(rot_angle_z) < .05 and abs(rot_angle_z) < .05  # small angle
-        totalshift_y = shift_y + tan(rot_angle_z) * self.L
-        totalshift_z = shift_z + tan(rot_angle_y) * self.L
-        total_shift = sqrt(totalshift_y ** 2 + totalshift_z ** 2)
-        max_shift = self.get_valid_jitter_amplitude()
-        if total_shift > max_shift:
-            print('Misalignment is moving particles to bad field region, misalingment will be clipped')
-            safety_fact = .95 * max_shift / total_shift  # safety factor
-            print('proposed', total_shift, 'new', safety_fact * max_shift)
-            shift_y, shift_z, rot_angle_y, rot_angle_z = [val * safety_fact for val in
-                                                          [shift_y, shift_z, rot_angle_y, rot_angle_z]]
-        self.fast_field_helper.update_Element_Perturb_Params(shift_y, shift_z, rot_angle_y, rot_angle_z)

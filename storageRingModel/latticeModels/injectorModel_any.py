@@ -71,7 +71,8 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
                                     use_mag_errors=options['use_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    use_standard_mag_size=options['use_standard_mag_size'])
+                                    use_standard_mag_size=options['use_standard_mag_size'],
+                                    include_misalignments=options['include_misalignments'])
     if options['has_bumper']:
         add_Kevin_Bumper_Elements(lattice)
 

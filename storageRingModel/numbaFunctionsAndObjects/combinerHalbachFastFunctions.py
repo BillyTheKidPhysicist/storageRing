@@ -12,7 +12,7 @@ def force(x0, y0, z0, params, field_data):
     # x, y, z = baseClass.misalign_Coords(x0, y0, z0)
     if not is_coord_in_vacuum(x0, y0, z0, params):
         return np.nan, np.nan, np.nan
-    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry, extra_field_length = params
+    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry = params
     field_data_internal, field_data_external, field_data_full  = field_data
     x, y, z = x0, y0, z0
     symmetry_plane_x = Lm / 2 + space  # field symmetry plane location
@@ -22,7 +22,7 @@ def force(x0, y0, z0, params, field_data):
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
 
-        if -extra_field_length <= x <= space:
+        if 0.0 <= x <= space:
             # print(x,y,z,Lm,space)
             Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_external)
         elif space < x <= symmetry_plane_x:
@@ -53,14 +53,14 @@ def magnetic_potential(x, y, z, params, field_data):
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan
     # x, y, z = baseClass.misalign_Coords(x, y, z)
-    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry, extra_field_length = params
+    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry = params
     field_data_internal, field_data_external, field_data_full  = field_data
 
     if use_symmetry:
         symmetry_plane_x = Lm / 2 + space  # field symmetry plane location
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if -extra_field_length <= x <= space:
+        if 0.0 <= x <= space:
             V = magnetic_potential_interp_3D(x, y, z, field_data_external)
         elif space < x <= symmetry_plane_x:
             V = magnetic_potential_interp_3D(x, y, z, field_data_internal)
@@ -82,7 +82,7 @@ def magnetic_potential(x, y, z, params, field_data):
 @numba.njit()
 def is_coord_in_vacuum(x, y, z, params):
     # q: coordinate to test in element's frame
-    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry, extra_field_length = params
+    ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry = params
     standOff = 10e-6  # first valid (non np.nan) interpolation point on face of lens is 1e-6 off the surface of the lens
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)

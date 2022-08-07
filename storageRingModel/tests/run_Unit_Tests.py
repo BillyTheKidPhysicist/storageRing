@@ -8,7 +8,7 @@ from modelerTester import test_Modeler
 from collisionPhysics_Tests import *
 from vacuumanalyzer_tests import *
 from energy_cons import *
-
+from testMatrixTracingMethod import *
 
 def test():
     pass
