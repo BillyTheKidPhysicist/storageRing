@@ -235,6 +235,18 @@ class SwarmTracer:
         swarm_at_combiner = self.move_swarm_to_combiner_output(swarm_at_origin, copy_swarm=False, scoot=True)
         return swarm_at_combiner
 
+    def initialize_pseudorandom_y_dim_swarm(self, y_max: RealNum, py_max: RealNum, num_particles: int) -> Swarm:
+        """Build a swarm only along the y dimension ([x,y,z]). Useful for tracing particle through matrix model
+        lattice"""
+        swarm = Swarm()
+        bounds = [(-y_max, y_max), (-py_max, py_max)]
+        samples = low_discrepancy_sample(bounds, num_particles)
+        for [y, py] in samples:
+            qi = np.array([-1e-10, y, 0])
+            pi = np.array([-self.lattice.speed_nominal, py, 0.0])
+            swarm.add_new_particle(qi=qi, pi=pi)
+        return swarm
+
     def combiner_output_offset_shift(self) -> np.ndarray:
         # combiner may have an output offset (ie hexapole combiner). This return the 3d vector (x,y,0) that connects the
         # geoemtric center of the output plane with the offset point, which also lies in the plane. stern gerlacht
