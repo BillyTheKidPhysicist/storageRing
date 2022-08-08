@@ -7,7 +7,7 @@ from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_For
 
 
 def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_offset_start: float = 0.0,
-                                atom_state='LOW_FIELD_SEEKER') -> tuple[np.ndarray, np.ndarray]:
+                                atom_state='LOW_FIELD_SEEKER', h=5e-6) -> tuple[np.ndarray, np.ndarray]:
     # this computes the output angle and offset for a combiner magnet.
     # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
     # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
@@ -16,7 +16,6 @@ def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_off
     # length, but for the simulated magnets, it's that plus twice the length at the ends.
     # h: timestep
     # lowField: wether to model low or high field seekers
-    h = 5e-6
 
     # TODO: WHAT IS THE DEAL WITH THIS?
     particle_y_offset_start = -particle_y_offset_start  # temporary
