@@ -184,15 +184,15 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
 
 def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
                       use_solenoid_field,
-                      use_bumper, num_particles, use_standard_tube_OD, use_standard_mag_size) -> Callable[
-    [tuple], float]:
+                      use_bumper, num_particles, use_standard_tube_OD, use_standard_mag_size, use_energy_correction) -> \
+                        Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
     solver = Solver(system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
                     use_bumper=use_bumper,
                     num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
                     use_standard_mag_size=use_standard_mag_size, injector_params=injector_params,
-                    use_energy_correction=True)
+                    use_energy_correction=use_energy_correction)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
@@ -229,7 +229,8 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
              globalTol=.005,
              disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
-             use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None):
+             use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
+             use_energy_correction=False):
     """Optimize a model of the ring and injector"""
     assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
@@ -239,7 +240,7 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
     bounds = make_bounds(system, ring_version, range_factor=bounds_range_factor)
     cost_func = get_cost_function(system, ring_version, ring_params, injector_params, use_solenoid_field, use_bumper,
                                   num_particles,
-                                  use_standard_tube_OD, use_standard_mag_size)
+                                  use_standard_tube_OD, use_standard_mag_size, use_energy_correction)
 
     if method == 'global':
         x_optimal, cost_min = _global_optimize(cost_func, bounds, globalTol, processes, disp)
@@ -251,15 +252,16 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
+    pass
 
-    injector_params=(0.298, 0.01824404317562657, 0.23788459956313238,
-           0.03, 0.17709193919623706, 0.009704452870607685,
-           0.10615316973237765, 0.22492222955994753, 0.22148833301792942)
+    # injector_params=(0.298, 0.01824404317562657, 0.23788459956313238,
+    #        0.03, 0.17709193919623706, 0.009704452870607685,
+    #        0.10615316973237765, 0.22492222955994753, 0.22148833301792942)
     # ring_params = (0.012593597021671735, 0.010115712864579277, 0.007415429587324836,
     #                0.04513305464223805, 0.1, 0.49472608069737817)
-
-    optimize('ring', 'global', '2', injector_params=injector_params,
-              use_bumper=True,local_search_region=.05)
+    #
+    # optimize('ring', 'local', '2', injector_params=injector_params,
+    #           use_bumper=True,local_search_region=.05,xi=ring_params)
 
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ from typing import Iterable, Union
 
 import numpy as np
 
+from HalbachLensClass import Collection
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
 from helperTools import arr_product
 from helperTools import make_dense_curve_1D_linear
@@ -33,7 +34,7 @@ def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
     return np.array([[A, B], [C, D]])
 
 
-def bender_orbit_radius(Bp: RealNum, rb: RealNum, rp: RealNum) -> float:
+def bender_orbit_radius_energy_correction(Bp: RealNum, rb: RealNum, rp: RealNum) -> float:
     """Calculate the orbit radius for particle in a bender. This is balancing the centrifugal "force" with the magnet
     force, and also accounts for the small difference from energy conservation of particle slowing down when entering
     bender"""
@@ -43,6 +44,14 @@ def bender_orbit_radius(Bp: RealNum, rb: RealNum, rp: RealNum) -> float:
     term4 = 4 * sqrt(Bp * SIMULATION_MAGNETON)
     radius_orbit = term1 + sqrt(term2 + term3) / term4  # quadratic formula
     return radius_orbit
+
+
+def bender_orbit_radius_no_energy_correction(Bp: RealNum, rb: RealNum, rp: RealNum) -> float:
+    term1 = .5 * rb
+    term2 = rb ** 2
+    term3 = 2 * SIMULATION_MASS * (DEFAULT_ATOM_SPEED * rp) ** 2 / (SIMULATION_MAGNETON * Bp)
+    term4 = .5 * np.sqrt(term2 + term3)
+    return term1 + term4
 
 
 def bender_spring_constant(Bp: RealNum, rb: RealNum, rp: RealNum, ro: RealNum) -> float:
@@ -77,6 +86,33 @@ def matrix_components(M):
     return m11, m12, m21, m22
 
 
+def lens_transfer_matrix_for_slice(rp: RealNum, magnets: Collection, x_slice: RealNum,
+                                   slice_length: RealNum) -> ndarray:
+    num_samples = 30
+    x_vals = np.ones(num_samples) * x_slice
+    y_vals = np.linspace(-rp / 2.0, rp / 2.0, num_samples)
+    z_vals = np.zeros(num_samples)
+    coords = np.column_stack((x_vals, y_vals, z_vals))
+    F_y = -SIMULATION_MAGNETON * magnets.B_norm_grad(coords)[:, 1]
+    m = np.polyfit(y_vals, F_y, 1)[0]
+    K = -m / DEFAULT_ATOM_SPEED ** 2
+    M_slice = transfer_matrix(K, slice_length)
+    return M_slice
+
+
+def transfer_matrix_from_lens(el: HalbachLensSim) -> ndarray:
+    magnet = el.magnet.make_magpylib_magnets(False, False)
+    num_slices_per_bore_rad = 300  # Don't use less than 100
+    num_slices = round(num_slices_per_bore_rad * el.L / el.rp)
+    x_slices = np.linspace(0, el.L, num_slices + 1)[:-1]
+    slice_length = x_slices[1] - x_slices[0]
+    x_slices += slice_length
+    M = np.eye(2)
+    for x in x_slices:
+        M = lens_transfer_matrix_for_slice(el.rp, magnet, x, slice_length) @ M
+    return M
+
+
 def is_stable_lattice(elements: Iterable) -> bool:
     """Determine if the lattice is stable. This can be done by computing eigenvalues, or the method below works. If
     unstable, then raising he transfer matrix to N results in large matrix elements for large N"""
@@ -88,21 +124,6 @@ def is_stable_lattice(elements: Iterable) -> bool:
 def total_length(elements: Iterable) -> float:
     length = sum([el.L for el in elements])
     return length
-
-
-def best_fit_magnetic_field_lens(el: HalbachLensSim) -> float:
-    """Use the simulated magnetic fields from a simulated element to determine optimal magnetic field for use in the
-    ideal force formula. Basically integrate through the simulated element, and choose a B value that gives the same
-    integral for the ideal element"""
-    magnets = el.magnet.make_magpylib_magnets(False, False)
-    x_vals = np.linspace(0.0, el.L, 1000)
-    y = el.rp * .5
-    coords = arr_product(x_vals, [y], [0])
-    F_xo = SIMULATION_MAGNETON * magnets.B_norm_grad(coords)[:, 1]
-    Kappa = abs(np.trapz(F_xo, x=x_vals))
-    gamma = el.Lm * SIMULATION_MAGNETON * 2 * y / el.rp ** 2
-    Bp_optimal = Kappa / gamma
-    return Bp_optimal
 
 
 def cumulative_trajectory_length(coords: ndarray) -> ndarray:
@@ -182,7 +203,7 @@ def best_fit_magnetic_field_seg_bender(el: HalbachBenderSimSegmented) -> float:
     """Use the simulated magnetic fields from a simulated element to determine optimal magnetic field for use in the
     ideal force formula. Basically integrate through the simulated element, and choose a B value that gives the same
     integral for the ideal element"""
-    magnets = el.build_bender(True, (True, True), use_method_of_moments=False, num_lenses=el.num_magnets)
+    magnets = el.build_bender(True, (True, True), num_lenses=el.num_magnets + 1)
     x0 = el.ro - el.rb  # x offset in orbit frame
     s_max = el.ang * el.rb + 2 * el.L_cap
     s_vals = np.linspace(0.0, s_max, 1000)
@@ -196,6 +217,17 @@ def best_fit_magnetic_field_seg_bender(el: HalbachBenderSimSegmented) -> float:
     gamma = L_orbit * SIMULATION_MAGNETON * 2 * delta_r / el.rp ** 2
     Bp_optimal = Kappa / gamma
     return Bp_optimal
+
+
+class CompositeElement:
+    """Element representing a series of elements, which in this case is a single transfer matrix"""
+
+    def __init__(self, M: ndarray, L: float):
+        self.M = M
+        self.L = L
+
+    def M_func(self, x) -> ndarray:
+        raise NotImplementedError
 
 
 class Element:
@@ -224,7 +256,6 @@ class Combiner(Element):
 
     def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum):
         K = spring_constant_lens(Bp, rp)
-        print(K)
         super().__init__(K, L)
 
 
@@ -239,13 +270,14 @@ class Drift(Element):
 class Bender(Element):
     """Element representing a bending component"""
 
-    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, ro, bending_angle: RealNum):
-        K = bender_spring_constant(Bp, rb, rp, ro)
-        L = ro * bending_angle  # length of particle orbit
+    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
+        self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp)
+        K = bender_spring_constant(Bp, rb, rp, self.ro)
+        L = self.ro * bending_angle  # length of particle orbit
         super().__init__(K, L)
 
 
-MatrixLatticeElement = Union[Drift, Lens, Bender, Combiner]
+MatrixLatticeElement = Union[Drift, Lens, Bender, Combiner, CompositeElement]
 
 
 class Lattice:
@@ -269,8 +301,8 @@ class Lattice:
     def add_lens(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
         self.elements.append(Lens(L, Bp, rp))
 
-    def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, ro: RealNum, bending_angle: RealNum):
-        self.elements.append(Bender(Bp, rb, rp, ro, bending_angle))
+    def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
+        self.elements.append(Bender(Bp, rb, rp, bending_angle))
 
     def add_combiner(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
         self.elements.append(Combiner(L, Bp, rp))
@@ -297,12 +329,8 @@ class Lattice:
         return tune
 
     def add_elements_from_sim_lens(self, el_lens: HalbachLensSim) -> None:
-        Bp = best_fit_magnetic_field_lens(el_lens)
-        L_lens, rp = el_lens.Lm, el_lens.rp
-        L_drift = HalbachLensSim.fringe_frac_outer * rp
-        self.add_drift(L_drift)
-        self.add_lens(L_lens, Bp, rp)
-        self.add_drift(L_drift)
+        M = transfer_matrix_from_lens(el_lens)
+        self.elements.append(CompositeElement(M, el_lens.L))
 
     def add_elements_from_sim_seg_bender(self, el_bend: HalbachBenderSimSegmented) -> None:
         L_drift = el_bend.L_cap
@@ -332,6 +360,7 @@ class Lattice:
             elif type(el) is HalbachLensSim:
                 self.add_elements_from_sim_lens(el)
             elif type(el) is HalbachBenderSimSegmented:
+                raise NotImplementedError
                 self.add_elements_from_sim_seg_bender(el)
             elif type(el) is CombinerHalbachLensSim:
                 self.add_elements_from_sim_combiner(el)

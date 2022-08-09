@@ -612,7 +612,7 @@ class SegmentedBenderHalbach(Collection):
         # todo: assert that the spacing is the same
         # todo: make a test that this accepts benders as exptected, and behaves as epxcted. Look at temp4 for a good way to do it
         # todo: rename stuff to be more intelligeable
-        theta_arr_coords = np.arctan2(eval_coords[:, 2], eval_coords[:, 0])
+        theta_arr_coords = np.arctan2(eval_coords[:, 1], eval_coords[:, 0])
         angular_length = self.lens_angles_arr.max() - self.lens_angles_arr.min()
         if angular_length < np.pi:  # bender exists between -pi and pi. Don't need to change anything
             pass

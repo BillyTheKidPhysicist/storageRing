@@ -54,7 +54,6 @@ class StorageRingModel:
                  use_bumper: bool = False, sim_time_max=100.0):
         assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
-        sim_time_max=10.0 #todo: remove me
         self.lattice_ring = lattice_ring
         self.lattice_injector = lattice_injector
         self.injector_lens_indices = [i for i, el in enumerate(self.lattice_injector) if type(el) is HalbachLensSim]

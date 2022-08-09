@@ -226,9 +226,11 @@ class HalbachBenderSimSegmented(BenderIdeal):
 
     def generate_perturbation_data(self) -> tuple[np.ndarray, ...]:
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
-        lens_imperfect = self.build_bender(True, (True, True), use_method_of_moments=False, num_lenses=self.num_magnets,
+        lens_imperfect = self.build_bender(True, (True, True), use_method_of_moments=False,
+                                           num_lenses=self.num_magnets + 1,
                                            use_mag_errors=True)
-        lens_perfect = self.build_bender(True, (True, True), use_method_of_moments=False, num_lenses=self.num_magnets)
+        lens_perfect = self.build_bender(True, (True, True), use_method_of_moments=False,
+                                         num_lenses=self.num_magnets + 1)
         r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
         valid_indices = r_center_arr < self.rp
         vals_imperfect = np.column_stack(self.compute_valid_field_vals(lens_imperfect, coords_cartesian, valid_indices))

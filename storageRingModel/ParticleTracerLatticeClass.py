@@ -296,8 +296,6 @@ class ParticleTracerLattice:
     def catch_errors(self, constrain: bool) -> None:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         # kinds. This class is not meant to have tons of error handling, so user must be cautious
-        if isinstance(self.el_list[0], BenderIdeal):  # first element can't be a bending element
-            raise Exception('FIRST ELEMENT CANT BE A BENDER')
         if isinstance(self.el_list[0], CombinerIdeal):  # first element can't be a combiner element
             raise Exception('FIRST ELEMENT CANT BE A COMBINER')
         if len(self.bender_indices) >= 2:  # if there are two benders they must be the same.
