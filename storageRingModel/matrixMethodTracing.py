@@ -1,13 +1,11 @@
-from math import sqrt, cos, sin
+from math import sqrt, cos, sin, cosh, sinh
 from typing import Iterable, Union
 
 import numpy as np
 
 from HalbachLensClass import Collection
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
-from helperTools import arr_product
-from helperTools import make_dense_curve_1D_linear
-from latticeElements.combiner_characterizer import calculate_trajectory_length
+from latticeElements.class_HalbachBenderSegmented import mirror_across_angle
 from latticeElements.elements import Drift as Drift_Sim
 from latticeElements.elements import HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim
 from latticeElements.orbitTrajectories import combiner_halbach_orbit_coords_el_frame
@@ -19,18 +17,26 @@ SMALL_ROUNDING_NUM = 1e-14
 def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
     """Build the 2x2 transfer matrix (ABCD matrix) for an element that represents a harmonic potential.
     Transfer matrix is for one dimension only"""
-    assert K >= 0.0 and L >= 0.0
+    assert L >= 0.0
     if K == 0.0:
         A = 1.0
         B = L
         C = 0.0
         D = 1
-    else:
+    elif K > 0.0:
         phi = sqrt(K) * L
         A = cos(phi)
         B = sin(phi) / sqrt(K)
         C = -sqrt(K) * sin(phi)
         D = cos(phi)
+    else:
+        K = abs(K)
+        psi = sqrt(K) * L
+        A = cosh(psi)
+        B = sinh(psi) / sqrt(K)
+        C = sqrt(K) * sinh(psi)
+        D = cosh(psi)
+
     return np.array([[A, B], [C, D]])
 
 
@@ -90,7 +96,7 @@ def lens_transfer_matrix_for_slice(rp: RealNum, magnets: Collection, x_slice: Re
                                    slice_length: RealNum) -> ndarray:
     num_samples = 30
     x_vals = np.ones(num_samples) * x_slice
-    y_vals = np.linspace(-rp / 2.0, rp / 2.0, num_samples)
+    y_vals = np.linspace(-rp / 4.0, rp / 4.0, num_samples)
     z_vals = np.zeros(num_samples)
     coords = np.column_stack((x_vals, y_vals, z_vals))
     F_y = -SIMULATION_MAGNETON * magnets.B_norm_grad(coords)[:, 1]
@@ -104,9 +110,7 @@ def transfer_matrix_from_lens(el: HalbachLensSim) -> ndarray:
     magnet = el.magnet.make_magpylib_magnets(False, False)
     num_slices_per_bore_rad = 300  # Don't use less than 100
     num_slices = round(num_slices_per_bore_rad * el.L / el.rp)
-    x_slices = np.linspace(0, el.L, num_slices + 1)[:-1]
-    slice_length = x_slices[1] - x_slices[0]
-    x_slices += slice_length
+    x_slices, slice_length = split_range_into_slices(0.0, el.L, num_slices)
     M = np.eye(2)
     for x in x_slices:
         M = lens_transfer_matrix_for_slice(el.rp, magnet, x, slice_length) @ M
@@ -122,65 +126,17 @@ def is_stable_lattice(elements: Iterable) -> bool:
 
 
 def total_length(elements: Iterable) -> float:
+    """Sum of the lengths of elements"""
     length = sum([el.L for el in elements])
     return length
 
 
-def cumulative_trajectory_length(coords: ndarray) -> ndarray:
-    """Given a 3D path, return the cumulative length along the path"""
-    ds_vec = coords[1:] - coords[:-1]
-    ds = np.linalg.norm(ds_vec, axis=1)
-    s = np.cumsum(ds)
-    s = np.append(0, s)  # need to add back first step
-    return s
-
-
-def dense_combiner_trajectory_curve(el: CombinerHalbachLensSim) -> ndarray:
-    """Because the combiner trajectory is used to calculate magnet and drift lengths, it's important that it is fine
-    enough that when splitting the trajectory up the loss of a point won't meaningfully change the values. """
-    coords = combiner_halbach_orbit_coords_el_frame(el)
-    x_vals, y_vals, _ = coords.T
-    x_vals, y_vals = make_dense_curve_1D_linear(x_vals, y_vals, 100_000)
-    z_vals = np.zeros(len(y_vals))
-    coords_dense = np.column_stack((x_vals, y_vals, z_vals))
-    return coords_dense
-
-
-def drift_lengths_before_after_combiner(el: CombinerHalbachLensSim) -> tuple[float, float]:
-    """Find the drift lengths before and after the combiner. Before refers to the direction stream of particles enter,
-    and after refers to the direction they leave by"""
-    coords = dense_combiner_trajectory_curve(el)
-    indices_before_combiner = coords[:, 0] > el.Lm + el.space
-    indices_after_combiner = coords[:, 0] < el.space
-    L_before = calculate_trajectory_length(coords[indices_before_combiner])
-    L_after = calculate_trajectory_length(coords[indices_after_combiner])
-    return L_before, L_after
-
-
-def best_fit_magnetic_field_combiner(el: CombinerHalbachLensSim, L_eff_combiner: float) -> float:
-    """find the best fit for the magnetic field for the combiner. This is done along the trajectory of the nominal
-    particle. """
-    magnets = el.magnet.make_magpylib_magnets(False, False)
-
-    x = np.linspace(0.0, el.L, 1000)
-    y0 = (abs(el.output_offset) + abs(el.input_offset)) / 2.0
-    coords = arr_product(x, [y0], [0])
-    forces = -SIMULATION_MAGNETON * magnets.B_norm_grad(coords)
-
-    Kappa = np.trapz(forces[:, 1], x=x)
-    gamma = -L_eff_combiner * SIMULATION_MAGNETON * 2 * y0 / el.rp ** 2
-    Bp_optimal = Kappa / gamma
-
-    return Bp_optimal
-
-
-def combiner_effective_length(el: CombinerHalbachLensSim) -> float:
-    """Effective material length of combiner. This equals the length of the trajectory through the combiner material"""
-    coords = dense_combiner_trajectory_curve(el)
-    indices_in_combiner = (coords[:, 0] > el.space) & (coords[:, 0] < el.Lm + el.space)
-    coords_in_combiner = coords[indices_in_combiner]
-    length = calculate_trajectory_length(coords_in_combiner)
-    return length
+def split_range_into_slices(x_min: float, x_max: float, num_slices: int) -> tuple[ndarray, float]:
+    """Split a range into equally spaced points, that are half a spacing away from start and end"""
+    slice_length = (x_max - x_min) / num_slices
+    x_slices = np.linspace(x_min, x_max, num_slices + 1)[:-1]
+    x_slices += slice_length / 2.0
+    return x_slices, slice_length
 
 
 def unit_vec_perp_to_path(path_coords: ndarray) -> ndarray:
@@ -199,24 +155,129 @@ def unit_vec_perp_to_path(path_coords: ndarray) -> ndarray:
     return np.array(norm_perps)
 
 
-def best_fit_magnetic_field_seg_bender(el: HalbachBenderSimSegmented) -> float:
-    """Use the simulated magnetic fields from a simulated element to determine optimal magnetic field for use in the
-    ideal force formula. Basically integrate through the simulated element, and choose a B value that gives the same
-    integral for the ideal element"""
-    magnets = el.build_bender(True, (True, True), num_lenses=el.num_magnets + 1)
-    x0 = el.ro - el.rb  # x offset in orbit frame
-    s_max = el.ang * el.rb + 2 * el.L_cap
-    s_vals = np.linspace(0.0, s_max, 1000)
-    coords = np.array([el.convert_center_to_cartesian_coords(s, x0, 0.0) for s in s_vals])
-    forces = -SIMULATION_MAGNETON * magnets.B_norm_grad(coords)
-    norm_perps = unit_vec_perp_to_path(coords)
-    force_r = [np.dot(norm, force) for norm, force in zip(norm_perps, forces)]
-    Kappa = abs(np.trapz(force_r, x=s_vals))
-    L_orbit = el.ro * el.ang
-    delta_r = el.ro - el.rb
-    gamma = L_orbit * SIMULATION_MAGNETON * 2 * delta_r / el.rp ** 2
-    Bp_optimal = Kappa / gamma
-    return Bp_optimal
+def combiner_slice_length_at_traj_index(index: int, coords_path: ndarray) -> float:
+    """"""
+    assert index < len(coords_path)
+    if index == 0:
+        dr = np.linalg.norm(coords_path[1] - coords_path[0])
+        slice_length = dr / 2.0
+    elif index == len(coords_path) - 1:
+        dr = np.linalg.norm(coords_path[-1] - coords_path[-2])
+        slice_length = dr / 2.0
+    else:
+        dr2 = np.linalg.norm(coords_path[index + 1] - coords_path[index])
+        dr1 = np.linalg.norm(coords_path[index] - coords_path[index - 1])
+        slice_length = dr1 / 2 + dr2 / 2
+    return slice_length
+
+
+def K_centrifugal_combiner_at_path_index(coord: ndarray, norm: ndarray, magnets: Collection) -> float:
+    """Compute the centrifugal spring constant"""
+    force = SIMULATION_MAGNETON * magnets.B_norm_grad(coord)
+    force_xo = np.dot(force, norm)
+    K_cent = force_xo ** 2 / (SIMULATION_MASS * DEFAULT_ATOM_SPEED ** 4)
+    return K_cent
+
+
+def combiner_transfer_matrix_at_path_index(index: int, magnets: Collection, coords_path: ndarray,
+                                           norms_path: ndarray, xo_vals: ndarray) -> ndarray:
+    """Compute the thin transfer matrix that corresponds to the location at coords_path[index]"""
+    coord = coords_path[index]
+    norm = norms_path[index]
+    coords = np.array([coord + xo * norm for xo in xo_vals])
+    B_norm_grad = magnets.B_norm_grad(coords)
+    forces = -SIMULATION_MAGNETON * B_norm_grad
+    V = SIMULATION_MAGNETON * magnets.B_norm(coord)
+    forces_xo = [np.dot(force, norm) for force in forces]
+    atom_speed = speed_with_energy_correction(V)
+    m = np.polyfit(xo_vals, forces_xo, 1)[0]
+    K = -m / atom_speed ** 2
+    K_cent = K_centrifugal_combiner_at_path_index(coord, norm, magnets)
+    K += K_cent
+    slice_length = combiner_slice_length_at_traj_index(index, coords_path)
+    M = transfer_matrix(K, slice_length)
+    return M
+
+
+def transfer_matrix_from_combiner(el_combiner: CombinerHalbachLensSim) -> ndarray:
+    """Compute the transfer matric for the combiner. This is done by splitting the element into many thin matrices, and
+    multiplying them together"""
+    coords_path = combiner_halbach_orbit_coords_el_frame(el_combiner)
+    norms_path = unit_vec_perp_to_path(coords_path)
+    xo_max = min([(el_combiner.rp - el_combiner.output_offset), el_combiner.output_offset]) / 5.0
+    xo_vals = np.linspace(-xo_max, xo_max, 11)
+    magnets = el_combiner.magnet.make_magpylib_magnets(False, False)
+    M = np.eye(2)
+    for idx, _ in enumerate(coords_path):
+        M_thin_slice = combiner_transfer_matrix_at_path_index(idx, magnets, coords_path, norms_path, xo_vals)
+        M = M_thin_slice @ M
+    return M
+
+
+def xo_unit_vector_bender_el_frame(el: HalbachBenderSimSegmented, coord: ndarray) -> ndarray:
+    """get unit vector pointing along xo in the bender orbit frame"""
+    which_section = el.in_which_section_of_bender(coord)
+    if which_section == 'ARC':
+        theta = np.arctan2(coord[1], coord[0])
+        norm = np.array([np.cos(theta), np.sin(theta), 0.0])
+    elif which_section == 'OUT':
+        norm = np.array([1.0, 0.0, 0.0])
+    elif which_section == 'IN':
+        nx, ny = mirror_across_angle(1.0, 0, el.ang / 2.0)
+        norm = np.array([nx, ny, 0.0])
+    else:
+        raise ValueError
+    return norm
+
+
+def speed_with_energy_correction(V: float) -> float:
+    """Energy conservation for atom speed accounting for magnetic fields"""
+    E0 = .5 * DEFAULT_ATOM_SPEED ** 2
+    KE = E0 - V
+    speed_corrected = np.sqrt(2 * KE)
+    return speed_corrected
+
+
+def bender_transfer_matrix_for_slice(s: float, magnets: Collection, el: HalbachBenderSimSegmented,
+                                     slice_c_length: float) -> ndarray:
+    """This slice transfer matrix for a point along the bender"""
+    deltar_orbit = el.ro - el.rb
+    xo_max = el.rp - deltar_orbit
+    num_samples = 11
+    xo_vals = np.linspace(-xo_max / 4.0, xo_max / 4.0, num_samples)
+    coords = np.array([el.convert_center_to_cartesian_coords(s, deltar_orbit + xo, 0.0) for xo in xo_vals])
+    B_norm_grad = magnets.B_norm_grad(coords, use_approx=True)
+    forces = -SIMULATION_MAGNETON * B_norm_grad
+    B_norm_at_center = el.convert_center_to_cartesian_coords(s, deltar_orbit, 0.0)
+    V = SIMULATION_MAGNETON * np.mean(B_norm_at_center)
+    norm_perps = xo_unit_vector_bender_el_frame(el, coords[0])
+    force_r = [np.dot(norm_perps, force) for force in forces]
+    atom_speed = speed_with_energy_correction(V)
+    m = np.polyfit(xo_vals, force_r, 1)[0]
+    K = -m / atom_speed ** 2
+    if el.L_cap < s < el.L_cap + el.ang * el.rb:
+        K_cent = SIMULATION_MASS / el.ro ** 2  # centrifugal term
+        K += K_cent
+        slice_length = slice_c_length * el.ro / el.rb
+    else:
+        slice_length = slice_c_length
+    M = transfer_matrix(K, slice_length)
+    return M
+
+
+def transfer_matrix_from_bender(el: HalbachBenderSimSegmented) -> ndarray:
+    """Compute the transfer matric for the bender. This is done by splitting the element into many thin matrices, and
+    multiplying them together"""
+    magnets = el.build_full_bender_model()
+    num_slices_per_mag = 5
+    num_slices = 10 + el.num_magnets * num_slices_per_mag
+    sc_max = el.ang * el.rb + 2 * el.L_cap
+    s_slices, slice_c_length = split_range_into_slices(0.0, sc_max, num_slices)
+    M = np.eye(2)
+    for s in s_slices:
+        M_thin_slice = bender_transfer_matrix_for_slice(s, magnets, el, slice_c_length)
+        M = M_thin_slice @ M
+    return M
 
 
 class CompositeElement:
@@ -253,6 +314,7 @@ class Lens(Element):
 
 
 class Combiner(Element):
+    """Element representing a combiner"""
 
     def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum):
         K = spring_constant_lens(Bp, rp)
@@ -310,8 +372,9 @@ class Lattice:
     def is_stable(self) -> bool:
         return is_stable_lattice(self.elements)
 
-    def M_total(self) -> ndarray:
-        return full_transfer_matrix(self.elements)
+    def M_total(self, revolutions: int = 1) -> ndarray:
+        M_single_rev = full_transfer_matrix(self.elements)
+        return np.linalg.matrix_power(M_single_rev, revolutions)
 
     def trace(self, Xi) -> ndarray:
         return self.M_total() @ Xi
@@ -333,21 +396,12 @@ class Lattice:
         self.elements.append(CompositeElement(M, el_lens.L))
 
     def add_elements_from_sim_seg_bender(self, el_bend: HalbachBenderSimSegmented) -> None:
-        L_drift = el_bend.L_cap
-        Bp = best_fit_magnetic_field_seg_bender(el_bend)
-        self.add_drift(L_drift)
-        rb, rp, ro, bending_ang = el_bend.rb, el_bend.rp, el_bend.ro, el_bend.ang
-        self.add_bender(Bp, rb, rp, ro, bending_ang)
-        self.add_drift(L_drift)
+        M = transfer_matrix_from_bender(el_bend)
+        self.elements.append(CompositeElement(M, el_bend.Lo))
 
     def add_elements_from_sim_combiner(self, el_combiner: CombinerHalbachLensSim) -> None:
-        L_eff_drift_before, L_eff_drift_after = drift_lengths_before_after_combiner(el_combiner)
-        L_eff_combiner = combiner_effective_length(el_combiner)
-        rp = el_combiner.rp
-        Bp = best_fit_magnetic_field_combiner(el_combiner, L_eff_combiner)
-        self.add_drift(L_eff_drift_before)
-        self.add_combiner(L_eff_combiner, Bp, rp)
-        self.add_drift(L_eff_drift_after)
+        M = transfer_matrix_from_combiner(el_combiner)
+        self.elements.append(CompositeElement(M, el_combiner.L))
 
     def build_matrix_lattice_from_sim_lattice(self, simulated_lattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
@@ -360,7 +414,6 @@ class Lattice:
             elif type(el) is HalbachLensSim:
                 self.add_elements_from_sim_lens(el)
             elif type(el) is HalbachBenderSimSegmented:
-                raise NotImplementedError
                 self.add_elements_from_sim_seg_bender(el)
             elif type(el) is CombinerHalbachLensSim:
                 self.add_elements_from_sim_combiner(el)
@@ -372,7 +425,7 @@ class Lattice:
         assert len(self.elements) > 0
         if copy_swarm:
             swarm = swarm.copy()
-        M_tot = np.linalg.matrix_power(self.M_total(), revolutions)
+        M_tot = self.M_total(revolutions=revolutions)
         directionality_sign = -1.0  # particle are assumed to being launched leftwards
         for particle in swarm:
             xo_i, pxo = particle.qi[1] * directionality_sign, particle.pi[1] * directionality_sign

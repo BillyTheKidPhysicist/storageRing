@@ -7,6 +7,7 @@ import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
 from HalbachLensClass import SegmentedBenderHalbach as _HalbachBenderFieldGenerator
+from constants import DEFAULT_ATOM_SPEED
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
 from helperTools import arr_product, round_and_make_odd
 from latticeElements.class_BenderIdeal import BenderIdeal
@@ -18,6 +19,15 @@ from typeHints import sequence
 
 dummy_field_data_empty = (np.ones(1) * np.nan,) * 7
 
+
+def speed_with_energy_correction(V: float) -> float:
+    E0 = .5 * DEFAULT_ATOM_SPEED ** 2
+    KE = E0 - V
+    speed_corrected = np.sqrt(2 * KE)
+    return speed_corrected
+
+
+# todo: fix bug with coord outside when right on edge on input
 
 class HalbachBenderSimSegmented(BenderIdeal):
     # magnet
@@ -101,10 +111,12 @@ class HalbachBenderSimSegmented(BenderIdeal):
             x_arr = r * np.cos(theta_arr)
             y_arr = r * np.sin(theta_arr)
             coords = np.column_stack((x_arr, y_arr, z_arr))
-            F = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
-            Fr = np.linalg.norm(F[:, :2], axis=1)
-            FCen = np.ones(len(coords)) * m * self.PTL.speed_nominal ** 2 / r
-            FCen[coords[:, 2] < 0.0] = 0.0
+            norms = [coord / np.linalg.norm(coord) for coord in coords]
+            forces = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
+            V_vals = lens.B_norm(coords) * SIMULATION_MAGNETON
+            Fr = np.array([np.dot(force, norm) for force, norm in zip(forces, norms)])
+            atom_speeds = np.array([speed_with_energy_correction(V) for V in V_vals])
+            FCen = m * atom_speeds ** 2 / r
             error = np.sum((Fr - FCen) ** 2)
             return error
 
@@ -342,6 +354,9 @@ class HalbachBenderSimSegmented(BenderIdeal):
         bender_field_generator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return bender_field_generator
 
+    def build_full_bender_model(self):
+        return self.build_bender(True, (True, True), num_lenses=self.num_magnets + 1)
+
     def in_which_section_of_bender(self, q_el: np.ndarray) -> str:
         """Find which section of the bender q_el is in. options are:
             - 'IN' refers to the westward cap. at some angle
@@ -355,7 +370,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         cap_names = ['IN', 'OUT']
         for name in cap_names:
             x_cap, y_cap = mirror_across_angle(q_el[0], q_el[1], self.ang / 2.0) if name == 'IN' else q_el[:2]
-            if (self.rb - self.ap < x_cap < self.rb + self.ap) and (0 > y_cap > -self.L_cap):
+            if (self.rb - (self.ap + TINY_OFFSET) <= x_cap <= self.rb + (self.ap + TINY_OFFSET)) and (
+                    TINY_OFFSET >= y_cap >= -(self.L_cap + TINY_OFFSET)):
                 return name
         return 'NONE'
 
