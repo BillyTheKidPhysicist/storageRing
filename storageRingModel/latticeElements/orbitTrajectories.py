@@ -30,17 +30,17 @@ def convert_center_to_orbit_coords(el: Element, s: RealNum, xc: RealNum, yc: Rea
     return x, y, z
 
 
-def combiner_halbach_orbit_coords_el_frame(el: Element, h=5e-6) -> np.ndarray:
+def combiner_halbach_orbit_coords_el_frame(el: Element, h=5e-6) -> tuple[np.ndarray, np.ndarray]:
     atom_state = 'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER'
     force_func = make_halbach_combiner_force_function(el)
-    q_arr, _ = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
-                                           particle_y_offset_start=el.output_offset, atom_state=atom_state, h=h)
+    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
+                                               particle_y_offset_start=el.output_offset, atom_state=atom_state, h=h)
 
-    return q_arr
+    return q_arr, p_arr
 
 
 def combiner_halbach_orbit_xy(el: Element) -> np.ndarray:
-    q_arr = combiner_halbach_orbit_coords_el_frame(el)
+    q_arr, _ = combiner_halbach_orbit_coords_el_frame(el)
     xy = q_arr[:, :2]
     for i, coord in enumerate(xy):
         xy[i] = el.R_Out @ coord

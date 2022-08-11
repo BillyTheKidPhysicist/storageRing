@@ -168,7 +168,7 @@ class Collection(_Collection):
 
     def B_vec(self, eval_coords: np.ndarray, use_approx: int = False) -> np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        assert len(self) > 0
+        assert len(self) > 0 and isinstance(eval_coords,np.ndarray)
         if use_approx:
             raise NotImplementedError  # this is only implement on the bender
         mTESLA_TO_TESLA = 1e-3

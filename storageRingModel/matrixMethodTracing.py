@@ -1,3 +1,4 @@
+import itertools
 from math import sqrt, cos, sin, cosh, sinh
 from typing import Iterable, Union
 
@@ -5,13 +6,15 @@ import numpy as np
 
 from HalbachLensClass import Collection
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
+from helperTools import multiply_matrices
 from latticeElements.class_HalbachBenderSegmented import mirror_across_angle
 from latticeElements.elements import Drift as Drift_Sim
 from latticeElements.elements import HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim
 from latticeElements.orbitTrajectories import combiner_halbach_orbit_coords_el_frame
 from typeHints import ndarray, RealNum
 
-SMALL_ROUNDING_NUM = 1e-14
+SMALL_ROUNDING_NUM: float = 1e-14
+NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model internal behaviour of bender
 
 
 def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
@@ -106,14 +109,34 @@ def lens_transfer_matrix_for_slice(rp: RealNum, magnets: Collection, x_slice: Re
     return M_slice
 
 
+def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray]:
+    s_fringe_depth = (el.fringe_frac_outer + 3) * el.rp
+    if s_fringe_depth >= el.L / 2.0:
+        s_fringe_depth = el.L / 2.0
+    num_slices_per_bore_rad = 300  # Don't use less than 100
+    num_slices = round(num_slices_per_bore_rad * s_fringe_depth / el.rp)
+    num_slices = int(2 * (num_slices // 2))
+    s_slices_fringing, slice_length_fringe = split_range_into_slices(0.0, s_fringe_depth, num_slices)
+    slice_lengths_fringe = np.ones(len(s_slices_fringing)) * slice_length_fringe
+    if s_fringe_depth >= el.L / 2.0:
+        s_slices, slice_lengths = s_slices_fringing, slice_lengths_fringe
+    else:
+        s_inner = s_fringe_depth + (el.L / 2.0 - s_fringe_depth) / 2.0
+        slice_length_inner = (el.L / 2.0 - s_fringe_depth)  # /4.0
+        s_slices = [*s_slices_fringing, s_inner]
+        slice_lengths = [*slice_lengths_fringe, slice_length_inner]
+    return s_slices, slice_lengths
+
+
 def transfer_matrix_from_lens(el: HalbachLensSim) -> ndarray:
     magnet = el.magnet.make_magpylib_magnets(False, False)
-    num_slices_per_bore_rad = 300  # Don't use less than 100
-    num_slices = round(num_slices_per_bore_rad * el.L / el.rp)
-    x_slices, slice_length = split_range_into_slices(0.0, el.L, num_slices)
+    s_slices, slice_lengths = s_slices_and_lengths_lens(el)
     M = np.eye(2)
-    for x in x_slices:
-        M = lens_transfer_matrix_for_slice(el.rp, magnet, x, slice_length) @ M
+    M_slices = [lens_transfer_matrix_for_slice(el.rp, magnet, x, slice_length) for x, slice_length in
+                zip(s_slices, slice_lengths)]
+
+    for M_slice in itertools.chain(M_slices, reversed(M_slices)):
+        M = M_slice @ M
     return M
 
 
@@ -180,16 +203,16 @@ def K_centrifugal_combiner_at_path_index(coord: ndarray, norm: ndarray, magnets:
 
 
 def combiner_transfer_matrix_at_path_index(index: int, magnets: Collection, coords_path: ndarray,
-                                           norms_path: ndarray, xo_vals: ndarray) -> ndarray:
+                                           speeds_path: np.ndarray, norms_path: ndarray,
+                                           xo_vals: ndarray) -> ndarray:
     """Compute the thin transfer matrix that corresponds to the location at coords_path[index]"""
     coord = coords_path[index]
     norm = norms_path[index]
     coords = np.array([coord + xo * norm for xo in xo_vals])
     B_norm_grad = magnets.B_norm_grad(coords)
     forces = -SIMULATION_MAGNETON * B_norm_grad
-    V = SIMULATION_MAGNETON * magnets.B_norm(coord)
     forces_xo = [np.dot(force, norm) for force in forces]
-    atom_speed = speed_with_energy_correction(V)
+    atom_speed = speeds_path[index]
     m = np.polyfit(xo_vals, forces_xo, 1)[0]
     K = -m / atom_speed ** 2
     K_cent = K_centrifugal_combiner_at_path_index(coord, norm, magnets)
@@ -202,14 +225,16 @@ def combiner_transfer_matrix_at_path_index(index: int, magnets: Collection, coor
 def transfer_matrix_from_combiner(el_combiner: CombinerHalbachLensSim) -> ndarray:
     """Compute the transfer matric for the combiner. This is done by splitting the element into many thin matrices, and
     multiplying them together"""
-    coords_path = combiner_halbach_orbit_coords_el_frame(el_combiner)
+    coords_path, p_path = combiner_halbach_orbit_coords_el_frame(el_combiner)
+    speeds_path = np.linalg.norm(p_path, axis=1)
     norms_path = unit_vec_perp_to_path(coords_path)
     xo_max = min([(el_combiner.rp - el_combiner.output_offset), el_combiner.output_offset]) / 5.0
     xo_vals = np.linspace(-xo_max, xo_max, 11)
     magnets = el_combiner.magnet.make_magpylib_magnets(False, False)
     M = np.eye(2)
     for idx, _ in enumerate(coords_path):
-        M_thin_slice = combiner_transfer_matrix_at_path_index(idx, magnets, coords_path, norms_path, xo_vals)
+        M_thin_slice = combiner_transfer_matrix_at_path_index(idx, magnets, coords_path, speeds_path, norms_path,
+                                                              xo_vals)
         M = M_thin_slice @ M
     return M
 
@@ -246,10 +271,10 @@ def bender_transfer_matrix_for_slice(s: float, magnets: Collection, el: HalbachB
     num_samples = 11
     xo_vals = np.linspace(-xo_max / 4.0, xo_max / 4.0, num_samples)
     coords = np.array([el.convert_center_to_cartesian_coords(s, deltar_orbit + xo, 0.0) for xo in xo_vals])
-    B_norm_grad = magnets.B_norm_grad(coords, use_approx=True)
+    B_norm_grad = magnets.B_norm_grad(coords, use_approx=True, dx=1e-6, diff_method='central')
     forces = -SIMULATION_MAGNETON * B_norm_grad
-    B_norm_at_center = el.convert_center_to_cartesian_coords(s, deltar_orbit, 0.0)
-    V = SIMULATION_MAGNETON * np.mean(B_norm_at_center)
+    coord_center_orbit = np.array(el.convert_center_to_cartesian_coords(s, deltar_orbit, 0.0))
+    V = SIMULATION_MAGNETON * magnets.B_norm(coord_center_orbit)
     norm_perps = xo_unit_vector_bender_el_frame(el, coords[0])
     force_r = [np.dot(norm_perps, force) for force in forces]
     atom_speed = speed_with_energy_correction(V)
@@ -265,19 +290,62 @@ def bender_transfer_matrix_for_slice(s: float, magnets: Collection, el: HalbachB
     return M
 
 
+def s_slices_and_lengths_bender(el: HalbachBenderSimSegmented) -> tuple[ndarray, ndarray]:
+    """Return arrays of orbit position for slices used to compute transfer matrix of fringing and periodic internal
+    regions of bender"""
+    s_unit_cell = el.rb * el.ucAng
+    s_length_magnet = 2 * s_unit_cell
+    s_fringe_depth = el.L_cap + NUM_FRINGE_MAGNETS_MIN * s_length_magnet
+    num_slices_per_bore_radius = 5
+    num_slices_min_uc = 10
+    num_slices_fringe = round(num_slices_per_bore_radius * s_fringe_depth / el.rp)
+    num_slices_uc = round(num_slices_per_bore_radius * s_unit_cell / el.rp)
+    num_slices_uc += num_slices_min_uc
+    s_slices_fringe, slice_length_fringe = split_range_into_slices(0.0, s_fringe_depth, num_slices_fringe)
+    s_slices_uc, slice_length_uc = split_range_into_slices(s_fringe_depth, s_fringe_depth + s_unit_cell, num_slices_uc)
+    return s_slices_fringe, s_slices_uc
+
+
+def bender_transfer_matrix_start_end(s_slices_fringe: ndarray, magnets: Collection,
+                                     el: HalbachBenderSimSegmented) -> tuple[ndarray, ndarray]:
+    """Return transfer matrices representing beginning and ending segments of bender. These are the region where the
+    impact of fringe fields cannot be ignored."""
+    slice_length_fringe = s_slices_fringe[1] - s_slices_fringe[0]
+    M_slices_fringe = [bender_transfer_matrix_for_slice(s, magnets, el, slice_length_fringe) for s in s_slices_fringe]
+    M_start = multiply_matrices(M_slices_fringe)
+    M_end = multiply_matrices(M_slices_fringe, reverse=True)
+    return M_start, M_end
+
+
+def bender_transfer_matrix_internal(s_slices_uc: ndarray, magnets: Collection,
+                                    el: HalbachBenderSimSegmented) -> ndarray:
+    """Return transfer matrix that represents interior of bender where the impact of fringe fields can be ignored. This is
+    rapidly computed by exploiting the symmetry of the unit cell model"""
+    num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
+    slice_length_uc = s_slices_uc[1] - s_slices_uc[0]
+    M_slices_uc = [bender_transfer_matrix_for_slice(s, magnets, el, slice_length_uc) for s in s_slices_uc]
+    M_uc_exit = multiply_matrices(M_slices_uc)  # first unit cell in bender is a half, so an 'exit', so 2N later is
+    # also exit
+    M_uc_entrance = multiply_matrices(M_slices_uc, reverse=True)  # next unit cell is 'entrance', or first half o unit
+    # cell
+    # matrices = [M_uc_exit, M_uc_entrance]
+    # M_internal = multiply_matrices(matrices, num_iters_cycling=num_internal_uc)
+    M_exit_to_entrace = M_uc_exit @ M_uc_entrance
+    M_internal = np.linalg.matrix_power(M_exit_to_entrace, num_internal_mags)
+    return M_internal
+
+
 def transfer_matrix_from_bender(el: HalbachBenderSimSegmented) -> ndarray:
-    """Compute the transfer matric for the bender. This is done by splitting the element into many thin matrices, and
+    """Return the transfer matric for the bender. This is done by splitting the element into many thin matrices, and
     multiplying them together"""
-    magnets = el.build_full_bender_model()
-    num_slices_per_mag = 5
-    num_slices = 10 + el.num_magnets * num_slices_per_mag
-    sc_max = el.ang * el.rb + 2 * el.L_cap
-    s_slices, slice_c_length = split_range_into_slices(0.0, sc_max, num_slices)
-    M = np.eye(2)
-    for s in s_slices:
-        M_thin_slice = bender_transfer_matrix_for_slice(s, magnets, el, slice_c_length)
-        M = M_thin_slice @ M
-    return M
+    if el.num_magnets < 2 * NUM_FRINGE_MAGNETS_MIN:
+        raise NotImplementedError
+    magnets = el.build_bender(True, (True, False), num_lenses=NUM_FRINGE_MAGNETS_MIN * 3)
+    s_slices_fringe, s_slices_uc = s_slices_and_lengths_bender(el)
+    M_start, M_end = bender_transfer_matrix_start_end(s_slices_fringe, magnets, el)
+    M_internal = bender_transfer_matrix_internal(s_slices_uc, magnets, el)
+    M_full = M_end @ M_internal @ M_start
+    return M_full
 
 
 class CompositeElement:

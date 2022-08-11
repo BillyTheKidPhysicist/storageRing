@@ -86,6 +86,28 @@ def make_dense_curve_1D_linear(x: np.ndarray, y: np.ndarray, num_points: int = 1
     return x_dense, y_dense
 
 
+def multiply_matrices(matrices: sequence, M_start=None, reverse=False, num_iters_cycling=None):
+    """Given a sequence of matrices, multiply them together start to end and return the result, M_total.
+    M_total=Mn@Mn-1 ... M1@M0. """
+    assert matrices[0].shape[0] == matrices[0].shape[1] and matrices[0].ndim == 2
+    matrix_size = matrices[0].shape[0]
+    if reverse:
+        matrices = reversed(matrices)
+    if num_iters_cycling is not None:
+        assert isinstance(num_iters_cycling, int) and num_iters_cycling > 0
+        matrices = itertools.islice(itertools.cycle(matrices), num_iters_cycling)
+    M_total = np.eye(matrix_size) if M_start is None else M_start
+    for i, M in enumerate(matrices):
+        M_total = M @ M_total if i > 0 else M
+    return M_total
+
+
+def is_even(x: int) -> bool:
+    """Test if a number is even"""
+    assert type(x) is int and x > 0
+    return True if x % 2 == 0 else False
+
+
 def radians(value_in_degrees: RealNum) -> float:
     return (value_in_degrees / 180) * np.pi
 
