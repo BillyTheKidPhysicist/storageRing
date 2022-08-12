@@ -1,3 +1,4 @@
+import copy
 import itertools
 import math
 import random
@@ -100,6 +101,21 @@ def multiply_matrices(matrices: sequence, M_start=None, reverse=False, num_iters
     for i, M in enumerate(matrices):
         M_total = M @ M_total if i > 0 else M
     return M_total
+
+
+def shrink_bounds_around_vals(bounds: sequence, vals: sequence, shrink_frac: float) -> sequence:
+    """Contract bounds about coordinates by a factor"""
+    assert shrink_frac <= 1.0
+    bounds = copy.deepcopy(bounds)
+    for bound, val in zip(bounds, vals):
+        if val > bound[1] or val < bound[0] or not bound[1] >= bound[0]:
+            raise ValueError
+        bound_width = shrink_frac * (bound[1] - bound[0])
+        bound_lower = val - bound_width / 2.0
+        bound_upper = val + bound_width / 2.0
+        bound[0] = bound_lower if bound[0] < bound_lower else bound[0]
+        bound[1] = bound_upper if bound[1] > bound_upper else bound[1]
+    return bounds
 
 
 def is_even(x: int) -> bool:

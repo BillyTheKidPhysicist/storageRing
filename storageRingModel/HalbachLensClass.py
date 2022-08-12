@@ -532,10 +532,10 @@ class SegmentedBenderHalbach(Collection):
         assert len(angle_arr) > 1
         length_magnets = [self.Lm] * self.num_lenses
         angle_sep = (angle_arr[1] - angle_arr[0])
-        # the first lens (clockwise sense in xz plane) is a half length lens
+
         length_magnets[0] = length_magnets[0] / 2 if self.use_half_cap_end[0] else length_magnets[0]
         angle_arr[0] = angle_arr[0] + angle_sep * .25 if self.use_half_cap_end[0] else angle_arr[0]
-        # the last lens (clockwise sense in xz plane) is a half length lens
+
         length_magnets[-1] = length_magnets[-1] / 2 if self.use_half_cap_end[1] else length_magnets[-1]
         angle_arr[-1] = angle_arr[-1] - angle_sep * .25 if self.use_half_cap_end[1] else angle_arr[-1]
 
