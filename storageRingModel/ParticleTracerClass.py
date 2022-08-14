@@ -9,7 +9,7 @@ from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 from collisionPhysics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
-from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, HalbachBenderSimSegmented, \
+from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, HalbachBender, \
     CombinerSim, CombinerHalbachLensSim
 from particleTracerFunctions_numba import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, fast_qNew, \
     dot_Prod_3D
@@ -66,13 +66,13 @@ class ParticleTracer:
             -> tuple[np.ndarray, np.ndarray]:
         el1 = self.current_el
         el2 = nextEll
-        if type(el1) in (BenderIdeal, HalbachBenderSimSegmented):
+        if type(el1) in (BenderIdeal, HalbachBender):
             r01 = el1.r0
         elif type(el1) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
             r01 = el1.r2
         else:
             r01 = el1.r1
-        if type(el2) in (BenderIdeal, HalbachBenderSimSegmented):
+        if type(el2) in (BenderIdeal, HalbachBender):
             r02 = el2.r0
         elif type(el2) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
             r02 = el2.r2

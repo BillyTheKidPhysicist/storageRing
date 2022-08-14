@@ -15,7 +15,7 @@ from shapely.geometry import Polygon
 
 from constants import FLAT_WALL_VACUUM_THICKNESS, TUBE_WALL_THICKNESS
 from latticeElements.elements import BenderIdeal, LensIdeal, CombinerIdeal, HalbachLensSim, Drift, \
-    HalbachBenderSimSegmented, CombinerHalbachLensSim, CombinerSim
+    HalbachBender, CombinerHalbachLensSim, CombinerSim
 from latticeElements.elements import Element
 from typeHints import RealNum
 
@@ -71,7 +71,7 @@ def make_hexapole_bender_outer_points(el: Element) -> list[np.ndarray]:
     """Construct a list of points of coordinates of corners of the outer geometry of a hexapole bending section.
     Shape is a toroid with short straight section at input/ouput, with another wider but shorter toroid ontop """
 
-    assert type(el) is HalbachBenderSimSegmented
+    assert type(el) is HalbachBender
     phi_arr = np.linspace(el.ang, 0.0, BENDER_POINTS)  # + el.theta + np.pi / 2  # angles swept out
 
     x_inner = (el.rb - el.outer_half_width) * np.cos(phi_arr)  # x values for inner bend
@@ -247,7 +247,7 @@ def make_drift_shape(el: Drift):
 def make_bender_shape(el: Element) -> tuple[Polygon, Polygon]:
     """Make shapely object that represent the inner (vacuum) and outer (exterior profile) of bender elements"""
 
-    assert type(el) in (BenderIdeal, HalbachBenderSimSegmented)
+    assert type(el) in (BenderIdeal, HalbachBender)
     half_width = el.ap
     theta = el.theta
     phiArr = np.linspace(0, -el.ang, BENDER_POINTS) + theta + pi / 2  # angles swept out
@@ -257,7 +257,7 @@ def make_bender_shape(el: Element) -> tuple[Polygon, Polygon]:
     x_outer = np.flip((el.rb + half_width) * np.cos(phiArr) + r0[0])  # x values for outer bend
     y_outer = np.flip((el.rb + half_width) * np.sin(phiArr) + r0[1])  # y values for outer bend
 
-    if isinstance(el, HalbachBenderSimSegmented):
+    if isinstance(el, HalbachBender):
         x_inner = np.append(x_inner[0] + el.nb[0] * el.L_cap, x_inner)
         y_inner = np.append(y_inner[0] + el.nb[1] * el.L_cap, y_inner)
         x_inner = np.append(x_inner, x_inner[-1] + el.ne[0] * el.L_cap)
@@ -272,7 +272,7 @@ def make_bender_shape(el: Element) -> tuple[Polygon, Polygon]:
     points_inner = np.column_stack((x, y))  # shape the coordinates and make the object
     if type(el) is BenderIdeal:
         points_outer = copy.deepcopy(points_inner)
-    elif type(el) is HalbachBenderSimSegmented:
+    elif type(el) is HalbachBender:
         points_outer = make_hexapole_bender_outer_points(el)
     else:
         raise NotImplementedError
@@ -299,7 +299,7 @@ def make_element_shape(el: Element) -> tuple[Polygon, Polygon]:
     as lenses, drifts, benders and combiners"""
     if type(el) in (HalbachLensSim, LensIdeal):
         shapely_outer, shapely_inner = make_lens_shape(el)
-    elif type(el) in (BenderIdeal, HalbachBenderSimSegmented):
+    elif type(el) in (BenderIdeal, HalbachBender):
         shapely_outer, shapely_inner = make_bender_shape(el)
     elif type(el) in (CombinerIdeal, CombinerSim, CombinerHalbachLensSim):
         shapely_outer, shapely_inner = make_combiner_shape(el)

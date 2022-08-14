@@ -29,7 +29,7 @@ def speed_with_energy_correction(V: float) -> float:
 
 # todo: fix bug with coord outside when right on edge on input
 
-class HalbachBenderSimSegmented(BenderIdeal):
+class HalbachBender(BenderIdeal):
     # magnet
     # this element is a model of a bending magnet constructed of segments. There are three models from which data is
     # extracted required to construct the element. All exported data must be in a grid, though it the spacing along
@@ -145,7 +145,8 @@ class HalbachBenderSimSegmented(BenderIdeal):
         self.fill_In_And_Out_Rotation_Matrices()
         assert self.ang < 2 * pi * 3 / 4  # not sure why i put this here
         self.ro = self.rb + self.output_offset
-        self.L = self.ang * self.rb
+        self.L = self.ang * self.rb #todo: this is wrong, but will it screw things up?
+
         self.Lo = self.ang * self.ro + 2 * self.L_cap
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
 
@@ -192,25 +193,31 @@ class HalbachBenderSimSegmented(BenderIdeal):
         grid_coords = np.asarray(np.meshgrid(*coord_arrs)).T.reshape(-1, 3)
         return grid_coords
 
-    def convert_center_to_cartesian_coords(self, s: float, xc: float, yc: float) -> tuple[float, float, float]:
+    def convert_center_to_cartesian_coords(self, s: float, xc: float, yc: float,r_offset=0.0) -> tuple[float, float, float]:
         """Convert center coordinates [s,xc,yc] to cartesian coordinates[x,y,z]"""
-
+        r_center=self.rb+r_offset
         if -TINY_OFFSET <= s < self.L_cap:
-            x, y, z = self.rb + xc, s - self.L_cap, yc
-        elif self.L_cap <= s < self.L_cap + self.ang * self.rb:
-            theta = (s - self.L_cap) / self.rb
-            r = self.rb + xc
+            x, y, z = r_center + xc, s - self.L_cap, yc
+        elif self.L_cap <= s < self.L_cap + self.ang * r_center:
+            theta = (s - self.L_cap) / r_center
+            r = r_center + xc
             x, y, z = cos(theta) * r, sin(theta) * r, yc
-        elif self.L_cap + self.ang * self.rb <= s <= self.ang * self.rb + 2 * self.L_cap + TINY_OFFSET:
+        elif self.L_cap + self.ang * r_center <= s <= self.ang * r_center + 2 * self.L_cap + TINY_OFFSET:
             theta = self.ang
-            r = self.rb + xc
+            r = r_center + xc
             x0, y0 = cos(theta) * r, sin(theta) * r
-            delta_s = s - (self.ang * self.rb + self.L_cap)
+            delta_s = s - (self.ang * r_center + self.L_cap)
             theta_perp = pi + atan(-1 / tan(theta))
             x, y, z = x0 + cos(theta_perp) * delta_s, y0 + sin(theta_perp) * delta_s, yc
         else:
             raise ValueError
         return x, y, z
+
+    def convert_orbit_to_cartesian_coords(self, s: float, xo: float, yo: float) -> tuple[float, float, float]:
+        """Convert orbit coordinates [s,xo,yo] to cartesian coordinates[x,y,z]"""
+
+        return self.convert_center_to_cartesian_coords(s,xo,yo,r_offset=self.ro-self.rb)
+
 
     def make_perturbation_data_coords(self) -> tuple[np.ndarray, np.ndarray]:
         """Make coordinates for computing and interpolation perturbation data. The perturbation field exists in an

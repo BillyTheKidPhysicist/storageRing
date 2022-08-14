@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 
 from helperTools import is_close_all
-from latticeElements.elements import Drift, HalbachBenderSimSegmented, CombinerHalbachLensSim, HalbachLensSim, \
+from latticeElements.elements import Drift, HalbachBender, CombinerHalbachLensSim, HalbachLensSim, \
     LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
 from storageRingGeometryModules.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry
@@ -18,7 +18,7 @@ def _get_Target_Radii(PTL) -> float:
 
     radii = []
     for element in PTL:
-        if type(element) is HalbachBenderSimSegmented:
+        if type(element) is HalbachBender:
             radii.append(element.ro)
     for radius in radii[1:]:
         assert radius == radii[0]  # different target radii is not supported now
@@ -38,7 +38,7 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
     return Kink(-combiner.ang, L2, L1)
 
 
-def _cappedSlicedBend_From_HalbachBender(bender: HalbachBenderSimSegmented) -> CappedSlicedBend:
+def _cappedSlicedBend_From_HalbachBender(bender: HalbachBender) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
     length_seg, L_cap, radius, num_magnets = bender.Lm, bender.L_cap, bender.ro, bender.num_magnets
@@ -60,7 +60,7 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
             elements.append(LineWithAngledEnds(el_PTL.L, el_PTL.input_tilt_angle, el_PTL.output_tilt_angle))
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
             elements.append(_kink_From_Combiner(el_PTL))
-        elif type(el_PTL) is HalbachBenderSimSegmented:
+        elif type(el_PTL) is HalbachBender:
             elements.append(_cappedSlicedBend_From_HalbachBender(el_PTL))
         elif type(el_PTL) is BenderIdeal:
             elements.append(Bend(el_PTL.ro, el_PTL.ang))
@@ -84,13 +84,13 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     return storage_ring
 
 
-def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBenderSimSegmented],
+def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBender],
                                    shape: Union[Bend, CappedSlicedBend]):
     """Given a geometric shape object, fill the geometric attributes of an Element object. """
 
-    assert type(bender) in (BenderIdeal, HalbachBenderSimSegmented) and type(shape) in (Bend, CappedSlicedBend)
+    assert type(bender) in (BenderIdeal, HalbachBender) and type(shape) in (Bend, CappedSlicedBend)
     bender.rb = shape.radius - bender.output_offset  # get the bending radius back from orbit radius
-    if type(bender) is HalbachBenderSimSegmented:
+    if type(bender) is HalbachBender:
         bender.num_magnets = shape.num_magnets
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
@@ -171,7 +171,7 @@ def update_and_place_elements_from_floor_plan(PTL, floor_plan):
             _build_Lattice_Lens_Or_Drift(el_PTL, el_Geom)
         elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
             _build_Lattice_Combiner_Element(el_PTL, el_Geom)
-        elif type(el_PTL) in (HalbachBenderSimSegmented, BenderIdeal):
+        elif type(el_PTL) in (HalbachBender, BenderIdeal):
             _build_Lattice_Bending_Element(el_PTL, el_Geom)
         else:
             raise NotImplementedError

@@ -3,7 +3,7 @@ from typing import Optional
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
-from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBenderSimSegmented
+from latticeElements.elements import CombinerHalbachLensSim, HalbachLensSim, HalbachBender
 from latticeModels.latticeModelParameters import system_constants, DEFAULT_SYSTEM_OPTIONS
 from latticeModels.latticeModelUtilities import LockedDict
 
@@ -47,7 +47,7 @@ def el_fringe_space(elementName: str, elementBoreRadius: float) -> float:
         return 0.0
     fringe_fracs = {"combiner": CombinerHalbachLensSim.fringe_frac_outer,
                     "lens": HalbachLensSim.fringe_frac_outer,
-                    "bender": HalbachBenderSimSegmented.fringe_frac_outer}
+                    "bender": HalbachBender.fringe_frac_outer}
     return fringe_fracs[elementName] * elementBoreRadius
 
 

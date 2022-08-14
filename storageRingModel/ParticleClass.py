@@ -170,8 +170,19 @@ class Swarm:
     def __len__(self):
         return len(self.particles)
 
-    def __getitem__(self, index):
-        return self.particles[index]
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return self.particles[item]
+        elif len(item) in (2, 3):
+            item = item if len(item) == 3 else (*item, slice(None))
+            particle_slice, var, var_index = item
+            particles = self.particles[particle_slice]
+            if isinstance(particle_slice, int):
+                return vars(particles)[var][var_index]
+            elif isinstance(particle_slice, slice):
+                return [vars(particle)[var][var_index] for particle in self.particles]
+        else:
+            raise NotImplementedError
 
     def add_new_particle(self, qi: Optional[np.ndarray] = None, pi: Union[np.ndarray] = None) -> None:
         # add an additional particle to phase space

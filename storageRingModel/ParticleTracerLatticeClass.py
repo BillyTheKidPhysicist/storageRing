@@ -6,7 +6,7 @@ import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
 from latticeElements.arrangeMagnets import collect_valid_neighboring_magpylib_magnets
-from latticeElements.elements import BenderIdeal, HalbachBenderSimSegmented, LensIdeal, CombinerIdeal, \
+from latticeElements.elements import BenderIdeal, HalbachBender, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
 from latticeElements.elements import Element
 from shapelyObjectBuilder import build_shapely_objects
@@ -17,7 +17,7 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_eleme
 # people, I need to change that. This was before my cleaner code approach
 
 
-benderTypes = Union[BenderIdeal, HalbachBenderSimSegmented]
+benderTypes = Union[BenderIdeal, HalbachBender]
 
 
 class ParticleTracerLattice:
@@ -212,7 +212,7 @@ class ParticleTracerLattice:
         # L_cap: Length of element on the end/input of bender
         # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
-        el = HalbachBenderSimSegmented(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
+        el = HalbachBender(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
         el.index = len(self.el_list)  # where the element is in the lattice
         self.bender_indices.append(el.index)
         self.el_list.append(el)

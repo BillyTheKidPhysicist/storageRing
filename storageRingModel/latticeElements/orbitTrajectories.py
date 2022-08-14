@@ -5,7 +5,7 @@ from shapely.geometry import LineString
 
 from latticeElements.combiner_characterizer import make_halbach_combiner_force_function, compute_particle_trajectory
 from latticeElements.elements import Drift, HalbachLensSim, CombinerHalbachLensSim, BenderIdeal, \
-    HalbachBenderSimSegmented, Element
+    HalbachBender, Element
 from typeHints import RealNum
 
 
@@ -81,7 +81,7 @@ def nominal_particle_trajectory(el: Element) -> np.ndarray:
         xy = combiner_halbach_orbit_xy(el)
     elif type(el) is BenderIdeal:
         xy = ideal_bendorbit_xy(el)
-    elif type(el) is HalbachBenderSimSegmented:
+    elif type(el) is HalbachBender:
         xy = segmented_halbach_bender(el)
     else:
         raise NotImplemented

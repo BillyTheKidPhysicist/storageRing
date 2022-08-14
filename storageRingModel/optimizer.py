@@ -116,7 +116,7 @@ class Solver:
                                                                self.storage_ring_system_options)
         return lattice_ring, lattice_injector
 
-    def make_system_model(self, params):
+    def make_system_model(self, params)-> StorageRingModel:
         lattice_ring, lattice_injector = self.build_lattices(params)
         model = StorageRingModel(lattice_ring, lattice_injector, use_collisions=self.use_collisions,
                                  num_particles=self.num_particles, use_energy_correction=self.use_energy_correction,

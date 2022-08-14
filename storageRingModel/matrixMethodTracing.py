@@ -1,20 +1,19 @@
 import copy
-import itertools
 from math import sqrt, cos, sin, cosh, sinh
-from typing import Iterable, Union
-from typing import Optional
+from typing import Iterable, Union, Optional, Callable
 
 import numpy as np
 
-from HalbachLensClass import Collection
+from HalbachLensClass import Collection, SegmentedBenderHalbach
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
 from helperTools import multiply_matrices
 from latticeElements.class_HalbachBenderSegmented import mirror_across_angle
 from latticeElements.elements import Drift as Drift_Sim
-from latticeElements.elements import HalbachLensSim, HalbachBenderSimSegmented, CombinerHalbachLensSim
+from latticeElements.elements import HalbachLensSim, HalbachBender, CombinerHalbachLensSim
 from latticeElements.orbitTrajectories import combiner_halbach_orbit_coords_el_frame
 from typeHints import ndarray, RealNum
+from typeHints import sequence
 
 SMALL_ROUNDING_NUM: float = 1e-14
 NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model internal behaviour of bender
@@ -32,13 +31,13 @@ class ElementRecycler:
         self.elements_sim = []
         self.elements_matrix = []
 
-    def add_sim_and_matrx(self, el_sim, el_matrix):
+    def add_sim_and_matrix(self, el_sim, el_matrix):
         self.elements_sim.append(el_sim)
         self.elements_matrix.append(el_matrix)
 
     def reusable_matrix_el(self, el_sim):
         for i, el in enumerate(self.elements_sim):
-            if type(el_sim) is HalbachBenderSimSegmented and type(el) is type(el_sim):
+            if type(el_sim) is HalbachBender and type(el) is type(el_sim):
                 if el.rp == el_sim.rp and el.num_magnets == el_sim.num_magnets and el.ro == el_sim.ro and el.ucAng == el_sim.ucAng:
                     return self.elements_matrix[i]
             elif type(el_sim) is HalbachLensSim and type(el) is type(el_sim):
@@ -73,6 +72,14 @@ def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
     return np.array([[A, B], [C, D]])
 
 
+def magnet_force(magnets, coords):
+    """Force in magnet at given point"""
+    use_approx = True if type(magnets) is SegmentedBenderHalbach else False
+    B_norm_grad = magnets.B_norm_grad(coords, use_approx=use_approx, dx=1e-6, diff_method='central')
+    forces = -SIMULATION_MAGNETON * B_norm_grad
+    return forces
+
+
 def bender_orbit_radius_energy_correction(Bp: RealNum, rb: RealNum, rp: RealNum, atom_speed: RealNum) -> float:
     """Calculate the orbit radius for particle in a bender. This is balancing the centrifugal "force" with the magnet
     force, and also accounts for the small difference from energy conservation of particle slowing down when entering
@@ -85,7 +92,7 @@ def bender_orbit_radius_energy_correction(Bp: RealNum, rb: RealNum, rp: RealNum,
     return radius_orbit
 
 
-def orbit_offset_bender(el: HalbachBenderSimSegmented, speed_ratio):
+def orbit_offset_bender(el: HalbachBender, speed_ratio):
     """Atom orbits are offset from center of bender because of centrifugal force"""
     delta_r = (el.ro - el.rb) * speed_ratio ** 2
     return delta_r
@@ -102,9 +109,10 @@ def bender_orbit_radius_no_energy_correction(Bp: RealNum, rb: RealNum, rp: RealN
 def is_sim_lattice_viable(simulated_lattice: ParticleTracerLattice, atom_speed: RealNum) -> bool:
     """Check that the matrix lattice generated from the simulated lattice is viable. It will not be if the
     atom speed is such that the orbit in the bender is shifted into the wall"""
+    # IMPROVEMENT: reimplement this
     speed_ratio = atom_speed / simulated_lattice.speed_nominal
     for el in simulated_lattice:
-        if type(el) is HalbachBenderSimSegmented:
+        if type(el) is HalbachBender:
             if orbit_offset_bender(el, speed_ratio) > el.ap:
                 return False
     return True
@@ -126,13 +134,7 @@ def spring_constant_lens(Bp: RealNum, rp: RealNum, atom_speed: RealNum) -> float
     return K
 
 
-def full_transfer_matrix(elements: Iterable) -> ndarray:
-    """Transfer matrix for a sequence of elements start to end"""
-    matrices = [el.M for el in elements]
-    return multiply_matrices(matrices)
-
-
-def matrix_components(M):
+def matrix_components(M: ndarray) -> tuple[RealNum, RealNum, RealNum, RealNum]:
     m11 = M[0, 0]
     m12 = M[0, 1]
     m21 = M[1, 0]
@@ -147,14 +149,42 @@ def lens_transfer_matrix_for_slice(rp: RealNum, magnets: Collection, x_slice: Re
     y_vals = np.linspace(-rp / 4.0, rp / 4.0, num_samples)
     z_vals = np.zeros(num_samples)
     coords = np.column_stack((x_vals, y_vals, z_vals))
-    F_y = -SIMULATION_MAGNETON * magnets.B_norm_grad(coords)[:, 1]
+    F_y = magnet_force(magnets, coords)[:, 1]
     m = np.polyfit(y_vals, F_y, 1)[0]
     K = -m / atom_speed ** 2
     M_slice = transfer_matrix(K, slice_length)
     return M_slice
 
 
-def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray]:
+def Ki_mag_lens(magnets: Collection, s: RealNum, num_samples: int, which_dim: str, range_max: RealNum) -> float:
+    """Magnetic spring constants from lens at position s along xo or yo axes"""
+    x_vals = np.ones(num_samples) * s
+    dim_vals = np.linspace(-range_max, range_max, num_samples)
+    zeros = np.zeros(num_samples)
+    if which_dim == 'xo':
+        y_vals, z_vals, index_dim = dim_vals, zeros, 1
+    elif which_dim == 'yo':
+        y_vals, z_vals, index_dim = zeros, dim_vals, 2
+    else:
+        raise ValueError
+    coords = np.column_stack((x_vals, y_vals, z_vals))
+    force_xo = magnet_force(magnets, coords)[:, index_dim]
+    return fit_k_to_force(dim_vals, force_xo)
+
+
+def lens_K_mags_for_slice(s: RealNum, magnets: Collection, el: HalbachLensSim) -> tuple[float, float]:
+    """Magnetic spring constans for lens element at position x. Return spring constant for xo and yo axes"""
+    num_samples = 30
+    fit_range_max = el.rp / 4.0
+    Kx = Ki_mag_lens(magnets, s, num_samples, 'xo', fit_range_max)
+    Ky = Ki_mag_lens(magnets, s, num_samples, 'yo', fit_range_max)
+    return Kx, Ky
+
+
+def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray, float, ndarray]:
+    """Get the slice positions and lengths along lens. Symmetry is exploited if the lens is long enough such that the
+    lens is split into two region, and fringing region and inner region. The inner region is only used if the lens is
+    long enough that the fringe fields don't impact the inner region meaningfully"""
     s_fringe_depth = (el.fringe_frac_outer + 3) * el.rp
     if s_fringe_depth >= el.L / 2.0:
         s_fringe_depth = el.L / 2.0
@@ -164,45 +194,47 @@ def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray]:
     s_slices_fringing, slice_length_fringe = split_range_into_slices(0.0, s_fringe_depth, num_slices)
     slice_lengths_fringe = np.ones(len(s_slices_fringing)) * slice_length_fringe
     if s_fringe_depth >= el.L / 2.0:
-        s_slices, slice_lengths = s_slices_fringing, slice_lengths_fringe
+        s_inner, lengths_inner = None, None
     else:
         s_inner = s_fringe_depth + (el.L / 2.0 - s_fringe_depth) / 2.0
-        slice_length_inner = (el.L / 2.0 - s_fringe_depth)  # /4.0
-        s_slices = [*s_slices_fringing, s_inner]
-        slice_lengths = [*slice_lengths_fringe, slice_length_inner]
-    return s_slices, slice_lengths
+        length_inner = el.L - s_fringe_depth * 2.0
+        num_inner = round(length_inner / slice_lengths_fringe[0])
+        lengths_inner = np.ones(num_inner) * length_inner / num_inner
+    return s_slices_fringing, slice_lengths_fringe, s_inner, lengths_inner
 
 
-def transfer_matrix_from_lens(el: HalbachLensSim, atom_speed: RealNum) -> ndarray:
-    magnet = el.magnet.make_magpylib_magnets(False, False)
-    s_slices, slice_lengths = s_slices_and_lengths_lens(el)
-    M = np.eye(2)
-    M_slices = [lens_transfer_matrix_for_slice(el.rp, magnet, x, slice_length, atom_speed) for x, slice_length in
-                zip(s_slices, slice_lengths)]
-
-    for M_slice in itertools.chain(M_slices, reversed(M_slices)):
-        M = M_slice @ M
-    return M
-
-
-def stability_factor_lattice(elements: Iterable):
-    """Factor describing stability of periodic lattice of elements. If value is greater than 1 it is stable, though
-    higher values are "more" stable in some sense"""
-    M_total = full_transfer_matrix(elements)
-    m11, m12, m21, m22 = matrix_components(M_total)
-    return 2.0 - (m11 ** 2 + 2 * m12 * m21 + m22 ** 2)
+def K_mag_vals_and_slice_lengths_from_lens_el(el: HalbachLensSim) -> tuple[sequence, sequence]:
+    """Magnetic spring constants and lengths of slices along the length of the lens. used to construct short transfer
+    matrice at each slice"""
+    magnets = el.magnet.make_magpylib_magnets(False, False)
+    s_slices_fringing, slice_lengths_fringe, s_inner, lengths_inner = s_slices_and_lengths_lens(el)
+    K_vals_mag_fringe = [lens_K_mags_for_slice(s, magnets, el) for s in s_slices_fringing]
+    if s_inner is not None:
+        K_mag_inner = lens_K_mags_for_slice(s_inner, magnets, el)
+        K_vals_mag_inner = [K_mag_inner] * len(lengths_inner)
+        K_vals_mag = [*K_vals_mag_fringe, *K_vals_mag_inner, *reversed(K_vals_mag_fringe)]
+        slice_lengths = [*slice_lengths_fringe, *lengths_inner, *slice_lengths_fringe]
+    else:
+        K_vals_mag = [*K_vals_mag_fringe, *reversed(K_vals_mag_fringe)]
+        slice_lengths = [*slice_lengths_fringe] * 2
+    return slice_lengths, K_vals_mag
 
 
-def is_stable_lattice(elements: Iterable) -> bool:
-    """Determine if the lattice is stable. This can be done by computing eigenvalues, or the method below works. If
-    unstable, then raising he transfer matrix to N results in large matrix elements for large N"""
-    return stability_factor_lattice(elements) > 0.0
+def transfer_matrix_func_from_lens(el: HalbachLensSim) -> Callable:
+    """Create equivalent transfer matric from lens. Built by slicing lens into short transfer matrices"""
+    slice_lengths, K_vals_mag = K_mag_vals_and_slice_lengths_from_lens_el(el)
 
+    def M_func(atom_speed: RealNum) -> tuple[ndarray, ndarray]:
+        Mx = np.eye(2)
+        My = np.eye(2)
+        for [Kx_mag, Ky_mag], L in zip(K_vals_mag, slice_lengths):
+            Kx = Kx_mag / atom_speed ** 2
+            Ky = Ky_mag / atom_speed ** 2
+            Mx = transfer_matrix(Kx, L) @ Mx
+            My = transfer_matrix(Ky, L) @ My
+        return Mx, My
 
-def total_length(elements: Iterable) -> float:
-    """Sum of the lengths of elements"""
-    length = sum([el.L for el in elements])
-    return length
+    return M_func
 
 
 def split_range_into_slices(x_min: RealNum, x_max: RealNum, num_slices: int) -> tuple[ndarray, float]:
@@ -215,7 +247,9 @@ def split_range_into_slices(x_min: RealNum, x_max: RealNum, num_slices: int) -> 
 
 def unit_vec_perp_to_path(path_coords: ndarray) -> ndarray:
     """Along the path path_coords, find the perpindicualr normal vector for each point. Assume the path is
-    counter-clockwise, and the normal point radially outwards"""
+    counter-clockwise, and the normal point radially outwards
+    """
+    # IMPROVEMENT: This could be more accurate by using the speed at each point I think
     norm_perps = []
     vec_vertical = np.array([0, 0, 1.0])
     for i in range(len(path_coords)):
@@ -230,7 +264,7 @@ def unit_vec_perp_to_path(path_coords: ndarray) -> ndarray:
 
 
 def combiner_slice_length_at_traj_index(index: int, coords_path: ndarray) -> float:
-    """"""
+    """Length of short slice along length of trajectory through combiner"""
     assert index < len(coords_path)
     if index == 0:
         dr = np.linalg.norm(coords_path[1] - coords_path[0])
@@ -245,53 +279,85 @@ def combiner_slice_length_at_traj_index(index: int, coords_path: ndarray) -> flo
     return slice_length
 
 
-def K_centrifugal_combiner_at_path_index(coord: ndarray, norm: ndarray, magnets: Collection,
-                                         atom_speed: RealNum) -> float:
-    """Compute the centrifugal spring constant"""
-    force = SIMULATION_MAGNETON * magnets.B_norm_grad(coord)
-    force_xo = np.dot(force, norm)
-    K_cent = force_xo ** 2 / (SIMULATION_MASS * atom_speed ** 4)
-    return K_cent
+def combiner_Ki_mag_for_slice(coord: ndarray, normi: ndarray, magnets: Collection, qo_vals: sequence) -> float:
+    """Magnetic spring constant for a slice in combiner along the vector normi perpindicular to coord"""
+    coords = np.array([coord + qo * normi for qo in qo_vals])
+    forces = magnet_force(magnets, coords)
+    forces_yo = [np.dot(force, normi) for force in forces]
+    Ki = fit_k_to_force(qo_vals, forces_yo)
+    return Ki
 
 
-def combiner_transfer_matrix_at_path_index(index: int, magnets: Collection, coords_path: ndarray,
-                                           speeds_path: np.ndarray, norms_path: ndarray,
-                                           xo_vals: ndarray, atom_speed: RealNum, design_speed: RealNum) -> ndarray:
-    """Compute the thin transfer matrix that corresponds to the location at coords_path[index]"""
-    coord = coords_path[index]
-    norm = norms_path[index]
-    coords = np.array([coord + xo * norm for xo in xo_vals])
-    B_norm_grad = magnets.B_norm_grad(coords)
-    forces = -SIMULATION_MAGNETON * B_norm_grad
-    forces_xo = [np.dot(force, norm) for force in forces]
-    speed_path = speeds_path[index] * atom_speed / design_speed
-    m = np.polyfit(xo_vals, forces_xo, 1)[0]
-    K = -m / speed_path ** 2
-    K_cent = K_centrifugal_combiner_at_path_index(coord, norm, magnets, speed_path)
-    K += K_cent
-    slice_length = combiner_slice_length_at_traj_index(index, coords_path)
-    M = transfer_matrix(K, slice_length)
-    return M
+def combiner_K_mags_for_slice(coord: ndarray, norm_xo: ndarray, magnets: Collection,
+                              xo_vals: sequence, yo_vals: sequence) -> tuple[float, float]:
+    """Magnetic spring constants for combiner element at position coord. Return spring constant for xo and yo axes"""
+    norm_yo = np.array([0, 0, 1.0])
+    Kx = combiner_Ki_mag_for_slice(coord, norm_xo, magnets, xo_vals)
+    Ky = combiner_Ki_mag_for_slice(coord, norm_yo, magnets, yo_vals)
+    return Kx, Ky
 
 
-def transfer_matrix_from_combiner(el_combiner: CombinerHalbachLensSim, atom_speed: RealNum) -> ndarray:
+def bending_radius(index: int, p_path: ndarray, coords_path: ndarray):
+    """Bending radius at a goven index along the trajectory of the combiner. Uses simple geometry of angle subtended
+    by and arc of known path length"""
+    assert index >= 0
+    if index != len(p_path) - 1:
+        v1, v2 = p_path[index], p_path[index + 1]
+        dL = np.linalg.norm(coords_path[index + 1] - coords_path[index])
+    else:
+        v1, v2 = p_path[index], p_path[index - 1]
+        dL = np.linalg.norm(coords_path[index - 1] - coords_path[index])
+    theta1 = np.arctan2(v1[1], v1[0])
+    theta2 = np.arctan2(v2[1], v2[0])
+    R = abs(dL / np.tan(theta2 - theta1))
+    return R
+
+
+def combiner_K_mag_and_R_vals(coords_path: ndarray, p_path: ndarray, el: CombinerHalbachLensSim) -> tuple[list, list]:
+    """Mganetic spring constants and bending radius along path of trajectory through combiner."""
+    magnets = el.magnet.make_magpylib_magnets(False, False)
+    norms_xo_path = unit_vec_perp_to_path(coords_path)
+    xo_max = min([(el.rp - el.output_offset), el.output_offset])
+    num_points = 11
+    xo_vals = np.linspace(-xo_max / 5.0, xo_max / 5.0, num_points)
+    yo_max = sqrt(el.rp ** 2 - el.output_offset ** 2)
+    yo_vals = np.linspace(-yo_max / 5.0, yo_max / 5.0, num_points)
+    K_vals_mag = [combiner_K_mags_for_slice(coord, norm, magnets, xo_vals, yo_vals) for coord, norm in
+                  zip(coords_path, norms_xo_path)]
+    R_vals = [bending_radius(idx, p_path, coords_path) for idx in range(len(K_vals_mag))]
+    return K_vals_mag, R_vals
+
+
+def transfer_matrix_func_from_combiner(el: CombinerHalbachLensSim) -> Callable:
     """Compute the transfer matric for the combiner. This is done by splitting the element into many thin matrices, and
     multiplying them together"""
-    coords_path, p_path = combiner_halbach_orbit_coords_el_frame(el_combiner)
+    coords_path, p_path = combiner_halbach_orbit_coords_el_frame(el)
+    coords_path, p_path = np.flip(coords_path, axis=0), np.flip(p_path, axis=0)
     speeds_path = np.linalg.norm(p_path, axis=1)
-    norms_path = unit_vec_perp_to_path(coords_path)
-    xo_max = min([(el_combiner.rp - el_combiner.output_offset), el_combiner.output_offset]) / 5.0
-    xo_vals = np.linspace(-xo_max, xo_max, 11)
-    magnets = el_combiner.magnet.make_magpylib_magnets(False, False)
-    M = np.eye(2)
-    for idx, _ in enumerate(coords_path):
-        M_thin_slice = combiner_transfer_matrix_at_path_index(idx, magnets, coords_path, speeds_path, norms_path,
-                                                              xo_vals, atom_speed, el_combiner.PTL.speed_nominal)
-        M = M_thin_slice @ M
-    return M
+
+    K_vals_mag, R_vals = combiner_K_mag_and_R_vals(coords_path, p_path, el)
+
+    def M_func(atom_speed: RealNum) -> tuple[ndarray, ndarray]:
+        Mx = np.eye(2)
+        My = np.eye(2)
+        speed_factor = atom_speed / DEFAULT_ATOM_SPEED
+        for idx, [[Kx_mag, Ky_mag], R, speed] in enumerate(zip(K_vals_mag, R_vals, speeds_path)):
+            L = combiner_slice_length_at_traj_index(idx, coords_path)
+            speed *= speed_factor
+            Kx = Kx_mag / speed ** 2
+            Ky = Ky_mag / speed ** 2
+            R *= speed_factor ** 2
+            K_cent = 1 / R ** 2
+            Kx += K_cent
+            # IMPROVEMENT: Should the length change depending on the speed factor and the bending radius?
+            Mx = transfer_matrix(Kx, L) @ Mx
+            My = transfer_matrix(Ky, L) @ My
+        return Mx, My
+
+    return M_func
 
 
-def xo_unit_vector_bender_el_frame(el: HalbachBenderSimSegmented, coord: ndarray) -> ndarray:
+def xo_unit_vector_bender_el_frame(el: HalbachBender, coord: ndarray) -> ndarray:
     """get unit vector pointing along xo in the bender orbit frame"""
     which_section = el.in_which_section_of_bender(coord)
     if which_section == 'ARC':
@@ -315,161 +381,229 @@ def speed_with_energy_correction(V: RealNum, atom_speed: RealNum) -> float:
     return speed_corrected
 
 
-def bender_transfer_matrix_for_slice(s: RealNum, magnets: Collection, el: HalbachBenderSimSegmented,
-                                     slice_c_length: RealNum, atom_speed: RealNum) -> ndarray:
-    """This slice transfer matrix for a point along the bender"""
-    speed_ratio = atom_speed / el.PTL.speed_nominal
-    deltar_orbit = orbit_offset_bender(el, speed_ratio)
-    ro = el.rb + deltar_orbit
-    xo_max = el.ap - deltar_orbit
-    num_samples = 11
+def fit_k_to_force(pos_vals: sequence, force: sequence) -> float:
+    """given position and force values, find the spring constant"""
+    m = np.polyfit(pos_vals, force, 1)[0]
+    K = -m
+    return K
+
+
+def bender_K_mag_xo(el: HalbachBender, s: RealNum, magnets: Collection, xo_max: RealNum, num_samples: int) -> float:
+    """Spring constant in bender along xo axis"""
     xo_vals = np.linspace(-xo_max / 4.0, xo_max / 4.0, num_samples)
-    coords = np.array([el.convert_center_to_cartesian_coords(s, deltar_orbit + xo, 0.0) for xo in xo_vals])
-    B_norm_grad = magnets.B_norm_grad(coords, use_approx=True, dx=1e-6, diff_method='central')
-    forces = -SIMULATION_MAGNETON * B_norm_grad
-    coord_center_orbit = np.array(el.convert_center_to_cartesian_coords(s, deltar_orbit, 0.0))
-    V = SIMULATION_MAGNETON * magnets.B_norm(coord_center_orbit)
+    coords = np.array([el.convert_orbit_to_cartesian_coords(s, xo, 0.0) for xo in xo_vals])
+    forces = magnet_force(magnets, coords)
     norm_perps = xo_unit_vector_bender_el_frame(el, coords[0])
-
-    force_r = [np.dot(norm_perps, force) for force in forces]
-    atom_speed_corrected = speed_with_energy_correction(V, atom_speed)
-    m = np.polyfit(xo_vals, force_r, 1)[0]
-    K = -m / atom_speed_corrected ** 2
-    if el.L_cap < s < el.L_cap + el.ang * el.rb:
-        K_cent = SIMULATION_MASS / ro ** 2  # centrifugal term
-        K += K_cent
-        slice_length = slice_c_length * ro / el.rb
-    else:
-        slice_length = slice_c_length
-    M = transfer_matrix(K, slice_length)
-    return M
+    forces_r = [np.dot(norm_perps, force) for force in forces]
+    K = fit_k_to_force(xo_vals, forces_r)
+    return K
 
 
-def s_slices_and_lengths_bender(el: HalbachBenderSimSegmented) -> tuple[ndarray, ndarray]:
-    """Return arrays of orbit position for slices used to compute transfer matrix of fringing and periodic internal
-    regions of bender"""
-    s_unit_cell = el.rb * el.ucAng
+def bender_K_mag_yo(el: HalbachBender, s: RealNum, magnets: Collection, zo_max: RealNum, num_samples: int) -> float:
+    """Spring constant in bender along yo axis"""
+    zo_vals = np.linspace(-zo_max / 4.0, zo_max / 4.0, num_samples)
+    coords = np.array([el.convert_orbit_to_cartesian_coords(s, 0.0, zo) for zo in zo_vals])
+    forces = magnet_force(magnets, coords)
+    forces_z = [force[2] for force in forces]
+    K = fit_k_to_force(zo_vals, forces_z)
+    return K
+
+
+def s_slices_and_lengths_bender(el) -> tuple[ndarray, ndarray, ndarray, ndarray]:
+    """slices and lengths through bender. Slice positions for the fringnig region and symmetry region are returned,
+     as well as slice positions and length for the entire bender
+    """
+    s_unit_cell = el.ro * el.ucAng
     s_length_magnet = 2 * s_unit_cell
     s_fringe_depth = el.L_cap + NUM_FRINGE_MAGNETS_MIN * s_length_magnet
-    num_slices_per_bore_radius = 5
-    num_slices_min_uc = 10
+    num_slices_per_bore_radius = 8
     num_slices_fringe = round(num_slices_per_bore_radius * s_fringe_depth / el.rp)
     num_slices_uc = round(num_slices_per_bore_radius * s_unit_cell / el.rp)
-    num_slices_uc += num_slices_min_uc
-    s_slices_fringe, slice_length_fringe = split_range_into_slices(0.0, s_fringe_depth, num_slices_fringe)
-    s_slices_uc, slice_length_uc = split_range_into_slices(s_fringe_depth, s_fringe_depth + s_unit_cell, num_slices_uc)
-    return s_slices_fringe, s_slices_uc
+    s_slices_fringe, _ = split_range_into_slices(0.0, s_fringe_depth, num_slices_fringe)
+    s_slices_uc, _ = split_range_into_slices(s_fringe_depth, s_fringe_depth + s_unit_cell, num_slices_uc)
 
-
-def bender_transfer_matrix_start_end(s_slices_fringe: ndarray, magnets: Collection,
-                                     el: HalbachBenderSimSegmented, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
-    """Return transfer matrices representing beginning and ending segments of bender. These are the region where the
-    impact of fringe fields cannot be ignored."""
-    slice_length_fringe = s_slices_fringe[1] - s_slices_fringe[0]
-    M_slices_fringe = [bender_transfer_matrix_for_slice(s, magnets, el, slice_length_fringe, atom_speed) for s in
-                       s_slices_fringe]
-    M_start = multiply_matrices(M_slices_fringe)
-    M_end = multiply_matrices(M_slices_fringe, reverse=True)
-    return M_start, M_end
-
-
-def bender_transfer_matrix_internal(s_slices_uc: ndarray, magnets: Collection,
-                                    el: HalbachBenderSimSegmented, atom_speed: RealNum) -> ndarray:
-    """Return transfer matrix that represents interior of bender where the impact of fringe fields can be ignored. This is
-    rapidly computed by exploiting the symmetry of the unit cell model"""
+    s_internal_start = s_fringe_depth
+    s_total_length = el.Lo
+    s_internal_stop = s_total_length - s_fringe_depth
     num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
-    slice_length_uc = s_slices_uc[1] - s_slices_uc[0]
-    M_slices_uc = [bender_transfer_matrix_for_slice(s, magnets, el, slice_length_uc, atom_speed) for s in s_slices_uc]
-    M_uc_exit = multiply_matrices(M_slices_uc)  # first unit cell in bender is a half, so an 'exit', so 2N later is
-    # also exit
-    M_uc_entrance = multiply_matrices(M_slices_uc, reverse=True)  # next unit cell is 'entrance', or first half o unit
-    # cell
-    M_exit_to_entrace = M_uc_exit @ M_uc_entrance
-    M_internal = np.linalg.matrix_power(M_exit_to_entrace, num_internal_mags)
-    return M_internal
+    num_internal_slices = num_internal_mags * 2 * len(s_slices_uc)
+    s_slices_internal, length_internal = split_range_into_slices(s_internal_start, s_internal_stop, num_internal_slices)
+    s_slices_fringe_end, length_fringe = split_range_into_slices(s_internal_stop, s_total_length, len(s_slices_fringe))
+    s_slices_total = np.array([*s_slices_fringe, *s_slices_internal, *s_slices_fringe_end])
+    lengths_fringe = np.ones(len(s_slices_fringe_end)) * length_fringe
+    lengths_internal = np.ones(len(s_slices_internal)) * length_internal
+    lengths_total = np.array([*lengths_fringe, *lengths_internal, *lengths_fringe])
+    return s_slices_fringe, s_slices_uc, s_slices_total, lengths_total
 
 
-def transfer_matrix_from_bender(el: HalbachBenderSimSegmented, atom_speed: RealNum) -> ndarray:
+def bender_K_mag_for_slice(s: RealNum, magnets, el) -> tuple[float, float]:
+    """This slice transfer matrix for a point along the bender"""
+    deltar_orbit = el.ro - el.rb
+    xo_max = el.ap - deltar_orbit
+    zo_max = sqrt(el.rp ** 2 - deltar_orbit ** 2)
+    num_samples = 11
+    Kx = bender_K_mag_xo(el, s, magnets, xo_max, num_samples)
+    Ky = bender_K_mag_yo(el, s, magnets, zo_max, num_samples)
+    return Kx, Ky
+
+
+def stitch_bender_values(values_start: sequence, values_uc: sequence, num_internal_mags: int) -> list:
+    """Given spring constant, or physically similiar values, from the fringing and symmetry region, construct a list
+    that represents the entire bender"""
+    values_internal = [*values_uc, *reversed(values_uc)] * num_internal_mags
+    values_full = [*values_start, *values_internal, *reversed(values_start)]
+    return values_full
+
+
+def K_mag_vals_and_lengths_from_bender_el(el: HalbachBender) -> tuple[ndarray, ndarray, list, list]:
+    """Magnetic spring constants and lengths at each spring constant value along the orbit trajectory through the
+    bender"""
+    magnets = el.build_bender(True, (True, False), num_lenses=NUM_FRINGE_MAGNETS_MIN * 3)
+    s_slices_fringe, s_slices_uc, s_slices_total, lengths_total = s_slices_and_lengths_bender(el)
+    num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
+    K_vals_mag_uc = np.array([bender_K_mag_for_slice(s, magnets, el) for s in s_slices_uc])
+    Kx_vals_mag_uc, Ky_vals_mag_uc = K_vals_mag_uc.T
+    K_vals_mag_start = np.array([bender_K_mag_for_slice(s, magnets, el) for s in s_slices_fringe])
+    Kx_vals_mag_start, Ky_vals_mag_start = K_vals_mag_start.T
+    Kx_vals_mag = stitch_bender_values(Kx_vals_mag_start, Kx_vals_mag_uc, num_internal_mags)
+    Ky_vals_mag = stitch_bender_values(Ky_vals_mag_start, Ky_vals_mag_uc, num_internal_mags)
+    return s_slices_total, lengths_total, Kx_vals_mag, Ky_vals_mag
+
+
+def transfer_matrix_func_from_bender(el: HalbachBender) -> Callable:
     """Return the transfer matric for the bender. This is done by splitting the element into many thin matrices, and
     multiplying them together"""
     if el.num_magnets < 2 * NUM_FRINGE_MAGNETS_MIN:
         raise NotImplementedError
-    magnets = el.build_bender(True, (True, False), num_lenses=NUM_FRINGE_MAGNETS_MIN * 3)
-    s_slices_fringe, s_slices_uc = s_slices_and_lengths_bender(el)
-    M_start, M_end = bender_transfer_matrix_start_end(s_slices_fringe, magnets, el, atom_speed)
-    M_internal = bender_transfer_matrix_internal(s_slices_uc, magnets, el, atom_speed)
-    M_full = M_end @ M_internal @ M_start
-    return M_full
+    s_slices_total, lengths_total, Kx_vals_mag, Ky_vals_mag = K_mag_vals_and_lengths_from_bender_el(el)
 
+    def M_func(atom_speed: RealNum) -> tuple[ndarray, ndarray]:
+        Mx = np.eye(2)
+        My = np.eye(2)
+        for s, L, Kx_mag, Ky_mag in zip(s_slices_total, lengths_total, Kx_vals_mag, Ky_vals_mag):
+            orbit_offset = (el.ro - el.rb) * (atom_speed / DEFAULT_ATOM_SPEED) ** 2
+            V = .5 * Kx_mag * orbit_offset ** 2
+            atom_speed_corrected = speed_with_energy_correction(V, atom_speed)
+            Kx = Kx_mag / atom_speed_corrected ** 2
+            Ky = Kx_mag / atom_speed_corrected ** 2
+            if el.L_cap < s < el.ang * el.ro + el.L_cap:
+                r_orbit = el.rb + orbit_offset
+                Kx += 1 / r_orbit ** 2
+                L *= r_orbit / el.ro
+            Mx = transfer_matrix(Kx, L) @ Mx
+            My = transfer_matrix(Ky, L) @ My
+        return Mx, My
 
-class CompositeElement:
-    """Element representing a series of elements, which in this case is a single transfer matrix"""
-
-    def __init__(self, M: ndarray, L: RealNum):
-        self.M = M
-        self.L = L
-
-    def M_func(self, x) -> ndarray:
-        raise NotImplementedError
+    return M_func
 
 
 class Element:
     """ Base element representing a transfer matrix (ABCD matrix)"""
 
-    def __init__(self, K, L):
+    def __init__(self, L: RealNum, M_func: Callable = None):
         assert L > 0.0
-        self.K = K
+        self.M_func = M_func
         self.L = L
-        self.M = self.M_func(L)
 
-    def M_func(self, x) -> ndarray:
-        assert 0.0 <= x <= self.L
-        return transfer_matrix(self.K, x)
+    def M(self, atom_speed=DEFAULT_ATOM_SPEED) -> tuple[ndarray, ndarray]:
+        if self.M_func is None:
+            raise NotImplementedError
+        else:
+            Mx, My = self.M_func(atom_speed)
+            return Mx, My
 
 
 class Lens(Element):
     """Element representing a lens"""
 
-    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum, atom_speed: RealNum):
-        K = spring_constant_lens(Bp, rp, atom_speed)
-        super().__init__(K, L)
+    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum, ):
+        # K = spring_constant_lens(Bp, rp, DEFAULT_ATOM_SPEED)
+        super().__init__(L)
 
 
 class Combiner(Element):
     """Element representing a combiner"""
 
-    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum, atom_speed: RealNum):
-        K = spring_constant_lens(Bp, rp, atom_speed)
-        super().__init__(K, L)
+    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum):
+        # K = spring_constant_lens(Bp, rp, DEFAULT_ATOM_SPEED)
+        super().__init__(L)
 
 
 class Drift(Element):
     """Element representing free space"""
 
     def __init__(self, L: RealNum):
-        K = 0.0
-        super().__init__(K, L)
+        super().__init__(L)
+
+    def M(self, atom_speed=DEFAULT_ATOM_SPEED):
+        Mx = transfer_matrix(0.0, self.L)
+        My = Mx.copy()
+        return Mx, My
 
 
 class Bender(Element):
     """Element representing a bending component"""
 
-    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum, atom_speed: RealNum):
-        self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp, atom_speed)
-        K = bender_spring_constant(Bp, rb, rp, self.ro, atom_speed)
+    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
+        self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp, DEFAULT_ATOM_SPEED)
+        # K = bender_spring_constant(Bp, rb, rp, self.ro, DEFAULT_ATOM_SPEED)
         L = self.ro * bending_angle  # length of particle orbit
-        super().__init__(K, L)
+        super().__init__(L)
 
 
-MatrixLatticeElement = Union[Drift, Lens, Bender, Combiner, CompositeElement]
+MatrixLatticeElement = Union[Drift, Lens, Bender, Combiner, Element]
+
+
+def full_transfer_matrices(elements: Iterable[MatrixLatticeElement],
+                           atom_speed=DEFAULT_ATOM_SPEED) -> tuple[ndarray, ndarray]:
+    """Transfer matrix for a sequence of elements start to end"""
+    matrices_x_and_y = [el.M(atom_speed=atom_speed) for el in elements]
+    matrices_x = [entry[0] for entry in matrices_x_and_y]
+    matrices_y = [entry[1] for entry in matrices_x_and_y]
+    Mx, My = multiply_matrices(matrices_x), multiply_matrices(matrices_y)
+    return Mx, My
+
+
+def stability_factor(m11, m12, m21, m22):
+    """Factor describing stability of periodic lattice of elements. If value is greater than 1 it is stable, though
+    higher values are "more" stable in some sense"""
+    return 2.0 - (m11 ** 2 + 2 * m12 * m21 + m22 ** 2)
+
+
+def stability_factors_lattice(elements: Iterable[MatrixLatticeElement],
+                              atom_speed: Union[RealNum, sequence] = DEFAULT_ATOM_SPEED):
+    """Factor describing stability of periodic lattice of elements. If value is greater than 0 it is stable, though
+    higher values are "more" stable in some sense"""
+    speeds = [atom_speed] if isinstance(atom_speed, (int, float)) else atom_speed
+
+    matrices_full_xy = [full_transfer_matrices(elements, atom_speed=speed) for speed in speeds]
+    stability_factors_x = [stability_factor(*matrix_components(Mx)) for Mx, My in matrices_full_xy]
+    stability_factors_y = [stability_factor(*matrix_components(My)) for Mx, My in matrices_full_xy]
+    if isinstance(atom_speed, (int, float)):
+        return stability_factors_x[0], stability_factors_y[0]
+    else:
+        return stability_factors_x, stability_factors_y
+
+
+def is_stable_lattice(elements: Iterable[MatrixLatticeElement],
+                      atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[bool, bool]:
+    """Determine if the lattice is stable. This can be done by computing eigenvalues, or the method below works. If
+    unstable, then raising he transfer matrix to N results in large matrix elements for large N"""
+    stability_factor_x, stability_factor_y = stability_factors_lattice(elements, atom_speed=atom_speed)
+    return stability_factor_x > 0.0, stability_factor_y > 0.0
+
+
+def total_length(elements: Iterable[MatrixLatticeElement]) -> float:
+    """Sum of the lengths of elements"""
+    length = sum([el.L for el in elements])
+    return length
 
 
 class Lattice:
     """Model of a sequence (possibly periodic) of elements"""
 
-    def __init__(self, atom_speed=DEFAULT_ATOM_SPEED):
+    def __init__(self):
         self.elements: Optional[list[MatrixLatticeElement]] = []
-        self.atom_speed = atom_speed
 
     def __iter__(self):
         return iter(self.elements)
@@ -484,51 +618,60 @@ class Lattice:
         self.elements.append(Drift(L))
 
     def add_lens(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
-        self.elements.append(Lens(L, Bp, rp, self.atom_speed))
+        self.elements.append(Lens(L, Bp, rp))
 
     def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
-        self.elements.append(Bender(Bp, rb, rp, bending_angle, self.atom_speed))
+        self.elements.append(Bender(Bp, rb, rp, bending_angle))
 
     def add_combiner(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
-        self.elements.append(Combiner(L, Bp, rp, self.atom_speed))
+        self.elements.append(Combiner(L, Bp, rp))
 
-    def is_stable(self) -> bool:
-        return is_stable_lattice(self)
+    def is_stable(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[bool, bool]:
+        return is_stable_lattice(self, atom_speed=atom_speed)
 
-    def stability_factor(self) -> bool:
-        return stability_factor_lattice(self)
+    def stability_factors(self, atom_speed: Union[RealNum, sequence] = DEFAULT_ATOM_SPEED,
+                          clip_to_positive: bool = False):
+        fact_x, fact_y = stability_factors_lattice(self, atom_speed=atom_speed)
+        if clip_to_positive:
+            return np.clip(fact_x, 0.0, np.inf), np.clip(fact_y, 0.0, np.inf)
+        else:
+            return fact_x, fact_y
 
-    def M_total(self, revolutions: int = 1) -> Optional[ndarray]:
-        M_single_rev = full_transfer_matrix(self.elements)
-        return np.linalg.matrix_power(M_single_rev, revolutions)
+    def M_total(self, revolutions: int = 1, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[ndarray, ndarray]:
+        Mx_single_rev, My_single_rev = full_transfer_matrices(self.elements, atom_speed=atom_speed)
+        Mx = np.linalg.matrix_power(Mx_single_rev, revolutions)
+        My = np.linalg.matrix_power(My_single_rev, revolutions)
+        return Mx, My
 
-    def M_total_components(self) -> tuple[float, float, float, float]:
-        return matrix_components(self.M_total())
+    def M_total_components(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        Mx, My = self.M_total(atom_speed=atom_speed)
+        x_components = matrix_components(Mx)
+        y_components = matrix_components(My)
+        return x_components, y_components
 
     def trace(self, Xi) -> ndarray:
+        raise NotImplementedError
         return self.M_total() @ Xi
 
     def total_length(self) -> float:
         return total_length(self.elements)
 
-    def add_elements_from_sim_lens(self, el_lens: HalbachLensSim) -> None:
-        M = transfer_matrix_from_lens(el_lens, self.atom_speed)
-        self.elements.append(CompositeElement(M, el_lens.L))
+    def add_element_from_sim_lens(self, el_lens: HalbachLensSim) -> None:
+        M_func = transfer_matrix_func_from_lens(el_lens)
+        self.elements.append(Element(el_lens.L, M_func=M_func))
 
-    def add_elements_from_sim_seg_bender(self, el_bend: HalbachBenderSimSegmented) -> None:
-        M = transfer_matrix_from_bender(el_bend, self.atom_speed)
-        self.elements.append(CompositeElement(M, el_bend.Lo))
+    def add_element_from_sim_seg_bender(self, el_bend: HalbachBender) -> None:
+        M_func = transfer_matrix_func_from_bender(el_bend)
+        self.elements.append(Element(el_bend.Lo, M_func=M_func))
 
-    def add_elements_from_sim_combiner(self, el_combiner: CombinerHalbachLensSim) -> None:
-        M = transfer_matrix_from_combiner(el_combiner, self.atom_speed)
-        self.elements.append(CompositeElement(M, el_combiner.L))
+    def add_element_from_sim_combiner(self, el_combiner: CombinerHalbachLensSim) -> None:
+        M_func = transfer_matrix_func_from_combiner(el_combiner)
+        self.elements.append(Element(el_combiner.L, M_func=M_func))
 
     def build_matrix_lattice_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
         if simulated_lattice.lattice_type != 'storage_ring':
             raise NotImplementedError
-        if not is_sim_lattice_viable(simulated_lattice, self.atom_speed):
-            raise NonViableLattice
 
         reuser = ElementRecycler()  # saves time to recycle the matrices for the same elements
         for el in simulated_lattice:
@@ -540,14 +683,14 @@ class Lattice:
                 if type(el) is Drift_Sim:
                     self.add_drift(el.L)
                 elif type(el) is HalbachLensSim:
-                    self.add_elements_from_sim_lens(el)
-                elif type(el) is HalbachBenderSimSegmented:
-                    self.add_elements_from_sim_seg_bender(el)
+                    self.add_element_from_sim_lens(el)
+                elif type(el) is HalbachBender:
+                    self.add_element_from_sim_seg_bender(el)
                 elif type(el) is CombinerHalbachLensSim:
-                    self.add_elements_from_sim_combiner(el)
+                    self.add_element_from_sim_combiner(el)
                 else:
                     raise NotImplementedError
-                reuser.add_sim_and_matrx(el, self.elements[-1])
+                reuser.add_sim_and_matrix(el, self.elements[-1])
 
     def trace_swarm(self, swarm, revolutions=1, copy_swarm=True):
         raise NotImplementedError

@@ -18,7 +18,7 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
 from helperTools import is_close_all, parallel_evaluate
 from latticeElements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
-    HalbachBenderSimSegmented, HalbachLensSim, Element
+    HalbachBender, HalbachLensSim, Element
 from latticeElements.utilities import halbach_magnet_width
 
 
@@ -71,7 +71,7 @@ class ElementTestHelper:
     def get_Element(self, PTL) -> Element:
         if any(self.elType == el for el in (Drift, LensIdeal, HalbachLensSim)):
             el = PTL.el_list[0]
-        elif any(self.elType == el for el in (BenderIdeal, HalbachBenderSimSegmented, CombinerIdeal,
+        elif any(self.elType == el for el in (BenderIdeal, HalbachBender, CombinerIdeal,
                                               CombinerHalbachLensSim)):
             el = PTL.el_list[1]
         else:
@@ -90,7 +90,7 @@ class ElementTestHelper:
         """Simple cartesian coordinates work for most elements"""
         if any(self.elType == el for el in (Drift, LensIdeal, HalbachLensSim, CombinerIdeal, CombinerHalbachLensSim)):
             x, y, z = x1, x2, x3
-        elif any(self.elType == el for el in (BenderIdeal, HalbachBenderSimSegmented)):
+        elif any(self.elType == el for el in (BenderIdeal, HalbachBender)):
             r, theta, z = x1, x2, x3
             x, y = r * np.cos(theta), r * np.sin(theta)
         else:
@@ -330,7 +330,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
         qf0 = np.array([6.2592035426978843e-01, 1.8272996344352248e+00, 5.5687821779393850e-04])
         pf0 = np.array([157.4311247912118, -124.90221075271222, -4.302029947811501])
-        super().__init__(HalbachBenderSimSegmented, particle0, qf0, pf0, False, False, False)
+        super().__init__(HalbachBender, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
         # test generic conditions of the element
@@ -359,9 +359,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         num_magnets = 15
         np.random.seed(42)
         PTL_Dev = PTL_Dummy(field_dens_mult=.75, use_mag_errors=True)
-        elDeviation = HalbachBenderSimSegmented(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
+        elDeviation = HalbachBender(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         PTL_Perf = PTL_Dummy(field_dens_mult=.75)
-        elPerfect = HalbachBenderSimSegmented(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
+        elPerfect = HalbachBender(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         for el in [elDeviation, elPerfect]:
             el.fill_pre_constrained_parameters()
             el.theta = 0.0
