@@ -232,19 +232,21 @@ class SwarmTracer:
         swarm_at_combiner = self.move_swarm_to_combiner_output(swarm_at_origin, copy_swarm=False, scoot=True)
         return swarm_at_combiner
 
-    def initialize_pseudorandom_y_dim_swarm(self, y_max: RealNum, py_max: RealNum, num_particles: int,
-                                            seed: int = None, px_spread: RealNum=0.0) -> Swarm:
+    def initialize_pseudorandom_1_dim_swarm(self, pos_max: RealNum, p_max: RealNum, num_particles: int,
+                                            seed: int = None, px_spread: RealNum = 0.0, which_dim='y') -> Swarm:
         """Build a swarm only along the y dimension ([x,y,z]). Useful for tracing particle through matrix model
         lattice"""
+        assert which_dim in ('y', 'z')
         swarm = Swarm()
-        px0=-self.lattice.speed_nominal
-        bounds = [(-y_max, y_max),
-                  (-py_max, py_max),
-                  (px0-px_spread,px0+px_spread)]
+        px0 = -self.lattice.speed_nominal
+        bounds = [(-pos_max, pos_max), (-p_max, p_max), (px0 - px_spread, px0 + px_spread)]
         samples = low_discrepancy_sample(bounds, num_particles, seed=seed)
-        for [y, py, px] in samples:
-            qi = np.array([-1e-10, y, 0])
-            pi = np.array([px, py, 0.0])
+        for [pos, p, px] in samples:
+            qi = np.array([-1e-10, 0, 0])
+            pi = np.array([px, 0.0, 0.0])
+            index = 1 if which_dim == 'y' else 2
+            qi[index] = pos
+            pi[index] = p
             swarm.add_new_particle(qi=qi, pi=pi)
         return swarm
 
