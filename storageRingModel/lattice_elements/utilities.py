@@ -3,8 +3,8 @@ from math import atan2, floor
 import numpy as np
 
 from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT
-from helperTools import inch_to_meter
-from typeHints import FloatTuple, RealNum
+from helper_tools import inch_to_meter
+from type_hints import FloatTuple, RealNum
 
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element

@@ -1,9 +1,9 @@
 import numpy as np
 
-from ParticleClass import Particle
-from ParticleTracerClass import ParticleTracer
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from helperTools import is_close_all
+from particle_class import Particle
+from particle_tracer import ParticleTracer
+from Particle_tracer_lattice import ParticleTracerLattice
+from helper_tools import is_close_all
 import matplotlib.pyplot as plt
 
 def poop_energy_conservation():

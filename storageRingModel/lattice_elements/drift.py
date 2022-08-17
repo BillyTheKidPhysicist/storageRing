@@ -2,12 +2,12 @@ from typing import Optional
 
 import numpy as np
 
-from fieldgenerator import Collection
+from field_generators import Collection
 from constants import TUBE_WALL_THICKNESS
-from helperTools import arr_product
+from helper_tools import arr_product
 from lattice_elements.lens_ideal import LensIdeal
 from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
-from numbaFunctionsAndObjects import driftFastFunctions
+from numba_functions_and_objects import drift_fast_functions
 
 
 class Drift(LensIdeal):
@@ -44,7 +44,7 @@ class Drift(LensIdeal):
         potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(driftFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(drift_fast_functions, force_args, potential_args, is_coord_in_vacuum_args)
 
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""

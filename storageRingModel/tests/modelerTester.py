@@ -1,9 +1,9 @@
-from storageRingModeler import StorageRingModel
-import storageRingModeler
+from storage_ring_modeler import StorageRingModel
+import storage_ring_modeler
 import numpy as np
 from shapely.geometry import LineString
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from helperTools import is_close_all
+from Particle_tracer_lattice import ParticleTracerLattice
+from helper_tools import is_close_all
 from math import isclose
 
 
@@ -23,7 +23,7 @@ def test_Modeler():
     lattice_injector.add_drift(.12)
     lattice_injector.add_combiner_sim_lens(.15, .03)
     lattice_injector.end_lattice()
-    storageRingModeler.ELEMENTS_MODE_MATCHER=tuple([type(el) for el in lattice_injector])
+    storage_ring_modeler.ELEMENTS_MODE_MATCHER=tuple([type(el) for el in lattice_injector])
     model = StorageRingModel(lattice_ring, lattice_injector)
 
     assert model.floor_plan_cost() == 0  # no overlap between lenses

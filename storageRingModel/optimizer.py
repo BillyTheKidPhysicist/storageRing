@@ -3,18 +3,18 @@ from typing import Optional
 
 import numpy as np
 
-from ParticleTracerClass import ElementTooShortError as ElementTooShortErrorTimeStep
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from asyncDE import solve_async
+from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
+from Particle_tracer_lattice import ParticleTracerLattice
+from async_de import solve_async
 from lattice_elements.utilities import CombinerDimensionError
 from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
-from latticeModels.latticeModelUtilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
-from latticeModels.systemModel import make_system_model, get_ring_bounds, get_injector_bounds, \
+from lattice_models.lattice_model_utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
+from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
-from octopusOptimizer import octopus_optimize
-from simpleLineSearch import line_search
-from storageRingModeler import StorageRingModel
-from typeHints import sequence
+from octopus_optimizer import octopus_optimize
+from simple_line_search import line_search
+from storage_ring_modeler import StorageRingModel
+from type_hints import sequence
 
 
 class Solution:

@@ -11,14 +11,14 @@ from hypothesis import given, settings, strategies as st
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Point
 
-from fieldgenerator import HalbachLens
-from fieldgenerator import BenderSim as HalbachBender_FieldGenerator
+from field_generators import HalbachLens
+from field_generators import BenderSim as HalbachBender_FieldGenerator
 
-from ParticleClass import Particle
-from ParticleTracerClass import ParticleTracer
-from ParticleTracerLatticeClass import ParticleTracerLattice
+from particle_class import Particle
+from particle_tracer import ParticleTracer
+from Particle_tracer_lattice import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
-from helperTools import is_close_all, parallel_evaluate
+from helper_tools import is_close_all, parallel_evaluate
 from lattice_elements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerLensSim, \
     BenderSim, HalbachLensSim, Element
 from lattice_elements.utilities import halbach_magnet_width

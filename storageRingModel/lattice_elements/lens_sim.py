@@ -4,16 +4,16 @@ from typing import Optional
 
 import numpy as np
 
-from fieldgenerator import Collection
+from field_generators import Collection
 from constants import TUBE_WALL_THICKNESS
-from helperTools import is_close_all
-from helperTools import round_and_make_odd
+from helper_tools import is_close_all
+from helper_tools import round_and_make_odd
 from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.lens_ideal import LensIdeal
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO, is_even, \
     ElementTooShortError, halbach_magnet_width, round_down_to_nearest_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
     INTERP_MAGNET_MATERIAL_OFFSET
-from numbaFunctionsAndObjects import halbachLensFastFunctions
+from numba_functions_and_objects import lens_sim_numba_functions
 
 
 # todo: the structure here is confusing and brittle because of the extra field length logic
@@ -224,7 +224,7 @@ class HalbachLensSim(LensIdeal):
         potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(halbachLensFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(lens_sim_numba_functions, force_args, potential_args, is_coord_in_vacuum_args)
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.L_cap, self.ap / 2, .0])))

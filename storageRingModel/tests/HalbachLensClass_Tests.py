@@ -5,9 +5,9 @@ import time
 import numpy as np
 import scipy.optimize as spo
 
-from fieldgenerator import Layer, HalbachLens, Sphere, BenderSim
-from helperTools import is_close_all, parallel_evaluate, arr_product
-from typeHints import RealNum
+from field_generators import Layer, HalbachLens, Sphere, BenderSim
+from helper_tools import is_close_all, parallel_evaluate, arr_product
+from type_hints import RealNum
 
 numericTol = 1e-14  # my working numeric tolerance
 

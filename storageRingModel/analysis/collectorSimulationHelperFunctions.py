@@ -1,18 +1,18 @@
 from typing import Callable
 
 
-from helperTools import make_dense_curve_1D_linear
+from helper_tools import make_dense_curve_1D_linear
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import voigt_profile
 
-from ParticleClass import Swarm
-from ParticleTracerLatticeClass import ParticleTracerLattice
+from particle_class import Swarm
+from Particle_tracer_lattice import ParticleTracerLattice
 from constants import GRAVITATIONAL_ACCELERATION
 from lattice_elements.elements import HalbachLensSim, Drift
-from typeHints import sequence
+from type_hints import sequence
 
 meter_to_mm = 1e3
 

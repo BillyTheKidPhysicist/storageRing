@@ -1,10 +1,10 @@
 import multiprocess as mp
 import numpy as np
-from SwarmTracerClass import SwarmTracer
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from ParticleClass import Particle, Swarm
+from swarm_tracer import SwarmTracer
+from Particle_tracer_lattice import ParticleTracerLattice
+from particle_class import Particle, Swarm
 import os
-from ParticleTracerClass import ParticleTracer
+from particle_tracer import ParticleTracer
 
 # pylint: disable=too-many-locals, too-many-arguments,missing-function-docstring
 

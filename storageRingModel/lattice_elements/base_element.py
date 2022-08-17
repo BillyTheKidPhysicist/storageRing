@@ -5,7 +5,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from constants import SIMULATION_MAGNETON
-from typeHints import ndarray
+from type_hints import ndarray
 
 
 # todo: a base geometry inheritance is most logical

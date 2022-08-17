@@ -1,5 +1,5 @@
 import numpy as np
-from parallel_Gradient_Descent import gradient_Descent, GradientOptimizer
+from parallel_gradient_descent import gradient_Descent, GradientOptimizer
 
 
 def test1():

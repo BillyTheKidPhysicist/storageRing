@@ -6,7 +6,7 @@ from shapely.geometry import LineString
 from lattice_elements.combiner_characterizer import make_halbach_combiner_force_function, compute_particle_trajectory
 from lattice_elements.elements import Drift, HalbachLensSim, CombinerLensSim, BenderIdeal, \
     BenderSim, Element
-from typeHints import RealNum
+from type_hints import RealNum
 
 
 def convert_center_to_orbit_coords(el: Element, s: RealNum, xc: RealNum, yc: RealNum) -> tuple[float, float, float]:

@@ -1,9 +1,9 @@
 from math import isclose, sqrt
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
-from helperTools import *
+from helper_tools import *
 from lattice_elements.elements import CombinerIdeal, CombinerLensSim, CombinerSim
-from numbaFunctionsAndObjects.combinerIdealFastFunction import combiner_Ideal_Force
+from numba_functions_and_objects.combiner_ideal_numba_function import combiner_Ideal_Force
 
 
 def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_offset_start: float = 0.0,
@@ -117,7 +117,7 @@ def characterize_combiner_halbach(el: CombinerLensSim, atom_state=None, particle
 
 
 def characterize_combiner_sim(el: CombinerSim):
-    from numbaFunctionsAndObjects.combinerSimFastFunction import force_Without_isInside_Check
+    from numba_functions_and_objects.combiner_quad_sim_numba_function import force_Without_isInside_Check
     params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.ap_left, el.ap_right, el.space, el.field_fact)
 
     field_data = el.open_and_shape_field_data()

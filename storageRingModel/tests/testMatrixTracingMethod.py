@@ -1,11 +1,11 @@
 from math import isclose
 
-from ParticleClass import Swarm
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracerClass import SwarmTracer
+from particle_class import Swarm
+from Particle_tracer_lattice import ParticleTracerLattice
+from swarm_tracer import SwarmTracer
 from constants import DEFAULT_ATOM_SPEED
-from helperTools import *
-from matrixMethodTracing import Lattice
+from helper_tools import *
+from matrix_method_tracing import Lattice
 
 
 def test_sim_and_matrix_similiarity():

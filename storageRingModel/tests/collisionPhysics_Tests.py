@@ -1,7 +1,7 @@
-from collisionPhysics import max_momentum_1D_in_trap, trim_trans_momentum_to_max, collision_rate, \
+from collision_physics import max_momentum_1D_in_trap, trim_trans_momentum_to_max, collision_rate, \
     collision_partner_momentum_lens, collision_partner_momentum_bender, trim_longitudinal_momentum_to_max
 from math import isclose
-from helperTools import is_close_all,parallel_evaluate
+from helper_tools import is_close_all,parallel_evaluate
 import numpy as np
 from constants import SIMULATION_MAGNETON
 

@@ -5,8 +5,8 @@ field interactions. It's an abomination because of how I wasn't consistent early
 
 from scipy.spatial.transform import Rotation as Rot
 
-from fieldgenerator import Collection
-from helperTools import *
+from field_generators import Collection
+from helper_tools import *
 from lattice_elements.base_element import BaseElement
 from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift
 

@@ -1,5 +1,5 @@
 from optimizer import Solver
-from helperTools import parallel_evaluate
+from helper_tools import parallel_evaluate
 
 def _test_Ring_Solver():
     xRing = (0.01232265, 0.00998983, 0.03899118, 0.10642821, 0.4949227)

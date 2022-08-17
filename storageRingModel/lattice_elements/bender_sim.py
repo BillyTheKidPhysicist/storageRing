@@ -6,16 +6,16 @@ import numpy as np
 import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
-from fieldgenerator import BenderSim as HalbachBender_FieldGenerator
+from field_generators import BenderSim as HalbachBender_FieldGenerator
 from constants import DEFAULT_ATOM_SPEED
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
-from helperTools import arr_product, round_and_make_odd
+from helper_tools import arr_product, round_and_make_odd
 from lattice_elements.bender_ideal import BenderIdeal
 from lattice_elements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP
-from numbaFunctionsAndObjects import benderHalbachFastFunctions
-from typeHints import sequence,ndarray,RealNum
+from numba_functions_and_objects import bender_sim_numba_functions
+from type_hints import sequence,ndarray,RealNum
 
 dummy_field_data_empty = (np.ones(1) * np.nan,) * 7
 
@@ -157,7 +157,7 @@ class BenderSim(BenderIdeal):
         potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(benderHalbachFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(bender_sim_numba_functions, force_args, potential_args, is_coord_in_vacuum_args)
 
     def make_Grid_Coords(self, x_min: float, x_max: float, y_min: float, y_max: float) -> ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.

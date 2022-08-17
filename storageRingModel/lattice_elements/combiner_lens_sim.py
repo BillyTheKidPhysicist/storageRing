@@ -4,17 +4,17 @@ from typing import Optional
 import numpy as np
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
-from fieldgenerator import Collection
-from helperTools import is_close_all
-from helperTools import round_and_make_odd
+from field_generators import Collection
+from helper_tools import is_close_all
+from helper_tools import round_and_make_odd
 from lattice_elements.combiner_ideal import CombinerIdeal
 from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.utilities import CombinerDimensionError, \
     CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
     TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
-from numbaFunctionsAndObjects import combinerHalbachFastFunctions
-from numbaFunctionsAndObjects.utilities import DUMMY_FIELD_DATA_3D
-from typeHints import ndarray
+from numba_functions_and_objects import combiner_lens_sim_numba_functions
+from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
+from type_hints import ndarray
 
 DEFAULT_SEED = 42
 
@@ -193,7 +193,8 @@ class CombinerLensSim(CombinerIdeal):
         potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(combinerHalbachFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(combiner_lens_sim_numba_functions, force_args, potential_args,
+                                    is_coord_in_vacuum_args)
 
         F_edge = np.linalg.norm(self.force(np.asarray([0.0, self.ap / 2, .0])))
         F_center = np.linalg.norm(self.force(np.asarray([self.Lm / 2 + self.space, self.ap / 2, .0])))

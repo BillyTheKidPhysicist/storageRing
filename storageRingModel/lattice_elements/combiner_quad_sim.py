@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from lattice_elements.combiner_ideal import CombinerIdeal
-from numbaFunctionsAndObjects import combinerSimFastFunction
+from numba_functions_and_objects import combiner_quad_sim_numba_function
 
 
 class CombinerSim(CombinerIdeal):
@@ -65,7 +65,8 @@ class CombinerSim(CombinerIdeal):
         potential_args = (numba_func_constants, field_data)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(combinerSimFastFunction, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(combiner_quad_sim_numba_function, force_args, potential_args,
+                                    is_coord_in_vacuum_args)
 
     def update_field_fact(self, field_strength_fact) -> None:
         raise NotImplementedError

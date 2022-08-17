@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 
-from ParticleClass import Swarm, Particle
-from helperTools import *
+from particle_class import Swarm, Particle
+from helper_tools import *
 from phaseSpaceAnalyzer import SwarmSnapShot
-from storageRingModeler import StorageRingModel
+from storage_ring_modeler import StorageRingModel
 
 
 def trace_swarm_through_ring(model: StorageRingModel, swarm_to_trace: Swarm, h=7.5e-6, T=10.0,

@@ -6,8 +6,8 @@ from scipy.spatial.transform import Rotation as Rot
 from constants import SIMULATION_MAGNETON
 from lattice_elements.base_element import BaseElement
 from lattice_elements.utilities import full_arctan2
-from numbaFunctionsAndObjects import benderIdealFastFunctions
-from typeHints import ndarray
+from numba_functions_and_objects import bender_ideal_numba_functions
+from type_hints import ndarray
 
 
 class BenderIdeal(BaseElement):
@@ -66,7 +66,7 @@ class BenderIdeal(BaseElement):
         potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(benderIdealFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(bender_ideal_numba_functions, force_args, potential_args, is_coord_in_vacuum_args)
 
     def fill_post_constrained_parameters(self) -> None:
         self.fill_in_and_out_rotation_matrices()

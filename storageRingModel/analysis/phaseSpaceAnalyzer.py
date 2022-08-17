@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from ParticleClass import Particle as ParticleBase
-from ParticleClass import Swarm
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from SwarmTracerClass import SwarmTracer
+from particle_class import Particle as ParticleBase
+from particle_class import Swarm
+from Particle_tracer_lattice import ParticleTracerLattice
+from swarm_tracer import SwarmTracer
 
-from helperTools import parallel_evaluate
+from helper_tools import parallel_evaluate
 
 cmap = plt.get_cmap('viridis')
 

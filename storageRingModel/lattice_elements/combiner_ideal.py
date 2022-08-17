@@ -1,7 +1,7 @@
 import numpy as np
 
 from lattice_elements.base_element import BaseElement
-from numbaFunctionsAndObjects import combinerIdealFastFunction
+from numba_functions_and_objects import combiner_ideal_numba_function
 
 
 # from latticeElements.class_CombinerHalbachLensSim import CombinerLensSim
@@ -57,7 +57,7 @@ class CombinerIdeal(BaseElement):
         potential_args = (numba_func_constants,)
         is_coord_in_vacuum_args = (numba_func_constants,)
 
-        self.assign_numba_functions(combinerIdealFastFunction, force_args, potential_args, is_coord_in_vacuum_args)
+        self.assign_numba_functions(combiner_ideal_numba_function, force_args, potential_args, is_coord_in_vacuum_args)
 
     def compute_trajectory_length(self, qTracedArr: np.ndarray) -> float:
         # to find the trajectory length model the trajectory as a bunch of little deltas for each step and add up their

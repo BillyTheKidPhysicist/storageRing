@@ -2,10 +2,10 @@ from math import cos, sin
 
 from scipy.spatial.transform import Rotation as Rot
 
-from fieldgenerator import Collection
-from fieldgenerator import HalbachLens
+from field_generators import Collection
+from field_generators import HalbachLens
 from constants import ASSEMBLY_TOLERANCE
-from helperTools import *
+from helper_tools import *
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO
 
 B_Vec_Arr, B_Norm_Arr = np.ndarray, np.ndarray

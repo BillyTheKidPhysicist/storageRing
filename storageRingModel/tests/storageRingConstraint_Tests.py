@@ -1,7 +1,7 @@
 import os
-from ParticleTracerLatticeClass import ParticleTracerLattice
-from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
-from helperTools import is_close_all,parallel_evaluate
+from Particle_tracer_lattice import ParticleTracerLattice
+from storage_ring_constraint_solver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
+from helper_tools import is_close_all,parallel_evaluate
 import numpy as np
 
 from math import isclose
