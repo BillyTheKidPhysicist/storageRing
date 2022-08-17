@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from latticeElements.class_CombinerIdeal import CombinerIdeal
+from lattice_elements.combiner_ideal import CombinerIdeal
 from numbaFunctionsAndObjects import combinerSimFastFunction
 
 
@@ -38,7 +38,7 @@ class CombinerSim(CombinerIdeal):
 
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
-        from latticeElements.combiner_characterizer import characterize_combiner_sim
+        from lattice_elements.combiner_characterizer import characterize_combiner_sim
         self.space = self.fringeSpace * self.size_scale  # extra space past the hard edge on either end to account for fringe fields
         self.ap_left = self.ap_left * self.size_scale
         self.ap_right = self.ap_right * self.size_scale

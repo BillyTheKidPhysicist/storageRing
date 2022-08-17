@@ -1,5 +1,5 @@
 from ParticleTracerLatticeClass import ParticleTracerLattice
-from latticeElements.elements import HalbachLensSim
+from lattice_elements.elements import HalbachLensSim
 
 assert HalbachLensSim.fringe_frac_outer == 1.5
 

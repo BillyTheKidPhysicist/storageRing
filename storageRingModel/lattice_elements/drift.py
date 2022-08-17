@@ -2,11 +2,11 @@ from typing import Optional
 
 import numpy as np
 
-from HalbachLensClass import Collection
+from fieldgenerator import Collection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import arr_product
-from latticeElements.class_LensIdeal import LensIdeal
-from latticeElements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
+from lattice_elements.lens_ideal import LensIdeal
+from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
 from numbaFunctionsAndObjects import driftFastFunctions
 
 

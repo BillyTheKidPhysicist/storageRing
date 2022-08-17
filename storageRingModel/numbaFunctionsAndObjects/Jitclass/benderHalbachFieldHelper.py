@@ -61,7 +61,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.field_fact = params[0]
 
     def cartesian_To_Center(self, x, y, z):
-        """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
+        """Convert from cartesian coords to HalbachLensClass.BenderSim coored, ie "center coords" for
         evaluation by interpolator"""
 
         if x > 0.0 and -self.L_cap <= y <= 0.0:

@@ -12,19 +12,19 @@ from ParticleTracerLatticeClass import ParticleTracerLattice
 from SwarmTracerClass import SwarmTracer
 from floorPlanCheckerFunctions import does_fit_in_room, plot_floor_plan_in_lab
 from helperTools import full_arctan2
-from latticeElements.elements import Element
-from latticeElements.elements import HalbachLensSim, Drift, CombinerHalbachLensSim, CombinerSim, CombinerIdeal
-from latticeElements.orbitTrajectories import make_orbit_shape
+from lattice_elements.elements import Element
+from lattice_elements.elements import HalbachLensSim, Drift, CombinerLensSim, CombinerSim, CombinerIdeal
+from lattice_elements.orbit_trajectories import make_orbit_shape
 from latticeModels.latticeModelParameters import INJECTOR_TUNABILITY_LENGTH
 from latticeModels.systemModel import get_optimal_ring_params, get_optimal_injector_params, make_system_model
 
-combiners = (CombinerHalbachLensSim, CombinerSim, CombinerIdeal)
+combiners = (CombinerLensSim, CombinerSim, CombinerIdeal)
 Shape = Union[LineString, Polygon]
 
 # expected elements of injector.
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
-ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerHalbachLensSim)
+ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerLensSim)
 
 
 def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bumper: bool):
@@ -51,7 +51,7 @@ class StorageRingModel:
 
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
-                 use_bumper: bool = False, sim_time_max=100.0):
+                 use_bumper: bool = False, sim_time_max=50.0):
         assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
@@ -83,8 +83,8 @@ class StorageRingModel:
 
     def convert_momentum_injector_to_ring_frame(self, p_lab_inject: np.ndarray) -> np.ndarray:
         """Convert 3D particle momentum in injector lab frame into ring lab frame"""
-        p_lab_ring = self.lattice_injector.combiner.transform_Lab_Frame_Vector_Into_Element_Frame(p_lab_inject)
-        p_lab_ring = self.lattice_ring.combiner.transform_Element_Frame_Vector_Into_Lab_Frame(p_lab_ring)
+        p_lab_ring = self.lattice_injector.combiner.transform_lab_frame_vector_into_element_frame(p_lab_inject)
+        p_lab_ring = self.lattice_ring.combiner.transform_element_frame_vector_into_lab_frame(p_lab_ring)
         return p_lab_ring
 
     def line_In_ring_frame_from_injector_particle(self, particle: Particle) -> Optional[LineString]:

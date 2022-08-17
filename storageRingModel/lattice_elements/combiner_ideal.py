@@ -1,10 +1,10 @@
 import numpy as np
 
-from latticeElements.class_BaseElement import BaseElement
+from lattice_elements.base_element import BaseElement
 from numbaFunctionsAndObjects import combinerIdealFastFunction
 
 
-# from latticeElements.class_CombinerHalbachLensSim import CombinerHalbachLensSim
+# from latticeElements.class_CombinerHalbachLensSim import CombinerLensSim
 
 class CombinerIdeal(BaseElement):
     # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
@@ -35,7 +35,7 @@ class CombinerIdeal(BaseElement):
 
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
-        from latticeElements.combiner_characterizer import characterize_combiner_ideal
+        from lattice_elements.combiner_characterizer import characterize_combiner_ideal
         self.ap_right, self.ap_left, self.apz, self.Lm = [val * self.size_scale for val in
                                                           (self.ap_right, self.ap_left, self.apz, self.Lm)]
         self.c1, self.c2 = self.c1 / self.size_scale, self.c2 / self.size_scale
@@ -73,7 +73,7 @@ class CombinerIdeal(BaseElement):
 
     def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element"""
-        q_el = self.transform_Lab_Frame_Vector_Into_Element_Frame(q_lab - self.r2)  # a simple vector trick
+        q_el = self.transform_lab_frame_vector_into_element_frame(q_lab - self.r2)  # a simple vector trick
         return q_el
 
     def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:

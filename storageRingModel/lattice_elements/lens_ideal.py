@@ -1,7 +1,7 @@
 import numpy as np
 
 from constants import SIMULATION_MAGNETON
-from latticeElements.class_BaseElement import BaseElement
+from lattice_elements.base_element import BaseElement
 from numbaFunctionsAndObjects import idealLensFastFunctions
 
 
@@ -46,13 +46,13 @@ class LensIdeal(BaseElement):
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         q_new = q_lab.copy()
         q_new -= self.r1
-        q_new = self.transform_Lab_Frame_Vector_Into_Element_Frame(q_new)
+        q_new = self.transform_lab_frame_vector_into_element_frame(q_new)
         return q_new
 
     def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element. A simple translation and rotation completes the transformation"""
         q_new = q_el.copy()
-        q_new = self.transform_Element_Frame_Vector_Into_Lab_Frame(q_new)
+        q_new = self.transform_element_frame_vector_into_lab_frame(q_new)
         q_new += self.r1
         return q_new
 

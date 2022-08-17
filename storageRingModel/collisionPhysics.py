@@ -16,8 +16,8 @@ import numpy as np
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT, SIMULATION_MAGNETON
 from helperTools import full_arctan2
 # import latticeElements.elementPT
-from latticeElements.elements import HalbachLensSim, Drift, \
-    HalbachBender, Element
+from lattice_elements.elements import HalbachLensSim, Drift, \
+    BenderSim, Element
 from typeHints import RealNum
 
 full_arctan2 = numba.njit(full_arctan2)
@@ -169,7 +169,7 @@ def make_collision_params(element: Element, atomSpeed: RealNum):
         rp = rpDrift_Fake if rp == np.inf else rp
         col_rate = collision_rate(T, rp)
         return 'STRAIGHT', col_rate, atomSpeed, T, rp, np.nan, np.nan
-    elif type(element) is HalbachBender:
+    elif type(element) is BenderSim:
         rp, rb = element.rp, element.rb
         col_rate = collision_rate(T, rp)
         return 'SEG_BEND', col_rate, atomSpeed, element.ang, T, rb, rp

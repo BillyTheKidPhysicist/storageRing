@@ -1,12 +1,13 @@
-import time
-from HalbachLensClass import Layer, HalbachLens, Sphere, SegmentedBenderHalbach
-import scipy.optimize as spo
-import multiprocess as mp
 import itertools
-from helperTools import is_close_all,parallel_evaluate,arr_product
-from typeHints import RealNum
 import math
+import time
+
 import numpy as np
+import scipy.optimize as spo
+
+from fieldgenerator import Layer, HalbachLens, Sphere, BenderSim
+from helperTools import is_close_all, parallel_evaluate, arr_product
+from typeHints import RealNum
 
 numericTol = 1e-14  # my working numeric tolerance
 
@@ -97,7 +98,8 @@ class LayertestHelper:
                                         [8.1041300350840118e-05, 1.7963843761049603e-01, 0.0]])
         rtest = np.asarray([[.02, .02, 1.0]])
         z, width, length, rp = 1.0, .02, .5, .05
-        layer1 = Layer(rp, width, length, position=(0.0, 0.0, z), r_magnet_shift=1e-3 * np.random.random_sample((12, 1)))
+        layer1 = Layer(rp, width, length, position=(0.0, 0.0, z),
+                       r_magnet_shift=1e-3 * np.random.random_sample((12, 1)))
         layer2 = Layer(rp, width, length, position=(0.0, 0.0, z), dim_shift=1e-3 * np.random.random_sample((12, 3)))
         layer3 = Layer(rp, width, length, position=(0.0, 0.0, z), theta_shift=1e-3 * np.random.random_sample((12, 1)))
         layer4 = Layer(rp, width, length, position=(0.0, 0.0, z), phi_shift=1e-3 * np.random.random_sample((12, 1)))
@@ -212,7 +214,8 @@ class HalbachLenstestHelper:
         np.random.seed(42)
         lensError = HalbachLens(self.rp, self.magnet_width, self.length, use_standard_mag_errors=True)
         np.random.seed(42)
-        lensErrorSliced = HalbachLens(self.rp, self.magnet_width, self.length, use_standard_mag_errors=True, num_disks=10)
+        lensErrorSliced = HalbachLens(self.rp, self.magnet_width, self.length, use_standard_mag_errors=True,
+                                      num_disks=10)
         self.test_All_Three_Are_Different(lensPerfect, lensError, lensErrorSliced)
 
     def test7(self):
@@ -251,11 +254,11 @@ class SegmentedBenderHalbachHelper:
     def run_test(self):
         self.test1()
 
-    def make_Bender_Test_Coords(self, bender: SegmentedBenderHalbach) -> np.ndarray:
+    def make_Bender_Test_Coords(self, bender: BenderSim) -> np.ndarray:
         """Coords for testing bender that span the angular length and a little more."""
         ucAngle, rb, rp = bender.UCAngle, bender.rb, bender.rp
         theta_arr = np.linspace(bender.lens_angles_arr.min() - 2 * ucAngle, bender.lens_angles_arr.max() + 2 * ucAngle,
-                               2 * bender.num_lenses)
+                                2 * bender.num_lenses)
         rArr = np.linspace(rb - rp / 2, rb + rp / 2, 5)
         y_arr = np.linspace(-rp / 2, rp / 2, 6)
         coordsPolar = np.array(list(itertools.product(theta_arr, rArr, y_arr)))
@@ -264,7 +267,7 @@ class SegmentedBenderHalbachHelper:
         coords = np.column_stack((x_arr, y_arr, z_arr))
         return coords
 
-    def test_Bender_Approx(self, bender: SegmentedBenderHalbach) -> None:
+    def test_Bender_Approx(self, bender: BenderSim) -> None:
         """Test that the bender satisifes speed and accuracy limits over it's length for exact and approximate
         values."""
         coords = self.make_Bender_Test_Coords(bender)
@@ -289,10 +292,10 @@ class SegmentedBenderHalbachHelper:
         Lm, rb, rp = .0254, .9, .011
         ucAngle = .6 * Lm / 1.0
         # -------bender starting at theta=0
-        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, num_lenses=130, use_pos_mag_angs_only=True)
+        bender = BenderSim(rp, rb, ucAngle, Lm, 'N52', 130, (False, False), use_pos_mag_angs_only=True)
         self.test_Bender_Approx(bender)
         # ------bender symmetric about theta=0
-        bender = SegmentedBenderHalbach(rp, rb, ucAngle, Lm, num_lenses=80, use_pos_mag_angs_only=False)
+        bender = BenderSim(rp, rb, ucAngle, Lm, 'N52', 80, (False, False), use_pos_mag_angs_only=False)
         self.test_Bender_Approx(bender)
 
 

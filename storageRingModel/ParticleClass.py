@@ -8,7 +8,7 @@ import numpy as np
 import numpy.linalg as npl
 
 from constants import DEFAULT_ATOM_SPEED
-from latticeElements.elements import Element
+from lattice_elements.elements import Element
 
 
 class Particle:
@@ -69,7 +69,7 @@ class Particle:
 
     def log_params(self, current_el: Element, q_el: np.ndarray, p_el: np.ndarray) -> None:
         q_lab = current_el.transform_element_coords_into_lab_frame(q_el)
-        p_lab = current_el.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
+        p_lab = current_el.transform_element_frame_vector_into_lab_frame(p_el)
         self.q_vals.append(q_lab.copy())
         self.p_vals.append(p_lab.copy())
         self.KE_vals.append(np.sum(p_lab ** 2) / 2.0)
@@ -104,7 +104,7 @@ class Particle:
         if self.current_el is not None:
             self.current_el = current_el
             self.qf = self.current_el.transform_element_coords_into_lab_frame(q_el)
-            self.pf = self.current_el.transform_Element_Frame_Vector_Into_Lab_Frame(p_el)
+            self.pf = self.current_el.transform_element_frame_vector_into_lab_frame(p_el)
             if total_lattice_length is not None:
                 self.total_lattice_length = total_lattice_length
                 qoFinal = self.current_el.transform_element_coords_into_global_orbit_frame(q_el, self.cumulative_length)

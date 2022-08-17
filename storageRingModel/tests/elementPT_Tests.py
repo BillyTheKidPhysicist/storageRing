@@ -11,15 +11,17 @@ from hypothesis import given, settings, strategies as st
 from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Point
 
-from HalbachLensClass import HalbachLens, SegmentedBenderHalbach
+from fieldgenerator import HalbachLens
+from fieldgenerator import BenderSim as HalbachBender_FieldGenerator
+
 from ParticleClass import Particle
 from ParticleTracerClass import ParticleTracer
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
 from helperTools import is_close_all, parallel_evaluate
-from latticeElements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerHalbachLensSim, \
-    HalbachBender, HalbachLensSim, Element
-from latticeElements.utilities import halbach_magnet_width
+from lattice_elements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerLensSim, \
+    BenderSim, HalbachLensSim, Element
+from lattice_elements.utilities import halbach_magnet_width
 
 
 def absDif(x1, x2):
@@ -71,8 +73,8 @@ class ElementTestHelper:
     def get_Element(self, PTL) -> Element:
         if any(self.elType == el for el in (Drift, LensIdeal, HalbachLensSim)):
             el = PTL.el_list[0]
-        elif any(self.elType == el for el in (BenderIdeal, HalbachBender, CombinerIdeal,
-                                              CombinerHalbachLensSim)):
+        elif any(self.elType == el for el in (BenderIdeal, BenderSim, CombinerIdeal,
+                                              CombinerLensSim)):
             el = PTL.el_list[1]
         else:
             raise ValueError
@@ -88,9 +90,9 @@ class ElementTestHelper:
 
     def convert_Test_Coord_To_El_Frame(self, x1, x2, x3) -> np.ndarray:
         """Simple cartesian coordinates work for most elements"""
-        if any(self.elType == el for el in (Drift, LensIdeal, HalbachLensSim, CombinerIdeal, CombinerHalbachLensSim)):
+        if any(self.elType == el for el in (Drift, LensIdeal, HalbachLensSim, CombinerIdeal, CombinerLensSim)):
             x, y, z = x1, x2, x3
-        elif any(self.elType == el for el in (BenderIdeal, HalbachBender)):
+        elif any(self.elType == el for el in (BenderIdeal, BenderSim)):
             r, theta, z = x1, x2, x3
             x, y = r * np.cos(theta), r * np.sin(theta)
         else:
@@ -224,7 +226,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
             qEl1 = np.asarray([x, y, z])
             minInterpPointsFromOrigin = 2  # if I test very near the origin, the differences can be much larger.
             maxAperture = .8 * lensElement.rp  # larger aperture require finer grid for comparison
-            if lensElement.is_Coord_Inside(qEl1) == True and np.sqrt(y ** 2 + z ** 2) < maxAperture and \
+            if lensElement.is_coord_inside(qEl1) == True and np.sqrt(y ** 2 + z ** 2) < maxAperture and \
                     y / gridSpacing > minInterpPointsFromOrigin and z / gridSpacing > minInterpPointsFromOrigin:
                 Fx1, Fy1, Fz1 = lensElement.force(qEl1)
                 V1 = lensElement.magnetic_potential(qEl1)
@@ -328,9 +330,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.num_magnets * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2592035426978843e-01, 1.8272996344352248e+00, 5.5687821779393850e-04])
-        pf0 = np.array([157.4311247912118, -124.90221075271222, -4.302029947811501])
-        super().__init__(HalbachBender, particle0, qf0, pf0, False, False, False)
+        qf0 = np.array([6.2559354814221457e-01, 1.8269230633890334e+00,5.3982311417581880e-04])
+        pf0 = np.array([ 156.4521002770279  , -126.12385819012125 ,   -4.330765790764602])
+        super().__init__(BenderSim, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
         # test generic conditions of the element
@@ -359,9 +361,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         num_magnets = 15
         np.random.seed(42)
         PTL_Dev = PTL_Dummy(field_dens_mult=.75, use_mag_errors=True)
-        elDeviation = HalbachBender(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
+        elDeviation = BenderSim(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         PTL_Perf = PTL_Dummy(field_dens_mult=.75)
-        elPerfect = HalbachBender(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
+        elPerfect = BenderSim(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         for el in [elDeviation, elPerfect]:
             el.fill_pre_constrained_parameters()
             el.theta = 0.0
@@ -371,13 +373,13 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         coords_center, coords_cartesian = elPerfect.make_perturbation_data_coords()
         magnet_width = halbach_magnet_width(self.rp)
         np.random.seed(42)
-        lensIdeal = SegmentedBenderHalbach(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm, 'N52',
+        lensIdeal = HalbachBender_FieldGenerator(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm, 'N52',
                                            num_magnets+1,
                                            (True, True), use_method_of_moments=False,
                                            use_pos_mag_angs_only=True, use_mag_errors=False, magnet_width=magnet_width)
         lensIdeal.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         np.random.seed(42)
-        lensDeviated = SegmentedBenderHalbach(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm, 'N52',
+        lensDeviated = HalbachBender_FieldGenerator(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm, 'N52',
                                               num_magnets+1,
                                               (True, True),
                                               use_method_of_moments=False, magnet_width=magnet_width,
@@ -444,7 +446,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
         qf0 = np.array([-2.5204642358260165e-01, 7.0862975445841782e-03, -2.1550523921137185e-04])
         pf0 = np.array([-200.93630228490446, 1.3759172322022248, 7.710850190666924])
-        super().__init__(CombinerHalbachLensSim, particle0, qf0, pf0, True, False, False)
+        super().__init__(CombinerLensSim, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
         # test generic conditions of the element
@@ -496,7 +498,7 @@ class ElementTestRunner:
             qEl_2D = q_el[:2].copy()
             if self.elTestHelper.useShapelyTest:
                 self.test_Coord2D_Against_Shapely(qEl_2D)
-            isInsideFull3D = el.is_Coord_Inside(q_el)
+            isInsideFull3D = el.is_coord_inside(q_el)
             isInsideList.append(isInsideFull3D)
             # todo: clean this up
             if isInsideFull3D == False:
@@ -522,8 +524,8 @@ class ElementTestRunner:
             coordsEl = el.transform_lab_coords_into_element_frame(coordLab)
             assert np.all(np.abs(coordEl0 - coordsEl) < tol)
             vecEl0 = coordEl0
-            vecLab = el.transform_Lab_Frame_Vector_Into_Element_Frame(vecEl0)
-            vecEl = el.transform_Element_Frame_Vector_Into_Lab_Frame(vecLab)
+            vecLab = el.transform_lab_frame_vector_into_element_frame(vecEl0)
+            vecEl = el.transform_element_frame_vector_into_lab_frame(vecLab)
             assert np.all(np.abs(vecEl0 - vecEl) < tol)
 
         convert_Invert_Consistency()
@@ -538,7 +540,7 @@ class ElementTestRunner:
             @settings(max_examples=300, deadline=None)
             def test_Magnetic_Imperfection_Field_Symmetry(x1: float, x2: float, x3: float):
                 coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
-                if any(isclose(x, 0.0, abs_tol=1e-3) for x in [x1, x2, x3]):  # or el.is_Coord_Inside(coord):
+                if any(isclose(x, 0.0, abs_tol=1e-3) for x in [x1, x2, x3]):  # or el.is_coord_inside(coord):
                     return
                 else:
                     F0 = np.abs(el.force(coord))
@@ -581,7 +583,6 @@ class ElementTestRunner:
             jitterArr[2:] *= 1 / el.L  # rotation component
             blockPrint()
             el.perturb_element(*jitterArr)
-            assert el.get_valid_jitter_amplitude() <= jitter_amp * np.sqrt(2) + 1e-12
             enablePrint()
 
             @given(*self.elTestHelper.coordTestRules)
@@ -592,7 +593,7 @@ class ElementTestRunner:
                 coord = self.elTestHelper.convert_Test_Coord_To_El_Frame(x1, x2, x3)
                 F = el.force(coord)
                 V = el.magnetic_potential(coord)
-                isInside = el.is_Coord_Inside(coord)
+                isInside = el.is_coord_inside(coord)
                 assert (not isnan(F[0])) == isInside and (not isnan(V)) == isInside
 
             test_Geometry_And_Fields()
@@ -641,7 +642,7 @@ class ElementTestRunner:
         if isInside2DShapely == isInside2DShapelyPadded and isInside2DShapely == isInside2DShapelyNegPadded:
             # if consistent for both its not a weird situation of being
             # right on the edge, so go ahead and check
-            isInside_Fast = self.elTestHelper.el.is_Coord_Inside(np.append(qEl_2D, 0))
+            isInside_Fast = self.elTestHelper.el.is_coord_inside(np.append(qEl_2D, 0))
             if not isInside2DShapely == isInside_Fast:
                 print(qEl_2D)
                 print(isInside2DShapely, isInside2DShapelyPadded, isInside2DShapelyNegPadded, isInside_Fast)

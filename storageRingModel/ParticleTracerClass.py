@@ -9,8 +9,8 @@ from numba.core.errors import NumbaPerformanceWarning
 from ParticleClass import Particle
 from collisionPhysics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
-from latticeElements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, HalbachBender, \
-    CombinerSim, CombinerHalbachLensSim
+from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
+    CombinerSim, CombinerLensSim
 from particleTracerFunctions_numba import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, fast_qNew, \
     dot_Prod_3D
 
@@ -66,15 +66,15 @@ class ParticleTracer:
             -> tuple[np.ndarray, np.ndarray]:
         el1 = self.current_el
         el2 = nextEll
-        if type(el1) in (BenderIdeal, HalbachBender):
+        if type(el1) in (BenderIdeal, BenderSim):
             r01 = el1.r0
-        elif type(el1) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
+        elif type(el1) in (CombinerLensSim, CombinerSim, CombinerIdeal):
             r01 = el1.r2
         else:
             r01 = el1.r1
-        if type(el2) in (BenderIdeal, HalbachBender):
+        if type(el2) in (BenderIdeal, BenderSim):
             r02 = el2.r0
-        elif type(el2) in (CombinerHalbachLensSim, CombinerSim, CombinerIdeal):
+        elif type(el2) in (CombinerLensSim, CombinerSim, CombinerIdeal):
             r02 = el2.r2
         else:
             r02 = el2.r1
@@ -103,7 +103,7 @@ class ParticleTracer:
         else:
             self.particle.clipped = False
             self.q_el = self.current_el.transform_lab_coords_into_element_frame(self.particle.qi)
-            self.p_el = self.current_el.transform_Lab_Frame_Vector_Into_Element_Frame(self.particle.pi)
+            self.p_el = self.current_el.transform_lab_frame_vector_into_element_frame(self.particle.pi)
             if self.use_energy_correction:
                 self.E0 = self.particle.get_energy(self.current_el, self.q_el, self.p_el)
         if self.use_fast_mode is False and self.particle.clipped is False:
@@ -170,7 +170,7 @@ class ParticleTracer:
         assert not self.PTL.is_closed
         el_last = self.el_list[-1]
         # q_el = el_last.transform_lab_coords_into_element_frame(self.q_el)
-        # p_el = el_last.transform_Lab_Frame_Vector_Into_Element_Frame(self.p_el)
+        # p_el = el_last.transform_lab_frame_vector_into_element_frame(self.p_el)
         if isinstance(el_last, LensIdeal):
             timeStepToEnd = (el_last.L - self.q_el[0]) / self.p_el[0]
         elif isinstance(el_last, CombinerIdeal):
@@ -183,7 +183,7 @@ class ParticleTracer:
             clipped = True
         else:
             qElEnd = self.q_el + .99 * timeStepToEnd * self.p_el
-            clipped = not el_last.is_Coord_Inside(qElEnd)
+            clipped = not el_last.is_coord_inside(qElEnd)
         return clipped
 
     def time_step_loop(self) -> None:
@@ -271,12 +271,12 @@ class ParticleTracer:
             if self.log_el_phase_space_coords:
                 qElLab = self.current_el.transform_element_coords_into_lab_frame(
                     q_el_next)  # use the old  element for transform
-                pElLab = self.current_el.transform_Element_Frame_Vector_Into_Lab_Frame(
+                pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
                     p_el)  # use the old  element for transform
                 self.particle.el_phase_space_log.append((qElLab, pElLab))
             next_el = self.get_next_element()
             q_next_el, p_nextEl = self.transform_To_Next_Element(q_el_next, p_el, next_el)
-            if not next_el.is_Coord_Inside(q_next_el):
+            if not next_el.is_coord_inside(q_next_el):
                 self.particle.clipped = True
             else:
                 if self.use_energy_correction:
@@ -305,7 +305,7 @@ class ParticleTracer:
                 self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
                 qElLab = self.current_el.transform_element_coords_into_lab_frame(
                     q_el_next)  # use the old  element for transform
-                pElLab = self.current_el.transform_Element_Frame_Vector_Into_Lab_Frame(
+                pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
                     p_el)  # use the old  element for transform
                 if self.log_el_phase_space_coords:
                     self.particle.el_phase_space_log.append((qElLab, pElLab))
@@ -313,7 +313,7 @@ class ParticleTracer:
                 self.particle.current_el = next_el
                 self.q_el = self.current_el.transform_lab_coords_into_element_frame(
                     qElLab)  # at the beginning of the next element
-                self.p_el = self.current_el.transform_Lab_Frame_Vector_Into_Element_Frame(
+                self.p_el = self.current_el.transform_lab_frame_vector_into_element_frame(
                     pElLab)  # at the beginning of the next
                 # element
                 self.el_has_changed = True
@@ -353,7 +353,7 @@ class ParticleTracer:
 
     def which_element_lab_coords(self, q_lab: np.ndarray) -> Optional[Element]:
         for el in self.el_list:
-            if el.is_Coord_Inside(el.transform_lab_coords_into_element_frame(q_lab)):
+            if el.is_coord_inside(el.transform_lab_coords_into_element_frame(q_lab)):
                 return el
         return None
 
@@ -369,12 +369,12 @@ class ParticleTracer:
         # and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         q_lab = self.current_el.transform_element_coords_into_lab_frame(q_el)
         next_el = self.get_next_element()
-        if next_el.is_Coord_Inside(next_el.transform_lab_coords_into_element_frame(q_lab)):  # try the next element
+        if next_el.is_coord_inside(next_el.transform_lab_coords_into_element_frame(q_lab)):  # try the next element
             return next_el
         else:
             # now instead look everywhere, except the next element we already checked
             for el in self.el_list:
                 if el is not next_el:  # don't waste rechecking current element or next element
-                    if el.is_Coord_Inside(el.transform_lab_coords_into_element_frame(q_lab)):
+                    if el.is_coord_inside(el.transform_lab_coords_into_element_frame(q_lab)):
                         return el
             return None

@@ -98,7 +98,7 @@
 #         x, y, z = q
 #         y = abs(y)  # confine to upper right quadrant
 #         z = abs(z)
-#         if self.is_Coord_Inside(q) == False:
+#         if self.is_coord_inside(q) == False:
 #             raise Exception(ValueError)
 #
 #         if 0 <= x <= self.L / 2:

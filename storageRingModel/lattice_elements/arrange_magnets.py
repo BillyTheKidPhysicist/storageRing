@@ -5,14 +5,14 @@ field interactions. It's an abomination because of how I wasn't consistent early
 
 from scipy.spatial.transform import Rotation as Rot
 
-from HalbachLensClass import Collection
+from fieldgenerator import Collection
 from helperTools import *
-from latticeElements.class_BaseElement import BaseElement
-from latticeElements.elements import HalbachLensSim, Element, CombinerHalbachLensSim, Drift
+from lattice_elements.base_element import BaseElement
+from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift
 
-valid_interp_els = (HalbachLensSim, CombinerHalbachLensSim, Drift)  # elements that can include magnetic fields
+valid_interp_els = (HalbachLensSim, CombinerLensSim, Drift)  # elements that can include magnetic fields
 # produced by neighboring magnets into their own interpolation
-valid_neighors = (HalbachLensSim, CombinerHalbachLensSim)  # elements that can be used to generate  magnetic fields
+valid_neighors = (HalbachLensSim, CombinerLensSim)  # elements that can be used to generate  magnetic fields
 # that act on another elements
 
 neighbor_index_range = 1
@@ -40,7 +40,7 @@ def angle(norm) -> float:
     return full_arctan2(norm[1], norm[0])
 
 
-def move_combiner_to_target_frame(el_combiner: CombinerHalbachLensSim, el_target, magnet_options) -> Collection:
+def move_combiner_to_target_frame(el_combiner: CombinerLensSim, el_target, magnet_options) -> Collection:
     r_in_el = el_combiner.transform_lab_coords_into_element_frame(el_combiner.r1)
     magnets = el_combiner.magnet.make_magpylib_magnets(*magnet_options)
     magnets.move(-r_in_el)
@@ -56,7 +56,7 @@ def move_combiner_to_target_frame(el_combiner: CombinerHalbachLensSim, el_target
 
 def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element,magnet_options):
     magnets = el_to_move.magnet.make_magpylib_magnets(*magnet_options)
-    if type(el_target) is CombinerHalbachLensSim:  # the combiner is annoying to deal with because I defined the input
+    if type(el_target) is CombinerLensSim:  # the combiner is annoying to deal with because I defined the input
         # not at the origin, but rather along the x axis with some y offset
         # move input to 0,0 in el frame
         r_input = el_target.transform_lab_coords_into_element_frame(el_target.r2)
@@ -85,7 +85,7 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element,magnet_
 
 
 def field_generator_in_different_frame1(el_to_move: Element, el_target: Element, magnet_options: tuple):
-    if type(el_to_move) is CombinerHalbachLensSim:
+    if type(el_to_move) is CombinerLensSim:
         return move_combiner_to_target_frame(el_to_move, el_target,magnet_options)
     else:
         return move_lens_to_target_el_frame(el_to_move, el_target,magnet_options)

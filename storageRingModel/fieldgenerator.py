@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
 from helperTools import Union, Optional, math, inch_to_meter, radians, within_tol, time
-from latticeElements.utilities import halbach_magnet_width, max_tube_IR_in_segmented_bend
+from lattice_elements.utilities import halbach_magnet_width, max_tube_IR_in_segmented_bend
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
 Tuple3Float = tuple[float, float, float]
@@ -480,7 +480,7 @@ class HalbachLens(Collection):
             self.add(loop)
 
 
-class SegmentedBenderHalbach(Collection):
+class BenderSim(Collection):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 

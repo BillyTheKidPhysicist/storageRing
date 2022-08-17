@@ -2,8 +2,8 @@ from math import isclose, sqrt
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
 from helperTools import *
-from latticeElements.elements import CombinerIdeal, CombinerHalbachLensSim, CombinerSim
-from numbaFunctionsAndObjects.combinerIdealFieldHelper import combiner_Ideal_Force
+from lattice_elements.elements import CombinerIdeal, CombinerLensSim, CombinerSim
+from numbaFunctionsAndObjects.combinerIdealFastFunction import combiner_Ideal_Force
 
 
 def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_offset_start: float = 0.0,
@@ -79,7 +79,7 @@ def input_angle(p_arr) -> float:
     return np.arctan(py / px)
 
 
-def closet_approach_to_lens_corner(el: CombinerHalbachLensSim, q_arr: np.ndarray):
+def closet_approach_to_lens_corner(el: CombinerLensSim, q_arr: np.ndarray):
     lens_corner_coords = np.array([el.space + el.Lm + FLAT_WALL_VACUUM_THICKNESS, -el.ap, 0.0])
     return np.min(np.linalg.norm(q_arr - lens_corner_coords, axis=1))
 
@@ -100,7 +100,7 @@ def characterize_combiner_ideal(el: CombinerIdeal):
     return input_ang, input_offset, trajectory_length
 
 
-def characterize_combiner_halbach(el: CombinerHalbachLensSim, atom_state=None, particleOffset=None):
+def characterize_combiner_halbach(el: CombinerLensSim, atom_state=None, particleOffset=None):
     atom_state = (
         'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER') if atom_state is None else atom_state
     particle_y_offset_start = el.output_offset if particleOffset is None else particleOffset

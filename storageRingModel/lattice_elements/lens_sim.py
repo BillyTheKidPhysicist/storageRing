@@ -4,13 +4,13 @@ from typing import Optional
 
 import numpy as np
 
-from HalbachLensClass import Collection
+from fieldgenerator import Collection
 from constants import TUBE_WALL_THICKNESS
 from helperTools import is_close_all
 from helperTools import round_and_make_odd
-from latticeElements.Magnets import MagneticLens
-from latticeElements.class_LensIdeal import LensIdeal
-from latticeElements.utilities import MAGNET_ASPECT_RATIO, is_even, \
+from lattice_elements.element_magnets import MagneticLens
+from lattice_elements.lens_ideal import LensIdeal
+from lattice_elements.utilities import MAGNET_ASPECT_RATIO, is_even, \
     ElementTooShortError, halbach_magnet_width, round_down_to_nearest_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
     INTERP_MAGNET_MATERIAL_OFFSET
 from numbaFunctionsAndObjects import halbachLensFastFunctions

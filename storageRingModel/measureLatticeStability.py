@@ -6,10 +6,10 @@ from ringOptimizer import solution_From_Lattice
 
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from helperTools import parallel_evaluate
-from latticeElements.elements import CombinerHalbachLensSim, CombinerIdeal, CombinerSim, LensIdeal, HalbachLensSim
+from lattice_elements.elements import CombinerLensSim, CombinerIdeal, CombinerSim, LensIdeal, HalbachLensSim
 from latticeModels import make_Ring_And_Injector_Version3
 
-combinerTypes = (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
+combinerTypes = (CombinerLensSim, CombinerIdeal, CombinerSim)
 
 
 class StabilityAnalyzer:
@@ -27,7 +27,7 @@ class StabilityAnalyzer:
         self.paramsOptimal = paramsOptimal
         self.alignmentTol = alignmentTol
         self.machineTolerance = machineTolerance
-        self.jitterableElements = (CombinerHalbachLensSim, LensIdeal, HalbachLensSim)
+        self.jitterableElements = (CombinerLensSim, LensIdeal, HalbachLensSim)
 
     def generate_Ring_And_Injector_Lattice(self, use_mag_errors: bool,
                                            combiner_seed: int = None) \

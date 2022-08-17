@@ -1,4 +1,4 @@
-from latticeElements.elements import Drift,HalbachLensSim
+from lattice_elements.elements import Drift,HalbachLensSim
 def get_element_before_and_after(el_center,lattice):
     if (el_center.index == len(lattice.el_list) - 1 or el_center.index == 0) and lattice.lattice_type == 'injector':
         raise Exception('Element cannot be first or last if lattice is injector type')

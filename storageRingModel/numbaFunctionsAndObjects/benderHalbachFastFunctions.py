@@ -7,7 +7,7 @@ from numbaFunctionsAndObjects.utilities import full_arctan2
 
 @numba.njit()
 def cartesian_To_Center(x, y, z, params):
-    """Convert from cartesian coords to HalbachLensClass.SegmentedBenderHalbach coored, ie "center coords" for
+    """Convert from cartesian coords to HalbachLensClass.BenderSim coored, ie "center coords" for
     evaluation by interpolator"""
     rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_field_perturbations = params
 

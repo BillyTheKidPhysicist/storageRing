@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
-from latticeElements.arrangeMagnets import collect_valid_neighboring_magpylib_magnets
-from latticeElements.elements import BenderIdeal, HalbachBender, LensIdeal, CombinerIdeal, \
-    CombinerSim, CombinerHalbachLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
-from latticeElements.elements import Element
+from lattice_elements.arrange_magnets import collect_valid_neighboring_magpylib_magnets
+from lattice_elements.elements import BenderIdeal, BenderSim, LensIdeal, CombinerIdeal, \
+    CombinerSim, CombinerLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
+from lattice_elements.elements import Element
 from shapelyObjectBuilder import build_shapely_objects
 from storageRingConstraintSolver import is_particle_tracer_lattice_closed
 from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
@@ -17,7 +17,7 @@ from storageRingConstraintSolver import solve_Floor_Plan, update_and_place_eleme
 # people, I need to change that. This was before my cleaner code approach
 
 
-benderTypes = Union[BenderIdeal, HalbachBender]
+benderTypes = Union[BenderIdeal, BenderSim]
 
 
 class ParticleTracerLattice:
@@ -112,7 +112,7 @@ class ParticleTracerLattice:
         :return: None
         """
 
-        el = CombinerHalbachLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed)
+        el = CombinerLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed)
         el.index = len(self.el_list)  # where the element is in the lattice
         assert self.combiner is None  # there can be only one!
         self.combiner = el
@@ -212,7 +212,7 @@ class ParticleTracerLattice:
         # L_cap: Length of element on the end/input of bender
         # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
         # modeling shows that ~.675 is ideal
-        el = HalbachBender(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
+        el = BenderSim(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
         el.index = len(self.el_list)  # where the element is in the lattice
         self.bender_indices.append(el.index)
         self.el_list.append(el)

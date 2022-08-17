@@ -11,7 +11,7 @@ from scipy.special import voigt_profile
 from ParticleClass import Swarm
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from constants import GRAVITATIONAL_ACCELERATION
-from latticeElements.elements import HalbachLensSim, Drift
+from lattice_elements.elements import HalbachLensSim, Drift
 from typeHints import sequence
 
 meter_to_mm = 1e3
@@ -71,7 +71,7 @@ def check_collector_lattice_is_expected(lattice: ParticleTracerLattice):
     assert type(middle_el) is HalbachLensSim
 
 
-def build_collector_lattice(interp_density_mult=2.0, ap=None) -> ParticleTracerLattice:
+def build_collector_lattice(interp_density_mult=2.0, ap=None,direction=0.0) -> ParticleTracerLattice:
     distance_nozzle = 72e-2
     magnet_widths = (.0254, 1.5 * .0254)
     rp_layers = (.05, .05 + magnet_widths[0])
@@ -81,8 +81,8 @@ def build_collector_lattice(interp_density_mult=2.0, ap=None) -> ParticleTracerL
     pre_lens_drift_length = distance_nozzle - fringe_field_length
     lens_element_length = magnet_length + 2 * fringe_field_length
 
-    lattice = ParticleTracerLattice(lattice_type='injector', initial_ang=0.0, field_dens_mult=interp_density_mult,
-                                    magnet_grade='N40')
+    lattice = ParticleTracerLattice(lattice_type='injector', initial_ang=direction, field_dens_mult=interp_density_mult,
+                                    magnet_grade='N40',include_mag_cross_talk=False)
     lattice.add_drift(pre_lens_drift_length, ap=rp_layers[1])
     lattice.add_halbach_lens_sim(rp_layers, lens_element_length, ap=ap, magnet_width=magnet_widths)
     lattice.add_drift(post_lens_drift_length, rp_layers[1])
@@ -184,8 +184,9 @@ class CollectorSwarmAnalyzer:
         return vTMax
 
     def interpolate(self, x_interp: float, max_radius_mm: float = np.inf, laser_scan_range_volts: float = None,vtrans_max: float=None,
-                    return_p: bool = False, return_valid_indices: bool=False) -> list[np.ndarray, ...]:
-        assert self.x_min < x_interp < self.x_max
+                    return_p: bool = False, return_valid_indices: bool=False, enforce_location: bool=True) -> list[np.ndarray, ...]:
+        if enforce_location:
+            assert self.x_min < x_interp < self.x_max
         assert not ( laser_scan_range_volts is not None and vtrans_max is not None)
         if laser_scan_range_volts is not None:
             vTMax = self._get_Sweep_Range_Trans_Vel_Max(laser_scan_range_volts)

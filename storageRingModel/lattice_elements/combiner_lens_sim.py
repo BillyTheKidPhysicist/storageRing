@@ -3,13 +3,13 @@ from typing import Optional
 
 import numpy as np
 
-from HalbachLensClass import Collection
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
+from fieldgenerator import Collection
 from helperTools import is_close_all
 from helperTools import round_and_make_odd
-from latticeElements.Magnets import MagneticLens
-from latticeElements.class_CombinerIdeal import CombinerIdeal
-from latticeElements.utilities import CombinerDimensionError, \
+from lattice_elements.combiner_ideal import CombinerIdeal
+from lattice_elements.element_magnets import MagneticLens
+from lattice_elements.utilities import CombinerDimensionError, \
     CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
     TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from numbaFunctionsAndObjects import combinerHalbachFastFunctions
@@ -32,7 +32,7 @@ def make_arrays(x_min, x_max, y_min, y_max, z_min, z_max, num_x, num_y, num_z) -
     return x_arr, y_arr, z_arr
 
 
-class CombinerHalbachLensSim(CombinerIdeal):
+class CombinerLensSim(CombinerIdeal):
     fringe_frac_outer: float = 1.5
     num_grid_points_r: int = 30
     num_points_per_rad_in_x: int = 5
@@ -288,7 +288,7 @@ class CombinerHalbachLensSim(CombinerIdeal):
 
     def compute_input_orbit_characteristics(self) -> tuple:
         """compute characteristics of the input orbit. This applies for injected beam, or recirculating beam"""
-        from latticeElements.combiner_characterizer import characterize_combiner_halbach
+        from lattice_elements.combiner_characterizer import characterize_combiner_halbach
 
         self.output_offset = self.find_Ideal_Offset()
 
@@ -301,25 +301,12 @@ class CombinerHalbachLensSim(CombinerIdeal):
     def update_field_fact(self, field_strength_fact) -> None:
         raise NotImplementedError
 
-    # def get_valid_jitter_amplitude(self, show_warnings=True) -> float:
-    #     """If jitter (radial misalignment) amplitude is too large, it is clipped"""
-    #     assert self.PTL.jitter_amp >= 0.0
-    #     jitter_amp_proposed = self.PTL.jitter_amp
-    #     max_jitter_amp = self.max_ap_internal_interp_region() - self.ap
-    #     jitter_amp = max_jitter_amp if jitter_amp_proposed > max_jitter_amp else jitter_amp_proposed
-    #     if show_warnings:
-    #         if jitter_amp_proposed == max_jitter_amp and jitter_amp_proposed != 0.0:
-    #             warnings.warn('jitter amplitude of:' + str(jitter_amp_proposed) +
-    #                           ' clipped to maximum value:' + str(max_jitter_amp))
-    #
-    #     return jitter_amp
-
     def find_Ideal_Offset(self) -> float:
         """use newton's method to find where the vertical translation of the combiner wher the minimum seperation
         between atomic beam path and lens is equal to the specified beam diameter for INJECTED beam. This requires
         modeling high field seekers. Particle is traced backwards from the output of the combiner to the input.
         Can possibly error out from modeling magnet or assembly error"""
-        from latticeElements.combiner_characterizer import characterize_combiner_halbach
+        from lattice_elements.combiner_characterizer import characterize_combiner_halbach
 
         if self.load_beam_offset >= self.ap:  # beam doens't fit in combiner
             raise CombinerDimensionError

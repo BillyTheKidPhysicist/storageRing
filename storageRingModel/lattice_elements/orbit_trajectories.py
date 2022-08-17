@@ -3,9 +3,9 @@ from math import cos, sin, atan, tan, pi
 import numpy as np
 from shapely.geometry import LineString
 
-from latticeElements.combiner_characterizer import make_halbach_combiner_force_function, compute_particle_trajectory
-from latticeElements.elements import Drift, HalbachLensSim, CombinerHalbachLensSim, BenderIdeal, \
-    HalbachBender, Element
+from lattice_elements.combiner_characterizer import make_halbach_combiner_force_function, compute_particle_trajectory
+from lattice_elements.elements import Drift, HalbachLensSim, CombinerLensSim, BenderIdeal, \
+    BenderSim, Element
 from typeHints import RealNum
 
 
@@ -77,11 +77,11 @@ def segmented_halbach_bender(el: Element) -> np.ndarray:
 def nominal_particle_trajectory(el: Element) -> np.ndarray:
     if type(el) in (Drift, HalbachLensSim):
         xy = straight_orbit_xy(el)
-    elif type(el) is CombinerHalbachLensSim:
+    elif type(el) is CombinerLensSim:
         xy = combiner_halbach_orbit_xy(el)
     elif type(el) is BenderIdeal:
         xy = ideal_bendorbit_xy(el)
-    elif type(el) is HalbachBender:
+    elif type(el) is BenderSim:
         xy = segmented_halbach_bender(el)
     else:
         raise NotImplemented

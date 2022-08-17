@@ -5,6 +5,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from constants import SIMULATION_MAGNETON
+from typeHints import ndarray
 
 
 # todo: a base geometry inheritance is most logical
@@ -43,13 +44,13 @@ class BaseElement:
         # and pointing in the NE direction
         # todo: r1,r2,ne,nb are not consistent. They describe either orbit coordinates, or physical element coordinates
         self.PTL = PTL  # particle tracer lattice object. Used for various constants
-        self.nb: Optional[np.ndarray] = None  # normal vector to beginning (clockwise sense) of element.
-        self.ne: Optional[np.ndarray] = None  # normal vector to end (clockwise sense) of element
+        self.nb: Optional[ndarray] = None  # normal vector to beginning (clockwise sense) of element.
+        self.ne: Optional[ndarray] = None  # normal vector to end (clockwise sense) of element
 
-        self.R_Out: Optional[np.ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
-        self.R_In: Optional[np.ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
-        self.r1: Optional[np.ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
-        self.r2: Optional[np.ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
+        self.R_Out: Optional[ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
+        self.R_In: Optional[ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
+        self.r1: Optional[ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
+        self.r2: Optional[ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
         self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for
         # finding if the coordinates
         # # are inside an element that can't be found with simple geometry
@@ -91,7 +92,7 @@ class BaseElement:
         self.fast_field_helper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shift_y, shift_z, rot_angle_y,
                                                                                        rot_angle_z)
 
-    def magnetic_potential(self, q_el: np.ndarray) -> float:
+    def magnetic_potential(self, q_el: ndarray) -> float:
         """
         Return magnetic potential energy at position q_el.
 
@@ -104,7 +105,7 @@ class BaseElement:
         """
         return self.numba_functions['magnetic_potential'](*q_el)  # will raise NotImplementedError if called
 
-    def force(self, q_el: np.ndarray) -> np.ndarray:
+    def force(self, q_el: ndarray) -> ndarray:
         """
         Return force at position q_el.
 
@@ -118,8 +119,8 @@ class BaseElement:
         """
         return np.asarray(self.numba_functions['force'](*q_el))  # will raise NotImplementedError if called
 
-    def transform_element_coords_into_global_orbit_frame(self, q_el: np.ndarray,
-                                                         cumulative_length: float) -> np.ndarray:
+    def transform_element_coords_into_global_orbit_frame(self, q_el: ndarray,
+                                                         cumulative_length: float) -> ndarray:
         """
         Generate coordinates in the non-cartesian global orbit frame that grows cumulatively with revolutions, from
         observer/lab cartesian coordinates.
@@ -134,12 +135,12 @@ class BaseElement:
         q_orbit[0] = q_orbit[0] + cumulative_length  # longitudinal component grows
         return q_orbit
 
-    def transform_element_momentum_into_global_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_global_orbit_frame(self, q_el: ndarray, p_el: ndarray) -> ndarray:
         """wraps self.transform_element_momentum_into_local_orbit_frame"""
 
         return self.transform_element_momentum_into_local_orbit_frame(q_el, p_el)
 
-    def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
+    def transform_lab_coords_into_element_frame(self, q_lab: ndarray) -> ndarray:
         """
         Generate local cartesian element frame coordinates from cartesian observer/lab frame coordinates
 
@@ -148,7 +149,7 @@ class BaseElement:
         """
         raise NotImplementedError
 
-    def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_lab_frame(self, q_el: ndarray) -> ndarray:
         """
         Generate cartesian observer/lab frame coordinates from local cartesian element frame coordinates
 
@@ -157,7 +158,7 @@ class BaseElement:
         """
         raise NotImplementedError
 
-    def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
+    def transform_orbit_frame_into_lab_frame(self, q_orbit: ndarray) -> ndarray:
         """
         Generate global cartesian observer/lab frame coords from non-cartesian local orbit frame coords. Orbit coords
         are similiar to the Frenet-Serret Frame.
@@ -169,7 +170,7 @@ class BaseElement:
         """
         raise NotImplementedError
 
-    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: ndarray) -> ndarray:
         """
         Generate non-cartesian local orbit frame coords from local cartesian element frame coords. Orbit coords are
         similiar to the Frenet-Serret Frame.
@@ -181,7 +182,7 @@ class BaseElement:
         """
         raise NotImplementedError
 
-    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: ndarray, p_el: ndarray) -> ndarray:
         """
         Transform momentum vector in element frame in frame moving along with nominal orbit. In this frame px is the
         momentum tangent to the orbit, py is perpindicular and horizontal, pz is vertical.
@@ -192,7 +193,7 @@ class BaseElement:
         """
         raise NotImplementedError
 
-    def transform_Lab_Frame_Vector_Into_Element_Frame(self, vecLab: np.ndarray) -> np.ndarray:
+    def transform_lab_frame_vector_into_element_frame(self, vecLab: ndarray) -> ndarray:
         """
         Generate element frame vector from observer/lab frame vector.
 
@@ -203,7 +204,7 @@ class BaseElement:
         vec_new[:2] = self.R_In @ vec_new[:2]
         return vec_new
 
-    def transform_Element_Frame_Vector_Into_Lab_Frame(self, vecEl: np.ndarray) -> np.ndarray:
+    def transform_element_frame_vector_into_lab_frame(self, vecEl: ndarray) -> ndarray:
         """
         Generate observer/lab frame vector from element frame vector.
 
@@ -214,7 +215,7 @@ class BaseElement:
         vec_new[:2] = self.R_Out @ vec_new[:2]
         return vec_new
 
-    def is_Coord_Inside(self, q_el: np.ndarray) -> bool:
+    def is_coord_inside(self, q_el: ndarray) -> bool:
         """
         Check if a 3D cartesian element frame coordinate is contained within an element's vacuum tube
 
@@ -240,7 +241,7 @@ class BaseElement:
         """Fill internal parameters after constrained lattice layout is solved. See fill_Pre_Constrainted_Parameters.
         At this point everything about the geometry of the element is specified"""
 
-    def shape_field_data_3D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
+    def shape_field_data_3D(self, data: ndarray) -> tuple[ndarray, ...]:
         """
         Shape 3D field data for fast linear interpolation method
 
@@ -276,7 +277,7 @@ class BaseElement:
         V_Flat, Fx_Flat, Fy_Flat, Fz_Flat = V_matrix.ravel(), Fx_matrix.ravel(), Fy_matrix.ravel(), Fz_matrix.ravel()
         return x_arr, y_arr, z_arr, Fx_Flat, Fy_Flat, Fz_Flat, V_Flat
 
-    def shape_field_data_2D(self, data: np.ndarray) -> tuple[np.ndarray, ...]:
+    def shape_field_data_2D(self, data: ndarray) -> tuple[ndarray, ...]:
         """2D version of shape_field_data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
         assert data.shape[1] == 5 and len(data) > 2 ** 3
         x_arr = np.unique(data[:, 0])
@@ -297,7 +298,3 @@ class BaseElement:
         V_matrix = SIMULATION_MAGNETON * B0_matrix
         V_Flat, Fx_Flat, Fy_Flat = np.ravel(V_matrix), np.ravel(Fx_matrix), np.ravel(FyMatrix)
         return x_arr, y_arr, Fx_Flat, Fy_Flat, V_Flat
-
-    def get_valid_jitter_amplitude(self):
-        """If jitter (radial misalignment) amplitude is too large, it is clipped."""
-        return self.PTL.jitter_amp

@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from latticeElements.utilities import calc_unit_cell_angle
+from lattice_elements.utilities import calc_unit_cell_angle
 from typeHints import sequence
 
 

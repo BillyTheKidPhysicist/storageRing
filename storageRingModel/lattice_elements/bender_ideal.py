@@ -4,9 +4,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import SIMULATION_MAGNETON
-from latticeElements.class_BaseElement import BaseElement
-from latticeElements.utilities import full_arctan2
+from lattice_elements.base_element import BaseElement
+from lattice_elements.utilities import full_arctan2
 from numbaFunctionsAndObjects import benderIdealFastFunctions
+from typeHints import ndarray
 
 
 class BenderIdeal(BaseElement):
@@ -35,8 +36,6 @@ class BenderIdeal(BaseElement):
 
         ro: Orbit bending radius, meter. Larger than self.rb because of centrifugal effect
 
-        segmented: Wether the element is made up of discrete segments, or is continuous. Used in
-            ParticleTracerLatticeClass
         """
 
     def __init__(self, PTL, ang: float, Bp: float, rp: float, rb: float, ap: float):
@@ -69,28 +68,28 @@ class BenderIdeal(BaseElement):
 
         self.assign_numba_functions(benderIdealFastFunctions, force_args, potential_args, is_coord_in_vacuum_args)
 
-    def fill_post_constrained_parameters(self):
-        self.fill_In_And_Out_Rotation_Matrices()
+    def fill_post_constrained_parameters(self) -> None:
+        self.fill_in_and_out_rotation_matrices()
 
-    def fill_In_And_Out_Rotation_Matrices(self):
+    def fill_in_and_out_rotation_matrices(self) -> None:
         rot = self.theta - self.ang + np.pi / 2
         self.R_Out = Rot.from_rotvec([0.0, 0.0, rot]).as_matrix()[:2, :2]
         self.R_In = Rot.from_rotvec([0.0, 0.0, -rot]).as_matrix()[:2, :2]
 
-    def transform_lab_coords_into_element_frame(self, q_lab: np.ndarray) -> np.ndarray:
+    def transform_lab_coords_into_element_frame(self, q_lab: ndarray) -> ndarray:
         """Overrides abstract method from Element."""
         q_new = q_lab - self.r0
-        q_new = self.transform_Lab_Frame_Vector_Into_Element_Frame(q_new)
+        q_new = self.transform_lab_frame_vector_into_element_frame(q_new)
         return q_new
 
-    def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_lab_frame(self, q_el: ndarray) -> ndarray:
         """Overrides abstract method from Element."""
         q_new = q_el.copy()
-        q_new = self.transform_Element_Frame_Vector_Into_Lab_Frame(q_new)
+        q_new = self.transform_element_frame_vector_into_lab_frame(q_new)
         q_new = q_new + self.r0
         return q_new
 
-    def transform_element_coords_into_local_orbit_frame(self, q_el: np.ndarray) -> np.ndarray:
+    def transform_element_coords_into_local_orbit_frame(self, q_el: ndarray) -> ndarray:
         """Overrides abstract method from Element."""
         qo = q_el.copy()
         phi = self.ang - full_arctan2(qo)  # angle swept out by particle in trajectory. This is zero
@@ -102,7 +101,7 @@ class BenderIdeal(BaseElement):
         qo[1] = qox
         return qo
 
-    def transform_orbit_frame_into_lab_frame(self, q_orbit: np.ndarray) -> np.ndarray:
+    def transform_orbit_frame_into_lab_frame(self, q_orbit: ndarray) -> ndarray:
         """Overrides abstract method from Element."""
         raise NotImplementedError  # there is an error here with yo
         xo, yo, zo = q_orbit
@@ -115,7 +114,7 @@ class BenderIdeal(BaseElement):
         q_lab += self.r0
         return q_lab
 
-    def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
+    def transform_element_momentum_into_local_orbit_frame(self, q_el: ndarray, p_el: ndarray) -> ndarray:
         """Overrides abstract method from Element class. Simple cartesian to cylinderical coordinates"""
 
         x, y = q_el[:2]

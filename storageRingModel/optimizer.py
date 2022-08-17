@@ -6,8 +6,8 @@ import numpy as np
 from ParticleTracerClass import ElementTooShortError as ElementTooShortErrorTimeStep
 from ParticleTracerLatticeClass import ParticleTracerLattice
 from asyncDE import solve_async
-from latticeElements.utilities import CombinerDimensionError
-from latticeElements.utilities import ElementTooShortError as ElementTooShortErrorFields
+from lattice_elements.utilities import CombinerDimensionError
+from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
 from latticeModels.latticeModelUtilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
 from latticeModels.systemModel import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
@@ -206,7 +206,7 @@ def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], i
 def _global_optimize(cost_func, bounds: sequence, globalTol: float, processes: int, disp: bool) -> tuple[
     float, float]:
     """globally optimize a storage ring model cost function"""
-    member = solve_async(cost_func, bounds, 15 * len(bounds), workers=processes,
+    member = solve_async(cost_func, bounds, workers=processes,
                          save_data='optimizerProgress', tol=globalTol, disp=disp)
     x_optimal, cost_min = member.DNA, member.cost
     return x_optimal, cost_min
@@ -254,15 +254,8 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 def main():
     pass
 
-    # injector_params=(0.298, 0.01824404317562657, 0.23788459956313238,
-    #        0.03, 0.17709193919623706, 0.009704452870607685,
-    #        0.10615316973237765, 0.22492222955994753, 0.22148833301792942)
-    # ring_params = (0.012593597021671735, 0.010115712864579277, 0.007415429587324836,
-    #                0.04513305464223805, 0.1, 0.49472608069737817)
-    #
-    # optimize('ring', 'local', '2', injector_params=injector_params,
-    #           use_bumper=True,local_search_region=.05,xi=ring_params)
-
+    optimize('both', 'global', '2',use_bumper=True)
+#
 
 if __name__ == '__main__':
     main()

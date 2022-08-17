@@ -10,16 +10,17 @@ from helperTools import low_discrepancy_sample
 
 HUGE_INT = int(1e12)
 real_number = (int, float)
+PRINT_OUT_ITERS = 100
 
 
 class AsyncSolver:
     def __init__(self, workers):
         self.jobs = []
         if workers is None or isinstance(workers, int):
-            if workers is None or workers==-1:
+            if workers is None or workers == -1:
                 num_processes = multiprocessing.cpu_count()
             elif isinstance(workers, int):
-                assert workers>0
+                assert workers > 0
                 num_processes = workers
             else:
                 raise ValueError
@@ -398,6 +399,12 @@ class AsyncDE:
         except:
             raise IOError('error encountered with file saving!! proceeding')
 
+    def print_progress(self):
+        print('------ITERATIONS: ', self.num_evals)
+        print("POPULATION VARIABILITY: " + str(self.get_population_variability()))
+        print('BEST MEMBER BELOW')
+        print(self.population.get_most_fit_member())
+
     def solve(self):
         self.initialize_population()
         t0 = time.time()
@@ -407,15 +414,14 @@ class AsyncDE:
                     or self.found_poisson_pill():
                 if self.save_data is not None:
                     self.resave_progress()
-                print('finished with total evals: ', self.num_evals)
+                print('DONE')
+                self.print_progress()
+
                 break
             self.evolve()
-            if self.num_evals % self.num_members == 0:
+            if self.num_evals % PRINT_OUT_ITERS == 0:
                 if self.disp is True:
-                    print('------ITERATIONS: ', self.num_evals)
-                    print("POPULATION VARIABILITY: " + str(self.get_population_variability()))
-                    print('BEST MEMBER BELOW')
-                    print(self.population.get_most_fit_member())
+                    self.print_progress()
                 if self.save_data is not None:
                     self.resave_progress()
             assert self.population.num_adults() <= self.num_members
@@ -437,7 +443,15 @@ def load_previous_population(num, file):
     return population
 
 
-def solve_async(func, bounds, popsize, time_out_seconds=None, initial_vals=None, save_population=None,
+def select_pop_size(bounds):
+    pop_size_min = multiprocessing.cpu_count()
+    pop_size_max = max([500, pop_size_min])
+    pop_size_scalable = 10 * len(bounds)
+    pop_size = np.clip(pop_size_scalable, pop_size_min, pop_size_max)
+    return pop_size
+
+
+def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=None, save_population=None,
                 surrogate_method_prob=0.0,
                 disp=True, max_evals=None, tol=None, workers=None, save_data=None,
                 reload_population: str = None) -> Member:
@@ -445,7 +459,8 @@ def solve_async(func, bounds, popsize, time_out_seconds=None, initial_vals=None,
         assert initial_vals is None
         initial_vals = load_previous_population(popsize, reload_population)
     np.set_printoptions(precision=1000)
-    solver = AsyncDE(func, popsize, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
+    pop_size = select_pop_size(bounds) if popsize is None else popsize
+    solver = AsyncDE(func, pop_size, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
                      surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol,
                      workers=workers,
                      save_data=save_data)

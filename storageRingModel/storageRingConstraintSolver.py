@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 
 from helperTools import is_close_all
-from latticeElements.elements import Drift, HalbachBender, CombinerHalbachLensSim, HalbachLensSim, \
+from lattice_elements.elements import Drift, BenderSim, CombinerLensSim, HalbachLensSim, \
     LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
 from storageRingGeometryModules.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
 from storageRingGeometryModules.storageRingGeometry import StorageRingGeometry
@@ -18,14 +18,14 @@ def _get_Target_Radii(PTL) -> float:
 
     radii = []
     for element in PTL:
-        if type(element) is HalbachBender:
+        if type(element) is BenderSim:
             radii.append(element.ro)
     for radius in radii[1:]:
         assert radius == radii[0]  # different target radii is not supported now
     return radii[0]
 
 
-def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) -> Kink:
+def _kink_From_Combiner(combiner: Union[CombinerLensSim, CombinerIdeal]) -> Kink:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
     L1 = combiner.Lb  # from kink to next bender
@@ -38,7 +38,7 @@ def _kink_From_Combiner(combiner: Union[CombinerHalbachLensSim, CombinerIdeal]) 
     return Kink(-combiner.ang, L2, L1)
 
 
-def _cappedSlicedBend_From_HalbachBender(bender: HalbachBender) -> CappedSlicedBend:
+def _cappedSlicedBend_From_HalbachBender(bender: BenderSim) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
     length_seg, L_cap, radius, num_magnets = bender.Lm, bender.L_cap, bender.ro, bender.num_magnets
@@ -58,9 +58,9 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
             elements.append(Line(el_PTL.L, constrained=constrained))
         elif type(el_PTL) is Drift:
             elements.append(LineWithAngledEnds(el_PTL.L, el_PTL.input_tilt_angle, el_PTL.output_tilt_angle))
-        elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
+        elif type(el_PTL) in (CombinerLensSim, CombinerIdeal, CombinerSim):
             elements.append(_kink_From_Combiner(el_PTL))
-        elif type(el_PTL) is HalbachBender:
+        elif type(el_PTL) is BenderSim:
             elements.append(_cappedSlicedBend_From_HalbachBender(el_PTL))
         elif type(el_PTL) is BenderIdeal:
             elements.append(Bend(el_PTL.ro, el_PTL.ang))
@@ -84,13 +84,13 @@ def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     return storage_ring
 
 
-def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBender],
+def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, BenderSim],
                                    shape: Union[Bend, CappedSlicedBend]):
     """Given a geometric shape object, fill the geometric attributes of an Element object. """
 
-    assert type(bender) in (BenderIdeal, HalbachBender) and type(shape) in (Bend, CappedSlicedBend)
+    assert type(bender) in (BenderIdeal, BenderSim) and type(shape) in (Bend, CappedSlicedBend)
     bender.rb = shape.radius - bender.output_offset  # get the bending radius back from orbit radius
-    if type(bender) is HalbachBender:
+    if type(bender) is BenderSim:
         bender.num_magnets = shape.num_magnets
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
@@ -104,10 +104,10 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, HalbachBender],
     bender.theta = theta
 
 
-def _build_Lattice_Combiner_Element(combiner: Union[CombinerHalbachLensSim, CombinerIdeal, CombinerSim], shape: Kink):
+def _build_Lattice_Combiner_Element(combiner: Union[CombinerLensSim, CombinerIdeal, CombinerSim], shape: Kink):
     """Given a geometric shape object, fill the geometric attributes of an Element object. """
 
-    assert type(combiner) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim)
+    assert type(combiner) in (CombinerLensSim, CombinerIdeal, CombinerSim)
     assert type(shape) is Kink
 
     n_out_perp = -np.flip(shape.norm_out) * np.array([-1, 1])
@@ -169,9 +169,9 @@ def update_and_place_elements_from_floor_plan(PTL, floor_plan):
     for i, (el_PTL, el_Geom) in enumerate(zip(PTL.el_list, floor_plan)):
         if type(el_PTL) in (LensIdeal, HalbachLensSim, Drift):
             _build_Lattice_Lens_Or_Drift(el_PTL, el_Geom)
-        elif type(el_PTL) in (CombinerHalbachLensSim, CombinerIdeal, CombinerSim):
+        elif type(el_PTL) in (CombinerLensSim, CombinerIdeal, CombinerSim):
             _build_Lattice_Combiner_Element(el_PTL, el_Geom)
-        elif type(el_PTL) in (HalbachBender, BenderIdeal):
+        elif type(el_PTL) in (BenderSim, BenderIdeal):
             _build_Lattice_Bending_Element(el_PTL, el_Geom)
         else:
             raise NotImplementedError
