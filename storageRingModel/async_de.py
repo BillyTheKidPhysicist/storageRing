@@ -10,7 +10,7 @@ from helper_tools import low_discrepancy_sample
 
 HUGE_INT = int(1e12)
 real_number = (int, float)
-PRINT_OUT_ITERS = 100
+OUTPUT_ITERS = 100
 
 
 class AsyncSolver:
@@ -201,18 +201,18 @@ class Population:
 
 class AsyncDE:
     def __init__(self, func, num_members, bounds, max_evals=None, time_out_seconds=None, initial_vals=None,
-                 surrogate_method_prob=0.0, disp=True, tol=None, workers=None, save_data=None):
+                 surrogate_method_prob=0.0, disp=True, tol=None, workers=None, progress_file=None):
         assert num_members >= 5
         for bound in bounds:
             assert len(bound) == 2 and bound[1] > bound[0]
         bounds = np.asarray(bounds).astype(float)
         if not isinstance(bounds, np.ndarray): bounds = np.asarray(bounds)
-        assert save_data is None or isinstance(save_data, str)
+        assert progress_file is None or isinstance(progress_file, str)
         self.initial_vals = [] if initial_vals is None else initial_vals
         self.num_members = num_members
         self.num_evals = 0
         self.disp = disp
-        self.save_data = save_data
+        self.progress_file = progress_file
         assert (time_out_seconds is not None) ^ (max_evals is not None) ^ (tol is not None)
         self.max_evals = max_evals if max_evals is not None else HUGE_INT
         self.time_out = time_out_seconds if time_out_seconds is not None else np.inf
@@ -394,8 +394,11 @@ class AsyncDE:
         cost_arr = np.asarray([mem.cost for mem in self.population.member_history])
         DNA_arr = np.asarray([mem.DNA for mem in self.population.member_history])
         history_arr = np.column_stack((DNA_arr, cost_arr))
+        new_history = history_arr[-OUTPUT_ITERS:]
+
         try:
-            np.savetxt(self.save_data, history_arr)
+            with open(self.progress_file, 'a') as file:
+                np.savetxt(file, new_history)
         except:
             raise IOError('error encountered with file saving!! proceeding')
 
@@ -412,22 +415,22 @@ class AsyncDE:
             self.update_population()
             if self.num_evals >= self.max_evals or self.time_out <= time.time() - t0 or self.tolerance_met() \
                     or self.found_poisson_pill():
-                if self.save_data is not None:
+                if self.progress_file is not None:
                     self.resave_progress()
                 print('DONE')
                 self.print_progress()
 
                 break
             self.evolve()
-            if self.num_evals % PRINT_OUT_ITERS == 0:
+            if self.num_evals % OUTPUT_ITERS == 0:
                 if self.disp is True:
                     self.print_progress()
-                if self.save_data is not None:
+                if self.progress_file is not None:
                     self.resave_progress()
             assert self.population.num_adults() <= self.num_members
             assert self.population.num_children() <= self.num_members
         self.async_manager.close()
-        if self.save_data is not None:
+        if self.progress_file is not None:
             self.resave_progress()
         return self.population
 
@@ -453,7 +456,7 @@ def select_pop_size(bounds):
 
 def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=None, save_population=None,
                 surrogate_method_prob=0.0,
-                disp=True, max_evals=None, tol=None, workers=None, save_data=None,
+                disp=True, max_evals=None, tol=None, workers=None, progress_file=None,
                 reload_population: str = None) -> Member:
     if reload_population is not None:
         assert initial_vals is None
@@ -463,7 +466,7 @@ def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=
     solver = AsyncDE(func, pop_size, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
                      surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol,
                      workers=workers,
-                     save_data=save_data)
+                     progress_file=progress_file)
     pop = solver.solve()
     if save_population is not None:
         assert type(save_population) == str

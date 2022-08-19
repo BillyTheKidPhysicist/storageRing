@@ -222,7 +222,7 @@ class BaseElement:
         :param q_el: 3D cartesian position vector in element frame,numpy.array([x,y,z])
         :return: True if the coordinate is inside, False if outside
         """
-        return self.numba_functions['is_coord_in_vacuum'](*q_el)  # will raise NotImplementedError if called
+        return self.numba_functions['is_coord_in_vacuum'](*q_el)
 
     def assign_numba_functions(self, func_module, force_args, potential_args, is_coord_in_vacuum_args) -> None:
         self.numba_functions['force'] = wrap_numba_func(func_module.force, force_args)

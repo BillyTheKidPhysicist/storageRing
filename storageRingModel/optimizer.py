@@ -3,7 +3,6 @@ from typing import Optional
 
 import numpy as np
 
-from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
 from Particle_tracer_lattice import ParticleTracerLattice
 from async_de import solve_async
 from lattice_elements.utilities import CombinerDimensionError
@@ -12,8 +11,9 @@ from lattice_models.lattice_model_utilities import RingGeometryError, InjectorGe
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
 from octopus_optimizer import octopus_optimize
+from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
 from simple_line_search import line_search
-from storage_ring_modeler import StorageRingModel
+from storage_ring_modeler import StorageRingModel, DEFAULT_SIMULATION_TIME
 from type_hints import sequence
 
 
@@ -71,7 +71,7 @@ class Solver:
     def __init__(self, system, ring_version: str, ring_params=None, injector_params=None, use_solenoid_field=False,
                  use_collisions=False,
                  use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
-                 use_standard_mag_size=False):
+                 use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system = system
         self.ring_version = ring_version
@@ -80,6 +80,7 @@ class Solver:
         self.use_collisions = use_collisions
         self.use_energy_correction = use_energy_correction
         self.num_particles = num_particles
+        self.sim_time_max = sim_time_max
         self.storage_ring_system_options = {'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
                                             'use_standard_tube_OD': use_standard_tube_OD,
                                             'use_standard_mag_size': use_standard_mag_size}
@@ -116,11 +117,12 @@ class Solver:
                                                                self.storage_ring_system_options)
         return lattice_ring, lattice_injector
 
-    def make_system_model(self, params)-> StorageRingModel:
+    def make_system_model(self, params) -> StorageRingModel:
         lattice_ring, lattice_injector = self.build_lattices(params)
         model = StorageRingModel(lattice_ring, lattice_injector, use_collisions=self.use_collisions,
                                  num_particles=self.num_particles, use_energy_correction=self.use_energy_correction,
-                                 use_bumper=self.storage_ring_system_options['has_bumper'])
+                                 use_bumper=self.storage_ring_system_options['has_bumper'],
+                                 sim_time_max=self.sim_time_max)
         return model
 
     def _solve(self, params: tuple[float, ...]) -> Solution:
@@ -185,7 +187,7 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
 def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
                       use_solenoid_field,
                       use_bumper, num_particles, use_standard_tube_OD, use_standard_mag_size, use_energy_correction) -> \
-                        Callable[[tuple], float]:
+        Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
     solver = Solver(system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
@@ -203,11 +205,11 @@ def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], i
     return cost
 
 
-def _global_optimize(cost_func, bounds: sequence, globalTol: float, processes: int, disp: bool) -> tuple[
-    float, float]:
+def _global_optimize(cost_func, bounds: sequence, global_tol: float, processes: int, disp: bool,
+                     progress_file: Optional[str], initial_vals) -> tuple[float, float]:
     """globally optimize a storage ring model cost function"""
     member = solve_async(cost_func, bounds, workers=processes,
-                         save_data='optimizerProgress', tol=globalTol, disp=disp)
+                         tol=global_tol, disp=disp, progress_file=progress_file, initial_vals=initial_vals)
     x_optimal, cost_min = member.DNA, member.cost
     return x_optimal, cost_min
 
@@ -226,11 +228,11 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
 
 
 def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0,
-             globalTol=.005,
+             global_tol=.005,
              disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
-             use_energy_correction=False):
+             use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None):
     """Optimize a model of the ring and injector"""
     assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
@@ -243,7 +245,8 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
                                   use_standard_tube_OD, use_standard_mag_size, use_energy_correction)
 
     if method == 'global':
-        x_optimal, cost_min = _global_optimize(cost_func, bounds, globalTol, processes, disp)
+        x_optimal, cost_min = _global_optimize(cost_func, bounds, global_tol, processes, disp, progress_file,
+                                               initial_vals)
     else:
         x_optimal, cost_min = _local_optimize(cost_func, bounds, xi, disp, processes, local_optimizer,
                                               local_search_region)
@@ -252,9 +255,14 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
-    pass
+    initial_vals = [(np.array([0.028878494129300738, 0.012, 0.008085621300004474,
+                               0.051968338909023186, 0.24446412189297423, 0.4856930450474475,
+                               0.07225120949475027, 0.01446165321953699, 0.12734434825621838,
+                               0.021675737700368205, 0.16242248285282324, 0.009515346494767587,
+                               0.09276560966927551, 0.29293499914074145, 0.22299916609396822]), None)]
+    optimize('both', 'global', '2', use_bumper=True, progress_file='solver_progress', initial_vals=initial_vals)
 
-    optimize('both', 'global', '2',use_bumper=True)
+
 #
 
 if __name__ == '__main__':

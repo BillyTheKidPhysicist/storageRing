@@ -6,17 +6,17 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import LineString, Polygon
 
-from kevin_bumper import swarmShift_x
-from particle_class import Swarm, Particle
 from Particle_tracer_lattice import ParticleTracerLattice
-from swarm_tracer import SwarmTracer
 from floor_plan_checker import does_fit_in_room, plot_floor_plan_in_lab
 from helper_tools import full_arctan2
+from kevin_bumper import swarmShift_x
 from lattice_elements.elements import Element
 from lattice_elements.elements import HalbachLensSim, Drift, CombinerLensSim, CombinerSim, CombinerIdeal
 from lattice_elements.orbit_trajectories import make_orbit_shape
 from lattice_models.lattice_model_parameters import INJECTOR_TUNABILITY_LENGTH
 from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params, make_system_model
+from particle_class import Swarm, Particle
+from swarm_tracer import SwarmTracer
 
 combiners = (CombinerLensSim, CombinerSim, CombinerIdeal)
 Shape = Union[LineString, Polygon]
@@ -25,6 +25,7 @@ Shape = Union[LineString, Polygon]
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
 ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerLensSim)
+DEFAULT_SIMULATION_TIME = 30.0
 
 
 def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bumper: bool):
@@ -51,7 +52,7 @@ class StorageRingModel:
 
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
-                 use_bumper: bool = False, sim_time_max=50.0):
+                 use_bumper: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
         assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
@@ -348,7 +349,7 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
                              use_collisions: bool = False, include_mag_cross_talk: bool = False,
                              use_energy_correction: bool = False, use_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False,
-                             include_misalignments: bool = False):
+                             include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
     """Convenience function for building a StorageRingModel"""
     options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
                'include_mag_cross_talk_in_ring': include_mag_cross_talk, 'include_misalignments': include_misalignments}
@@ -363,7 +364,8 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 use_solenoid_field: bool = True, use_mag_errors=False,
                                 use_energy_correction: bool = False,
                                 include_mag_cross_talk: bool = False,
-                                include_misalignments: bool = False) -> StorageRingModel:
+                                include_misalignments: bool = False,
+                                sim_time_max=DEFAULT_SIMULATION_TIME) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params()
@@ -371,5 +373,6 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                      use_solenoid_field=use_solenoid_field, use_mag_errors=use_mag_errors,
                                      use_energy_correction=use_energy_correction,
                                      include_mag_cross_talk=include_mag_cross_talk,
-                                     include_misalignments=include_misalignments)
+                                     include_misalignments=include_misalignments,
+                                     sim_time_max=sim_time_max)
     return model

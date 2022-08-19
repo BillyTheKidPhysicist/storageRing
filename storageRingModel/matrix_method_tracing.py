@@ -6,10 +6,10 @@ from typing import Iterable, Union, Optional, Callable
 import numba
 import numpy as np
 
-from field_generators import Collection
-from field_generators import BenderSim as HalbachBender_FieldGenerator
 from Particle_tracer_lattice import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
+from field_generators import BenderSim as HalbachBender_FieldGenerator
+from field_generators import Collection
 from helper_tools import multiply_matrices
 from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_correction
 from lattice_elements.elements import Drift as Drift_Sim
@@ -61,7 +61,8 @@ def make_atom_speed_kwarg_iterable(func) -> Callable:
             for atom_speed in atom_speed_iterable:
                 kwargs['atom_speed'] = atom_speed
                 vals.append(func(*args, **kwargs))
-            return tuple(zip(*vals))
+            vals = tuple([np.array(val) for val in zip(*vals)])  # convert into arrays
+            return vals
         else:
             return func(*args, **kwargs)
 
@@ -412,9 +413,7 @@ def xo_unit_vector_bender_el_frame(el: BenderSim, coord: ndarray) -> ndarray:
     return norm
 
 
-
-speed_with_energy_correction=numba.njit(speed_with_energy_correction)
-
+speed_with_energy_correction = numba.njit(speed_with_energy_correction)
 
 
 def fit_k_to_force(pos_vals: sequence, force: sequence) -> float:
@@ -530,7 +529,8 @@ def transfer_matrix_func_from_bender(el: BenderSim) -> Callable:
 
             if L_cap < s < ang * ro + L_cap:
                 r_orbit = rb + orbit_offset
-                Kx += 3.0 / r_orbit ** 2
+                K_cent = 3.0 / r_orbit ** 2
+                Kx += K_cent
                 L *= r_orbit / ro
             Mx = transfer_matrix(Kx, L) @ Mx
             My = transfer_matrix(Ky, L) @ My
@@ -684,17 +684,21 @@ def tunes_incremental(elements: Iterable[MatrixLatticeElement],
                       atom_speed: RealNum = DEFAULT_ATOM_SPEED) -> tuple[float, float]:
     """Return tune value tune value, ie the total tune minus nearest half integer int. This is between 0 and .5 .
     This method cannot distinguish between a tune of 1.25 and 1.75, both would result in .25"""
-    Mx, My = total_lattice_transfer_matrix(elements,atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
     tunes = []
     for M in [Mx, My]:
-        m11, m12, m21, m22 = matrix_components(M)
-        tune = acos((m11 + m22) / 2.0)
-        tunes.append(tune)
+        if not is_stable_matrix(M):
+            tunes.append(np.nan)
+        else:
+            m11, m12, m21, m22 = matrix_components(M)
+            stability_factor(m11, m12, m21, m22)
+            tune = acos((m11 + m22) / 2.0) / (2 * np.pi)
+            tunes.append(tune)
     tune_x, tune_y = tunes
     return tune_x, tune_y
 
 
-def total_lattice_transfer_matrix(elements: Iterable[MatrixLatticeElement],atom_speed) -> tuple[ndarray, ndarray]:
+def total_lattice_transfer_matrix(elements: Iterable[MatrixLatticeElement], atom_speed) -> tuple[ndarray, ndarray]:
     """Transfer matrix for a sequence of elements start to end"""
     matrices_x_and_y = [el.M(atom_speed=atom_speed) for el in elements]
     matrices_x = [entry[0] for entry in matrices_x_and_y]
@@ -729,6 +733,10 @@ def is_stable_lattice(elements: Iterable[MatrixLatticeElement],
     return stability_factor_x > 0.0, stability_factor_y > 0.0
 
 
+def is_stable_matrix(M: ndarray) -> bool:
+    return stability_factor(*matrix_components(M)) >= 0
+
+
 def total_length(elements: Iterable[MatrixLatticeElement]) -> float:
     """Sum of the lengths of elements"""
     length = sum([el.L for el in elements])
@@ -758,8 +766,12 @@ def acceptance_profile(elements: Sequence[MatrixLatticeElement], atom_speed=DEFA
 def minimum_acceptance(elements: Sequence[MatrixLatticeElement], atom_speed: RealNum = DEFAULT_ATOM_SPEED,
                        num_points: int = 300):
     """Return the minimum acceptance value in lattice. """
-    _, (acceptances_x, acceptances_y) = acceptance_profile(elements, atom_speed=atom_speed, num_points=num_points)
-    return np.min(acceptances_x), np.min(acceptances_y)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
+    if not is_stable_matrix(Mx) and not is_stable_matrix(My):
+        return np.nan, np.nan
+    else:
+        _, (acceptances_x, acceptances_y) = acceptance_profile(elements, atom_speed=atom_speed, num_points=num_points)
+        return np.min(acceptances_x), np.min(acceptances_y)
 
 
 class Lattice(Sequence):
@@ -800,11 +812,11 @@ class Lattice(Sequence):
         else:
             return fact_x, fact_y
 
-    def M(self, atom_speed: float = DEFAULT_ATOM_SPEED,s=None) -> tuple[ndarray, ndarray]:
+    def M(self, atom_speed: float = DEFAULT_ATOM_SPEED, s=None) -> tuple[ndarray, ndarray]:
         if s is None:
             Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed)
         else:
-            Mx,My = lattice_transfer_matrix_at_s(s,self,atom_speed)
+            Mx, My = lattice_transfer_matrix_at_s(s, self, atom_speed)
         return Mx, My
 
     def M_total_components(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -848,8 +860,6 @@ class Lattice(Sequence):
 
     def build_matrix_lattice_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
-        if simulated_lattice.lattice_type != 'storage_ring':
-            raise NotImplementedError
 
         reuser = ElementRecycler()  # saves time to recycle the matrices for the same elements
         for el in simulated_lattice:
@@ -870,11 +880,12 @@ class Lattice(Sequence):
                     raise NotImplementedError
                 reuser.add_sim_and_matrix(el, self.elements[-1])
 
-    def trace_swarm(self, swarm,copy_swarm=True):
+    def trace_swarm(self, swarm, copy_swarm=True):
+        raise NotImplementedError
         assert len(self.elements) > 0
         if copy_swarm:
             swarm = swarm.copy()
-        M_x,M_y = self.M_total()[0]
+        M_x, M_y = self.M_total()[0]
         directionality_sign = -1.0  # particle are assumed to being launched leftwards
         for particle in swarm:
             xo_i, pxo = particle.qi[1] * directionality_sign, particle.pi[1] * directionality_sign
