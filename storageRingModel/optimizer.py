@@ -198,18 +198,19 @@ def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], i
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
-        if sol.flux_mult is not None and sol.flux_mult > 10:
-            print(sol)
+        # if sol.flux_mult is not None and sol.flux_mult > 10:
+        #     print(sol)
         return sol.cost
 
     return cost
 
 
-def _global_optimize(cost_func, bounds: sequence, global_tol: float, processes: int, disp: bool,
-                     progress_file: Optional[str], initial_vals) -> tuple[float, float]:
+def _global_optimize(cost_func, bounds: sequence, time_out_seconds: float, processes: int, disp: bool,
+                     progress_file: Optional[str], save_population: Optional[str], initial_vals) -> tuple[float, float]:
     """globally optimize a storage ring model cost function"""
     member = solve_async(cost_func, bounds, workers=processes,
-                         tol=global_tol, disp=disp, progress_file=progress_file, initial_vals=initial_vals)
+                         disp=disp, progress_file=progress_file,
+                         initial_vals=initial_vals, save_population=save_population, time_out_seconds=time_out_seconds)
     x_optimal, cost_min = member.DNA, member.cost
     return x_optimal, cost_min
 
@@ -228,11 +229,12 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
 
 
 def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0,
-             global_tol=.005,
+             time_out_seconds=np.inf,
              disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
-             use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None):
+             use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None,
+             save_population: str = None):
     """Optimize a model of the ring and injector"""
     assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
@@ -245,8 +247,8 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
                                   use_standard_tube_OD, use_standard_mag_size, use_energy_correction)
 
     if method == 'global':
-        x_optimal, cost_min = _global_optimize(cost_func, bounds, global_tol, processes, disp, progress_file,
-                                               initial_vals)
+        x_optimal, cost_min = _global_optimize(cost_func, bounds, time_out_seconds, processes, disp,
+                                               progress_file, save_population, initial_vals)
     else:
         x_optimal, cost_min = _local_optimize(cost_func, bounds, xi, disp, processes, local_optimizer,
                                               local_search_region)
@@ -255,12 +257,13 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
-    initial_vals = [(np.array([0.028878494129300738, 0.012, 0.008085621300004474,
-                               0.051968338909023186, 0.24446412189297423, 0.4856930450474475,
-                               0.07225120949475027, 0.01446165321953699, 0.12734434825621838,
-                               0.021675737700368205, 0.16242248285282324, 0.009515346494767587,
-                               0.09276560966927551, 0.29293499914074145, 0.22299916609396822]), None)]
-    optimize('both', 'global', '2', use_bumper=True, progress_file='solver_progress', initial_vals=initial_vals)
+    initial_vals = [(np.array([0.029224048569255062, 0.012, 0.00791079624343275,
+                               0.05316998522872908, 0.2511690911853634, 0.47750820079244444,
+                               0.057608547528381765, 0.01512354180573907, 0.15719310510293633,
+                               0.025549034647303945, 0.1731914078570571, 0.010881562199668343,
+                               0.09726092287802854, 0.284952268528495, 0.24050538367279137]), None)]
+    optimize('both', 'global', '2', use_bumper=True, save_population='final_population',
+             initial_vals=initial_vals, time_out_seconds=12 * 3600)
 
 
 #

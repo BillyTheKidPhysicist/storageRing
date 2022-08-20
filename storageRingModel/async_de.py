@@ -31,7 +31,7 @@ class AsyncSolver:
     def add_jobs(self, job):
         self.jobs.append(self.pool.apply_async(job))
 
-    def get_job(self, wait=.05):
+    def get_job(self, wait=.1):
         # work thorugh the list of jobs
         assert len(self.jobs) > 0
         while True:
@@ -213,7 +213,6 @@ class AsyncDE:
         self.num_evals = 0
         self.disp = disp
         self.progress_file = progress_file
-        assert (time_out_seconds is not None) ^ (max_evals is not None) ^ (tol is not None)
         self.max_evals = max_evals if max_evals is not None else HUGE_INT
         self.time_out = time_out_seconds if time_out_seconds is not None else np.inf
         self.tol = tol if tol is not None else -np.inf
@@ -400,7 +399,7 @@ class AsyncDE:
             with open(self.progress_file, 'a') as file:
                 np.savetxt(file, new_history)
         except:
-            raise IOError('error encountered with file saving!! proceeding')
+            raise IOError('error encountered with file saving!!')
 
     def print_progress(self):
         print('------ITERATIONS: ', self.num_evals)
@@ -408,7 +407,7 @@ class AsyncDE:
         print('BEST MEMBER BELOW')
         print(self.population.get_most_fit_member())
 
-    def solve(self):
+    def solve(self) -> Population:
         self.initialize_population()
         t0 = time.time()
         while True:
@@ -469,8 +468,7 @@ def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=
                      progress_file=progress_file)
     pop = solver.solve()
     if save_population is not None:
-        assert type(save_population) == str
-        import pickle
-        with open(save_population, 'wb') as file:
-            pickle.dump(pop, file)
+        member_values = np.array([(*mem.DNA, mem.cost) for mem in pop.adult_members])
+        np.savetxt(save_population, member_values)
+
     return pop.get_most_fit_member()
