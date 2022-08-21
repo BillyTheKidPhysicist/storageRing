@@ -1,10 +1,10 @@
 from typing import Optional
 
 import lattice_models.ring_model_1 as ring_model_1
-import lattice_models.ring_model_1 as ring_model_2
-import lattice_models.ring_model_1 as ring_model_3
+import lattice_models.ring_model_2 as ring_model_2
+import lattice_models.ring_model_3 as ring_model_3
 from particle_tracer_lattice import ParticleTracerLattice
-from lattice_models.injector_model_any import injector_param_bounds, injector_params_optimal
+from lattice_models.injector_model_any import injector_param_bounds
 from lattice_models.injector_model_any import make_injector_lattice as make_injector_lattice_any
 from lattice_models.ring_model_surrogate_any import make_ring_surrogate_for_injector
 from lattice_models.utilities import assert_combiners_are_same, LockedDict
@@ -20,8 +20,8 @@ def get_optimal_ring_params(ring_version: str) -> LockedDict:
     return ring_models[ring_version].ring_params_optimal
 
 
-def get_optimal_injector_params() -> LockedDict:
-    return injector_params_optimal
+def get_optimal_injector_params(ring_version: str) -> LockedDict:
+    return ring_models[ring_version].injector_params_optimal
 
 
 def get_injector_bounds() -> LockedDict:
@@ -51,5 +51,5 @@ def make_system_model(ring_params, injector_params, ring_version: str,
 
 def make_optimal_ring_and_injector_lattice(ring_version: str) -> tuple[ParticleTracerLattice, ParticleTracerLattice]:
     ring_params_optimal = get_optimal_ring_params(ring_version)
-    injector_params_optimal = get_optimal_injector_params()
+    injector_params_optimal = get_optimal_injector_params(ring_version)
     return make_system_model(ring_params_optimal, injector_params_optimal, ring_version, None)

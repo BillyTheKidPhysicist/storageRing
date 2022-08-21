@@ -40,17 +40,7 @@ injector_param_bounds: LockedDict = LockedDict({
     "gap3": (.05, .3)  ##separation between final lens and input to combnier
 })
 
-injector_params_optimal = LockedDict({
-    "L1": .298,  # length of first lens
-    "rp1": 0.01824404317562657,  # bore radius of first lens
-    "L2": 0.23788459956313238,  # length of first lens
-    "rp2": 0.03,  # bore radius of first lens
-    "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
-    "load_beam_offset": 0.009704452870607685,  # offset of incoming beam into combiner
-    "gap1": 0.10615316973237765,  # separation between source and first lens
-    "gap2": 0.22492222955994753,  # separation between two lenses
-    "gap3": 0.22148833301792942  ##separation between final lens and input to combiner
-})
+
 
 
 def make_injector_lattice(injector_params: dict, options: dict = None) -> ParticleTracerLattice:

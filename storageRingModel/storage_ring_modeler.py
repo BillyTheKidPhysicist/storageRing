@@ -384,7 +384,7 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 sim_time_max=DEFAULT_SIMULATION_TIME) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
-    injector_params_optimal = get_optimal_injector_params()
+    injector_params_optimal = get_optimal_injector_params(ring_version)
     model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
                                      use_solenoid_field=use_solenoid_field, use_mag_errors=use_mag_errors,
                                      use_energy_correction=use_energy_correction,
