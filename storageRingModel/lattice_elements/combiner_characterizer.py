@@ -74,6 +74,11 @@ def make_halbach_combiner_force_function(el) -> Callable:
     return force_func
 
 
+def make_combiner_force_func(el) -> Callable:
+    if type(el) is CombinerLensSim:
+        return make_halbach_combiner_force_function(el)
+
+
 def input_angle(p_arr) -> float:
     px, py, _ = p_arr[-1]
     return np.arctan(py / px)

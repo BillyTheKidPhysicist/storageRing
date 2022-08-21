@@ -106,6 +106,7 @@ class CombinerLensSim(CombinerIdeal):
         nb = -self.ne
         self.magnet.fill_position_and_orientation_params(r1, nb)
         self.magnet.combiner = True
+        self.make_orbit()
 
     def get_acceptance_width(self) -> float:
         extra_large_ange = 2 * self.ang

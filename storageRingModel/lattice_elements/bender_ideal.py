@@ -70,6 +70,7 @@ class BenderIdeal(BaseElement):
 
     def fill_post_constrained_parameters(self) -> None:
         self.fill_in_and_out_rotation_matrices()
+        self.make_orbit()
 
     def fill_in_and_out_rotation_matrices(self) -> None:
         rot = self.theta - self.ang + np.pi / 2

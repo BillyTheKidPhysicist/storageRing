@@ -1,4 +1,4 @@
-from lattice_models.lattice_model_utilities import LockedDict
+from lattice_models.utilities import LockedDict
 
 # outgassing rates, in units of torr L /s, from stainless steel with high temperature heat treating procedure
 

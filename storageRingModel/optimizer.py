@@ -3,11 +3,11 @@ from typing import Optional
 
 import numpy as np
 
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from async_de import solve_async
 from lattice_elements.utilities import CombinerDimensionError
 from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
-from lattice_models.lattice_model_utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
+from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
 from octopus_optimizer import octopus_optimize
@@ -71,7 +71,7 @@ class Solver:
     def __init__(self, system, ring_version: str, ring_params=None, injector_params=None, use_solenoid_field=False,
                  use_collisions=False,
                  use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
-                 use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME):
+                 use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME, include_mag_cross_talk=False):
         assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.system = system
         self.ring_version = ring_version
@@ -81,9 +81,15 @@ class Solver:
         self.use_energy_correction = use_energy_correction
         self.num_particles = num_particles
         self.sim_time_max = sim_time_max
-        self.storage_ring_system_options = {'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
-                                            'use_standard_tube_OD': use_standard_tube_OD,
-                                            'use_standard_mag_size': use_standard_mag_size}
+        self.storage_ring_system_options = {
+            'use_solenoid_field': use_solenoid_field,
+            'has_bumper': use_bumper,
+            'use_standard_tube_OD': use_standard_tube_OD,
+            'use_standard_mag_size': use_standard_mag_size,
+            'include_mag_cross_talk_in_ring': include_mag_cross_talk,
+            'build_field_helpers': False  # When the floor plan is violated, fast field helpers are not used, so don't
+            # waste time computing them unless needed to trace swarm
+        }
 
     def unpack_params(self, params):
         ring_params, injector_params = None, None
@@ -111,7 +117,7 @@ class Solver:
         ring_params, injector_params = self.unpack_params(params)
         if self.system == 'injector_Surrogate_Ring':
             lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params, self.ring_version,
-                                                                           options=self.storage_ring_system_options)
+                                                                           self.storage_ring_system_options)
         else:
             lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, self.ring_version,
                                                                self.storage_ring_system_options)
@@ -127,14 +133,19 @@ class Solver:
 
     def _solve(self, params: tuple[float, ...]) -> Solution:
         model = self.make_system_model(params)
+        floor_plan_cost_cutoff = .1
         if self.system == 'injector_Surrogate_Ring':
-            swarm_cost = injected_swarm_cost(model)
-            survival = 1e2 * (1.0 - swarm_cost)
             floor_plan_cost = model.floor_plan_cost_with_tunability()
-            cost = swarm_cost + floor_plan_cost
+            if floor_plan_cost > floor_plan_cost_cutoff:
+                cost = model.max_swarm_cost + floor_plan_cost
+                survival = None
+            else:
+                swarm_cost = injected_swarm_cost(model)
+                survival = 1e2 * (1.0 - swarm_cost)
+                cost = swarm_cost + floor_plan_cost
             sol = Solution(params, cost, survival=survival)
         else:
-            cost, flux_mult = model.mode_match(floor_plan_cost_cutoff=.05)
+            cost, flux_mult = model.mode_match(floor_plan_cost_cutoff=floor_plan_cost_cutoff)
             sol = Solution(params, cost, flux_mult=flux_mult)
         return sol
 
@@ -257,39 +268,8 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
-    initial_vals = [(np.array([0.029224048569255062, 0.012, 0.00791079624343275,
-                               0.05316998522872908, 0.2511690911853634, 0.47750820079244444,
-                               0.057608547528381765, 0.01512354180573907, 0.15719310510293633,
-                               0.025549034647303945, 0.1731914078570571, 0.010881562199668343,
-                               0.09726092287802854, 0.284952268528495, 0.24050538367279137]), None)]
-    optimize('both', 'global', '2', use_bumper=True, save_population='final_population',
-             initial_vals=initial_vals, time_out_seconds=12 * 3600)
+    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=13 * 3600)
 
-
-#
 
 if __name__ == '__main__':
     main()
-
-'''
-iter: 1
-
-------ITERATIONS:  12150
-POPULATION VARIABILITY: [0.0013254038067971286 0.08972152475814882   0.05855418316649445
- 0.06786038344816106   0.04792458401409157   0.03478099531874918
- 0.08760829097204124   0.06251256568382411   0.07651957411429648  ]
-BEST MEMBER BELOW
----population member---- 
-DNA: array([0.3                 , 0.01624404317562657 , 0.23788459956313238 ,
-       0.03                , 0.17809193919623706 , 0.007704452870607685,
-       0.10615316973237765 , 0.22492222955994753 , 0.22148833301792942 ])
-cost: 0.17247584348578404
-
-
-parameters: array([0.298               , 0.01824404317562657 , 0.23788459956313238 ,
-       0.03                , 0.17709193919623706 , 0.009704452870607685,
-       0.10615316973237765 , 0.22492222955994753 , 0.22148833301792942 ])
-cost: 0.6515628751282442
-flux multiplication: 887.2165763076563
-
-'''

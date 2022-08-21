@@ -34,6 +34,9 @@ class LensIdeal(BaseElement):
         if self.L is not None:
             self.Lo = self.L
 
+    def fill_post_constrained_parameters(self):
+        self.make_orbit()
+
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         numba_func_constants = self.K, self.L, self.ap, self.field_fact
         force_args = (numba_func_constants,)

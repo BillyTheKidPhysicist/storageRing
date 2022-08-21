@@ -1,11 +1,11 @@
 from typing import Optional
 
-from particle_tracer import ParticleTracer
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
 from lattice_elements.elements import CombinerLensSim, HalbachLensSim, BenderSim
-from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SYSTEM_OPTIONS
-from lattice_models.lattice_model_utilities import LockedDict
+from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SYSTEM_OPTIONS, atom_characteristics
+from lattice_models.utilities import LockedDict
+from particle_tracer import ParticleTracer
 
 
 def check_and_add_default_values(options: Optional[dict]) -> LockedDict:
@@ -13,8 +13,7 @@ def check_and_add_default_values(options: Optional[dict]) -> LockedDict:
     value. If options is None, use the default dictionary"""
 
     if options is not None:
-        num_valid_keys_in_dict = sum([1 for key in DEFAULT_SYSTEM_OPTIONS if key in options])
-        assert num_valid_keys_in_dict == len(options)  # can't be unexpected stuff
+        assert all(key in DEFAULT_SYSTEM_OPTIONS for key in options.keys())
         for key, val in DEFAULT_SYSTEM_OPTIONS.items():
             if key not in options:
                 options[key] = val
@@ -53,6 +52,30 @@ def el_fringe_space(elementName: str, elementBoreRadius: float) -> float:
 
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 min_time_step_gap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
+
+
+def initialize_ring_lattice(ring_params: dict, options: dict,
+                            num_ring_params: int) -> tuple[ParticleTracerLattice, LockedDict, LockedDict]:
+    assert len(ring_params) == num_ring_params
+    ring_params = LockedDict(ring_params)
+    options = check_and_add_default_values(options)
+
+    lattice = ParticleTracerLattice(speed_nominal=atom_characteristics["nominalDesignSpeed"],
+                                    lattice_type='storage_ring',
+                                    use_mag_errors=options['use_mag_errors'],
+                                    use_solenoid_field=options['use_solenoid_field'],
+                                    use_standard_tube_OD=options['use_standard_tube_OD'],
+                                    use_standard_mag_size=options['use_standard_mag_size'],
+                                    include_mag_cross_talk=options['include_mag_cross_talk_in_ring'],
+                                    include_misalignments=options['include_misalignments'])
+    return lattice, ring_params, options
+
+
+def finish_ring_lattice(lattice: ParticleTracerLattice, ring_params: LockedDict,
+                        options: LockedDict) -> ParticleTracerLattice:
+    ring_params.assert_all_entries_accesed()
+    lattice.end_lattice(constrain=True, build_field_helpers=options['build_field_helpers'])
+    return lattice
 
 
 def round_up_if_below_min_time_step_gap(proposedLength: float) -> float:

@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from particle_class import Particle as ParticleBase
 from particle_class import Swarm
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from swarm_tracer import SwarmTracer
 
 from helper_tools import parallel_evaluate

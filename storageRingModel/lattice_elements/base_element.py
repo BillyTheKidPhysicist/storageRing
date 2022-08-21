@@ -1,3 +1,5 @@
+"""I am violating SOLID principles with this because I started this project before being properly aware of them"""
+
 from typing import Optional
 
 import numba
@@ -59,6 +61,7 @@ class BaseElement:
             float] = None  # outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
+        self.orbit_trajectory = None
         self.L: Optional[float] = L
         self.index: Optional[int] = None
         self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the
@@ -240,6 +243,11 @@ class BaseElement:
     def fill_post_constrained_parameters(self):
         """Fill internal parameters after constrained lattice layout is solved. See fill_Pre_Constrainted_Parameters.
         At this point everything about the geometry of the element is specified"""
+        raise NotImplementedError
+
+    def make_orbit(self):
+        from lattice_elements.orbit_trajectories import nominal_particle_trajectory
+        self.orbit_trajectory = nominal_particle_trajectory(self)
 
     def shape_field_data_3D(self, data: ndarray) -> tuple[ndarray, ...]:
         """

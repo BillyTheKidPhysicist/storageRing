@@ -5,7 +5,7 @@ import numpy as np
 
 from particle_class import Swarm
 from particle_tracer import ParticleTracer
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from helper_tools import low_discrepancy_sample
 from helper_tools import parallel_evaluate, temporary_seed
 from type_hints import RealNum

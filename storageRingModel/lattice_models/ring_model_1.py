@@ -1,13 +1,13 @@
 from math import pi
 
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import meter_to_cm
-from lattice_models.lattice_model_functions import check_and_add_default_values, add_drift_if_needed, add_split_bend, \
-    add_combiner_and_OP
-from lattice_models.lattice_model_parameters import atom_characteristics, system_constants
-from lattice_models.lattice_model_utilities import LockedDict
+from lattice_models.lattice_model_functions import add_drift_if_needed, add_split_bend, \
+    add_combiner_and_OP, initialize_ring_lattice, finish_ring_lattice
+from lattice_models.lattice_model_parameters import system_constants
+from lattice_models.utilities import LockedDict
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
 from vacuum_modeling.vacuum_constants import outgassing_rates, big_ion_pump_speed, small_ion_pump_speed
 
@@ -32,22 +32,12 @@ ring_constants = LockedDict({
     'rp_lens1': .01
 })
 
-num_ring_params=6
+num_ring_params = 6
 
 
 def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracerLattice:
-    assert len(ring_params)==num_ring_params
-    ring_params = LockedDict(ring_params)
-    options = check_and_add_default_values(options)
-
-    lattice = ParticleTracerLattice(speed_nominal=atom_characteristics["nominalDesignSpeed"],
-                                    lattice_type='storage_ring',
-                                    use_mag_errors=options['use_mag_errors'],
-                                    use_solenoid_field=options['use_solenoid_field'],
-                                    use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    use_standard_mag_size=options['use_standard_mag_size'],
-                                    include_mag_cross_talk=options['include_mag_cross_talk_in_ring'],
-                                    include_misalignments=options['include_misalignments'])
+    assert len(ring_params) == num_ring_params
+    lattice, ring_params, options = initialize_ring_lattice(ring_params, options, num_ring_params)
     rp_lens2 = ring_constants['rp_lens2']
     rp_lens1 = ring_constants['rp_lens1']
     rp_lens3_4 = ring_params['rp_lens3_4']
@@ -67,7 +57,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
 
     # ---combiner + OP magnet-----
     add_combiner_and_OP(lattice, system_constants['rp_combiner'], ring_params['Lm_combiner'],
-                        ring_params['load_beam_offset'], rp_lens2, options,'Circulating')
+                        ring_params['load_beam_offset'], rp_lens2, options, 'Circulating')
 
     # ---lens after combiner---
 
@@ -99,8 +89,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
 
     add_split_bend(lattice, rp_bend)
 
-    ring_params.assert_all_entries_accesed()
-    lattice.end_lattice(constrain=True)
+    lattice = finish_ring_lattice(lattice, ring_params, options)
     return lattice
 
 

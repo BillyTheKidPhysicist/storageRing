@@ -31,7 +31,8 @@ class AsyncSolver:
     def add_jobs(self, job):
         self.jobs.append(self.pool.apply_async(job))
 
-    def get_job(self, wait=.1):
+    def get_job(self):
+        wait = .1
         # work thorugh the list of jobs
         assert len(self.jobs) > 0
         while True:
@@ -454,8 +455,7 @@ def select_pop_size(bounds):
 
 
 def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=None, save_population=None,
-                surrogate_method_prob=0.0,
-                disp=True, max_evals=None, tol=None, workers=None, progress_file=None,
+                surrogate_method_prob=0.0, disp=True, max_evals=None, tol=None, workers=None, progress_file=None,
                 reload_population: str = None) -> Member:
     if reload_population is not None:
         assert initial_vals is None

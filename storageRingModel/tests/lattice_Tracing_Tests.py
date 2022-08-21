@@ -1,7 +1,7 @@
 import multiprocess as mp
 import numpy as np
 from swarm_tracer import SwarmTracer
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from particle_class import Particle, Swarm
 import os
 from particle_tracer import ParticleTracer

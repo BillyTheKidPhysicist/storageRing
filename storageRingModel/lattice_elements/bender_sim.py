@@ -6,16 +6,15 @@ import numpy as np
 import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
-from field_generators import BenderSim as HalbachBender_FieldGenerator
-from constants import DEFAULT_ATOM_SPEED
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
+from field_generators import BenderSim as HalbachBender_FieldGenerator
 from helper_tools import arr_product, round_and_make_odd
 from lattice_elements.bender_ideal import BenderIdeal
 from lattice_elements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP
 from numba_functions_and_objects import bender_sim_numba_functions
-from type_hints import sequence,ndarray,RealNum
+from type_hints import sequence, ndarray, RealNum
 
 dummy_field_data_empty = (np.ones(1) * np.nan,) * 7
 
@@ -60,8 +59,8 @@ class BenderSim(BenderIdeal):
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
         ap_max_geom = max_tube_IR_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
                                                     use_standard_sizes=self.PTL.use_standard_tube_OD)
-        delta=sqrt(2)*self.rp/self.numPointsBoreAp #maximum interp grid spacing
-        ap_max_interp=(self.rp-INTERP_MAGNET_MATERIAL_OFFSET)-delta
+        delta = sqrt(2) * self.rp / self.numPointsBoreAp  # maximum interp grid spacing
+        ap_max_interp = (self.rp - INTERP_MAGNET_MATERIAL_OFFSET) - delta
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
         if ap_max_interp < ap_max_geom:  # for now, I want this to be the case
@@ -98,15 +97,15 @@ class BenderSim(BenderIdeal):
             forces = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
             V_vals = lens.B_norm(coords) * SIMULATION_MAGNETON
             Fr = np.array([np.dot(force, norm) for force, norm in zip(forces, norms)])
-            atom_speeds = np.array([speed_with_energy_correction(V,self.PTL.speed_nominal) for V in V_vals])
+            atom_speeds = np.array([speed_with_energy_correction(V, self.PTL.speed_nominal) for V in V_vals])
             FCen = m * atom_speeds ** 2 / r
-            error = np.sum((Fr - FCen) ** 2)
+            error = np.sqrt(np.sum((Fr - FCen) ** 2)) / np.mean(FCen)
             return error
 
         r_offset_max = .9 * self.rp
         bounds = [(0.0, r_offset_max)]
         sol = spo.minimize(offset_error, np.array([self.rp / 3.0]), bounds=bounds, method='Nelder-Mead',
-                           options={'xatol': 1e-5})
+                           options={'xatol': 500e-9, 'ftol': 1e-6})
         r_offset_optimal = sol.x[0]
         if isclose(r_offset_optimal, r_offset_max, abs_tol=1e-6):
             raise Exception("The bending bore radius is too large to accomodate a reasonable solution")
@@ -128,10 +127,11 @@ class BenderSim(BenderIdeal):
         self.fill_in_and_out_rotation_matrices()
         assert self.ang < 2 * pi * 3 / 4  # not sure why i put this here
         self.ro = self.rb + self.output_offset
-        self.L = self.ang * self.rb +2*self.L_cap
+        self.L = self.ang * self.rb + 2 * self.L_cap
 
         self.Lo = self.ang * self.ro + 2 * self.L_cap
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
+        self.make_orbit()
 
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         """compute field values and build fast numba helper"""

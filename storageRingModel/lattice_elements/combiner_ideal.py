@@ -51,6 +51,9 @@ class CombinerIdeal(BaseElement):
         self.L = self.La * np.cos(
             self.ang) + self.Lb  # TODO: WHAT IS WITH THIS? TRY TO FIND WITH DEBUGGING. Is it used?
 
+    def fill_post_constrained_parameters(self):
+        pass
+
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         numba_func_constants = self.c1, self.c2, self.ang, self.La, self.Lb, self.apz, self.ap_left, self.ap_right, self.field_fact
         force_args = (numba_func_constants,)

@@ -5,8 +5,8 @@ from shapely.geometry import LineString
 
 from lattice_elements.combiner_characterizer import make_halbach_combiner_force_function, compute_particle_trajectory
 from lattice_elements.elements import Drift, HalbachLensSim, CombinerLensSim, BenderIdeal, \
-    BenderSim, Element
-from type_hints import RealNum
+    BenderSim, Element, LensIdeal
+from type_hints import RealNum, ndarray
 
 
 def convert_center_to_orbit_coords(el: Element, s: RealNum, xc: RealNum, yc: RealNum) -> tuple[float, float, float]:
@@ -30,7 +30,7 @@ def convert_center_to_orbit_coords(el: Element, s: RealNum, xc: RealNum, yc: Rea
     return x, y, z
 
 
-def combiner_halbach_orbit_coords_el_frame(el: Element, h=5e-6) -> tuple[np.ndarray, np.ndarray]:
+def combiner_orbit_coords_el_frame(el: Element, h: RealNum = 5e-6) -> tuple[ndarray, ndarray]:
     atom_state = 'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER'
     force_func = make_halbach_combiner_force_function(el)
     q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
@@ -39,52 +39,40 @@ def combiner_halbach_orbit_coords_el_frame(el: Element, h=5e-6) -> tuple[np.ndar
     return q_arr, p_arr
 
 
-def combiner_halbach_orbit_xy(el: Element) -> np.ndarray:
-    q_arr, _ = combiner_halbach_orbit_coords_el_frame(el)
+def combiner_orbit_in_el_frame(el: Element) -> ndarray:
+    q_arr, _ = combiner_orbit_coords_el_frame(el)
     xy = q_arr[:, :2]
-    for i, coord in enumerate(xy):
-        xy[i] = el.R_Out @ coord
-    xy += el.r2[:2]
     return xy
 
 
-def straight_orbit_xy(el: Element) -> np.ndarray:
+def linear_element_orbit_in_el_frame(el: Element) -> ndarray:
     xy = np.array([[0.0, 0.0], [el.L, 0.0]])
-    for i, coord in enumerate(xy):
-        xy[i] = el.R_Out @ coord
-    xy += el.r1[:2]
     return xy
 
 
-def ideal_bendorbit_xy(el: Element) -> np.ndarray:
+def ideal_bender_orbit_in_el_frame(el: Element) -> ndarray:
     angles = np.linspace(0.0, el.ang)
     xy = np.column_stack((el.ro * np.cos(angles), el.ro * np.sin(angles)))
-    for i, coord in enumerate(xy):
-        xy[i] = el.R_Out @ coord
-    xy += el.r0[:2]
     return xy
 
 
-def segmented_halbach_bender(el: Element) -> np.ndarray:
+def lens_combiner_orbit_in_el_frame(el: Element) -> ndarray:
     s_vals = np.linspace(1e-6, el.Lo - 1e-6)
     xy = np.array([convert_center_to_orbit_coords(el, s, 0.0, 0.0)[:2] for s in s_vals])
-    for i, coord in enumerate(xy):
-        xy[i] = el.R_Out @ coord
-    xy += el.r0[:2]
     return xy
 
 
-def nominal_particle_trajectory(el: Element) -> np.ndarray:
-    if type(el) in (Drift, HalbachLensSim):
-        xy = straight_orbit_xy(el)
+def nominal_particle_trajectory(el: Element) -> ndarray:
+    if type(el) in (Drift, HalbachLensSim, LensIdeal):
+        xy = linear_element_orbit_in_el_frame(el)
     elif type(el) is CombinerLensSim:
-        xy = combiner_halbach_orbit_xy(el)
+        xy = combiner_orbit_in_el_frame(el)
     elif type(el) is BenderIdeal:
-        xy = ideal_bendorbit_xy(el)
+        xy = ideal_bender_orbit_in_el_frame(el)
     elif type(el) is BenderSim:
-        xy = segmented_halbach_bender(el)
+        xy = lens_combiner_orbit_in_el_frame(el)
     else:
-        raise NotImplemented
+        raise NotImplementedError
     return xy
 
 

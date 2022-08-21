@@ -16,7 +16,7 @@ from field_generators import BenderSim as HalbachBender_FieldGenerator
 
 from particle_class import Particle
 from particle_tracer import ParticleTracer
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
 from helper_tools import is_close_all, parallel_evaluate
 from lattice_elements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerLensSim, \
@@ -120,7 +120,7 @@ class DriftTestHelper(ElementTestHelper):
         self.test_Drift()
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_drift(self.L, self.ap)
         PTL.end_lattice(constrain=False)
         return PTL
@@ -161,7 +161,7 @@ class _TiltedDriftTester(ElementTestHelper):
         return (floatx, floatyz, floatyz)
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_drift(self.L, self.ap, input_tilt_angle=self.input_ang, output_tilt_angle=self.outputAngle)
         PTL.end_lattice(constrain=False)
         return PTL
@@ -248,7 +248,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         return floatx, floatyz, floatyz
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_halbach_lens_sim(self.rp, self.L, ap=.9 * self.rp)
         PTL.end_lattice(constrain=False)
         return PTL
@@ -275,7 +275,7 @@ class LensIdealTestHelper(ElementTestHelper):
         self.theory_Test()
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_lens_ideal(self.L, self.Bp, self.rp)
         PTL.end_lattice(constrain=False)
         return PTL
@@ -314,7 +314,7 @@ class BenderIdealTestHelper(ElementTestHelper):
         return (floatr, floatphi, floatz)
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_drift(5e-3)
         PTL.add_bender_ideal(self.ang, self.Bp, self.rb, self.rp)
         PTL.end_lattice(constrain=False)
@@ -330,8 +330,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.num_magnets * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2559354814221457e-01, 1.8269230633890334e+00,5.3982311417581880e-04])
-        pf0 = np.array([ 156.4521002770279  , -126.12385819012125 ,   -4.330765790764602])
+        qf0 = np.array([6.255933906258958e-01, 1.826922965775924e+00,5.398156393688948e-04])
+        pf0 = np.array([ 156.45176195965172 , -126.12427583465063 ,   -4.330779010450692])
         super().__init__(BenderSim, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -431,7 +431,7 @@ class CombinerIdealTestHelper(ElementTestHelper):
         return floatx, floaty, floatz
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_drift(5e-3)
         PTL.add_combiner_ideal(Lm=self.Lm, ap=self.ap)
         PTL.end_lattice(constrain=False)
@@ -455,7 +455,7 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         return floatx, floatyz, floatyz
 
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
-        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors, jitter_amp=jitter_amp)
+        PTL = ParticleTracerLattice(speed_nominal=200.0, use_mag_errors=magnetErrors)
         PTL.add_drift(5e-3)
         PTL.add_combiner_sim_lens(self.Lm, self.rp, ap=None, layers=2)
         PTL.end_lattice(constrain=False)
@@ -560,7 +560,7 @@ class ElementTestRunner:
             qf0Temp, pf0Temp = particleList[0].qf, particleList[0].pf
 
             def wrapper(magnetError, jitter_amp):
-                PTL = self.elTestHelper.make_Latice(magnetErrors=magnetError, jitter_amp=jitter_amp)
+                PTL = self.elTestHelper.make_Latice(magnetErrors=magnetError)
                 el = self.elTestHelper.get_Element(PTL)
                 if jitter_amp != 0.0:
                     el.perturb_element(.1 * jitter_amp, .1 * jitter_amp, .1 * jitter_amp / el.L, .1 * jitter_amp / el.L)
@@ -577,7 +577,7 @@ class ElementTestRunner:
         """Test that misaligning element does not results in any errors or conflicts with other methods"""
 
         def _test_Miaslignment(jitter_amp):
-            PTL = self.elTestHelper.make_Latice(jitter_amp=jitter_amp)
+            PTL = self.elTestHelper.make_Latice()
             el = self.elTestHelper.get_Element(PTL)
             jitterArr = 2 * (np.random.random_sample(4) - .5) * jitter_amp
             jitterArr[2:] *= 1 / el.L  # rotation component

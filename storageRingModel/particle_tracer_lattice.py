@@ -12,47 +12,47 @@ from lattice_elements.elements import Element
 from shapely_object_builder import build_shapely_objects
 from storage_ring_constraint_solver import is_particle_tracer_lattice_closed
 from storage_ring_constraint_solver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
+from type_hints import ndarray, RealNum
 
 # todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
 # people, I need to change that. This was before my cleaner code approach
 
 
 benderTypes = Union[BenderIdeal, BenderSim]
+number = (int, float)
 
 
 class ParticleTracerLattice:
 
-    def __init__(self, speed_nominal: float = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
-                 jitter_amp: float = 0.0, field_dens_mult: float = 1.0, use_mag_errors: bool = False,
-                 use_solenoid_field: bool = False, initial_location: tuple[float, float] = None, initial_ang=None,
+    def __init__(self, speed_nominal: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
+                 field_dens_mult: RealNum = 1.0, use_mag_errors: bool = False,
+                 use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None, initial_ang=None,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
                  include_mag_cross_talk: bool = False, include_misalignments: bool = False):
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
-        if jitter_amp > 5e-3:
-            raise Exception("Jitter values greater than 5 mm may begin to have unexpected results. Several parameters"
-                            "depend on this value, and relatively large values were not planned for")
         if include_mag_cross_talk and use_mag_errors:
             raise NotImplementedError  # not sure this works.
-        self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring, the geometry is the the first element's
-        # input at the origin and succeeding elements in a counterclockwise fashion. If injector, then first element's input
-        # is also at the origin, but seceeding elements follow along the positive x axis
+        self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring,
+        # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
+        # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along
+        # the positive x axis
         self.speed_nominal = speed_nominal  # Design particle speed
         self.bender_indices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.initial_location = (0.0, 0.0) if initial_location is None else initial_location
         self.initial_ang = -np.pi if initial_ang is None else initial_ang
-        self.combiner_index: Optional[int] = None  # the index in the lattice where the combiner is
-        self.total_length: Optional[float] = None  # total length of lattice, m
-        self.jitter_amp = jitter_amp
+        self.combiner_index = None  # the index in the lattice where the combiner is
+        self.total_length = None  # total length of lattice, m
         self.field_dens_mult = field_dens_mult
         self.use_mag_errors = use_mag_errors
         self.use_standard_tube_OD = use_standard_tube_OD
         self.use_standard_mag_size = use_standard_mag_size
         self.include_mag_cross_talk = include_mag_cross_talk
         self.include_misalignments = include_misalignments
+        self.are_fast_field_helpers_built = False
 
         self.combiner: Optional[Element] = None  # combiner element object
         self.linear_elements_to_constrain: list[HalbachLensSim] = []  # elements whos length will be changed when the
@@ -78,7 +78,7 @@ class ParticleTracerLattice:
         if len(self.linear_elements_to_constrain) > 2:
             raise ValueError("there can only be 2 constrained linear elements")
 
-    def add_combiner_sim(self, size_scale: float = 1.0) -> None:
+    def add_combiner_sim(self, size_scale: RealNum = 1.0) -> None:
         """
         Add model of our combiner from COMSOL. rarely used
 
@@ -94,8 +94,8 @@ class ParticleTracerLattice:
         self.combiner_index = el.index
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def add_combiner_sim_lens(self, Lm: float, rp: float, load_beam_offset: float = 5e-3, layers: int = 1,
-                              ap: float = None,
+    def add_combiner_sim_lens(self, Lm: RealNum, rp: RealNum, load_beam_offset: RealNum = 5e-3, layers: int = 1,
+                              ap: RealNum = None,
                               seed: int = None) -> None:
 
         """
@@ -119,16 +119,16 @@ class ParticleTracerLattice:
         self.combiner_index = el.index
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def add_halbach_lens_sim(self, rp: Union[float, tuple], L: Optional[float], ap: Optional[float] = None,
-                             constrain: bool = False, magnet_width: Union[float, tuple] = None) -> None:
+    def add_halbach_lens_sim(self, rp: Union[RealNum, tuple], L: Optional[RealNum], ap: RealNum = None,
+                             constrain: bool = False, magnet_width: Union[RealNum, tuple] = None) -> None:
         """
         Add simulated halbach sextupole element to lattice.
 
         Combinations of rp and magnet_width specify how to handle multiple layers, according to:
 
         rp    | magnet_width | Explanation
-        float | None        | Single layer with radius rp and magnet widths maximum possible
-        float | float       | Single layer with radius rp and magnet widths of magnet_width
+        RealNum | None        | Single layer with radius rp and magnet widths maximum possible
+        RealNum | RealNum       | Single layer with radius rp and magnet widths of magnet_width
         tuple | tuple       | Number of layers is len(rp). Each layer has radius corresponding value in rp, such that
                             | rp[0] is radius of first layer. Same logic for magnet widths. rp and magnet_width must
                             | be same length.
@@ -145,26 +145,14 @@ class ParticleTracerLattice:
         :return: None
         """
         rp_layers = rp if isinstance(rp, tuple) else (rp,)
-        magnet_width = (magnet_width,) if isinstance(magnet_width, float) else magnet_width
+        magnet_width = (magnet_width,) if isinstance(magnet_width, number) else magnet_width
         el = HalbachLensSim(self, rp_layers, L, ap, magnet_width)
         el.index = len(self.el_list)  # where the element is in the lattice
         self.el_list.append(el)  # add element to the list holding lattice elements in order
         if constrain:
             self.set_constrained_linear_element(el)
 
-    # def add_Genetic_lens(self,lens: GeneticLens,ap: float)-> None:
-    #     """
-    #     Add genetic lens used for minimizing focus size. This is part of an idea to make a low aberration lens
-    #
-    #     :param lens: GeneticLens object that returns field values. This sextupole lens can be shimmed, and have bizarre
-    #     :param ap: Aperture of genetic lens, m
-    #     :return: None
-    #     """
-    #     el=geneticLens(self,lens,ap)
-    #     el.index = len(self.el_list) #where the element is in the lattice
-    #     self.el_list.append(el) #add element to the list holding lattice elements in order
-
-    def add_lens_ideal(self, L: float, Bp: float, rp: float, constrain: bool = False, ap: float = None) -> None:
+    def add_lens_ideal(self, L: RealNum, Bp: RealNum, rp: RealNum, constrain: bool = False, ap: RealNum = None) -> None:
         """
         Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
 
@@ -183,8 +171,8 @@ class ParticleTracerLattice:
             self.set_constrained_linear_element(el)
             print('not fully supported feature')
 
-    def add_drift(self, L: float, ap: float = .03, input_tilt_angle: float = 0.0, output_tilt_angle: float = 0.0,
-                  outer_half_width: float = None) -> None:
+    def add_drift(self, L: RealNum, ap: RealNum = .03, input_tilt_angle: RealNum = 0.0,
+                  output_tilt_angle: RealNum = 0.0, outer_half_width: RealNum = None) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
@@ -199,15 +187,15 @@ class ParticleTracerLattice:
         :param input_tilt_angle: Tilt angle of the input plane to the drift region.
         :param output_tilt_angle: Tilt angle of the output to the drift region.
         :param outer_half_width: Outer half width of drift region. For example, a valve.
-        :return:
+        :return: None
         """
 
         el = Drift(self, L, ap, outer_half_width, input_tilt_angle, output_tilt_angle)  # create a drift element object
         el.index = len(self.el_list)  # where the element is in the lattice
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def add_segmented_halbach_bender(self, Lm: float, rp: float, num_magnets: Optional[int], rb: float,
-                                     r_offset_fact: float = 1.0, ap: float = None) -> None:
+    def add_segmented_halbach_bender(self, Lm: RealNum, rp: RealNum, num_magnets: Optional[int], rb: RealNum,
+                                     r_offset_fact: RealNum = 1.0, ap: RealNum = None) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # L_cap: Length of element on the end/input of bender
         # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
@@ -217,7 +205,7 @@ class ParticleTracerLattice:
         self.bender_indices.append(el.index)
         self.el_list.append(el)
 
-    def add_bender_ideal(self, ang: float, Bp: float, rb: float, rp: float, ap: float = None) -> None:
+    def add_bender_ideal(self, ang: RealNum, Bp: RealNum, rb: RealNum, rp: RealNum, ap: RealNum = None) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # ang: Bending angle of bender, radians
         # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
@@ -231,8 +219,8 @@ class ParticleTracerLattice:
         self.bender_indices.append(el.index)
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def add_combiner_ideal(self, Lm: float = .2, c1: float = 1, c2: float = 20, ap: float = .015,
-                           size_scale: float = 1.0) -> None:
+    def add_combiner_ideal(self, Lm: RealNum = .2, c1: RealNum = 1, c2: RealNum = 20, ap: RealNum = .015,
+                           size_scale: RealNum = 1.0) -> None:
         # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
         # add combiner (stern gerlacht) element to lattice
         # La: input length of combiner. The bent portion outside of combiner
@@ -263,17 +251,12 @@ class ParticleTracerLattice:
         - Build shapely object for elementPT
         """
 
-        for el in self.el_list:
-            el.fill_pre_constrained_parameters()
-        floor_plan = solve_Floor_Plan(self, constrain)
-        update_and_place_elements_from_floor_plan(self, floor_plan)
+        self.fill_pre_constrained_parameters()
+        self.place_elements(constrain)
+        self.fill_post_constrained_parameters()
 
-        for el in self.el_list:
-            el.fill_post_constrained_parameters()
         if build_field_helpers:
-            for el in self.el_list:
-                magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
-                el.build_fast_field_helper(extra_magnets=magnets)
+            self.build_fast_field_helpers()
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could
         # still be closed
@@ -283,6 +266,24 @@ class ParticleTracerLattice:
         self.total_length = 0
         for el in self.el_list:  # total length of particle's orbit in an element
             self.total_length += el.Lo
+
+    def build_fast_field_helpers(self) -> None:
+        self.are_fast_field_helpers_built = True
+        for el in self.el_list:
+            magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
+            el.build_fast_field_helper(extra_magnets=magnets)
+
+    def fill_pre_constrained_parameters(self) -> None:
+        for el in self.el_list:
+            el.fill_pre_constrained_parameters()
+
+    def fill_post_constrained_parameters(self) -> None:
+        for el in self.el_list:
+            el.fill_post_constrained_parameters()
+
+    def place_elements(self, constrain):
+        floor_plan = solve_Floor_Plan(self, constrain)
+        update_and_place_elements_from_floor_plan(self, floor_plan)
 
     def end_lattice(self, constrain: bool = False, build_lattice: bool = True,
                     build_field_helpers: bool = True) -> None:
@@ -326,7 +327,7 @@ class ParticleTracerLattice:
         el_after = self.el_list[el_after_index]
         return el_before, el_after
 
-    def get_lab_coords_from_orbit_distance(self, x_pos: np.ndarray) -> tuple[float, float]:
+    def get_lab_coords_from_orbit_distance(self, x_pos: ndarray) -> tuple[float, float]:
         # x_pos: distance along ideal orbit
         assert x_pos >= 0.0
         x_pos = x_pos % self.total_length  # xpos without multiple revolutions

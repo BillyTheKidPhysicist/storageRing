@@ -2,8 +2,8 @@ from typing import Optional
 
 import numpy as np
 
-from field_generators import Collection
 from constants import TUBE_WALL_THICKNESS
+from field_generators import Collection
 from helper_tools import arr_product
 from lattice_elements.lens_ideal import LensIdeal
 from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
@@ -49,3 +49,4 @@ class Drift(LensIdeal):
     def fill_pre_constrained_parameters(self) -> None:
         """Overrides abstract method from Element"""
         self.Lo = self.L
+        self.make_orbit()

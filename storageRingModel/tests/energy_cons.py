@@ -2,7 +2,7 @@ import numpy as np
 
 from particle_class import Particle
 from particle_tracer import ParticleTracer
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from helper_tools import is_close_all
 import matplotlib.pyplot as plt
 

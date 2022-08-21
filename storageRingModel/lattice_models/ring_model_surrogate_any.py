@@ -1,7 +1,7 @@
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from lattice_models.lattice_model_functions import check_and_add_default_values, add_combiner_and_OP
 from lattice_models.lattice_model_parameters import system_constants, atom_characteristics
-from lattice_models.lattice_model_utilities import LockedDict
+from lattice_models.utilities import LockedDict
 from lattice_models.ring_model_1 import ring_constants
 
 surrogate_params = LockedDict({'rp_lens1': ring_constants['rp_lens1'],

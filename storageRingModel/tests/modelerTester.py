@@ -2,7 +2,7 @@ from storage_ring_modeler import StorageRingModel
 import storage_ring_modeler
 import numpy as np
 from shapely.geometry import LineString
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from helper_tools import is_close_all
 from math import isclose
 

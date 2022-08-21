@@ -4,8 +4,8 @@ from typing import Optional
 
 import numpy as np
 
-from field_generators import Collection
 from constants import TUBE_WALL_THICKNESS
+from field_generators import Collection
 from helper_tools import is_close_all
 from helper_tools import round_and_make_odd
 from lattice_elements.element_magnets import MagneticLens
@@ -64,6 +64,7 @@ class HalbachLensSim(LensIdeal):
         self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
                                    self.PTL.use_solenoid_field, self.fringe_field_length)
         self.magnet.fill_position_and_orientation_params(self.r1, self.nb)
+        self.make_orbit()
 
     def set_length(self, L: float) -> None:
         assert L > 0.0

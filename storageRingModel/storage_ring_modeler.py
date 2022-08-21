@@ -6,13 +6,12 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import LineString, Polygon
 
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from floor_plan_checker import does_fit_in_room, plot_floor_plan_in_lab
 from helper_tools import full_arctan2
 from kevin_bumper import swarmShift_x
 from lattice_elements.elements import Element
 from lattice_elements.elements import HalbachLensSim, Drift, CombinerLensSim, CombinerSim, CombinerIdeal
-from lattice_elements.orbit_trajectories import make_orbit_shape
 from lattice_models.lattice_model_parameters import INJECTOR_TUNABILITY_LENGTH
 from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params, make_system_model
 from particle_class import Swarm, Particle
@@ -25,7 +24,7 @@ Shape = Union[LineString, Polygon]
 # todo: This logic here could be changed. These expected elements shouldn't be hard coded here
 ELEMENTS_BUMPER = (HalbachLensSim, Drift, HalbachLensSim, Drift)
 ELEMENTS_MODE_MATCHER = (Drift, HalbachLensSim, Drift, Drift, HalbachLensSim, Drift, CombinerLensSim)
-DEFAULT_SIMULATION_TIME = 30.0
+DEFAULT_SIMULATION_TIME = 100.0
 
 
 def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bumper: bool):
@@ -38,10 +37,21 @@ def injector_is_expected_design(lattice_injector: ParticleTracerLattice, has_bum
     return True
 
 
+def lab_frame_trajectory_shape(el: Element) -> LineString:
+    trajectory = el.orbit_trajectory
+    assert trajectory is not None
+    lab_trajectory = []
+    for xy_el in trajectory:
+        q_el = np.array([*xy_el, 0])
+        xy_lab = el.transform_element_coords_into_lab_frame(q_el)[:2]
+        lab_trajectory.append(xy_lab)
+    return LineString(lab_trajectory)
+
+
 def make_shapes(lattice: ParticleTracerLattice) -> tuple[list[Shape], list[Shape], list[Shape]]:
     shapes_outer = [el.SO_outer for el in lattice]
     shapes_inner = [el.SO for el in lattice]
-    shapes_trajectories = [make_orbit_shape(el) for el in lattice]
+    shapes_trajectories = [lab_frame_trajectory_shape(el) for el in lattice]
     return shapes_inner, shapes_outer, shapes_trajectories
 
 
@@ -255,7 +265,7 @@ class StorageRingModel:
         floor_plan_cost = self.floor_plan_cost_with_tunability()
         if self.floor_plan_cost() > floor_plan_cost_cutoff:
             cost = self.max_swarm_cost + floor_plan_cost
-            flux_mult = np.nan
+            flux_mult = None
         else:
             swarm_traced = self.inject_swarm(parallel)
             flux_mult = swarm_traced.weighted_flux_mult()
@@ -264,7 +274,13 @@ class StorageRingModel:
         assert 0.0 <= cost <= self.max_cost
         return cost, flux_mult
 
+    def build_field_helpers_if_unbuilt(self) -> None:
+        for lattice in [self.lattice_ring, self.lattice_injector]:
+            if not lattice.are_fast_field_helpers_built:
+                lattice.build_fast_field_helpers()
+
     def inject_swarm(self, parallel: bool = False) -> Swarm:
+        self.build_field_helpers_if_unbuilt()
         swarm_initial = self.trace_through_injector_and_transform_to_ring()
         swarm_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_initial, self.h, self.T,
                                                                           use_fast_mode=True, accelerated=True,
@@ -313,7 +329,7 @@ class StorageRingModel:
         return cost
 
     def get_drift_after_last_lens_injector(self) -> Drift:
-        """Get drift element which comes immediately after last lens in injector"""
+        """Get drift element which comes immediately after last lens in injector (lens before combiner)"""
         drift = self.lattice_injector.el_list[self.injector_lens_indices[-1] + 1]
         assert type(drift) is Drift
         return drift
@@ -327,12 +343,12 @@ class StorageRingModel:
         cost = [self.floor_plan_cost()]
 
         drift_after_lens.set_length(L0 + -INJECTOR_TUNABILITY_LENGTH)  # move lens away from combiner
-        self.lattice_injector.build_lattice(False, False)  # don't waste time building field helpers
+        self.lattice_injector.place_elements(False)
         cost.append(self.floor_plan_cost())
 
-        drift_after_lens.set_length(L0)  # reset
-        self.lattice_injector.build_lattice(False, False)  # don't waste time building field helpers,
-        # previous helpers are still saved
+        drift_after_lens.set_length(L0)
+        self.lattice_injector.place_elements(False)
+
         floor_plan_cost = max(cost)
         assert 0.0 <= floor_plan_cost <= 1.0
         return floor_plan_cost
@@ -356,7 +372,7 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
                              num_particles=num_particles, use_collisions=use_collisions,
-                             use_bumper=use_bumper)
+                             use_bumper=use_bumper, sim_time_max=sim_time_max)
     return model
 
 

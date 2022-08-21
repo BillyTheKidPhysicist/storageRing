@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 from ringOptimizer import solution_From_Lattice
 
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from helper_tools import parallel_evaluate
 from lattice_elements.elements import CombinerLensSim, CombinerIdeal, CombinerSim, LensIdeal, HalbachLensSim
 from lattice_models import make_Ring_And_Injector_Version3

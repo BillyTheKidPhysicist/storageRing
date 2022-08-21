@@ -1,15 +1,15 @@
 import numpy as np
 
 import kevin_bumper as bumper
-from kevin_bumper import add_Kevin_Bumper_Elements
-from Particle_tracer_lattice import ParticleTracerLattice
+from particle_tracer_lattice import ParticleTracerLattice
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import inch_to_meter
 from helper_tools import meter_to_cm
+from kevin_bumper import add_Kevin_Bumper_Elements
 from lattice_models.lattice_model_functions import el_fringe_space, add_drift_if_needed, check_and_add_default_values
 from lattice_models.lattice_model_parameters import system_constants, atom_characteristics, flange_OD
-from lattice_models.lattice_model_utilities import LockedDict, InjectorGeometryError
+from lattice_models.utilities import LockedDict, InjectorGeometryError
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
 from vacuum_modeling.vacuum_constants import turbo_pump_speed, diffusion_pump_speed, big_chamber_pressure, \
     big_ion_pump_speed
@@ -72,7 +72,7 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_standard_mag_size=options['use_standard_mag_size'],
-                                    include_misalignments=options['include_misalignments'])
+                                    include_misalignments=options['include_misalignments'], )
     if options['has_bumper']:
         add_Kevin_Bumper_Elements(lattice)
 
@@ -101,7 +101,7 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
                                   load_beam_offset=injector_params["load_beam_offset"], layers=1,
                                   seed=options['combiner_seed'])
 
-    lattice.end_lattice(constrain=False)
+    lattice.end_lattice(constrain=False, build_field_helpers=options['build_field_helpers'])
 
     injector_params.assert_All_Entries_Accessed_And_Reset_Counter()
 
