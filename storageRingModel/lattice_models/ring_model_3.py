@@ -39,8 +39,8 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
     L_apex_lens = ring_params['L_apex_lens']
     L_lens1 = ring_params['L_Lens1']
     L_lens2 = ring_params['L_Lens2']
-    L_lens3 = ring_params['L_lens3']
-    L_lens4 = ring_params['L_lens4']
+    L_lens3 = ring_params['L_Lens3']
+    L_lens4 = ring_params['L_Lens4']
 
     # ---------gap between bender output and first lens -------
     # add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens1, rp_bend)

@@ -268,7 +268,7 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
-    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=13 * 3600)
+    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=25 * 3600)
 
 
 if __name__ == '__main__':
