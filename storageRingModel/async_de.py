@@ -471,4 +471,8 @@ def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=
         member_values = np.array([(*mem.DNA, mem.cost) for mem in pop.adult_members])
         np.savetxt(save_population, member_values)
 
+        full_pop_file = save_population + '_full'
+        member_values_full = np.array([(*mem.DNA, mem.cost) for mem in pop.member_history])
+        np.savetxt(full_pop_file, member_values_full)
+
     return pop.get_most_fit_member()

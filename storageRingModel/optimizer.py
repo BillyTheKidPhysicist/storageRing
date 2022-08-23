@@ -3,15 +3,15 @@ from typing import Optional
 
 import numpy as np
 
-from particle_tracer_lattice import ParticleTracerLattice
 from async_de import solve_async
 from lattice_elements.utilities import CombinerDimensionError
 from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
-from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
+from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
 from octopus_optimizer import octopus_optimize
 from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
+from particle_tracer_lattice import ParticleTracerLattice
 from simple_line_search import line_search
 from storage_ring_modeler import StorageRingModel, DEFAULT_SIMULATION_TIME
 from type_hints import sequence
@@ -268,7 +268,7 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
 
 
 def main():
-    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=25 * 3600)
+    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=23 * 3600)
 
 
 if __name__ == '__main__':

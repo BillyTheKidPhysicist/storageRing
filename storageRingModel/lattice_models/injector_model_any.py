@@ -1,7 +1,6 @@
 import numpy as np
 
 import kevin_bumper as bumper
-from particle_tracer_lattice import ParticleTracerLattice
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import inch_to_meter
@@ -10,6 +9,7 @@ from kevin_bumper import add_Kevin_Bumper_Elements
 from lattice_models.lattice_model_functions import el_fringe_space, add_drift_if_needed, check_and_add_default_values
 from lattice_models.lattice_model_parameters import system_constants, atom_characteristics, flange_OD
 from lattice_models.utilities import LockedDict, InjectorGeometryError
+from particle_tracer_lattice import ParticleTracerLattice
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
 from vacuum_modeling.vacuum_constants import turbo_pump_speed, diffusion_pump_speed, big_chamber_pressure, \
     big_ion_pump_speed
@@ -34,13 +34,11 @@ injector_param_bounds: LockedDict = LockedDict({
     "L2": (.05, .3),  # length of second lens
     "rp2": (.01, .03),  # bore radius of second lens
     "Lm_combiner": (.05, .25),  # hard edge length of combiner
-    "load_beam_offset": (5e-3, 30e-3),  # assumed diameter of incoming beam
+    "load_beam_offset": (1e-3, 30e-3),  # assumed diameter of incoming beam
     "gap1": (.05, .3),  # separation between source and first lens
     "gap2": (.05, .3),  # separation between two lenses
     "gap3": (.05, .3)  ##separation between final lens and input to combnier
 })
-
-
 
 
 def make_injector_lattice(injector_params: dict, options: dict = None) -> ParticleTracerLattice:

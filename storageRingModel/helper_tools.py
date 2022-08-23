@@ -136,6 +136,12 @@ def clamp(a: RealNum, a_min: RealNum, a_max: RealNum) -> RealNum:
     return min([max([a_min, a]), a_max])
 
 
+def RMS(vals: sequence) -> float:
+    """Simple RMS function"""
+    vals = np.array(vals) if not isinstance(vals, np.ndarray) else vals
+    return np.sqrt(np.sum(vals ** 2) / len(vals))
+
+
 def is_close_all(a: sequence, b: sequence, abstol: RealNum) -> bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a, b, atol=abstol, equal_nan=False))

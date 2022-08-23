@@ -1,12 +1,11 @@
 import copy
 from collections.abc import Sequence
-from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2
+from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
 from typing import Iterable, Union, Optional, Callable
 
 import numba
 import numpy as np
 
-from particle_tracer_lattice import ParticleTracerLattice
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
 from field_generators import BenderSim as HalbachBender_FieldGenerator
 from field_generators import Collection
@@ -15,6 +14,7 @@ from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_c
 from lattice_elements.elements import Drift as Drift_Sim
 from lattice_elements.elements import HalbachLensSim, BenderSim, CombinerLensSim
 from lattice_elements.orbit_trajectories import combiner_orbit_coords_el_frame
+from particle_tracer_lattice import ParticleTracerLattice
 from type_hints import ndarray, RealNum
 from type_hints import sequence
 
@@ -152,7 +152,7 @@ def spring_constant_lens(Bp: RealNum, rp: RealNum, atom_speed: RealNum) -> float
 def bender_spring_constant(Bp: RealNum, rp: RealNum, ro: RealNum, atom_speed: RealNum) -> float:
     """Spring constant (F=-Kx) for bender's harmonic potential"""
     assert Bp >= 0.0 and 0.0 < rp
-    K_cent = SIMULATION_MASS / ro ** 2  # centrifugal term
+    K_cent = 3 * SIMULATION_MASS / ro ** 2  # centrifugal term
     K_lens = spring_constant_lens(Bp, rp, atom_speed)
     K = K_cent + K_lens
     return K
@@ -528,11 +528,8 @@ def transfer_matrix_func_from_bender(el: BenderSim) -> Callable:
             Ky = Ky_mag / atom_speed_corrected ** 2
 
             if L_cap < s < ang * ro + L_cap:
-                # DEFAULT_ATOM_SPEED_cor=speed_with_energy_correction(V,DEFAULT_ATOM_SPEED)
-                # delta=(atom_speed_corrected-DEFAULT_ATOM_SPEED_cor)/DEFAULT_ATOM_SPEED_cor
                 r_orbit = rb + orbit_offset
                 K_cent = 3.0 / r_orbit ** 2
-                # K_delta=K_cent*2*delta
                 Kx += K_cent
             Mx = transfer_matrix(Kx, L) @ Mx
             My = transfer_matrix(Ky, L) @ My
@@ -631,6 +628,8 @@ class Bender(Element):
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
         assert 0 <= s <= self.L
+        # ro = bender_orbit_radius_no_energy_correction(self.Bp, self.rb, self.rp, atom_speed)
+        # L = self.L * ro / self.ro
         Kx = bender_spring_constant(self.Bp, self.rp, self.ro, atom_speed)
         Ky = spring_constant_lens(self.Bp, self.rp, atom_speed)
         Mx = transfer_matrix(Kx, self.L)
@@ -891,6 +890,8 @@ class Lattice(Sequence):
     def build_matrix_lattice_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
 
+        assert isclose(abs(simulated_lattice.initial_ang), np.pi)  # must be pointing along -x in polar coordinates
+
         reuser = ElementRecycler()  # saves time to recycle the matrices for the same elements
         for el in simulated_lattice:
             el_matrix_reusable = reuser.reusable_matrix_el(el)
@@ -910,18 +911,26 @@ class Lattice(Sequence):
                     raise NotImplementedError
                 reuser.add_sim_and_matrix(el, self.elements[-1])
 
-    def trace_swarm_x(self, swarm, copy_swarm=True, atom_speed=DEFAULT_ATOM_SPEED):
+    def trace_swarm(self, swarm, copy_swarm=True, atom_speed=DEFAULT_ATOM_SPEED):
         assert len(self.elements) > 0
         if copy_swarm:
             swarm = swarm.copy()
-        M_tot, _ = self.M(atom_speed=atom_speed)
-        directionality_sign = -1.0  # particle are assumed to being launched leftwards
+        Mx, My = self.M(atom_speed=atom_speed)
+        L = self.total_length()
+        directionality_signs = {1: -1.0,
+                                2: 1.0}  # to square results with simulated lattice direction, which because particles are
+        # assumed to circulate clockwise, forces the transverse horizontal unit vector to have opposite direction
+        # as the convential value (y vs -y)
         for particle in swarm:
-            xo_i, pxo = particle.qi[1] * directionality_sign, particle.pi[1] * directionality_sign
-            slope_xo_i = pxo / DEFAULT_ATOM_SPEED
-            Xi = [xo_i, slope_xo_i]
-            xo_f, slope_xo_f = M_tot @ Xi
             particle.qf, particle.pf = np.zeros(3), np.zeros(3)
-            particle.qf[1] = xo_f
-            particle.pf[1] = slope_xo_f * DEFAULT_ATOM_SPEED
+            particle.qf[0] = L
+            particle.pf[0] = atom_speed
+            for idx, M in zip([1, 2], [Mx, My]):
+                sign = directionality_signs[idx]
+                pos_i, v_i = particle.qi[idx] * sign, particle.pi[idx] * sign
+                slope_i = v_i / atom_speed
+                Qi = [pos_i, slope_i]
+                pos_f, slope_f = M @ Qi
+                particle.qf[idx] = pos_f
+                particle.pf[idx] = slope_f * atom_speed
         return swarm
