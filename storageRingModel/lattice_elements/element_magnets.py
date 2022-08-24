@@ -1,10 +1,10 @@
-from math import cos, sin
+from math import cos, sin, sqrt
 
 from scipy.spatial.transform import Rotation as Rot
 
+from constants import ASSEMBLY_TOLERANCE
 from field_generators import Collection
 from field_generators import HalbachLens
-from constants import ASSEMBLY_TOLERANCE
 from helper_tools import *
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO
 
@@ -40,7 +40,7 @@ def transform_coords_to_misaligned(self, coords):
 
 def yz_random_samp() -> tuple[float, float]:
     """Generate 2 random samples, y and z,  in circle"""
-    r_shift = np.random.random() * ASSEMBLY_TOLERANCE
+    r_shift = sqrt(np.random.random()) * ASSEMBLY_TOLERANCE  # sqrt neccesary cause it's polar
     angle = np.random.random() * 2 * np.pi
     return r_shift * cos(angle), r_shift * sin(angle)
 
@@ -49,7 +49,7 @@ def alignment_shifts() -> tuple[float, float, float, float, float]:
     """Generate the 5 shift values that represent misalingment of the lens. dx, dy1,dz1,dy2,dz2"""
     dy1, dz1 = yz_random_samp()
     dy2, dz2 = yz_random_samp()
-    dx = np.random.random() * ASSEMBLY_TOLERANCE
+    dx = 2 * (np.random.random() - .5) * ASSEMBLY_TOLERANCE
     return dx, dy1, dy2, dz1, dz2
 
 
@@ -164,10 +164,10 @@ class MagneticLens(MagneticOptic):
         assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
         interp_step_size_valid = interp_step_size + interp_rounding_guard
         valid_indices = self.get_valid_coord_indices(coords, interp_step_size_valid, include_misalignments)
-        col = Collection([self.make_magpylib_magnets(use_mag_errors,include_misalignments)])
+        col = Collection([self.make_magpylib_magnets(use_mag_errors, include_misalignments)])
         if extra_magnets is not None:
             col.add(extra_magnets)
-            # col.show()
+
         B_norm_grad, B_norm = np.zeros((len(valid_indices), 3)) * np.nan, np.ones(len(valid_indices)) * np.nan
         B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                             return_norm=True, dx=interp_step_size)

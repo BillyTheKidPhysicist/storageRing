@@ -1,14 +1,15 @@
-from typing import Callable
-from typing import Optional
+from typing import Callable, Union, Optional
 
 import numpy as np
 
 from async_de import solve_async
+from helper_tools import shrink_bounds_around_vals
 from lattice_elements.utilities import CombinerDimensionError
 from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
+from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
-from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same
+from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same, LockedDict
 from octopus_optimizer import octopus_optimize
 from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
 from particle_tracer_lattice import ParticleTracerLattice
@@ -68,12 +69,13 @@ def build_lattice_params_dict(params, which: str, ring_version: str) -> dict:
 
 
 class Solver:
-    def __init__(self, system, ring_version: str, ring_params=None, injector_params=None, use_solenoid_field=False,
+    def __init__(self, which_system, ring_version: str, ring_params=None, injector_params=None,
+                 use_solenoid_field=False,
                  use_collisions=False,
                  use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
                  use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME, include_mag_cross_talk=False):
-        assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
-        self.system = system
+        assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+        self.which_system = which_system
         self.ring_version = ring_version
         self.ring_params = ring_params
         self.injector_params = injector_params
@@ -93,12 +95,12 @@ class Solver:
 
     def unpack_params(self, params):
         ring_params, injector_params = None, None
-        if self.system == 'ring':
+        if self.which_system == 'ring':
             ring_params = params
             injector_params = self.injector_params
-        elif self.system == 'injector_Surrogate_Ring':
+        elif self.which_system == 'injector_Surrogate_Ring':
             injector_params = params
-        elif self.system == 'injector_Actual_Ring':
+        elif self.which_system == 'injector_Actual_Ring':
             ring_params = self.ring_params
             injector_params = params
         else:
@@ -115,7 +117,7 @@ class Solver:
 
     def build_lattices(self, params):
         ring_params, injector_params = self.unpack_params(params)
-        if self.system == 'injector_Surrogate_Ring':
+        if self.which_system == 'injector_Surrogate_Ring':
             lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params, self.ring_version,
                                                                            self.storage_ring_system_options)
         else:
@@ -134,7 +136,7 @@ class Solver:
     def _solve(self, params: tuple[float, ...]) -> Solution:
         model = self.make_system_model(params)
         floor_plan_cost_cutoff = .1
-        if self.system == 'injector_Surrogate_Ring':
+        if self.which_system == 'injector_Surrogate_Ring':
             floor_plan_cost = model.floor_plan_cost_with_tunability()
             if floor_plan_cost > floor_plan_cost_cutoff:
                 cost = model.max_swarm_cost + floor_plan_cost
@@ -195,17 +197,16 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
     return tuple(bounds)
 
 
-def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
-                      use_solenoid_field,
-                      use_bumper, num_particles, use_standard_tube_OD, use_standard_mag_size, use_energy_correction) -> \
-        Callable[[tuple], float]:
+def get_cost_function(which_system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
+                      use_solenoid_field, use_bumper, num_particles, use_standard_tube_OD,
+                      use_standard_mag_size, use_energy_correction, include_mag_cross_talk) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
-    solver = Solver(system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
+    solver = Solver(which_system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
                     use_bumper=use_bumper,
                     num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
                     use_standard_mag_size=use_standard_mag_size, injector_params=injector_params,
-                    use_energy_correction=use_energy_correction)
+                    use_energy_correction=use_energy_correction, include_mag_cross_talk=include_mag_cross_talk)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
@@ -214,6 +215,35 @@ def get_cost_function(system: str, ring_version, ring_params: Optional[tuple], i
         return sol.cost
 
     return cost
+
+
+def strip_combiner_params(params) -> LockedDict:
+    """Given params, remove Lm_combiner and load_beam_offset params. Used to ring params"""
+    new_params = {}
+    for key, value in params.items():
+        if key not in ('Lm_combiner', 'load_beam_offset'):
+            new_params[key] = value
+    return LockedDict(new_params)
+
+
+def ring_params_optimal_without_combiner(ring_version) -> LockedDict:
+    """Return optimal ring params with combiner params included"""
+    ring_params_optimal_with_combiner = get_optimal_ring_params(ring_version)
+    return strip_combiner_params(ring_params_optimal_with_combiner)
+
+
+def initial_params_from_optimal(which_system, ring_version) -> tuple[float, ...]:
+    """Return tuple of initial parameters from optimal parameters of lattice system"""
+    if which_system == 'both':
+        params_optimal = tuple([*list(ring_params_optimal_without_combiner(ring_version).values()),
+                                *list(get_optimal_injector_params(ring_version).values())])
+    elif which_system == 'ring':
+        params_optimal = tuple(ring_params_optimal_without_combiner(ring_version).values())
+    elif which_system in ('injector_Surrogate_Ring', 'injector_Actual_Ring'):
+        params_optimal = tuple(get_optimal_injector_params(ring_version).values())
+    else:
+        raise NotImplementedError
+    return params_optimal
 
 
 def _global_optimize(cost_func, bounds: sequence, time_out_seconds: float, processes: int, disp: bool,
@@ -239,25 +269,29 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
     return x_optimal, cost_min
 
 
-def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple = None, bounds_range_factor=1.0,
+def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, ring_params: tuple = None,
+             shrink_bounds_range_factor=np.inf,
              time_out_seconds=np.inf,
-             disp=True, processes=-1, local_optimizer='octopus', use_solenoid_field: bool = False,
+             disp=True, processes=-1, local_optimizer='simple_line', use_solenoid_field: bool = False,
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
              use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None,
-             save_population: str = None):
+             save_population: str = None, include_mag_cross_talk=False):
     """Optimize a model of the ring and injector"""
-    assert system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+    assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
-    assert ring_params is not None if system == 'injector_Actual_Ring' else True
-    assert injector_params is not None if system == 'ring' else True
-    bounds = make_bounds(system, ring_version, range_factor=bounds_range_factor)
-    cost_func = get_cost_function(system, ring_version, ring_params, injector_params, use_solenoid_field, use_bumper,
-                                  num_particles,
-                                  use_standard_tube_OD, use_standard_mag_size, use_energy_correction)
-
+    assert ring_params is not None if which_system == 'injector_Actual_Ring' else True
+    assert injector_params is not None if which_system == 'ring' else True
+    assert xi == 'optimal' if isinstance(xi, str) else True
+    xi = initial_params_from_optimal(which_system, ring_version) if xi == 'optimal' else xi
+    bounds = make_bounds(which_system, ring_version)
+    cost_func = get_cost_function(which_system, ring_version, ring_params, injector_params, use_solenoid_field,
+                                  use_bumper,
+                                  num_particles, use_standard_tube_OD, use_standard_mag_size,
+                                  use_energy_correction, include_mag_cross_talk)
     if method == 'global':
+        bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else boundsmin
         x_optimal, cost_min = _global_optimize(cost_func, bounds, time_out_seconds, processes, disp,
                                                progress_file, save_population, initial_vals)
     else:
@@ -265,11 +299,3 @@ def optimize(system, method, ring_version, xi: tuple = None, ring_params: tuple 
                                               local_search_region)
 
     return x_optimal, cost_min
-
-
-def main():
-    optimize('both', 'global', '3', save_population='final_population', time_out_seconds=23 * 3600)
-
-
-if __name__ == '__main__':
-    main()

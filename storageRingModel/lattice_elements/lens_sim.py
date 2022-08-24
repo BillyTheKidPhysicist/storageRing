@@ -145,7 +145,11 @@ class HalbachLensSim(LensIdeal):
             x_min = -TINY_INTERP_STEP
             points_per_bore_radius = 5
             num_points_z = round_and_make_odd(max([points_per_bore_radius * self.Lm / self.rp, 2 * num_points_z - 1]))
-            assert num_points_z < 150  # things might start taking unreasonably long if not careful
+            num_points_z_max = 151
+            if num_points_z > num_points_z_max:
+                warnings.warn("number of z points is being truncated.\n desired is " + str(num_points_z) +
+                              " but limit is 150.")
+            num_points_z = num_points_z_max if num_points_z > num_points_z_max else num_points_z
             num_points_xy = 45
         assert not is_even(num_points_xy) and not is_even(num_points_z)
         x_arr = np.linspace(x_min, x_max, num_points_z)

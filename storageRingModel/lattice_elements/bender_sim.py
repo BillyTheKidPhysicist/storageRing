@@ -105,7 +105,7 @@ class BenderSim(BenderIdeal):
         r_offset_max = .9 * self.rp
         bounds = [(0.0, r_offset_max)]
         sol = spo.minimize(offset_error, np.array([self.rp / 3.0]), bounds=bounds, method='Nelder-Mead',
-                           options={'xatol': 500e-9, 'ftol': 1e-6})
+                           options={'xatol': 500e-9, 'fatol': 1e-6})
         r_offset_optimal = sol.x[0]
         if isclose(r_offset_optimal, r_offset_max, abs_tol=1e-6):
             raise Exception("The bending bore radius is too large to accomodate a reasonable solution")

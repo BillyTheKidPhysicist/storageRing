@@ -6,13 +6,13 @@ import numba
 import numpy as np
 from numba.core.errors import NumbaPerformanceWarning
 
-from particle_class import Particle
 from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
     CombinerSim, CombinerLensSim
-from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, fast_qNew, \
-    dot_Prod_3D
+from particle_class import Particle
+from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
+    fast_qNew, dot_Prod_3D
 
 warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
@@ -150,6 +150,7 @@ class ParticleTracer:
             return particle
         self.time_step_loop()
         self.force_last = None  # reset last force to zero
+        # self.particle.log_params(self.current_el,self.q_el,self.p_el)
         self.particle.finished(self.current_el, self.q_el, self.p_el, total_lattice_length=self.total_lattice_length)
 
         if self.log_el_phase_space_coords:

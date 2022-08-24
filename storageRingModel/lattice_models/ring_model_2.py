@@ -1,6 +1,5 @@
 from math import pi
 
-from particle_tracer_lattice import ParticleTracerLattice
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import meter_to_cm
@@ -8,6 +7,7 @@ from lattice_models.lattice_model_functions import add_drift_if_needed, \
     add_split_bend_with_lens, add_combiner_and_OP, initialize_ring_lattice, finish_ring_lattice
 from lattice_models.lattice_model_parameters import system_constants
 from lattice_models.utilities import LockedDict
+from particle_tracer_lattice import ParticleTracerLattice
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
 from vacuum_modeling.vacuum_constants import outgassing_rates, big_ion_pump_speed, small_ion_pump_speed
 
@@ -24,15 +24,13 @@ ring_param_bounds: LockedDict = LockedDict({
     'L_Lens2': (.1, .7)
 })
 
-ring_params = (0.012593597021671735, 0.010115712864579277, 0.007415429587324836,
-               0.04513305464223805, 0.1, 0.49472608069737817)
 ring_params_optimal = {
     'rp_lens3_4': 0.012593597021671735,
     'rp_bend': 0.010115712864579277,
     'rp_apex_lens': 0.007415429587324836,
     'L_apex_lens': 0.04513305464223805,
-    'L_Lens1': .1,
-    'L_Lens2': 0.49472608069737817,
+    'L_Lens1': .1,  # length of lens before combiner
+    'L_Lens2': 0.49472608069737817,  # length of lens after combiner
     "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
     "load_beam_offset": 0.009704452870607685,  # offset of incoming beam into combiner
 }

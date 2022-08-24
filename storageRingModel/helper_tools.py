@@ -105,7 +105,7 @@ def multiply_matrices(matrices: sequence, M_start=None, reverse=False, num_iters
 
 def shrink_bounds_around_vals(bounds: sequence, vals: sequence, shrink_frac: float) -> sequence:
     """Contract bounds about coordinates by a factor"""
-    assert shrink_frac <= 1.0
+    assert shrink_frac > 0
     bounds = copy.deepcopy(bounds)
     for bound, val in zip(bounds, vals):
         if val > bound[1] or val < bound[0] or not bound[1] >= bound[0]:

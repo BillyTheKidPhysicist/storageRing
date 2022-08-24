@@ -70,7 +70,7 @@ def make_atom_speed_kwarg_iterable(func) -> Callable:
 
 
 @numba.njit()
-def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
+def transfer_matrix(K: RealNum, L: RealNum, K_dispersion=None) -> ndarray:
     """Build the 2x2 transfer matrix (ABCD matrix) for an element that represents a harmonic potential.
     Transfer matrix is for one dimension only"""
     assert L >= 0.0
@@ -92,8 +92,14 @@ def transfer_matrix(K: RealNum, L: RealNum) -> ndarray:
         B = sinh(psi) / sqrt(K)
         C = sqrt(K) * sinh(psi)
         D = cosh(psi)
-
-    return np.array([[A, B], [C, D]])
+    if K_dispersion is not None:
+        phi = sqrt(K) * L
+        E = (1 - cos(phi)) / sqrt(K_dispersion)
+        F = sin(phi)
+        M = np.array([[A, B, E], [C, D, F], [0, 0, 1]])
+    else:
+        M = np.array([[A, B], [C, D]])
+    return M
 
 
 def magnet_force(magnets, coords):
@@ -156,6 +162,10 @@ def bender_spring_constant(Bp: RealNum, rp: RealNum, ro: RealNum, atom_speed: Re
     K_lens = spring_constant_lens(Bp, rp, atom_speed)
     K = K_cent + K_lens
     return K
+
+
+def bender_dispersion(ro):
+    return 2 / ro
 
 
 def matrix_components(M: ndarray) -> tuple[RealNum, RealNum, RealNum, RealNum]:
@@ -628,9 +638,8 @@ class Bender(Element):
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
         assert 0 <= s <= self.L
-        # ro = bender_orbit_radius_no_energy_correction(self.Bp, self.rb, self.rp, atom_speed)
-        # L = self.L * ro / self.ro
         Kx = bender_spring_constant(self.Bp, self.rp, self.ro, atom_speed)
+        K_dispersion = bender_dispersion(self.ro)
         Ky = spring_constant_lens(self.Bp, self.rp, atom_speed)
         Mx = transfer_matrix(Kx, self.L)
         My = transfer_matrix(Ky, self.L)
@@ -867,8 +876,15 @@ class Lattice(Sequence):
     def tunes_incremental(self, atom_speed=DEFAULT_ATOM_SPEED):
         return tunes_incremental(self.elements, atom_speed=atom_speed)
 
-    def trace(self, Xi) -> ndarray:
-        return self.M()[0] @ Xi
+    def trace(self, Xi, atom_speed=DEFAULT_ATOM_SPEED, which='y') -> ndarray:
+        assert which in ('y', 'z')
+        Mx, My = self.M(atom_speed=atom_speed)
+        M = Mx if which == 'y' else My
+        Xf = M @ Xi
+        if which == 'y':  # because orientation is clockwise in particle tracer lattices, and orientation generally
+            # starts along -x, needs to change sign
+            Xf *= -1
+        return Xf
 
     def total_length(self) -> float:
         return total_length(self.elements)
