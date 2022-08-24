@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import ROOM_TEMPERATURE, BOLTZMANN_CONSTANT
+from helper_tools import is_ascending
 from vacuum_modeling.vacuum_constants import rate_coefficients
 
 '''
@@ -19,10 +20,6 @@ supports linear vacuum systems
 RealNum = Union[float, int]
 
 R = 8.3145
-
-
-def is_ascending(vals):
-    return np.all(np.sort(vals) == vals)
 
 
 def tube_conductance(m_Daltons, inside_diam, L, T=ROOM_TEMPERATURE) -> float:

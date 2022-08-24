@@ -29,15 +29,15 @@ injector_constants = LockedDict({
 })
 
 injector_param_bounds: LockedDict = LockedDict({
-    "L1": (.05, .3),  # length of first lens
+    "L1": (.05, .4),  # length of first lens
     "rp1": (.01, .03),  # bore radius of first lens
     "L2": (.05, .3),  # length of second lens
     "rp2": (.01, .03),  # bore radius of second lens
     "Lm_combiner": (.05, .25),  # hard edge length of combiner
     "load_beam_offset": (1e-3, 30e-3),  # assumed diameter of incoming beam
-    "gap1": (.05, .3),  # separation between source and first lens
-    "gap2": (.05, .3),  # separation between two lenses
-    "gap3": (.05, .3)  ##separation between final lens and input to combnier
+    "gap1": (.05, .4),  # separation between source and first lens
+    "gap2": (.05, .4),  # separation between two lenses
+    "gap3": (.05, .4)  ##separation between final lens and input to combnier
 })
 
 

@@ -1,18 +1,22 @@
 from math import cos, sin, sqrt
+from typing import Optional
 
+import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import ASSEMBLY_TOLERANCE
 from field_generators import Collection
 from field_generators import HalbachLens
-from helper_tools import *
+from helper_tools import temporary_seed
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO
+from type_hints import ndarray
 
-B_Vec_Arr, B_Norm_Arr = np.ndarray, np.ndarray
-Dim1_Arr = np.ndarray
+B_Vec_Arr, B_Norm_Arr = ndarray, ndarray
+Dim1_Arr = ndarray
+BIG_INT = int(1e9)
 
 
-def misalignment_transform_parameters(self) -> tuple[np.ndarray, Rot, Rot, np.ndarray]:
+def misalignment_transform_parameters(self) -> tuple[ndarray, Rot, Rot, ndarray]:
     """Return parameters (shifts and rotations) to move magnet to misaligned position. To apply these rotations,
     first rotate about rotation_origin using Ry and Rz, then shift with r_shift"""
     dx, dy1, dz1, dy2, dz2 = self.alignment_shifts
@@ -54,7 +58,7 @@ def alignment_shifts() -> tuple[float, float, float, float, float]:
 
 
 class MagneticOptic:
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int]):
         self.r_in_lab = None  # input of magnet system in lab coordinates.
         self.r_out_lab = None  # output of magnet system in lab coordinates
         self.r_in_el = None
@@ -63,28 +67,23 @@ class MagneticOptic:
         self.norm_out_lab = None  # output of magnet system in lab coordinates
         self.norm_in_el = None
         self.norm_out_el = None
-        self.seed = int(time.time()) if seed is None else seed
+        self.seed = np.random.randint(BIG_INT) if seed is None else seed
         self.neighbors: list[MagneticOptic] = []
 
 
 class MagneticLens(MagneticOptic):
-    def __init__(self, Lm, rp_layers, magnet_widths, magnet_grade, use_solenoid, x_in_offset, seed=None,
-                 num_slices=1):
-        assert all(rp1 == rp2 for rp1, rp2 in zip(rp_layers, sorted(rp_layers)))
+    def __init__(self, Lm, rp_layers, magnet_widths, magnet_grade, use_solenoid, x_in_offset, seed=None):
         assert len(rp_layers) == len(magnet_widths)
-        super().__init__()
+        super().__init__(seed)
         self.Lm = Lm
         self.rp_layers = rp_layers
         self.magnet_widths = magnet_widths
         self.magnet_grade = magnet_grade
         self.use_solenoid = use_solenoid
-        self.seed = seed
-        self.num_slices = num_slices
         self.alignment_shifts = alignment_shifts()  # dx, dy1, dz1, dy2, dz2
 
         self.x_in_offset = x_in_offset
         self.norm_in_el, self.norm_out_el = np.array([-1.0, 0, 0]), np.array([1.0, 0, 0])
-        self.combiner = False
 
     def fill_position_and_orientation_params(self, pos_in_lab_for_element, norm_in_lab_for_element):
         self.r_in_el = np.array([self.x_in_offset, 0.0, 0.0])
@@ -101,7 +100,7 @@ class MagneticLens(MagneticOptic):
         else:
             return 1
 
-    def misalignment_transform_parameters(self) -> tuple[np.ndarray, Rot, Rot, np.ndarray]:
+    def misalignment_transform_parameters(self) -> tuple[ndarray, Rot, Rot, ndarray]:
         """Return parameters (shifts and rotations) to move magnet to misaligned position. To apply these rotations,
         first rotate about rotation_origin using Ry and Rz, then shift with r_shift"""
         dx, dy1, dz1, dy2, dz2 = self.alignment_shifts
@@ -129,10 +128,11 @@ class MagneticLens(MagneticOptic):
         position = (self.Lm / 2.0 + self.x_in_offset, 0, 0)
         orientation = Rot.from_rotvec([0, np.pi / 2.0, 0.0])
 
-        magnets = HalbachLens(self.rp_layers, self.magnet_widths, self.Lm, self.magnet_grade,
-                              use_method_of_moments=True, use_standard_mag_errors=magnet_errors,
-                              num_disks=self.num_disks(magnet_errors), use_solenoid_field=self.use_solenoid,
-                              orientation=orientation, position=position)
+        with temporary_seed(self.seed):
+            magnets = HalbachLens(self.rp_layers, self.magnet_widths, self.Lm, self.magnet_grade,
+                                  use_method_of_moments=True, use_standard_mag_errors=magnet_errors,
+                                  num_disks=self.num_disks(magnet_errors), use_solenoid_field=self.use_solenoid,
+                                  orientation=orientation, position=position)
         if include_misalignments:
             rotation_origin, Ry, Rz, r_shift = self.misalignment_transform_parameters()
             for R in [Ry, Rz]:
@@ -141,7 +141,7 @@ class MagneticLens(MagneticOptic):
 
         return magnets
 
-    def get_valid_coord_indices(self, coords: np.ndarray, interp_step_size: float, include_misalignments) -> Dim1_Arr:
+    def get_valid_coord_indices(self, coords: ndarray, interp_step_size: float, include_misalignments) -> Dim1_Arr:
         if include_misalignments:
             coords = coords.copy()  # to not modify original
             coords = self.transform_coords_to_misaligned(coords)
@@ -150,14 +150,14 @@ class MagneticLens(MagneticOptic):
         valid_x_b = coords[:, 0] > self.x_in_offset + self.Lm + interp_step_size
         rarr = np.linalg.norm(coords[:, 1:], axis=1)
 
-        r_inner = self.rp_layers[0]
-        r_outer = self.rp_layers[-1] + self.magnet_widths[-1]
+        r_inner = np.min(self.rp_layers)
+        r_outer = np.max(self.rp_layers) + self.magnet_widths[np.argmax(self.rp_layers)]
         valid_r_a = rarr < r_inner - interp_step_size
         valid_r_b = rarr > r_outer + interp_step_size
         valid_indices = valid_x_a + valid_x_b + valid_r_a + valid_r_b
         return valid_indices
 
-    def get_valid_field_values(self, coords: np.ndarray, interp_step_size: float, use_mag_errors: bool = False,
+    def get_valid_field_values(self, coords: ndarray, interp_step_size: float, use_mag_errors: bool = False,
                                extra_magnets: Collection = None, interp_rounding_guard: float = 1e-12,
                                include_misalignments=False) -> tuple[
         B_Vec_Arr, B_Norm_Arr]:

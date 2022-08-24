@@ -142,6 +142,14 @@ def RMS(vals: sequence) -> float:
     return np.sqrt(np.sum(vals ** 2) / len(vals))
 
 
+def is_ascending(vals: sequence) -> bool:
+    """Return True if vals is in ascending order, else False"""
+    if isinstance(vals, np.ndarray):
+        return np.all(np.sort(vals) == vals)
+    else:
+        return all(val1 == val2 for val1, val2 in zip(vals, sorted(vals)))
+
+
 def is_close_all(a: sequence, b: sequence, abstol: RealNum) -> bool:
     """Test that each element in array a and b are within tolerance of each other"""
     return np.all(np.isclose(a, b, atol=abstol, equal_nan=False))

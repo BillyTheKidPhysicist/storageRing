@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
 from demag_functions import apply_demag
-from helper_tools import Union, Optional, math, inch_to_meter, radians, within_tol, time
+from helper_tools import Union, Optional, math, inch_to_meter, radians, within_tol
 from lattice_elements.utilities import halbach_magnet_width, max_tube_IR_in_segmented_bend
 
 list_tuple_arr = Union[list, tuple, np.ndarray]
@@ -24,6 +24,8 @@ SI_MagnetizationToMagpy: float = 1 / magpyMagnetization_ToSI
 METER_TO_MM = 1e3  # magpy takes distance in mm
 
 COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number divided by radius of element
+
+from helper_tools import temporary_seed
 
 
 @numba.njit()
@@ -168,7 +170,7 @@ class Collection(_Collection):
 
     def B_vec(self, eval_coords: np.ndarray, use_approx: int = False) -> np.ndarray:
         # r: Coordinates to evaluate at with dimension (N,3) where N is the number of evaluate points
-        assert len(self) > 0 and isinstance(eval_coords,np.ndarray)
+        assert len(self) > 0 and isinstance(eval_coords, np.ndarray)
         if use_approx:
             raise NotImplementedError  # this is only implement on the bender
         mTESLA_TO_TESLA = 1e-3
@@ -350,7 +352,7 @@ class Layer(Collection):
         dimension_single = np.asarray([self.magnet_width, self.magnet_width, self.length])
         dimension_all = dimension_single * np.ones((self.num_magnets_in_layer, 3))
         dimension_all += self.dim_shift
-        assert np.all(10 * np.abs(self.dim_shift) < dimension_all)  # model probably doesn't work
+        assert np.all(np.abs(self.dim_shift) < dimension_all)  # model probably doesn't work
         dimension_all *= METER_TO_MM
         assert dimension_all.shape == (self.num_magnets_in_layer, 3)
         return dimension_all
@@ -375,9 +377,8 @@ class HalbachLens(Collection):
     def __init__(self, rp: Union[float, tuple], magnet_width: Union[float, tuple], length: float, magnet_grade: str,
                  position: list_tuple_arr = None, orientation: Rotation = None,
                  num_disks: int = 1, use_method_of_moments=False, use_standard_mag_errors=False,
-                 use_solenoid_field: bool = False, same_seed=False):
+                 use_solenoid_field: bool = False, seed=None):
         # todo: why does initializing with non zero position indicate zero position still
-        # todo: Better seeding system
         super().__init__()
         assert length > 0.0
         assert (isinstance(num_disks, int) and num_disks >= 1)
@@ -394,9 +395,7 @@ class HalbachLens(Collection):
         self.magnet_width: tuple = magnet_width if isinstance(magnet_width, tuple) else (magnet_width,)
         self.use_method_of_moments: bool = use_method_of_moments
         self.use_standard_mag_errors: bool = use_standard_mag_errors
-        if same_seed is True:
-            raise Exception
-        self.same_seed: bool = same_seed
+        self.seed = seed
         self.magnet_grade = magnet_grade
         self.num_disks = num_disks
         self.num_layers = len(self.rp)
@@ -432,17 +431,13 @@ class HalbachLens(Collection):
 
     def standard_Magnet_Errors(self):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
-        if self.same_seed:
-            np.random.seed(42)
         dim_tol = inch_to_meter(.004)  # dimension variation,inch to meter, +/- meters
         mag_vec_angle_tol = radians(2)  # magnetization vector angle tolerane,degree to radian,, +/- radians
         mag_norm_tol = .0125  # magnetization value tolerance, +/- fraction
-        dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
-        MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol
-        mag_norm_variation = self.make_Base_Error_Arr_Cartesian() * mag_norm_tol
-        if self.same_seed:
-            # todo: Does this random seed thing work, or is it a pitfall?
-            np.random.seed(int(time.time()))
+        with temporary_seed(self.seed):  # if None, then no special seeding happens
+            dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
+            MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol
+            mag_norm_variation = self.make_Base_Error_Arr_Cartesian() * mag_norm_tol
         return dim_variation, MagVecAngleVariation, mag_norm_variation
 
     def make_Base_Error_Arr_Cartesian(self, num_params: int = 1) -> np.ndarray:

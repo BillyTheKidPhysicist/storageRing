@@ -247,11 +247,13 @@ def initial_params_from_optimal(which_system, ring_version) -> tuple[float, ...]
 
 
 def _global_optimize(cost_func, bounds: sequence, time_out_seconds: float, processes: int, disp: bool,
-                     progress_file: Optional[str], save_population: Optional[str], initial_vals) -> tuple[float, float]:
+                     progress_file: Optional[str], save_population: Optional[str],
+                     initial_vals, init_pop_file) -> tuple[float, float]:
     """globally optimize a storage ring model cost function"""
     member = solve_async(cost_func, bounds, workers=processes,
                          disp=disp, progress_file=progress_file,
-                         initial_vals=initial_vals, save_population=save_population, time_out_seconds=time_out_seconds)
+                         initial_vals=initial_vals, save_population=save_population,
+                         time_out_seconds=time_out_seconds, init_pop_file=init_pop_file)
     x_optimal, cost_min = member.DNA, member.cost
     return x_optimal, cost_min
 
@@ -276,7 +278,7 @@ def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, r
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
              use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None,
-             save_population: str = None, include_mag_cross_talk=False):
+             save_population: str = None, include_mag_cross_talk=False, init_pop_file=None):
     """Optimize a model of the ring and injector"""
     assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
@@ -291,9 +293,9 @@ def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, r
                                   num_particles, use_standard_tube_OD, use_standard_mag_size,
                                   use_energy_correction, include_mag_cross_talk)
     if method == 'global':
-        bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else boundsmin
+        bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else bounds
         x_optimal, cost_min = _global_optimize(cost_func, bounds, time_out_seconds, processes, disp,
-                                               progress_file, save_population, initial_vals)
+                                               progress_file, save_population, initial_vals, init_pop_file)
     else:
         x_optimal, cost_min = _local_optimize(cost_func, bounds, xi, disp, processes, local_optimizer,
                                               local_search_region)

@@ -3,11 +3,11 @@ Model of ring with mode match lenses at the apex of the benders, and mode matchi
 combiner
 """
 
-from particle_tracer_lattice import ParticleTracerLattice
 from lattice_models.lattice_model_functions import add_drift_if_needed, \
     add_split_bend_with_lens, add_combiner_and_OP, initialize_ring_lattice
 from lattice_models.lattice_model_parameters import system_constants
 from lattice_models.utilities import LockedDict
+from particle_tracer_lattice import ParticleTracerLattice
 
 ring_param_bounds: LockedDict = LockedDict({
     'rp_lens1': (.005, .04),
@@ -17,11 +17,11 @@ ring_param_bounds: LockedDict = LockedDict({
     'rp_lens5_6': (.005, .03),
     'rp_bend': (.005, .012),
     'rp_apex_lens': (.005, .012),
-    'L_apex_lens': (.001, .1),
-    'L_Lens1': (.1, .5),
-    'L_Lens2': (.1, .5),
-    'L_Lens3': (.1, .5),
-    'L_Lens4': (.1, .5)
+    'L_apex_lens': (.001, .2),
+    'L_Lens1': (.1, .6),
+    'L_Lens2': (.1, .6),
+    'L_Lens3': (.1, .6),
+    'L_Lens4': (.1, .6)
 })
 
 num_ring_params = 14

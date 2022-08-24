@@ -7,10 +7,27 @@ import scipy.interpolate as spi
 import scipy.optimize as spo
 
 from helper_tools import low_discrepancy_sample
+from type_hints import sequence, ndarray
 
 HUGE_INT = int(1e12)
 real_number = (int, float)
 OUTPUT_ITERS = 100
+
+
+def confine_values_to_bounds_wrap(values: sequence, bounds: sequence) -> ndarray:
+    """If a value in values exceed its bound in bounds, then wrap the value back into the bound range by. The modulus
+     of the difference between value and its nearest bound is used to prevent excessively large value causing the wrap
+     to overshoot"""
+    values = np.array(values)
+    for i, ((lower, upper), val) in enumerate(zip(bounds, values)):
+        bound_span = upper - lower
+        if val > upper:
+            delta_val = val - upper
+            values[i] = upper - delta_val % bound_span
+        elif val < lower:
+            delta_val = lower - val
+            values[i] = lower + delta_val % bound_span
+    return values
 
 
 class AsyncSolver:
@@ -327,8 +344,7 @@ class AsyncDE:
         x4 = x1 + self.dithered_mutation_factor() * (x2 - x3)
         x_new = target_member.DNA.copy()
         # new DNA may be out of bounds, so clip
-        x4[x4 < self.bounds[:, 0]] = self.bounds[:, 0][x4 < self.bounds[:, 0]]
-        x4[x4 > self.bounds[:, 1]] = self.bounds[:, 1][x4 > self.bounds[:, 1]]
+        x4 = confine_values_to_bounds_wrap(x4, self.bounds)
         # mitosis! (sort of)
         cross_over_indices = np.random.rand(len(self.bounds)) < self.cross_probability
         x_new[cross_over_indices] = x4[cross_over_indices]  # replace the crossover genes
@@ -435,15 +451,15 @@ class AsyncDE:
         return self.population
 
 
-def load_previous_population(num, file):
+def load_previous_population(num_to_load, file) -> list[tuple]:
+    """Return starting population values [(DNA,cost),...] from a specified file. Population values are sorted from
+    lowest to highest cost, and num_to_load are returned"""
     data = np.loadtxt(file)
-    X = data[:, :len(data[0]) - 1]
+    X = data[:, :- 1]
     vals = data[:, -1]
-
-    index_sort = np.argsort(vals)[:num]
-
-    population = [(DNA, cost) for DNA, cost in zip(X[index_sort], vals[index_sort])]
-    return population
+    index_sort = np.argsort(vals)[:num_to_load]
+    population_vals = [(DNA, cost) for DNA, cost in zip(X[index_sort], vals[index_sort])]
+    return population_vals
 
 
 def select_pop_size(bounds):
@@ -454,14 +470,15 @@ def select_pop_size(bounds):
     return pop_size
 
 
-def solve_async(func, bounds, popsize=None, time_out_seconds=None, initial_vals=None, save_population=None,
+def solve_async(func, bounds, pop_size=None, time_out_seconds=None, initial_vals=None, save_population=None,
                 surrogate_method_prob=0.0, disp=True, max_evals=None, tol=None, workers=None, progress_file=None,
-                reload_population: str = None) -> Member:
-    if reload_population is not None:
+                init_pop_file: str = None) -> Member:
+    pop_size = select_pop_size(bounds) if pop_size is None else pop_size
+    if init_pop_file is not None:
         assert initial_vals is None
-        initial_vals = load_previous_population(popsize, reload_population)
+        initial_vals = load_previous_population(pop_size, init_pop_file)
     np.set_printoptions(precision=1000)
-    pop_size = select_pop_size(bounds) if popsize is None else popsize
+
     solver = AsyncDE(func, pop_size, bounds, time_out_seconds=time_out_seconds, initial_vals=initial_vals,
                      surrogate_method_prob=surrogate_method_prob, disp=disp, max_evals=max_evals, tol=tol,
                      workers=workers,
