@@ -91,33 +91,33 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fx, Fy, Fz = vec_interp3D(x, y, z, *self.field_data_seg[:6])
         return Fx, Fy, Fz
 
-    def _force_Func_Internal_Fringe(self, x, y, z):
+    def _force_func_internal_fringe(self, x, y, z):
         Fx, Fy, Fz = vec_interp3D(x, y, z, *self.field_data_internal[:6])
         return Fx, Fy, Fz
 
-    def _force_Func_Perturbation(self, x, y, z):
+    def _force_func_perturbation(self, x, y, z):
         s, xc, yc = self.cartesian_To_Center(x, y, z)
         Fx, Fy, Fz = vec_interp3D(s, xc, yc, *self.fieldPerturbationData[:6])
         return Fx, Fy, Fz
 
-    def _Force_Func_Cap(self, x, y, z):
+    def _force_func_cap(self, x, y, z):
         Fx, Fy, Fz = vec_interp3D(x, y, z, *self.field_data_cap[:6])
         return Fx, Fy, Fz
 
     def _magnetic_potential_Func_Seg(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.field_data_seg[:3], self.field_data_seg[-1])
 
-    def _magnetic_potential_Func_Internal_Fringe(self, x, y, z):
+    def _magnetic_potential_func_internal_fringe(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.field_data_internal[:3], self.field_data_internal[-1])
 
-    def _magnetic_potential_Func_Cap(self, x, y, z):
+    def _magnetic_potential_func_cap(self, x, y, z):
         return scalar_interp3D(x, y, z, *self.field_data_cap[:3], self.field_data_cap[-1])
 
-    def _magnetic_potential_Func_Perturbation(self, x, y, z):
+    def _magnetic_potential_func_perturbation(self, x, y, z):
         s, xc, yc = self.cartesian_To_Center(x, y, z)
         return scalar_interp3D(s, xc, yc, *self.fieldPerturbationData[:3], self.fieldPerturbationData[-1])
 
-    def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(self, Fx, Fy, Fz, x, y):
+    def transform_unit_cell_force_into_element_frame(self, Fx, Fy, Fz, x, y):
         # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
         # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
         # or leaving the element interface as mirror images of each other.
@@ -167,28 +167,28 @@ class SegmentedBenderSimFieldHelper_Numba:
                     xuc = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
                     yuc = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
                     Fx, Fy, Fz = self._force_Func_Seg(xuc, yuc, z)
-                    Fx, Fy, Fz = self.transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x, y)
+                    Fx, Fy, Fz = self.transform_unit_cell_force_into_element_frame(Fx, Fy, Fz, x, y)
                 else:
                     if position == 'FIRST':
                         x, y = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y, self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
-                        Fx, Fy, Fz = self._force_Func_Internal_Fringe(x, y, z)
+                        Fx, Fy, Fz = self._force_func_internal_fringe(x, y, z)
                         Fx0 = Fx
                         Fy0 = Fy
                         Fx = self.M_ang[0, 0] * Fx0 + self.M_ang[0, 1] * Fy0
                         Fy = self.M_ang[1, 0] * Fx0 + self.M_ang[1, 1] * Fy0
                     else:
-                        Fx, Fy, Fz = self._force_Func_Internal_Fringe(x, y, z)
+                        Fx, Fy, Fz = self._force_func_internal_fringe(x, y, z)
             else:
                 Fx, Fy, Fz = np.nan, np.nan, np.nan
         else:  # if outside bender's angle range
             if np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap and (0 >= y >= -self.L_cap):  # If inside the cap on
                 # eastward side
-                Fx, Fy, Fz = self._Force_Func_Cap(x, y, z)
+                Fx, Fy, Fz = self._force_func_cap(x, y, z)
             else:
                 x, y = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y, self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
                 if np.sqrt((x - self.rb) ** 2 + z ** 2) < self.ap and (
                         -self.L_cap <= y <= 0):  # if on the westwards side
-                    Fx, Fy, Fz = self._Force_Func_Cap(x, y, z)
+                    Fx, Fy, Fz = self._force_func_cap(x, y, z)
                     Fx0 = Fx
                     Fy0 = Fy
                     Fx = self.M_ang[0, 0] * Fx0 + self.M_ang[0, 1] * Fy0
@@ -200,7 +200,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         Fy *= self.field_fact
         Fz *= self.field_fact
         if self.use_field_perturbations and not np.isnan(Fx):
-            deltaFx, deltaFy, deltaFz = self._force_Func_Perturbation(x0, y0,
+            deltaFx, deltaFy, deltaFz = self._force_func_perturbation(x0, y0,
                                                                       z0)  # extra force from design imperfections
             Fx, Fy, Fz = Fx + deltaFx, Fy + deltaFy, Fz + deltaFz
         return Fx, Fy, Fz
@@ -257,18 +257,18 @@ class SegmentedBenderSimFieldHelper_Numba:
         elif phi > self.ang:  # if outside bender's angle range
             if (self.rb - self.ap < x < self.rb + self.ap) and (0 > y > -self.L_cap):  # If inside the cap on
                 # eastward side
-                V0 = self._magnetic_potential_Func_Cap(x, y, z)
+                V0 = self._magnetic_potential_func_cap(x, y, z)
             else:
                 xTest = self.RIn_Ang[0, 0] * x + self.RIn_Ang[0, 1] * y
                 yTest = self.RIn_Ang[1, 0] * x + self.RIn_Ang[1, 1] * y
                 if (self.rb - self.ap < xTest < self.rb + self.ap) and (
                         self.L_cap > yTest > 0):  # if on the westwards side
                     yTest = -yTest
-                    V0 = self._magnetic_potential_Func_Cap(xTest, yTest, z)
+                    V0 = self._magnetic_potential_func_cap(xTest, yTest, z)
                 else:  # if not in either cap
                     V0 = np.nan
         if self.use_field_perturbations and not np.isnan(V0):
-            deltaV = self._magnetic_potential_Func_Perturbation(x0, y0, z0)  # extra force from design imperfections
+            deltaV = self._magnetic_potential_func_perturbation(x0, y0, z0)  # extra force from design imperfections
             V0 = V0 + deltaV
         V0 *= self.field_fact
         return V0
@@ -277,9 +277,9 @@ class SegmentedBenderSimFieldHelper_Numba:
         if position == 'FIRST':
             xNew = self.M_ang[0, 0] * x + self.M_ang[0, 1] * y
             yNew = self.M_ang[1, 0] * x + self.M_ang[1, 1] * y
-            V0 = self._magnetic_potential_Func_Internal_Fringe(xNew, yNew, z)
+            V0 = self._magnetic_potential_func_internal_fringe(xNew, yNew, z)
         elif position == 'LAST':
-            V0 = self._magnetic_potential_Func_Internal_Fringe(x, y, z)
+            V0 = self._magnetic_potential_func_internal_fringe(x, y, z)
         else:
             raise Exception('INVALID POSITION SUPPLIED')
         return V0

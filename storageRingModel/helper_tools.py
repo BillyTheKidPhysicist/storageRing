@@ -164,6 +164,18 @@ def inch_to_meter(value_in_inches: RealNum) -> float:
     return .0254 * value_in_inches
 
 
+def values_up_to_cutoff_frac(values: np.ndarray, fraction: float) -> np.ndarray:
+    """Return sorted subset of 'values' up to some fractional cutoff of the maximum"""
+    assert 0.0 <= fraction <= 1.0 and len(values) > 0
+    arg_at_frac = round(len(values) * fraction)
+    return np.sort(values)[:arg_at_frac]
+
+
+def val_at_cumulative_fraction(values: np.ndarray, fraction: float) -> float:
+    """Sort 'values', and return the nearest element to 'fraction' of the total length"""
+    return values_up_to_cutoff_frac(values, fraction)[-1]
+
+
 def meter_to_cm(value_in_meters: RealNum) -> float:
     return value_in_meters * 100.0
 

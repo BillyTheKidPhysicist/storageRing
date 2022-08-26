@@ -33,7 +33,7 @@ def is_valid_field_generator_el(el) -> bool:
     return type(el) in FIELD_GENERATOR_ELS
 
 
-def minimum_distance_between_elements(el1, el2)-> float:
+def minimum_distance_between_elements(el1, el2) -> float:
     """Minimum distance between two elements. Reference is r1 and r2 of the element, not the actual magnetic material"""
     dr = np.array([norm(pos1 - pos2) for pos1, pos2 in itertools.product([el1.r1, el1.r2], [el2.r1, el2.r2])])
     return min(dr)
@@ -68,14 +68,14 @@ def angle(norm) -> float:
 def move_combiner_to_target_frame(el_combiner: CombinerLensSim, el_target, magnet_options) -> Collection:
     r_in_el = el_combiner.transform_lab_coords_into_element_frame(el_combiner.r1)
     magnets = el_combiner.magnet.make_magpylib_magnets(*magnet_options)
-    magnets.move(-r_in_el)
+    magnets.move_meters(-r_in_el)
     theta_el = np.pi + (angle(el_combiner.ne) - angle(el_target.ne))
     R = Rot.from_rotvec([0, 0, theta_el])
     magnets.rotate(R, anchor=0)
     r1, r2 = el_combiner.r1, el_target.r1
     deltar_el = el_target.transform_lab_coords_into_element_frame(
         r1) - el_target.transform_lab_coords_into_element_frame(r2)
-    magnets.move(deltar_el)
+    magnets.move_meters(deltar_el)
     return magnets
 
 
@@ -83,19 +83,19 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
     magnets = el_to_move.magnet.make_magpylib_magnets(*magnet_options)
     if type(el_target) is CombinerLensSim:  # the combiner is annoying to deal with because I defined the input
         # not at the origin, but rather along the x axis with some y offset
-        # move input to 0,0 in el frame
+        # move_meters input to 0,0 in el frame
         r_input = el_target.transform_lab_coords_into_element_frame(el_target.r2)
-        magnets.move(r_input)
+        magnets.move_meters(r_input)
         # now rotate to correct alignment so that
         psi = angle(-el_to_move.nb) - angle(el_target.ne)
         R = Rot.from_rotvec([0, 0, np.pi + psi])
         magnets.rotate(R, anchor=(0, 0, 0))
-        # now move to target el output
+        # now move_meters to target el output
         r_target = el_target.r2
         r_move = el_to_move.r1
         deltar_el = el_target.transform_lab_coords_into_element_frame(
             r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
-        magnets.move(deltar_el)
+        magnets.move_meters(deltar_el)
         return magnets
     else:
         psi = angle(-el_to_move.nb) - angle(el_target.ne)
@@ -105,7 +105,7 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
         r_move = el_to_move.r1
         deltar_el = el_target.transform_lab_coords_into_element_frame(
             r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
-        magnets.move(deltar_el)
+        magnets.move_meters(deltar_el)
         return magnets
 
 
@@ -116,12 +116,11 @@ def field_generator_in_different_frame1(el_to_move: Element, el_target: Element,
         return move_lens_to_target_el_frame(el_to_move, el_target, magnet_options)
 
 
-def collect_valid_neighboring_magpylib_magnets(el: Element, lattice):
+def collect_valid_neighboring_magpylib_magnets(el: Element, lattice) -> Optional[list[Collection]]:
     if is_valid_interperable_el(el):
         magnet_options = (lattice.use_mag_errors, lattice.include_misalignments)
         neighboring_elements = [_el for _el in lattice if is_valid_neighbors(el, _el)]
-        col = Collection(
-            [field_generator_in_different_frame1(el_neighb, el, magnet_options) for el_neighb in neighboring_elements])
+        col = [field_generator_in_different_frame1(el_neighb, el, magnet_options) for el_neighb in neighboring_elements]
         return col
     else:
         return None

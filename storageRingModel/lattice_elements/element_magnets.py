@@ -5,7 +5,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import ASSEMBLY_TOLERANCE
-from field_generators import Collection
+from field_generators import ElementMagnetCollection, Collection
 from field_generators import HalbachLens
 from helper_tools import temporary_seed
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO
@@ -137,7 +137,7 @@ class MagneticLens(MagneticOptic):
             rotation_origin, Ry, Rz, r_shift = self.misalignment_transform_parameters()
             for R in [Ry, Rz]:
                 magnets.rotate(R, anchor=rotation_origin)
-            magnets.move(r_shift)
+            magnets.move_meters(r_shift)
 
         return magnets
 
@@ -164,11 +164,13 @@ class MagneticLens(MagneticOptic):
         assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
         interp_step_size_valid = interp_step_size + interp_rounding_guard
         valid_indices = self.get_valid_coord_indices(coords, interp_step_size_valid, include_misalignments)
-        col = Collection([self.make_magpylib_magnets(use_mag_errors, include_misalignments)])
+
+        col = ElementMagnetCollection(self.make_magpylib_magnets(use_mag_errors, include_misalignments))
         if extra_magnets is not None:
             col.add(extra_magnets)
 
         B_norm_grad, B_norm = np.zeros((len(valid_indices), 3)) * np.nan, np.ones(len(valid_indices)) * np.nan
         B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
-                                                                            return_norm=True, dx=interp_step_size)
+                                                                            return_norm=True, dx=interp_step_size,
+                                                                            use_approx=True)
         return B_norm_grad, B_norm

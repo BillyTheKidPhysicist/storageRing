@@ -320,8 +320,16 @@ class BenderSim(BenderIdeal):
     def compute_valid_field_vals(self, lens: HalbachBender_FieldGenerator, field_coords: ndarray,
                                  valid_indices: sequence) -> tuple[ndarray, ndarray]:
         B_norm_grad_arr, B_norm_arr = np.zeros((len(field_coords), 3)) * np.nan, np.zeros(len(field_coords)) * np.nan
+
+        # IMPROVEMENTE: this needs help
+        if lens.num_lenses > self.num_model_lenses:
+            use_approx = True
+        else:
+            use_approx = False
         B_norm_grad_arr[valid_indices], B_norm_arr[valid_indices] = lens.B_norm_grad(field_coords[valid_indices],
-                                                                                     return_norm=True, use_approx=True)
+                                                                                     return_norm=True,
+                                                                                     use_approx=use_approx)
+
         return B_norm_grad_arr, B_norm_arr
 
     def compute_valid_field_data(self, lens: HalbachBender_FieldGenerator, field_coords: ndarray,
