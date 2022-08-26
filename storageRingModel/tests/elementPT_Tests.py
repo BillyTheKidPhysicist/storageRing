@@ -359,31 +359,31 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         bender"""
 
         num_magnets = 15
-        np.random.seed(42)
-        PTL_Dev = PTL_Dummy(field_dens_mult=.75, use_mag_errors=True)
-        elDeviation = BenderSim(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         PTL_Perf = PTL_Dummy(field_dens_mult=.75)
         elPerfect = BenderSim(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
+        PTL_Dev = PTL_Dummy(field_dens_mult=.75, use_mag_errors=True)
+        elDeviation = BenderSim(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
         for el in [elDeviation, elPerfect]:
+            # BE CAUTIOUS HOW RANDOMNESS IS USED HERE. each MagneticOptic instance initializes a new random.seed
+            # so seeding must be done after that
             el.fill_pre_constrained_parameters()
             el.theta = 0.0
             el.fill_post_constrained_parameters()
+            np.random.seed(42)
             el.build_fast_field_helper()
         Ls = 2 * elPerfect.L_cap + elPerfect.ang * elPerfect.rb
         coords_center, coords_cartesian = elPerfect.make_perturbation_data_coords()
         magnet_width = halbach_magnet_width(self.rp)
         np.random.seed(42)
         lensIdeal = HalbachBender_FieldGenerator(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm, 'N52',
-                                           num_magnets+1,
-                                           (True, True), use_method_of_moments=False,
+                                           num_magnets+1,(True, True), use_method_of_moments=False,
                                            use_pos_mag_angs_only=True, use_mag_errors=False, magnet_width=magnet_width)
         lensIdeal.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         np.random.seed(42)
-        lensDeviated = HalbachBender_FieldGenerator(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm, 'N52',
-                                              num_magnets+1,
-                                              (True, True),
-                                              use_method_of_moments=False, magnet_width=magnet_width,
-                                              use_pos_mag_angs_only=True, use_mag_errors=True)
+        lensDeviated = HalbachBender_FieldGenerator(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,
+                                                    'N52',num_magnets+1,(True, True),
+                                                    use_method_of_moments=False, magnet_width=magnet_width,
+                                                    use_pos_mag_angs_only=True, use_mag_errors=True)
         lensDeviated.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         testStrategy = st.integers(min_value=0, max_value=len(coords_cartesian) - 1)
 
@@ -470,7 +470,7 @@ class ElementTestRunner:
         self.numericTol = 1e-12
 
     def run_Tests(self):
-        # todo: reenable these tests
+        # IMPROVEMENT: reenable these tests
         self.test_Tracing()
         self.test_Coord_Consistency()
         self.test_Coord_Conversions()

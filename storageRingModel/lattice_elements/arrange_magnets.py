@@ -67,7 +67,7 @@ def angle(norm) -> float:
 
 def move_combiner_to_target_frame(el_combiner: CombinerLensSim, el_target, magnet_options) -> Collection:
     r_in_el = el_combiner.transform_lab_coords_into_element_frame(el_combiner.r1)
-    magnets = el_combiner.magnet.make_magpylib_magnets(*magnet_options)
+    magnets = el_combiner.magnet.magpylib_magnets_model(*magnet_options)
     magnets.move_meters(-r_in_el)
     theta_el = np.pi + (angle(el_combiner.ne) - angle(el_target.ne))
     R = Rot.from_rotvec([0, 0, theta_el])
@@ -80,7 +80,7 @@ def move_combiner_to_target_frame(el_combiner: CombinerLensSim, el_target, magne
 
 
 def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet_options):
-    magnets = el_to_move.magnet.make_magpylib_magnets(*magnet_options)
+    magnets = el_to_move.magnet.magpylib_magnets_model(*magnet_options)
     if type(el_target) is CombinerLensSim:  # the combiner is annoying to deal with because I defined the input
         # not at the origin, but rather along the x axis with some y offset
         # move_meters input to 0,0 in el frame

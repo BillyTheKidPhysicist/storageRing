@@ -240,7 +240,7 @@ def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray, flo
 def K_mag_vals_and_slice_lengths_from_lens_el(el: HalbachLensSim) -> tuple[ndarray, ndarray]:
     """Magnetic spring constants and lengths of slices along the length of the lens. used to construct short transfer
     matrice at each slice"""
-    magnets = el.magnet.make_magpylib_magnets(False, False)
+    magnets = el.magnet.magpylib_magnets_model(False, False)
     s_slices_fringing, slice_lengths_fringe, s_inner, lengths_inner = s_slices_and_lengths_lens(el)
     K_vals_mag_fringe = [lens_K_mags_for_slice(s, magnets, el) for s in s_slices_fringing]
     if s_inner is not None:
@@ -358,7 +358,7 @@ def bending_radius(index: int, p_path: ndarray, coords_path: ndarray):
 def combiner_K_mag_and_R_vals(coords_path: ndarray, p_path: ndarray, el: CombinerLensSim) \
         -> tuple[ndarray, ndarray]:
     """Mganetic spring constants and bending radius along path of trajectory through combiner."""
-    magnets = el.magnet.make_magpylib_magnets(False, False)
+    magnets = el.magnet.magpylib_magnets_model(False, False)
     norms_xo_path = unit_vec_perp_to_path(coords_path)
     xo_max = min([(el.rp - el.output_offset), el.output_offset])
     num_points = 11
@@ -503,7 +503,7 @@ def stitch_bender_values(values_start: sequence, values_uc: sequence, num_intern
 def K_mag_vals_and_lengths_from_bender_el(el: BenderSim) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """Magnetic spring constants and lengths at each spring constant value along the orbit trajectory through the
     bender"""
-    magnets = el.build_bender(True, (True, False), num_lenses=NUM_FRINGE_MAGNETS_MIN * 3)
+    magnets = el.magnet.magpylib_magnets_model()
     s_slices_fringe, s_slices_uc, s_slices_total, lengths_total = s_slices_and_lengths_bender(el)
     num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
     K_vals_mag_uc = np.array([bender_K_mag_for_slice(s, magnets, el) for s in s_slices_uc])

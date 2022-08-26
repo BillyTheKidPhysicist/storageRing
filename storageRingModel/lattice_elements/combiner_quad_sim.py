@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from lattice_elements.combiner_ideal import CombinerIdeal
+from lattice_elements.utilities import shape_field_data_3D
 from numba_functions_and_objects import combiner_quad_sim_numba_function
 
 
@@ -33,7 +34,7 @@ class CombinerSim(CombinerIdeal):
         data[:, 3:6] = data[:, 3:6] / self.size_scale  # scale the field gradient
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input
-        field_data = self.shape_field_data_3D(data)
+        field_data = shape_field_data_3D(data)
         return field_data
 
     def fill_pre_constrained_parameters(self) -> None:
@@ -73,5 +74,3 @@ class CombinerSim(CombinerIdeal):
 
     def update_field_fact(self, field_strength_fact) -> None:
         raise NotImplementedError
-        self.fast_field_helper.numbaJitClass.field_fact = field_strength_fact
-        self.field_fact = field_strength_fact

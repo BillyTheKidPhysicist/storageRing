@@ -66,23 +66,23 @@ def _magnetic_potential_Func_Seg(x, y, z, field_data_seg):
 
 
 @numba.njit()
-def _magnetic_potential_func_internal_fringe(x, y, z, field_data_internal):
+def _magnetic_potential_Func_Internal_Fringe(x, y, z, field_data_internal):
     return scalar_interp3D(x, y, z, *field_data_internal[:3], field_data_internal[-1])
 
 
 @numba.njit()
-def _magnetic_potential_func_cap(x, y, z, field_data_cap):
+def _magnetic_potential_Func_Cap(x, y, z, field_data_cap):
     return scalar_interp3D(x, y, z, *field_data_cap[:3], field_data_cap[-1])
 
 
 @numba.njit()
-def _magnetic_potential_func_perturbation(x, y, z, fieldPerturbationData, params):
+def _magnetic_potential_Func_Perturbation(x, y, z, fieldPerturbationData, params):
     s, xc, yc = cartesian_To_Center(x, y, z, params)
     return scalar_interp3D(s, xc, yc, *fieldPerturbationData[:3], fieldPerturbationData[-1])
 
 
 @numba.njit()
-def transform_unit_cell_force_into_element_frame(Fx, Fy, Fz, x, y, ucAng, M_uc):
+def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x, y, ucAng, M_uc):
     # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
     # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
     # or leaving the element interface as mirror images of each other.
@@ -166,18 +166,18 @@ def magnetic_potential(x0, y0, z0, params, field_data):
     elif phi > ang:  # if outside bender's angle range
         if (rb - ap < x < rb + ap) and (0 > y > -L_cap):  # If inside the cap on
             # eastward side
-            V0 = _magnetic_potential_func_cap(x, y, z, field_data_cap)
+            V0 = _magnetic_potential_Func_Cap(x, y, z, field_data_cap)
         else:
             xTest = RIn_Ang[0, 0] * x + RIn_Ang[0, 1] * y
             yTest = RIn_Ang[1, 0] * x + RIn_Ang[1, 1] * y
             if (rb - ap < xTest < rb + ap) and (
                     L_cap > yTest > 0):  # if on the westwards side
                 yTest = -yTest
-                V0 = _magnetic_potential_func_cap(xTest, yTest, z, field_data_cap)
+                V0 = _magnetic_potential_Func_Cap(xTest, yTest, z, field_data_cap)
             else:  # if not in either cap
                 V0 = np.nan
     if use_field_perturbations and not np.isnan(V0):
-        deltaV = _magnetic_potential_func_perturbation(x0, y0, z0, fieldPerturbationData,
+        deltaV = _magnetic_potential_Func_Perturbation(x0, y0, z0, fieldPerturbationData,
                                                        params)  # extra force from design imperfections
         V0 = V0 + deltaV
     V0 *= field_fact
@@ -189,9 +189,9 @@ def magnetic_potential_First_And_Last(x, y, z, position, M_ang, field_data_inter
     if position == 'FIRST':
         xNew = M_ang[0, 0] * x + M_ang[0, 1] * y
         yNew = M_ang[1, 0] * x + M_ang[1, 1] * y
-        V0 = _magnetic_potential_func_internal_fringe(xNew, yNew, z, field_data_internal)
+        V0 = _magnetic_potential_Func_Internal_Fringe(xNew, yNew, z, field_data_internal)
     elif position == 'LAST':
-        V0 = _magnetic_potential_func_internal_fringe(x, y, z, field_data_internal)
+        V0 = _magnetic_potential_Func_Internal_Fringe(x, y, z, field_data_internal)
     else:
         raise Exception('INVALID POSITION SUPPLIED')
     return V0
@@ -232,7 +232,7 @@ def force(x0, y0, z0, params, field_data):
                 xuc = rXYPlane * np.cos(theta)  # cartesian coords in unit cell frame
                 yuc = rXYPlane * np.sin(theta)  # cartesian coords in unit cell frame
                 Fx, Fy, Fz = _force_Func_Seg(xuc, yuc, z, field_data_seg)
-                Fx, Fy, Fz = transform_unit_cell_force_into_element_frame(Fx, Fy, Fz, x, y, ucAng, M_uc)
+                Fx, Fy, Fz = transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x, y, ucAng, M_uc)
             else:
                 if position == 'FIRST':
                     x, y = M_ang[0, 0] * x + M_ang[0, 1] * y, M_ang[1, 0] * x + M_ang[1, 1] * y

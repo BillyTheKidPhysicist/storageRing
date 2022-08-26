@@ -10,11 +10,12 @@ from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL
 from field_generators import BenderSim as HalbachBender_FieldGenerator
 from helper_tools import arr_product, round_and_make_odd
 from lattice_elements.bender_ideal import BenderIdeal
+from lattice_elements.element_magnets import MagnetBender
 from lattice_elements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
-    INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP
+    INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP, shape_field_data_3D
 from numba_functions_and_objects import bender_sim_numba_functions
-from type_hints import sequence, ndarray, RealNum
+from type_hints import ndarray, RealNum
 
 dummy_field_data_empty = (np.ones(1) * np.nan,) * 7
 
@@ -25,6 +26,12 @@ def speed_with_energy_correction(U_longitudinal: RealNum, atom_speed: RealNum) -
     KE = E0 - U_longitudinal
     speed_corrected = np.sqrt(2 * KE)
     return speed_corrected
+
+
+def shaped_field_data(field_coords, field_values_function):
+    B_norm_grad_arr, B_norm_arr = field_values_function(field_coords)
+    field_data_unshaped = np.column_stack((field_coords, B_norm_grad_arr, B_norm_arr))
+    return shape_field_data_3D(field_data_unshaped)
 
 
 # todo: fix bug with coord outside when right on edge on input
@@ -52,6 +59,7 @@ class BenderSim(BenderIdeal):
         self.L_cap = self.fringe_frac_outer * self.rp
         self.num_magnets = num_magnets
         self.numPointsBoreAp: int = round_and_make_odd(self.num_points_bore_ap_default * self.PTL.field_dens_mult)
+        self.magnet = None
         # This many points should span the bore ap for good field sampling
 
     def compute_maximum_aperture(self) -> float:
@@ -133,6 +141,10 @@ class BenderSim(BenderIdeal):
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
         self.make_orbit()
 
+        num_lenses = self.num_magnets + 1  # half lens cause an additiona lens
+        self.magnet = MagnetBender(self.rp, self.rb, self.ucAng, self.Lm, self.magnet_width, self.PTL.magnet_grade,
+                                   num_lenses, self.PTL.use_solenoid_field)
+
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         """compute field values and build fast numba helper"""
         field_data_seg = self.generate_segment_field_data()
@@ -212,7 +224,7 @@ class BenderSim(BenderIdeal):
 
         Ls = 2 * self.L_cap + self.ang * self.rb
         num_s = round_and_make_odd(5 * (self.num_magnets + 2))  # carefully measured
-        num_yc = round_and_make_odd(35 * self.PTL.field_dens_mult)
+        num_yc = round_and_make_odd(20 * self.PTL.field_dens_mult)
         num_xc = num_yc
 
         s_arr = np.linspace(-TINY_OFFSET, Ls + TINY_OFFSET, num_s)  # distance through bender along center
@@ -228,19 +240,8 @@ class BenderSim(BenderIdeal):
 
     def generate_perturbation_data(self) -> tuple[ndarray, ...]:
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
-        lens_imperfect = self.build_bender(True, (True, True), use_method_of_moments=False,
-                                           num_lenses=self.num_magnets + 1,
-                                           use_mag_errors=True)
-        lens_perfect = self.build_bender(True, (True, True), use_method_of_moments=False,
-                                         num_lenses=self.num_magnets + 1)
-        r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
-        valid_indices = r_center_arr < self.rp
-        vals_imperfect = np.column_stack(self.compute_valid_field_vals(lens_imperfect, coords_cartesian, valid_indices))
-        vals_perfect = np.column_stack(self.compute_valid_field_vals(lens_perfect, coords_cartesian, valid_indices))
-        vals_perturbation = vals_imperfect - vals_perfect
-        vals_perturbation[np.isnan(vals_perturbation)] = 0.0
-        interp_data = np.column_stack((coords_center, vals_perturbation))
-        interp_data = self.shape_field_data_3D(interp_data)
+        B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_perturbation(coords_center, coords_cartesian)
+        interp_data = shape_field_data_3D(np.column_stack((coords_center, B_norm_grad_arr, B_norm_arr)))
         return interp_data
 
     def generate_cap_field_data(self) -> tuple[ndarray, ...]:
@@ -250,10 +251,8 @@ class BenderSim(BenderIdeal):
         y_min = -(self.L_cap + TINY_INTERP_STEP)
         y_max = TINY_INTERP_STEP
         field_coords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
-        valid_indices = np.sqrt(
-            (field_coords[:, 0] - self.rb) ** 2 + field_coords[:, 2] ** 2) < self.rp - B_GRAD_STEP_SIZE
-        lens = self.build_bender_fringe_cap_model()
-        return self.compute_valid_field_data(lens, field_coords, valid_indices)
+        field_values_function = self.magnet.valid_field_values_cap
+        return shaped_field_data(field_coords, field_values_function)
 
     def generate_internal_fringe_field_data(self) -> tuple[ndarray, ...]:
         """An magnet slices are required to model the region going from the cap to the repeating unit cell,otherwise
@@ -264,9 +263,8 @@ class BenderSim(BenderIdeal):
         y_min = -TINY_INTERP_STEP
         y_max = tan(2 * self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
         field_coords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
-        lens = self.build_bender_fringe_cap_model()
-        valid_indices = self.get_valid_indices_internal(field_coords, 3)
-        return self.compute_valid_field_data(lens, field_coords, valid_indices)
+        field_values_function = self.magnet.valid_internal_fringe_field_values
+        return shaped_field_data(field_coords, field_values_function)
 
     def is_valid_in_lens_of_bender(self, x: bool, y: bool, z: bool) -> bool:
         """Check that the coordinates x,y,z are valid for a lens in the bender. The lens is centered on (self.rb,0,0)
@@ -312,56 +310,8 @@ class BenderSim(BenderIdeal):
         y_min = -TINY_INTERP_STEP
         y_max = tan(self.ucAng) * (self.rb + self.ap) + TINY_INTERP_STEP
         field_coords = self.make_Grid_Coords(x_min, x_max, y_min, y_max)
-
-        valid_indices = self.get_valid_indices_internal(field_coords, 1)
-        lens = self.build_bender_internal_model()
-        return self.compute_valid_field_data(lens, field_coords, valid_indices)
-
-    def compute_valid_field_vals(self, lens: HalbachBender_FieldGenerator, field_coords: ndarray,
-                                 valid_indices: sequence) -> tuple[ndarray, ndarray]:
-        B_norm_grad_arr, B_norm_arr = np.zeros((len(field_coords), 3)) * np.nan, np.zeros(len(field_coords)) * np.nan
-
-        # IMPROVEMENTE: this needs help
-        if lens.num_lenses > self.num_model_lenses:
-            use_approx = True
-        else:
-            use_approx = False
-        B_norm_grad_arr[valid_indices], B_norm_arr[valid_indices] = lens.B_norm_grad(field_coords[valid_indices],
-                                                                                     return_norm=True,
-                                                                                     use_approx=use_approx)
-
-        return B_norm_grad_arr, B_norm_arr
-
-    def compute_valid_field_data(self, lens: HalbachBender_FieldGenerator, field_coords: ndarray,
-                                 valid_indices: sequence) -> tuple[ndarray, ...]:
-        B_norm_grad_arr, B_norm_arr = self.compute_valid_field_vals(lens, field_coords, valid_indices)
-        field_data_unshaped = np.column_stack((field_coords, B_norm_grad_arr, B_norm_arr))
-        return self.shape_field_data_3D(field_data_unshaped)
-
-    def build_bender(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
-                     use_method_of_moments: bool = True, num_lenses: int = None, use_mag_errors: bool = False):
-        num_lenses = self.num_model_lenses if num_lenses is None else num_lenses
-        bender_field_generator = HalbachBender_FieldGenerator(self.rp, self.rb, self.ucAng, self.Lm,
-                                                              self.PTL.magnet_grade,
-                                                              num_lenses, use_half_cap_end,
-                                                              use_method_of_moments=use_method_of_moments,
-                                                              use_pos_mag_angs_only=use_pos_mag_angs_only,
-                                                              use_solenoid_field=self.PTL.use_solenoid_field,
-                                                              use_mag_errors=use_mag_errors,
-                                                              magnet_width=self.magnet_width)
-        bender_field_generator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
-        return bender_field_generator
-
-    def build_full_bender_model(self):
-        return self.build_bender(True, (True, True), num_lenses=self.num_magnets + 1)
-
-    def build_bender_internal_model(self):
-        num_lenses = self.num_model_lenses
-        assert not is_even(num_lenses)
-        return self.build_bender(False, (False, False))
-
-    def build_bender_fringe_cap_model(self):
-        return self.build_bender(True, (True, False))
+        field_values_func = self.magnet.valid_segment_field_values
+        return shaped_field_data(field_coords, field_values_func)
 
     def in_which_section_of_bender(self, q_el: ndarray) -> str:
         """Find which section of the bender q_el is in. options are:

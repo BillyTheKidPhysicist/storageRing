@@ -1,6 +1,6 @@
 # from geneticLensElement_Wrapper import GeneticLens
 from typing import Iterable, Union, Optional
-
+import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -32,6 +32,9 @@ class ParticleTracerLattice:
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
+        if use_mag_errors:
+            warnings.warn("need to recheck the magnet error stuff, especially with combiner!. "
+                                      "Perhaps a better seeding system also. Include a combiner assert that checks this")
         self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring,
         # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
         # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along

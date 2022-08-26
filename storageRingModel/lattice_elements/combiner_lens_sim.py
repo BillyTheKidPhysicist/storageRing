@@ -11,7 +11,7 @@ from lattice_elements.combiner_ideal import CombinerIdeal
 from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.utilities import CombinerDimensionError, \
     CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
-    TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
+    TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_3D
 from numba_functions_and_objects import combiner_lens_sim_numba_functions
 from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
 from type_hints import ndarray
@@ -102,9 +102,6 @@ class CombinerLensSim(CombinerIdeal):
 
     def fill_post_constrained_parameters(self):
         # The way I fill the coordinates for magnet is kind of crazy and circular for the combiner
-        r1 = self.r2 + -self.ne * (self.space * 2 + self.Lm)
-        nb = -self.ne
-        self.magnet.fill_position_and_orientation_params(r1, nb)
         self.make_orbit()
 
     def get_acceptance_width(self) -> float:
@@ -279,12 +276,12 @@ class CombinerLensSim(CombinerIdeal):
                         use_mag_errors: bool = False, include_misalignments: bool = False) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)
-        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords,
                                                                  use_mag_errors=use_mag_errors,
                                                                  extra_magnets=extra_magnets,
                                                                  include_misalignments=include_misalignments)
         field_data_unshaped = np.column_stack((volume_coords, B_norm_grad, B_norm))
-        field_data = self.shape_field_data_3D(field_data_unshaped)
+        field_data = shape_field_data_3D(field_data_unshaped)
         return field_data
 
     def compute_input_orbit_characteristics(self) -> tuple:

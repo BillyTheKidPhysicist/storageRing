@@ -12,7 +12,7 @@ from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.lens_ideal import LensIdeal
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO, is_even, \
     ElementTooShortError, halbach_magnet_width, round_down_to_nearest_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
-    INTERP_MAGNET_MATERIAL_OFFSET
+    INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_2D, shape_field_data_3D
 from numba_functions_and_objects import lens_sim_numba_functions
 
 
@@ -63,7 +63,6 @@ class HalbachLensSim(LensIdeal):
         self.fill_geometric_params()
         self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
                                    self.PTL.use_solenoid_field, self.fringe_field_length)
-        self.magnet.fill_position_and_orientation_params(self.r1, self.nb)
         self.make_orbit()
 
     def set_length(self, L: float) -> None:
@@ -164,7 +163,7 @@ class HalbachLensSim(LensIdeal):
         _, y_arr, z_arr = self.make_grid_coord_arrays(True)
         lens_center = self.magnet.Lm / 2.0 + self.magnet.x_in_offset
         plane_coords = np.asarray(np.meshgrid(lens_center, y_arr, z_arr)).T.reshape(-1, 3)
-        B_norm_grad, B_norm = self.magnet.get_valid_field_values(plane_coords, B_GRAD_STEP_SIZE)
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(plane_coords)
         data_2D = np.column_stack((plane_coords[:, 1:], B_norm_grad[:, 1:], B_norm))  # 2D is formated as
         # [[x,y,z,B0Gx,B0Gy,B0],..]
         return data_2D
@@ -185,7 +184,7 @@ class HalbachLensSim(LensIdeal):
 
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)  # note that these coordinates
         # can have the wrong value for z if the magnet length is longer than the fringe field effects.
-        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords, B_GRAD_STEP_SIZE,
+        B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords,
                                                                  use_mag_errors=use_mag_errors,
                                                                  extra_magnets=extra_magnets,
                                                                  include_misalignments=include_misalignments)
@@ -195,10 +194,10 @@ class HalbachLensSim(LensIdeal):
 
     def make_interp_data_unperturbed(self) -> tuple[tuple, tuple]:
         exploit_very_long_lens = True if self.effective_material_length() < self.Lm else False
-        interp_data_3D = self.shape_field_data_3D(self.make_unshaped_interp_data_3D())
+        interp_data_3D = shape_field_data_3D(self.make_unshaped_interp_data_3D())
 
         if exploit_very_long_lens:
-            interp_data_2D = self.shape_field_data_2D(self.make_unshaped_interp_data_2D())
+            interp_data_2D = shape_field_data_2D(self.make_unshaped_interp_data_2D())
         else:
             interp_data_2D = (np.ones(1) * np.nan,) * 5  # dummy data to make Numba happy
 
@@ -255,7 +254,7 @@ class HalbachLensSim(LensIdeal):
         field_vals_difference = data_3D_perturbed[:, 3:] - data_3D_unperturbed[:, 3:]
         data_3D_diff = np.column_stack((coords, field_vals_difference))
         # data_3D_diff[np.isnan(data_3D_diff)] = 0.0
-        data_3D_diff = tuple(self.shape_field_data_3D(data_3D_diff))
+        data_3D_diff = tuple(shape_field_data_3D(data_3D_diff))
         return data_3D_diff
 
     def update_field_fact(self, field_strength_fact: float) -> None:

@@ -6,8 +6,9 @@ from constants import TUBE_WALL_THICKNESS
 from field_generators import ElementMagnetCollection
 from helper_tools import arr_product
 from lattice_elements.lens_ideal import LensIdeal
-from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE
+from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE, shape_field_data_3D
 from numba_functions_and_objects import drift_fast_functions
+from type_hints import ndarray
 
 
 class Drift(LensIdeal):
@@ -22,7 +23,7 @@ class Drift(LensIdeal):
         self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
         assert self.outer_half_width > ap
 
-    def make_field_data(self, extra_magnets: list):
+    def make_field_data(self, extra_magnets: list) -> ndarray:
 
         if extra_magnets is not None:
             col = ElementMagnetCollection(extra_magnets)
@@ -36,7 +37,7 @@ class Drift(LensIdeal):
             coords = arr_product(dummy_pos_vals, dummy_pos_vals, dummy_pos_vals)
             B_norm_grad, B_norm = np.zeros((len(coords), 3)), np.zeros(len(coords))
         unshaped_data = np.column_stack((coords, B_norm_grad, B_norm))
-        return self.shape_field_data_3D(unshaped_data)
+        return shape_field_data_3D(unshaped_data)
 
     def build_fast_field_helper(self, extra_magnets: list = None) -> None:
         numba_func_constants = (self.ap, self.L, self.input_tilt_angle, self.output_tilt_angle)

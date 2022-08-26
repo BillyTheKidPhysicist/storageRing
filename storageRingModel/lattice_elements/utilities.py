@@ -2,9 +2,9 @@ from math import atan2, floor
 
 import numpy as np
 
-from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT
+from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT, SIMULATION_MAGNETON
 from helper_tools import inch_to_meter
-from type_hints import FloatTuple, RealNum
+from type_hints import FloatTuple, RealNum, ndarray
 
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
@@ -14,6 +14,8 @@ MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to wid
 B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_MATERIAL_OFFSET = 1.5 * B_GRAD_STEP_SIZE
 TINY_INTERP_STEP = 1e-12
+
+INTERP_ROUNDING_GUARD: float = 1e-12
 
 
 def round_down_to_imperial(value: RealNum) -> float:
@@ -120,6 +122,66 @@ def mirror_across_angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, fl
     x_mirror = 2 * d - x
     y_mirror = 2 * d * m - y
     return x_mirror, y_mirror
+
+
+def shape_field_data_3D(data: ndarray) -> tuple[ndarray, ...]:
+    """
+    Shape 3D field data for fast linear interpolation method
+
+    Take an array with the shape (n,7) where n is the number of points in space. Each row
+    must have the format [x,y,z,gradxB,gradyB,gradzB,B] where B is the magnetic field norm at x,y,z and grad is the
+    partial derivative. The data must be from a 3D grid of points with no missing points or any other funny business
+    and the order of points doesn't matter. Return arrays are raveled for use by fast interpolater
+
+    :param data: (n,7) numpy array of points originating from a 3d grid
+    :return: tuple of 7 arrays, first 3 are grid edge coords (x,y,z) and last 4 are flattened field values
+    (Fx,Fy,Fz,V)
+    """
+    assert data.shape[1] == 7 and len(data) > 2 ** 3
+    x_arr = np.unique(data[:, 0])
+    y_arr = np.unique(data[:, 1])
+    z_arr = np.unique(data[:, 2])
+    assert all(not np.any(np.isnan(arr)) for arr in (x_arr, y_arr, z_arr))
+
+    num_x = x_arr.shape[0]
+    num_y = y_arr.shape[0]
+    num_z = z_arr.shape[0]
+    Fx_matrix = np.empty((num_x, num_y, num_z))
+    Fy_matrix = np.empty((num_x, num_y, num_z))
+    Fz_matrix = np.empty((num_x, num_y, num_z))
+    V_matrix = np.zeros((num_x, num_y, num_z))
+    x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
+    y_indices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
+    z_indices = np.argwhere(data[:, 2][:, None] == z_arr)[:, 1]
+    Fx_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 3]
+    Fy_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 4]
+    Fz_matrix[x_indices, y_indices, z_indices] = -SIMULATION_MAGNETON * data[:, 5]
+    V_matrix[x_indices, y_indices, z_indices] = SIMULATION_MAGNETON * data[:, 6]
+    V_Flat, Fx_Flat, Fy_Flat, Fz_Flat = V_matrix.ravel(), Fx_matrix.ravel(), Fy_matrix.ravel(), Fz_matrix.ravel()
+    return x_arr, y_arr, z_arr, Fx_Flat, Fy_Flat, Fz_Flat, V_Flat
+
+
+def shape_field_data_2D(data: ndarray) -> tuple[ndarray, ...]:
+    """2D version of shape_field_data_3D. Data must be shape (n,5), with each row [x,y,Fx,Fy,V]"""
+    assert data.shape[1] == 5 and len(data) > 2 ** 3
+    x_arr = np.unique(data[:, 0])
+    y_arr = np.unique(data[:, 1])
+    num_x = x_arr.shape[0]
+    num_y = y_arr.shape[0]
+    B_grad_x_matrix = np.zeros((num_x, num_y))
+    B_grad_y_matrix = np.zeros((num_x, num_y))
+    B0_matrix = np.zeros((num_x, num_y))
+    x_indices = np.argwhere(data[:, 0][:, None] == x_arr)[:, 1]
+    y_indices = np.argwhere(data[:, 1][:, None] == y_arr)[:, 1]
+
+    B_grad_x_matrix[x_indices, y_indices] = data[:, 2]
+    B_grad_y_matrix[x_indices, y_indices] = data[:, 3]
+    B0_matrix[x_indices, y_indices] = data[:, 4]
+    Fx_matrix = -SIMULATION_MAGNETON * B_grad_x_matrix
+    FyMatrix = -SIMULATION_MAGNETON * B_grad_y_matrix
+    V_matrix = SIMULATION_MAGNETON * B0_matrix
+    V_Flat, Fx_Flat, Fy_Flat = np.ravel(V_matrix), np.ravel(Fx_matrix), np.ravel(FyMatrix)
+    return x_arr, y_arr, Fx_Flat, Fy_Flat, V_Flat
 
 
 class ElementDimensionError(Exception):

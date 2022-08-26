@@ -1,4 +1,4 @@
-from math import cos, sin, sqrt
+from math import cos, sin, sqrt, tan
 from typing import Optional
 
 import numpy as np
@@ -6,14 +6,24 @@ from scipy.spatial.transform import Rotation as Rot
 
 from constants import ASSEMBLY_TOLERANCE
 from field_generators import ElementMagnetCollection, Collection
-from field_generators import HalbachLens
-from helper_tools import temporary_seed
-from lattice_elements.utilities import MAGNET_ASPECT_RATIO
+from field_generators import HalbachLens, BenderSim
+from helper_tools import temporary_seed, is_even
+from lattice_elements.utilities import MAGNET_ASPECT_RATIO, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from type_hints import ndarray
 
 B_Vec_Arr, B_Norm_Arr = ndarray, ndarray
 Dim1_Arr = ndarray
 BIG_INT = int(1e9)
+
+
+# IMPROVEMENT: the naming of valid is silly
+
+def valid_field_values_col(col, coords, valid_indices, use_approx):  # IMPROVEMENT: apply this to lens also
+    B_norm_grad_arr, B_norm_arr = np.zeros((len(coords), 3)) * np.nan, np.zeros(len(coords)) * np.nan
+    B_norm_grad_arr[valid_indices], B_norm_arr[valid_indices] = col.B_norm_grad(coords[valid_indices],
+                                                                                return_norm=True,
+                                                                                use_approx=use_approx)
+    return B_norm_grad_arr, B_norm_arr
 
 
 def misalignment_transform_parameters(self) -> tuple[ndarray, Rot, Rot, ndarray]:
@@ -59,14 +69,6 @@ def alignment_shifts() -> tuple[float, float, float, float, float]:
 
 class MagneticOptic:
     def __init__(self, seed: Optional[int]):
-        self.r_in_lab = None  # input of magnet system in lab coordinates.
-        self.r_out_lab = None  # output of magnet system in lab coordinates
-        self.r_in_el = None
-        self.r_out_el = None
-        self.norm_in_lab = None  # input of magnet system in lab coordinates.
-        self.norm_out_lab = None  # output of magnet system in lab coordinates
-        self.norm_in_el = None
-        self.norm_out_el = None
         self.seed = np.random.randint(BIG_INT) if seed is None else seed
         self.neighbors: list[MagneticOptic] = []
 
@@ -81,17 +83,8 @@ class MagneticLens(MagneticOptic):
         self.magnet_grade = magnet_grade
         self.use_solenoid = use_solenoid
         self.alignment_shifts = alignment_shifts()  # dx, dy1, dz1, dy2, dz2
-
         self.x_in_offset = x_in_offset
-        self.norm_in_el, self.norm_out_el = np.array([-1.0, 0, 0]), np.array([1.0, 0, 0])
-
-    def fill_position_and_orientation_params(self, pos_in_lab_for_element, norm_in_lab_for_element):
-        self.r_in_el = np.array([self.x_in_offset, 0.0, 0.0])
-        self.r_out_el = np.array([self.x_in_offset + self.Lm, 0.0, 0.0])
-        self.r_in_lab = pos_in_lab_for_element - self.x_in_offset * norm_in_lab_for_element
-        self.r_out_lab = self.r_in_lab + (-norm_in_lab_for_element) * self.Lm
-        self.norm_in_lab = norm_in_lab_for_element
-        self.norm_out_lab = -self.norm_in_lab
+        self.r_in_el = np.array([x_in_offset, 0.0, 0.0])
 
     def num_disks(self, magnet_errors) -> int:
         if magnet_errors:
@@ -141,11 +134,13 @@ class MagneticLens(MagneticOptic):
 
         return magnets
 
+    def magpylib_magnets_model(self, magnet_errors, include_misalignments):
+        return self.make_magpylib_magnets(magnet_errors, include_misalignments)
+
     def get_valid_coord_indices(self, coords: ndarray, interp_step_size: float, include_misalignments) -> Dim1_Arr:
         if include_misalignments:
             coords = coords.copy()  # to not modify original
             coords = self.transform_coords_to_misaligned(coords)
-
         valid_x_a = coords[:, 0] < self.x_in_offset - interp_step_size
         valid_x_b = coords[:, 0] > self.x_in_offset + self.Lm + interp_step_size
         rarr = np.linalg.norm(coords[:, 1:], axis=1)
@@ -157,20 +152,134 @@ class MagneticLens(MagneticOptic):
         valid_indices = valid_x_a + valid_x_b + valid_r_a + valid_r_b
         return valid_indices
 
-    def get_valid_field_values(self, coords: ndarray, interp_step_size: float, use_mag_errors: bool = False,
+    def get_valid_field_values(self, coords: ndarray, use_mag_errors: bool = False,
                                extra_magnets: Collection = None, interp_rounding_guard: float = 1e-12,
-                               include_misalignments=False) -> tuple[
-        B_Vec_Arr, B_Norm_Arr]:
+                               include_misalignments=False, interp_step_size: float = B_GRAD_STEP_SIZE,
+                               use_approx=True) -> tuple[B_Vec_Arr, B_Norm_Arr]:
         assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
-        interp_step_size_valid = interp_step_size + interp_rounding_guard
-        valid_indices = self.get_valid_coord_indices(coords, interp_step_size_valid, include_misalignments)
+        valid_indices = self.get_valid_coord_indices(coords, interp_step_size, include_misalignments)
 
-        col = ElementMagnetCollection(self.make_magpylib_magnets(use_mag_errors, include_misalignments))
+        col = ElementMagnetCollection(self.magpylib_magnets_model(use_mag_errors, include_misalignments))
         if extra_magnets is not None:
             col.add(extra_magnets)
 
         B_norm_grad, B_norm = np.zeros((len(valid_indices), 3)) * np.nan, np.ones(len(valid_indices)) * np.nan
         B_norm_grad[valid_indices], B_norm[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                             return_norm=True, dx=interp_step_size,
-                                                                            use_approx=True)
+                                                                            use_approx=use_approx)
         return B_norm_grad, B_norm
+
+
+class MagnetBender(MagneticOptic):
+    """Model of the magnetic system of a segmented bender magnet"""
+    num_model_lenses = 7
+
+    def __init__(self, rp, rb, uc_angle, Lm, magnet_width, magnet_grade, num_lenses, use_solenoid, seed=None):
+        super().__init__(seed)
+        self.rp = rp
+        self.rb = rb
+        self.uc_angle = uc_angle
+        self.Lm = Lm
+        self.magnet_grade = magnet_grade
+        self.num_lenses = num_lenses
+        self.use_solenoid = use_solenoid
+        self.magnet_width = magnet_width
+
+    def make_magpylib_magnets(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
+                              use_method_of_moments: bool, num_lenses: int,
+                              use_mag_errors: bool):
+        """Return magpylib magnet model representing a portion or all of the bender"""
+        bender_field_generator = BenderSim(self.rp, self.rb, self.uc_angle, self.Lm,
+                                           self.magnet_grade,
+                                           num_lenses, use_half_cap_end,
+                                           use_method_of_moments=use_method_of_moments,
+                                           use_pos_mag_angs_only=use_pos_mag_angs_only,
+                                           use_solenoid_field=self.use_solenoid,
+                                           use_mag_errors=use_mag_errors,
+                                           magnet_width=self.magnet_width)
+        bender_field_generator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
+        return bender_field_generator
+
+    def magpylib_magnets_model(self, use_mag_errors: bool = False, use_method_of_moments: bool = False) -> Collection:
+        """Return full magpylib magnet model of bender"""
+        return self.make_magpylib_magnets(True, (True, True), use_method_of_moments, self.num_lenses, use_mag_errors)
+
+    def magpylib_magnets_internal_model(self) -> Collection:
+        """Return full magpylib magnet model representing repeating interior region of bender"""
+        num_lenses = self.num_model_lenses
+        assert not is_even(num_lenses)
+        return self.make_magpylib_magnets(False, (False, False), True, num_lenses, False)
+
+    def magpylib_magnets_fringe_cap_model(self) -> Collection:
+        """Return full magpylib magnet model representing input section of bender"""
+        return self.make_magpylib_magnets(True, (True, False), True, self.num_model_lenses, False)
+
+    def is_valid_in_lens_of_bender(self, x: bool, y: bool, z: bool) -> bool:
+        """Check that the coordinates x,y,z are valid for a lens in the bender. The lens is centered on (self.rb,0,0)
+        aligned with the z axis. If the coordinates are outside the double unit cell containing the lens, or inside
+        the toirodal cylinder enveloping the magnet material, the coordinate is invalid"""
+        y_uc_line = tan(self.uc_angle) * x
+        minor_radius = sqrt((x - self.rb) ** 2 + z ** 2)
+        lens_radius_valid_inner = self.rp - INTERP_MAGNET_MATERIAL_OFFSET
+        lens_radius_valid_outer = self.rp + self.magnet_width + INTERP_MAGNET_MATERIAL_OFFSET
+        if abs(y) < (self.Lm + B_GRAD_STEP_SIZE) / 2.0 and \
+                lens_radius_valid_inner <= minor_radius < lens_radius_valid_outer:
+            return False
+        elif abs(y) <= y_uc_line:
+            return True
+        else:
+            return False
+
+    def get_valid_indices_internal(self, coords: ndarray, max_rotations: int) -> list[bool]:
+        """Check if coords are not in the magnetic material region of the bender. Check up to max_rotations of the
+        coords going counterclockwise about y axis by rotating coords"""
+        R = Rot.from_rotvec([0, 0, -self.uc_angle]).as_matrix()
+        valid_indices = []
+        for [x, y, z] in coords:
+            if self.is_valid_in_lens_of_bender(x, y, z):
+                valid_indices.append(True)
+            else:
+                loop_start, loop_stop = 1, max_rotations + 1
+                for i in range(loop_start, loop_stop):
+                    num_rotations = (i + 1) // 2
+                    x, y, z = (R ** num_rotations) @ [x, y, z]
+                    if self.is_valid_in_lens_of_bender(x, y, z):
+                        valid_indices.append(True)
+                        break
+                    elif i == loop_stop - 1:
+                        valid_indices.append(False)
+        return valid_indices
+
+    def valid_internal_fringe_field_values(self, coords):
+        valid_indices = self.get_valid_indices_internal(coords, 3)
+        col = self.magpylib_magnets_fringe_cap_model()
+        B_norm_grad_arr, B_norm_arr = valid_field_values_col(col, coords, valid_indices, False)
+        return B_norm_grad_arr, B_norm_arr
+
+    def valid_segment_field_values(self, coords):
+        valid_indices = self.get_valid_indices_internal(coords, 1)
+        col = self.magpylib_magnets_internal_model()
+        B_norm_grad_arr, B_norm_arr = valid_field_values_col(col, coords, valid_indices, False)
+        return B_norm_grad_arr, B_norm_arr
+
+    def valid_field_values_cap(self, coords):  # IMPROVEMENT: CAP NAMING IS AWFUL. BOTH HERE AND IN LENS
+        valid_indices = np.sqrt((coords[:, 0] - self.rb) ** 2 + coords[:, 2] ** 2) < self.rp - B_GRAD_STEP_SIZE
+        col = self.magpylib_magnets_fringe_cap_model()
+        B_norm_grad_arr, B_norm_arr = valid_field_values_col(col, coords, valid_indices, False)
+        return B_norm_grad_arr, B_norm_arr
+
+    def valid_field_values_perturbation(self, coords_center, coords_cartesian):
+        magnets_perfect = self.magpylib_magnets_model(use_mag_errors=False)
+        magnets_perturbed = self.magpylib_magnets_model(use_mag_errors=True)
+
+        r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
+        valid_indices = r_center_arr < self.rp
+        vals_perfect = np.column_stack(valid_field_values_col(magnets_perfect, coords_cartesian, valid_indices, True))
+        vals_perturbed = np.column_stack(
+            valid_field_values_col(magnets_perturbed, coords_cartesian, valid_indices, True))
+
+        vals_perturbation = vals_perturbed - vals_perfect
+        vals_perturbation[np.isnan(vals_perturbation)] = 0.0
+        B_norm_grad_arr = vals_perturbation[:, 0]
+        B_norm_arr = vals_perturbation[:, 1:]
+        return B_norm_grad_arr, B_norm_arr

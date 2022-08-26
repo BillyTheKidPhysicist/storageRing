@@ -9,7 +9,7 @@ from lattice_elements.utilities import ElementTooShortError as ElementTooShortEr
 from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
-from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_same, LockedDict
+from lattice_models.utilities import RingGeometryError, InjectorGeometryError, assert_combiners_are_valid, LockedDict
 from octopus_optimizer import octopus_optimize
 from particle_tracer import ElementTooShortError as ElementTooShortErrorTimeStep
 from particle_tracer_lattice import ParticleTracerLattice
@@ -57,7 +57,7 @@ def build_injector_and_surrrogate(injector_params, ring_version, options: dict) 
 
     lattice_injector = make_injector_lattice(injector_params, options)
     lattice_surrogate = make_surrogate_ring_for_injector(injector_params, ring_version, options)
-    assert_combiners_are_same(lattice_injector, lattice_surrogate)
+    assert_combiners_are_valid(lattice_injector, lattice_surrogate)
     return lattice_surrogate, lattice_injector
 
 

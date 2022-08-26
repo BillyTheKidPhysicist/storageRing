@@ -1,8 +1,6 @@
 from particle_tracer_lattice import ParticleTracerLattice
 
-
-
-real_numer=(int,float)
+real_numer = (int, float)
 
 
 class LockedDict(dict):
@@ -61,9 +59,10 @@ class RingGeometryError(Exception):
 class InjectorGeometryError(Exception):
     pass
 
-def assert_combiners_are_same(lattice_injector: ParticleTracerLattice, lattice_ring: ParticleTracerLattice) -> None:
+
+def assert_combiners_are_valid(lattice_injector: ParticleTracerLattice, lattice_ring: ParticleTracerLattice) -> None:
     """Combiner from injector and ring must have the same shared characteristics, as well as have the expected
     parameters"""
-
-    assert lattice_injector.combiner.output_offset == lattice_ring.combiner.output_offset
+    combiner_ring, combiner_inj = lattice_ring.combiner, lattice_injector.combiner
+    assert combiner_inj.output_offset == combiner_ring.output_offset
     assert lattice_injector.combiner.ang < 0 < lattice_ring.combiner.ang
