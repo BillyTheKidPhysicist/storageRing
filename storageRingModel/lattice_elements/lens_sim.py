@@ -149,7 +149,7 @@ class HalbachLensSim(LensIdeal):
                 warnings.warn("number of z points is being truncated.\n desired is " + str(num_points_z) +
                               " but limit is 150.")
             num_points_z = num_points_z_max if num_points_z > num_points_z_max else num_points_z
-            num_points_xy = 45
+            num_points_xy = round_and_make_odd(num_points_xy * 2)
         assert not is_even(num_points_xy) and not is_even(num_points_z)
         x_arr = np.linspace(x_min, x_max, num_points_z)
         y_arr_quadrant = np.linspace(y_min, y_max, num_points_xy)

@@ -269,10 +269,10 @@ class ParticleTracerLattice:
             self.total_length += el.Lo
 
     def build_fast_field_helpers(self) -> None:
-        self.are_fast_field_helpers_built = True
         for el in self.el_list:
             magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
             el.build_fast_field_helper(extra_magnets=magnets)
+        self.are_fast_field_helpers_built = True
 
     def fill_pre_constrained_parameters(self) -> None:
         for el in self.el_list:

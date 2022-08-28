@@ -24,7 +24,7 @@ MM_TO_METER = 1e-3  # magpy takes distance in mm
 
 COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number divided by radius of element
 
-BORE_RADII_MAX_DISTANCE_FACTORS = 5.0
+BORE_RADII_MAX_DISTANCE_FACTORS = 7.0
 
 
 @numba.njit()
@@ -374,21 +374,24 @@ class Layer(Collection):
         assert magnetization_all.shape == (self.num_magnets_in_layer, 3)
         return magnetization_all
 
+    def valid_indices(self, coords: ndarray, max_dist: float, x0: float, y0: float, z0: float) -> ndarray:
+        def valid_indices_range(vals, delta, center):
+            return (vals > center - delta) & (vals < center + delta)
+
+        x_vals, y_vals, z_vals = coords.T
+        x_valid_indices = valid_indices_range(x_vals, max_dist, x0)
+        y_valid_indices = valid_indices_range(y_vals, max_dist, y0)
+        z_valid_indices = valid_indices_range(z_vals, max_dist, z0)
+        valid_indices = x_valid_indices & y_valid_indices & z_valid_indices
+        return valid_indices
+
     def B_vec(self, coords: ndarray, use_approx: bool = False) -> ndarray:
         """Return B field vector at each coordinate in 'coords'. If 'use_approx' is specified, then magnets that
         are further than a maximum distance from each coordinate in 'coords' are ignored"""
         if use_approx:
             max_dist = self.length / 2 + max(self.rp) * BORE_RADII_MAX_DISTANCE_FACTORS
             x0, y0, z0 = np.array(self.position_meters())
-
-            def valid_indices_range(vals, delta, center):
-                return (vals > center - delta) & (vals < center + delta)
-
-            x_vals, y_vals, z_vals = coords.T
-            x_valid_indices = valid_indices_range(x_vals, max_dist, x0)
-            y_valid_indices = valid_indices_range(y_vals, max_dist, y0)
-            z_valid_indices = valid_indices_range(z_vals, max_dist, z0)
-            valid_indices = x_valid_indices & y_valid_indices & z_valid_indices
+            valid_indices = self.valid_indices(coords, max_dist, x0, y0, z0)
             _B_vec = np.zeros(coords.shape)
             if np.sum(valid_indices) == 0:
                 return _B_vec
@@ -512,7 +515,7 @@ class HalbachLens(Collection):
             return super().B_vec(eval_coords)
 
 
-class BenderSim(Collection):
+class HalbachBender(Collection):
     # a model of odd number lenses to represent the symmetry of the segmented bender. The inner lens represents the fully
     # symmetric field
 
@@ -627,7 +630,7 @@ class BenderSim(Collection):
             self.add(loop)
 
 
-element_magnets = (BenderSim, HalbachLens)
+element_magnets = (HalbachBender, HalbachLens)
 
 
 def can_magnet_use_approx(magnet):

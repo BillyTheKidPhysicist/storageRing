@@ -7,7 +7,7 @@ import numba
 import numpy as np
 
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
-from field_generators import BenderSim as HalbachBender_FieldGenerator
+from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from field_generators import Collection
 from helper_tools import multiply_matrices
 from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_correction
@@ -169,6 +169,7 @@ def bender_dispersion(ro):
 
 
 def matrix_components(M: ndarray) -> tuple[RealNum, RealNum, RealNum, RealNum]:
+    """Unpack a 2x2 matrix into it's components"""
     m11 = M[0, 0]
     m12 = M[0, 1]
     m21 = M[1, 0]
@@ -683,11 +684,56 @@ def lattice_transfer_matrix_at_s(s, elements: Sequence[Element], atom_speed) -> 
     return Mx, My
 
 
-def beta(M: ndarray) -> float:
-    """Return the value of the beta function for a transfer matrix. Assumes periodicity"""
+def determinant(M: ndarray) -> float:
+    """Return determinant of matrix"""
     m11, m12, m21, m22 = matrix_components(M)
-    beta = 2 * m12 / np.sqrt(2 - m11 ** 2 - 2 * m12 * m21 - m22 ** 2)
-    return beta
+    return m11 * m22 - m12 * m21
+
+
+def phi_twiss(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
+    """return phi twiss parameter assuming periodicity"""
+    arg = (m11 + m22) / 2.0
+    if m12 < 0:
+        return -np.arccos(arg) + 2 * np.pi
+    else:
+        return np.arccos(arg)
+
+
+def alpha_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
+    """Return alpha twiss parameter assuming periodicity"""
+    value = (m22 - m11) / np.sqrt(4 - (m11 + m22) ** 2)
+    sign = 1 if m12 < 0 else -1
+    return value * sign
+
+
+def beta_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
+    """Return beta twiss parameter assuming periodicity"""
+    value = 2 * m12 / np.sqrt(4 - (m11 + m22) ** 2)
+    sign = -1 if m12 < 0 else 1
+    return value * sign
+
+
+def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
+    """Value of gamma twiss parameter assuming periodicity"""
+    value = 2 * m21 / np.sqrt(4 - (m11 + m22) ** 2)
+    sign = 1 if m12 < 0 else -1
+    return value * sign
+
+
+def twiss_parameters(M: ndarray) -> tuple[float, float, float, float]:
+    """Return twiss parameters (phi, alpha, beta, gamma)"""
+    matrix_vals = matrix_components(M)
+    assert isclose(determinant(M), 1.0, abs_tol=1e-9)
+    phi = phi_twiss(*matrix_vals)
+    alpha = alpha_from_components(*matrix_vals)
+    beta = beta_from_components(*matrix_vals)
+    gamma = gamma_from_components(*matrix_vals)
+    return phi, alpha, beta, gamma
+
+
+def beta(M: ndarray) -> float:
+    """Return beta twiss parameter assuming periodicity"""
+    return beta_from_components(*matrix_components(M))
 
 
 def betas_at_s(s: RealNum, elements: Sequence[Element], atom_speed: RealNum) -> tuple[float, float]:
@@ -933,10 +979,9 @@ class Lattice(Sequence):
             swarm = swarm.copy()
         Mx, My = self.M(atom_speed=atom_speed)
         L = self.total_length()
-        directionality_signs = {1: -1.0,
-                                2: 1.0}  # to square results with simulated lattice direction, which because particles are
-        # assumed to circulate clockwise, forces the transverse horizontal unit vector to have opposite direction
-        # as the convential value (y vs -y)
+        directionality_signs = {1: -1.0, 2: 1.0}  # to square results with simulated lattice direction,
+        # because particles are assumed to circulate clockwise, forces the transverse horizontal unit vector to have
+        # opposite direction as the convential value (y vs -y)
         for particle in swarm:
             particle.qf, particle.pf = np.zeros(3), np.zeros(3)
             particle.qf[0] = L

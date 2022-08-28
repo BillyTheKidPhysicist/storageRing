@@ -5,7 +5,7 @@ import time
 import numpy as np
 import scipy.optimize as spo
 
-from field_generators import Layer, HalbachLens, Sphere, BenderSim
+from field_generators import Layer, HalbachLens, Sphere, HalbachBender
 from helper_tools import is_close_all, parallel_evaluate, arr_product
 from type_hints import RealNum
 
@@ -254,7 +254,7 @@ class SegmentedBenderHalbachHelper:
     def run_test(self):
         self.test1()
 
-    def make_Bender_Test_Coords(self, bender: BenderSim) -> np.ndarray:
+    def make_Bender_Test_Coords(self, bender: HalbachBender) -> np.ndarray:
         """Coords for testing bender that span the angular length and a little more."""
         ucAngle, rb, rp = bender.UCAngle, bender.rb, bender.rp
         theta_arr = np.linspace(bender.lens_angles_arr.min() - 2 * ucAngle, bender.lens_angles_arr.max() + 2 * ucAngle,
@@ -267,7 +267,7 @@ class SegmentedBenderHalbachHelper:
         coords = np.column_stack((x_arr, y_arr, z_arr))
         return coords
 
-    def test_Bender_Approx(self, bender: BenderSim) -> None:
+    def test_Bender_Approx(self, bender: HalbachBender) -> None:
         """Test that the bender satisifes speed and accuracy limits over it's length for exact and approximate
         values."""
         coords = self.make_Bender_Test_Coords(bender)
@@ -292,10 +292,10 @@ class SegmentedBenderHalbachHelper:
         Lm, rb, rp = .0254, .9, .011
         ucAngle = .6 * Lm / 1.0
         # -------bender starting at theta=0
-        bender = BenderSim(rp, rb, ucAngle, Lm, 'N52', 130, (False, False), use_pos_mag_angs_only=True)
+        bender = HalbachBender(rp, rb, ucAngle, Lm, 'N52', 130, (False, False), use_pos_mag_angs_only=True)
         self.test_Bender_Approx(bender)
         # ------bender symmetric about theta=0
-        bender = BenderSim(rp, rb, ucAngle, Lm, 'N52', 80, (False, False), use_pos_mag_angs_only=False)
+        bender = HalbachBender(rp, rb, ucAngle, Lm, 'N52', 80, (False, False), use_pos_mag_angs_only=False)
         self.test_Bender_Approx(bender)
 
 

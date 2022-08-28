@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Point
 
 from field_generators import HalbachLens
-from field_generators import BenderSim as HalbachBender_FieldGenerator
+from field_generators import HalbachBender as HalbachBender_FieldGenerator
 
 from particle_class import Particle
 from particle_tracer import ParticleTracer

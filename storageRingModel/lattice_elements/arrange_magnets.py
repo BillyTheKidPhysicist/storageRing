@@ -3,17 +3,20 @@ These methods deal with alinging and arranging magnets in the lattice to properl
 field interactions. It's an abomination because of how I wasn't consistent early on with element layouts.
 """
 
+from math import cos, sin
+
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation as Rot
 
 from field_generators import Collection
 from helper_tools import *
 from lattice_elements.base_element import BaseElement
-from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift
+from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift, BenderSim
 
-INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift)  # elements that can include magnetic fields
+INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift)  # ,BenderSim)  # elements that can include magnetic fields
 # produced by neighboring magnets into their own interpolation
-FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim)  # elements that can be used to generate  magnetic fields
+FIELD_GENERATOR_ELS = (
+    HalbachLensSim, CombinerLensSim, BenderSim)  # elements that can be used to generate  magnetic fields
 # that act on another elements
 
 DISTANCE_BORE_RADIUS_FACT = 3.0
@@ -49,9 +52,22 @@ def are_els_close_enough(el1, el2) -> bool:
     return False
 
 
+def do_geom_rule_exist(el1, el2):
+    if (type(el1) is CombinerLensSim and type(el2) is BenderSim) or (
+            type(el2) is CombinerLensSim and type(el1) is BenderSim):
+        return False
+    else:
+        return True
+
+
 def is_valid_neighbors(el: Element, el_neighbor: Element) -> bool:
     """is 'el_neighbor' a valid neighbooring element to 'el' for purposes of including magnetic field interactions"""
-    if not is_valid_interperable_el(el) or not is_valid_field_generator_el(el_neighbor):
+    if not is_valid_interperable_el(el) or not is_valid_field_generator_el(el_neighbor) \
+            or not do_geom_rule_exist(el, el_neighbor):
+        return False
+    elif type(el) is BenderSim and type(el_neighbor) is BenderSim:
+        return False
+    elif type(el) is Drift and el.output_tilt_angle != 0 and el.input_tilt_angle != 0:
         return False
     elif el is el_neighbor:  # element is itself
         return False
@@ -97,7 +113,26 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
             r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
         magnets.move_meters(deltar_el)
         return magnets
-    else:
+    elif type(el_target) is BenderSim:
+        shift_to_origin = (-el_to_move.L, 0, 0)
+        magnets.move_meters(shift_to_origin)
+        psi = -(angle(-el_target.nb) - angle(el_to_move.ne) + np.pi / 2.0 - el_target.ang)
+        R = Rot.from_rotvec([0, 0, psi])
+        magnets.rotate(R, anchor=(0, 0, 0))
+        ang_perp = el_target.ang + np.pi / 2
+        norm_out = np.array([cos(ang_perp), sin(ang_perp), 0.0])
+        x = cos(el_target.ang) * el_target.ro + norm_out[0] * el_target.L_cap
+        y = sin(el_target.ang) * el_target.ro + norm_out[1] * el_target.L_cap
+
+        shift_to_bender_input = (x, y, 0)
+        magnets.move_meters(shift_to_bender_input)
+        r_target = el_target.r1
+        r_move = el_to_move.r2
+        deltar_el = el_target.transform_lab_coords_into_element_frame(
+            r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
+        magnets.move_meters(deltar_el)
+        return magnets
+    elif type(el_target) in (Drift, HalbachLensSim):
         psi = angle(-el_to_move.nb) - angle(el_target.ne)
         R = Rot.from_rotvec([0, 0, psi])
         magnets.rotate(R, anchor=(0, 0, 0))
@@ -107,13 +142,45 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
             r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
         magnets.move_meters(deltar_el)
         return magnets
+    else:
+        raise NotImplementedError
+
+
+def move_bender_to_target_el_frame(el_to_move, el_target, magnet_options):
+    assert type(el_to_move) is BenderSim
+    if type(el_target) not in (Drift, HalbachLensSim):
+        raise NotImplementedError
+
+    magnets = el_to_move.magnet.magpylib_magnets_model()
+    ang_perp = el_to_move.ang + np.pi / 2
+    norm_out = np.array([cos(ang_perp), sin(ang_perp), 0.0])
+    x = cos(el_to_move.ang) * el_to_move.ro + norm_out[0] * el_to_move.L_cap
+    y = sin(el_to_move.ang) * el_to_move.ro + norm_out[1] * el_to_move.L_cap
+    delta_r = (-x, -y, 0)
+    magnets.move_meters(delta_r)
+
+    psi = angle(-el_to_move.nb) - angle(el_target.ne) + np.pi / 2.0 - el_to_move.ang
+    R = Rot.from_rotvec([0, 0, psi])
+    magnets.rotate(R, anchor=(0, 0, 0))
+    r_target = el_target.r1
+    r_move = el_to_move.r1
+    deltar_el = el_target.transform_lab_coords_into_element_frame(
+        r_move) - el_target.transform_lab_coords_into_element_frame(r_target)
+    magnets.move_meters(deltar_el)
+    return magnets
 
 
 def field_generator_in_different_frame1(el_to_move: Element, el_target: Element, magnet_options: tuple):
     if type(el_to_move) is CombinerLensSim:
         return move_combiner_to_target_frame(el_to_move, el_target, magnet_options)
-    else:
+    elif type(el_to_move) is HalbachLensSim:
         return move_lens_to_target_el_frame(el_to_move, el_target, magnet_options)
+    elif type(el_to_move) is BenderSim:
+        if magnet_options[0]:
+            raise NotImplementedError("magnet errors are not implemented here yet")
+        return move_bender_to_target_el_frame(el_to_move, el_target, magnet_options)
+    else:
+        raise NotImplementedError
 
 
 def collect_valid_neighboring_magpylib_magnets(el: Element, lattice) -> Optional[list[Collection]]:
@@ -121,6 +188,6 @@ def collect_valid_neighboring_magpylib_magnets(el: Element, lattice) -> Optional
         magnet_options = (lattice.use_mag_errors, lattice.include_misalignments)
         neighboring_elements = [_el for _el in lattice if is_valid_neighbors(el, _el)]
         col = [field_generator_in_different_frame1(el_neighb, el, magnet_options) for el_neighb in neighboring_elements]
-        return col
+        return col if len(col) != 0 else None
     else:
         return None

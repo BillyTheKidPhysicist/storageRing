@@ -7,7 +7,7 @@ import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
-from field_generators import BenderSim as HalbachBender_FieldGenerator
+from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from helper_tools import arr_product, round_and_make_odd
 from lattice_elements.bender_ideal import BenderIdeal
 from lattice_elements.element_magnets import MagnetBender
@@ -34,7 +34,7 @@ def shaped_field_data(field_coords, field_values_function):
     return shape_field_data_3D(field_data_unshaped)
 
 
-# todo: fix bug with coord outside when right on edge on input
+# IMPROVEMENT: fix bug with coord outside when right on edge on input
 
 class BenderSim(BenderIdeal):
     fringe_frac_outer: float = 1.5  # multiple of bore radius to accomodate fringe field
@@ -150,11 +150,12 @@ class BenderSim(BenderIdeal):
         field_data_seg = self.generate_segment_field_data()
         field_data_internal = self.generate_internal_fringe_field_data()
         field_data_cap = self.generate_cap_field_data()
-        field_data_perturbation = self.generate_perturbation_data() if self.PTL.use_mag_errors else dummy_field_data_empty
+        use_field_perturbations = self.PTL.use_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0)
+        field_data_perturbation = self.generate_perturbation_data(
+            extra_magnets) if use_field_perturbations else dummy_field_data_empty
         assert np.all(field_data_cap[0] == field_data_internal[0]) and np.all(
             field_data_cap[2] == field_data_internal[2])
         field_data = (field_data_seg, field_data_internal, field_data_cap, field_data_perturbation)
-        use_field_perturbations = self.PTL.use_mag_errors
 
         m = np.tan(self.ucAng)
         M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
@@ -223,8 +224,11 @@ class BenderSim(BenderIdeal):
         value"""
 
         Ls = 2 * self.L_cap + self.ang * self.rb
-        num_s = round_and_make_odd(5 * (self.num_magnets + 2))  # carefully measured
-        num_yc = round_and_make_odd(20 * self.PTL.field_dens_mult)
+
+        warnings.warn("These values need to be changed when the better system is implemented")
+
+        num_s = round_and_make_odd(5 * (self.num_magnets + 2))
+        num_yc = round_and_make_odd(self.num_points_bore_ap_default * self.PTL.field_dens_mult)
         num_xc = num_yc
 
         s_arr = np.linspace(-TINY_OFFSET, Ls + TINY_OFFSET, num_s)  # distance through bender along center
@@ -238,9 +242,11 @@ class BenderSim(BenderIdeal):
         coords = np.asarray([self.convert_center_to_cartesian_coords(*coordCenter) for coordCenter in coords_center])
         return coords_center, coords
 
-    def generate_perturbation_data(self) -> tuple[ndarray, ...]:
+    def generate_perturbation_data(self, extra_magnets) -> tuple[ndarray, ...]:
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
-        B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_perturbation(coords_center, coords_cartesian)
+        B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_perturbation(coords_center, coords_cartesian,
+                                                                                  extra_magnets,
+                                                                                  self.PTL.use_mag_errors)
         interp_data = shape_field_data_3D(np.column_stack((coords_center, B_norm_grad_arr, B_norm_arr)))
         return interp_data
 

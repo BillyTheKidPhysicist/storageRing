@@ -4,11 +4,16 @@ import numpy as np
 
 from constants import TUBE_WALL_THICKNESS
 from field_generators import ElementMagnetCollection
-from helper_tools import arr_product
+from helper_tools import arr_product, round_and_make_odd, is_odd_length
 from lattice_elements.lens_ideal import LensIdeal
 from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE, shape_field_data_3D
 from numba_functions_and_objects import drift_fast_functions
 from type_hints import ndarray
+
+POINTS_PER_M_r = 1000  # 1 point per mm
+POINTS_PER_M_x = 500  # 1 point per 2 mm
+NUM_VALS_MAX_r_AND_x = 101
+NUM_VALS_MIN_r_AND_x = 11
 
 
 class Drift(LensIdeal):
@@ -23,14 +28,21 @@ class Drift(LensIdeal):
         self.outer_half_width = ap + TUBE_WALL_THICKNESS if outer_half_width is None else outer_half_width
         assert self.outer_half_width > ap
 
-    def make_field_data(self, extra_magnets: list) -> ndarray:
+    def make_field_data(self, extra_magnets: Optional[list]) -> ndarray:
 
-        if extra_magnets is not None:
+        if extra_magnets is not None and len(extra_magnets) != 0:
             col = ElementMagnetCollection(extra_magnets)
-            x_vals = np.linspace(TINY_INTERP_STEP, self.L + TINY_INTERP_STEP, 30)
-            r_vals = np.linspace(-(self.ap + TINY_INTERP_STEP), (self.ap + TINY_INTERP_STEP), 30)
+
+            num_vals_r = round_and_make_odd(self.ap * POINTS_PER_M_r * self.PTL.field_dens_mult)
+            num_vals_x = round_and_make_odd(self.ap * POINTS_PER_M_x * self.PTL.field_dens_mult)
+            num_vals_r = np.clip(num_vals_r, NUM_VALS_MIN_r_AND_x, NUM_VALS_MAX_r_AND_x)
+            num_vals_x = np.clip(num_vals_x, NUM_VALS_MIN_r_AND_x, NUM_VALS_MAX_r_AND_x)
+            x_vals = np.linspace(-TINY_INTERP_STEP, self.L + TINY_INTERP_STEP, num_vals_x)
+            r_vals = np.linspace(-(self.ap + TINY_INTERP_STEP), (self.ap + TINY_INTERP_STEP), num_vals_r)
+            assert is_odd_length(x_vals) and is_odd_length(r_vals)
             coords = arr_product(x_vals, r_vals, r_vals)
-            B_norm_grad, B_norm = col.B_norm_grad(coords, return_norm=True, dx=B_GRAD_STEP_SIZE)
+            B_norm_grad, B_norm = col.B_norm_grad(coords, return_norm=True, dx=B_GRAD_STEP_SIZE, use_approx=True)
+
         else:
             big_pos_val = 1e12  # to prevent almost any chance of out of bounds issue with big drift regions
             dummy_pos_vals = [-big_pos_val, 0.0, big_pos_val]

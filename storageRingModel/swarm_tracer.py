@@ -3,12 +3,12 @@ from typing import Union
 
 import numpy as np
 
-from particle_class import Swarm
+from particle_class import Swarm,Particle
 from particle_tracer import ParticleTracer
 from particle_tracer_lattice import ParticleTracerLattice
-from helper_tools import low_discrepancy_sample
-from helper_tools import parallel_evaluate, temporary_seed
+from helper_tools import low_discrepancy_sample,parallel_evaluate, temporary_seed,arr_product
 from type_hints import RealNum
+from constants import DEFAULT_ATOM_SPEED
 
 
 def lorentz_function(x, gamma):
@@ -25,6 +25,8 @@ TINY_NEG_OFFSET_FROM_ELEMENT_EDGE = -1e-10  # to prevent the particle from start
 
 # unnecesary evaluation time
 
+initial_dict_var_and_index_for_dim={'x': ('qi',0),'y':('qi',1),'z':('qi',2),
+                                    'px':('pi',0),'py':('pi',1),'pz': ('pi',2)}
 
 class SwarmTracer:
 
@@ -249,6 +251,26 @@ class SwarmTracer:
             pi[index] = p
             swarm.add_new_particle(qi=qi, pi=pi)
         return swarm
+
+    def initialize_grid_2_dim_swarm(self,dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
+                                    dim1_name: str,dim2_name: str,px=DEFAULT_ATOM_SPEED) -> Swarm:
+        """Initialize a swarm in 2 dimensions along specified dimensions"""
+        assert all(dim in ('pi','qi') for dim in (dim1_name,dim2_name))
+        var1,idx1=initial_dict_var_and_index_for_dim[dim1_name]
+        var2,idx2=initial_dict_var_and_index_for_dim[dim2_name]
+        vals_dim1=np.linspace(-dim1_max,dim1_max,num_points_per_dim)
+        vals_dim2=np.linspace(-dim2_max,dim2_max,num_points_per_dim)
+        coords_vals=arr_product(vals_dim1,vals_dim2)
+        swarm=Swarm()
+        for coords in coords_vals:
+            val1,val2=coords
+            particle=Particle(qi=np.array([-1e-10,0,0]),pi=np.array([-px,0,0]))
+            particle.__dict__[var1][idx1]=val1
+            particle.__dict__[var2][idx2]=val2
+            swarm.add(particle)
+        return swarm
+
+
 
     def combiner_output_offset_shift(self) -> np.ndarray:
         # combiner may have an output offset (ie hexapole combiner). This return the 3d vector (x,y,0) that connects the

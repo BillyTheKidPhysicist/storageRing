@@ -119,9 +119,19 @@ def shrink_bounds_around_vals(bounds: sequence, vals: sequence, shrink_frac: flo
 
 
 def is_even(x: int) -> bool:
-    """Test if a number is even"""
+    """Return True if a number is even, False if it is odd"""
     assert type(x) is int and x > 0
     return True if x % 2 == 0 else False
+
+
+def is_odd(x: int) -> bool:
+    """Return True if a number is odd, False if it is even"""
+    return not is_even(x)
+
+
+def is_odd_length(values: sequence) -> bool:
+    """Return True if the length of a sequence is odd, False if it is even"""
+    return is_odd(len(values))
 
 
 def radians(value_in_degrees: RealNum) -> float:
