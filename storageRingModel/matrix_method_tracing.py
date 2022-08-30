@@ -7,8 +7,8 @@ import numba
 import numpy as np
 
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
-from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from field_generators import Collection
+from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from helper_tools import multiply_matrices
 from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_correction
 from lattice_elements.elements import Drift as Drift_Sim
@@ -24,6 +24,15 @@ NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model 
 
 class NonViableLattice(Exception):
     pass
+
+
+from numpy.linalg import inv as _inv
+
+
+@numba.njit()
+def inv(M):
+    '''Return the inverse of a matrix. Much faster with Numba wrapper'''
+    return _inv(M)
 
 
 class ElementRecycler:
@@ -552,7 +561,7 @@ def transfer_matrix_func_from_bender(el: BenderSim) -> Callable:
 class Element:
     """ Base element representing a transfer matrix (ABCD matrix)"""
 
-    def __init__(self, L: RealNum, ap: RealNum = np.inf):
+    def __init__(self, L: RealNum, ap: Union[RealNum, sequence] = np.inf):
         assert L > 0.0
         self.L = L
         self.ap = ap
@@ -631,19 +640,24 @@ class Bender(Element):
 
     def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
         self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp, DEFAULT_ATOM_SPEED)
+        centrifugal_offset = self.ro - rb
+        if centrifugal_offset >= rp:
+            raise ValueError("particle cannot survive in bender because centrifugal offset is too large")
         self.rb = rb
         self.rp = rp
         self.Bp = Bp
         L = self.ro * bending_angle  # length of particle orbit
-        super().__init__(L, ap=self.rp)
+        ap_x = self.rp - centrifugal_offset
+        ap_y = self.rp  # IMPROVEMENT: implement two different values
+        super().__init__(L, ap=ap_x)
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
         assert 0 <= s <= self.L
         Kx = bender_spring_constant(self.Bp, self.rp, self.ro, atom_speed)
-        K_dispersion = bender_dispersion(self.ro)
+        # K_dispersion = bender_dispersion(self.ro)
         Ky = spring_constant_lens(self.Bp, self.rp, atom_speed)
-        Mx = transfer_matrix(Kx, self.L)
-        My = transfer_matrix(Ky, self.L)
+        Mx = transfer_matrix(Kx, s)
+        My = transfer_matrix(Ky, s)
         return Mx, My
 
 
@@ -662,8 +676,8 @@ def M_exit(el, s_start, atom_speed):
     Mx_total, My_total = el.M(atom_speed=atom_speed)
     s_entrance = el.L - s_start
     Mx_entrance, My_entrance = el.M(s=s_entrance, atom_speed=atom_speed)
-    Mx_exit = Mx_total @ np.linalg.inv(Mx_entrance)
-    My_exit = My_total @ np.linalg.inv(My_entrance)
+    Mx_exit = Mx_total @ inv(Mx_entrance)
+    My_exit = My_total @ inv(My_entrance)
     return Mx_exit, My_exit
 
 
@@ -898,9 +912,13 @@ class Lattice(Sequence):
 
     def M(self, atom_speed: float = DEFAULT_ATOM_SPEED, s=None) -> tuple[ndarray, ndarray]:
         if s is None:
-            Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed)
+            Mx, My = self.M_total(atom_speed=atom_speed)
         else:
             Mx, My = lattice_transfer_matrix_at_s(s, self, atom_speed)
+        return Mx, My
+
+    def M_total(self, atom_speed: float = DEFAULT_ATOM_SPEED):
+        Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed)
         return Mx, My
 
     def M_total_components(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[tuple[float, ...], tuple[float, ...]]:

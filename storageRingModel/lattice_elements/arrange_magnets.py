@@ -15,8 +15,8 @@ from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, 
 
 INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift)  # ,BenderSim)  # elements that can include magnetic fields
 # produced by neighboring magnets into their own interpolation
-FIELD_GENERATOR_ELS = (
-    HalbachLensSim, CombinerLensSim, BenderSim)  # elements that can be used to generate  magnetic fields
+FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim)#, BenderSim)  # elements that can be used to
+# generate  magnetic fields
 # that act on another elements
 
 DISTANCE_BORE_RADIUS_FACT = 3.0

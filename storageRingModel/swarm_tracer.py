@@ -255,7 +255,6 @@ class SwarmTracer:
     def initialize_grid_2_dim_swarm(self,dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
                                     dim1_name: str,dim2_name: str,px=DEFAULT_ATOM_SPEED) -> Swarm:
         """Initialize a swarm in 2 dimensions along specified dimensions"""
-        assert all(dim in ('pi','qi') for dim in (dim1_name,dim2_name))
         var1,idx1=initial_dict_var_and_index_for_dim[dim1_name]
         var2,idx2=initial_dict_var_and_index_for_dim[dim2_name]
         vals_dim1=np.linspace(-dim1_max,dim1_max,num_points_per_dim)

@@ -10,16 +10,15 @@ from lattice_elements.utilities import TINY_INTERP_STEP, B_GRAD_STEP_SIZE, shape
 from numba_functions_and_objects import drift_fast_functions
 from type_hints import ndarray
 
-POINTS_PER_M_r = 1000  # 1 point per mm
-POINTS_PER_M_x = 500  # 1 point per 2 mm
-NUM_VALS_MAX_r_AND_x = 101
-NUM_VALS_MIN_r_AND_x = 11
-
 
 class Drift(LensIdeal):
     """
     Simple model of free space. Effectively a cylinderical vacuum tube
     """
+    num_points_per_meter_r = 1000  # 1 point per mm
+    num_pointer_per_meter_x = 1000  # 1 point per 2 mm
+    num_points_max = 101
+    num_points_min = 11
 
     def __init__(self, PTL, L: float, ap: float, outer_half_width: Optional[float],
                  input_tilt_angle: float, output_tilt_angle: float):
@@ -33,10 +32,10 @@ class Drift(LensIdeal):
         if extra_magnets is not None and len(extra_magnets) != 0:
             col = ElementMagnetCollection(extra_magnets)
 
-            num_vals_r = round_and_make_odd(self.ap * POINTS_PER_M_r * self.PTL.field_dens_mult)
-            num_vals_x = round_and_make_odd(self.ap * POINTS_PER_M_x * self.PTL.field_dens_mult)
-            num_vals_r = np.clip(num_vals_r, NUM_VALS_MIN_r_AND_x, NUM_VALS_MAX_r_AND_x)
-            num_vals_x = np.clip(num_vals_x, NUM_VALS_MIN_r_AND_x, NUM_VALS_MAX_r_AND_x)
+            num_vals_r = round_and_make_odd(self.ap * self.num_points_per_meter_r * self.PTL.field_dens_mult)
+            num_vals_x = round_and_make_odd(self.ap * self.num_pointer_per_meter_x * self.PTL.field_dens_mult)
+            num_vals_r = np.clip(num_vals_r, self.num_points_min, self.num_points_max)
+            num_vals_x = np.clip(num_vals_x, self.num_points_min, self.num_points_max)
             x_vals = np.linspace(-TINY_INTERP_STEP, self.L + TINY_INTERP_STEP, num_vals_x)
             r_vals = np.linspace(-(self.ap + TINY_INTERP_STEP), (self.ap + TINY_INTERP_STEP), num_vals_r)
             assert is_odd_length(x_vals) and is_odd_length(r_vals)

@@ -8,7 +8,7 @@ import numpy as np
 from storage_ring_placement.shapes import Kink, Bend, CappedSlicedBend, Line, \
     SlicedBend  # pylint: disable=import-error
 
-shapes = Union[Kink, Bend, CappedSlicedBend, Line]
+Shape = Union[Kink, Bend, CappedSlicedBend, Line]
 
 
 class StorageRingGeometry:
@@ -17,8 +17,8 @@ class StorageRingGeometry:
     orbit of a particle through the storage ring.
     """
 
-    def __init__(self, elements: list[shapes]):
-        self.elements: list[shapes] = elements
+    def __init__(self, elements: list[Shape]):
+        self.elements: list[Shape] = elements
         self.combiner: Optional[Kink] = self.get_combiner(elements)
         self.benders: list[CappedSlicedBend] = self.get_benders(elements)
         self.numBenders: int = len(self.benders)
@@ -26,7 +26,7 @@ class StorageRingGeometry:
     def __iter__(self):
         return iter(self.elements)
 
-    def get_combiner(self, elements: Iterable[shapes]) -> Optional[Kink]:
+    def get_combiner(self, elements: Iterable[Shape]) -> Optional[Kink]:
         """Get storage ring combiner. Must be one and only one"""
 
         combiner = None
@@ -36,7 +36,7 @@ class StorageRingGeometry:
                 combiner = element
         return combiner
 
-    def get_benders(self, elements: Iterable[shapes]) -> list[CappedSlicedBend]:
+    def get_benders(self, elements: Iterable[Shape]) -> list[CappedSlicedBend]:
         """Get bender elements in storage ring. Currently, only sliced bender is supported"""
 
         benders = []

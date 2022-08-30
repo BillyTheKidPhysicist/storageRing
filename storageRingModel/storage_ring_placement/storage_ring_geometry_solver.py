@@ -6,7 +6,7 @@ import numpy as np
 from scipy.optimize import differential_evolution
 
 from storage_ring_placement.shapes import Line, Bend, norm_2D  # pylint: disable= import-error
-from storage_ring_placement.storage_ring_geometry import StorageRingGeometry  # pylint: disable= import-error
+from storage_ring_placement.storage_ring_geometry import StorageRingGeometry, Shape  # pylint: disable= import-error
 from type_hints import RealNumTuple, FloatTuple, sequence, IntTuple
 
 BenderAndLensParams = tuple[tuple[RealNumTuple, ...], FloatTuple]
@@ -41,10 +41,9 @@ class StorageRingGeometryConstraintsSolver:
 
         assert all(type(shape) is not Bend for shape in self.storage_ring)  # not yet supported
 
-    def get_tuned_lenses(self) -> tuple[Line]:
+    def get_tuned_lenses(self) -> tuple[Shape]:
         """Get lenses(Line objects) that have been marked to have their length tunable to satisfy geometry"""
         tuned_lenses = tuple([el for el in self.storage_ring if (type(el) is Line and el.constrained)])
-        assert len(tuned_lenses) != 0  # must be at least one length tunable lenses
         return tuned_lenses
 
     def separate_params(self, params: RealNumTuple) -> tuple[FloatTuple, IntTuple, FloatTuple]:
@@ -115,7 +114,6 @@ class StorageRingGeometryConstraintsSolver:
                 raise NotImplementedError
 
         if self.is_same_length_tuned_lenses:
-            assert len(lens_params) == 1
             for lens in self.tuned_lenses:
                 lens.set_length(lens_params[0])
         else:
@@ -155,8 +153,8 @@ class StorageRingGeometryConstraintsSolver:
         :return: bounds in shape of [(upper_i,lower_i),...] where i is a paremeter such as bending radius, number of
             magnets, lens length etc.
         """
-
-        angle_per_bender_approx = (2 * np.pi - self.storage_ring.combiner.kinkAngle) / self.storage_ring.numBenders
+        combiner_angle = 0 if self.storage_ring.combiner is None else self.storage_ring.combiner.kinkAngle
+        angle_per_bender_approx = (2 * np.pi - combiner_angle) / self.storage_ring.numBenders
         unit_cell_angle_approx = self.storage_ring.benders[0].length_seg / self.radius_target  # each bender has
         # same segment length
         num_magnets_approx = round(angle_per_bender_approx / unit_cell_angle_approx)
@@ -166,8 +164,6 @@ class StorageRingGeometryConstraintsSolver:
         if self.is_same_length_tuned_lenses:
             if len(self.tuned_lenses) >= 1:
                 bounds.append((.1, 5.0))  # big overshoot
-        else:
-            raise NotImplementedError
         bounds = tuple(bounds)  # i want this to be immutable
         return bounds
 
@@ -214,10 +210,9 @@ class StorageRingGeometryConstraintsSolver:
         Find parameters that give a valid storage ring configuration. This will deform self.storage_ring from its original
         configuration!
 
-        :return: parametes as (param_i,...) where i is each parameter
+        :return: parameters as (param_i,...) where i is each parameter
         """
 
-        assert self.storage_ring.combiner is not None
         bounds = self.get_bounds()
         closed_ring_cost = 1e-11
         tries, max_tries = 0, 20

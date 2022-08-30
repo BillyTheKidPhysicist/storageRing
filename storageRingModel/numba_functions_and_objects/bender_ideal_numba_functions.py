@@ -11,10 +11,10 @@ def magnetic_potential(x, y, z, params):
     # q coords in element frame
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
-    rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
-    rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
-    if phi < ang and rToroidal < ap:
-        V0 = .5 * K * SIMULATION_MAGNETON * rToroidal ** 2
+    r_polar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
+    r_toroidal = np.sqrt((r_polar - rb) ** 2 + z ** 2)
+    if phi < ang and r_toroidal < ap:
+        V0 = .5 * K * r_toroidal ** 2
     else:
         V0 = np.nan
     V0 *= field_fact
@@ -27,10 +27,10 @@ def force(x, y, z, params):
     # q: particle's position in element frame
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
-    rPolar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
-    rToroidal = np.sqrt((rPolar - rb) ** 2 + z ** 2)
-    if phi < ang and rToroidal < ap:
-        F0 = -K * (rPolar - rb)  # force in x y plane
+    r_polar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
+    r_toroidal = np.sqrt((r_polar - rb) ** 2 + z ** 2)
+    if phi < ang and r_toroidal < ap:
+        F0 = -K * (r_polar - rb)  # force in x y plane
         Fx = np.cos(phi) * F0
         Fy = np.sin(phi) * F0
         Fz = -K * z

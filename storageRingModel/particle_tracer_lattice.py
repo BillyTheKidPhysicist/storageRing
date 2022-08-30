@@ -1,6 +1,7 @@
 # from geneticLensElement_Wrapper import GeneticLens
-from typing import Iterable, Union, Optional
 import warnings
+from typing import Iterable, Union, Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -34,7 +35,7 @@ class ParticleTracerLattice:
             raise Exception('invalid lattice type provided')
         if use_mag_errors:
             warnings.warn("need to recheck the magnet error stuff, especially with combiner!. "
-                                      "Perhaps a better seeding system also. Include a combiner assert that checks this")
+                          "Perhaps a better seeding system also. Include a combiner assert that checks this")
         self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring,
         # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
         # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along
@@ -316,8 +317,6 @@ class ParticleTracerLattice:
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
                 if not bender1.Lm == benderi.Lm or bender1.magnet_width != benderi.magnet_width:
                     raise Exception('SEGMENT LENGTHS AND MAGNET WIDTHS MUST BE EQUAL BETWEEN BENDERS')
-            if self.combiner is None:
-                raise Exception('COMBINER MUST BE PRESENT')
 
     def get_element_before_and_after(self, el_center: Element) -> tuple[Element, Element]:
         if (el_center.index == len(self.el_list) - 1 or el_center.index == 0) and self.lattice_type == 'injector':

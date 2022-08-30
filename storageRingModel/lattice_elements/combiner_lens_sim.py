@@ -35,7 +35,7 @@ def make_arrays(x_min, x_max, y_min, y_max, z_min, z_max, num_x, num_y, num_z) -
 class CombinerLensSim(CombinerIdeal):
     fringe_frac_outer: float = 1.5
     num_grid_points_r: int = 30
-    num_points_per_rad_in_x: int = 5
+    num_points_per_rad_in_x: int = 15
 
     def __init__(self, PTL, Lm: float, rp: float, load_beam_offset: float, num_layers: int, ap: Optional[float], seed):
         # PTL: object of ParticleTracerLatticeClass
