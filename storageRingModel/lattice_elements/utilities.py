@@ -9,7 +9,7 @@ from type_hints import FloatTuple, RealNum, ndarray
 TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
 SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
-MAGNET_ASPECT_RATIO = 4  # length of individual neodymium magnet relative to width of magnet
+MAGNET_ASPECT_RATIO = 2  # length of individual neodymium magnet relative to width of magnet
 
 B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_MATERIAL_OFFSET = 1.5 * B_GRAD_STEP_SIZE

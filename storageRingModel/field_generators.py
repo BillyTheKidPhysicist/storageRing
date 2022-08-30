@@ -584,8 +584,11 @@ class HalbachBender(Collection):
                                position=(self.rb, 0.0, 0.0),
                                use_standard_mag_errors=self.useStandardMagnetErrors,
                                use_method_of_moments=False)
-            R = Rotation.from_rotvec([0.0, -angle, 0.0])
-            lens.rotate(R, anchor=0)
+            # rotate so that magnetization vector is along z when finally rotated about x
+            lens.rotate(Rotation.from_rotvec([0.0, 0.0, np.pi / 2]))  # step 1
+            #now rotate about y to form the ring
+            lens.rotate(Rotation.from_rotvec([0.0, -angle, 0.0]), anchor=0)  # step 2
+
             # my angle convention is unfortunately opposite what it should be here. positive theta
             # is clockwise about y axis in the xz plane looking from the negative side of y
             # lens.position(r0)
@@ -595,7 +598,7 @@ class HalbachBender(Collection):
             self.apply_method_of_moments()
         if self.use_solenoid_field:
             self.add_solenoid_coils()
-
+        self.rotate(Rotation.from_rotvec([-np.pi / 2, 0, 0]))  # step3: finally rotate about x
     def B_vec(self, eval_coords: ndarray, use_approx=False) -> ndarray:
         """
         overrides Collection

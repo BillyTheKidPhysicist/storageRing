@@ -5,6 +5,7 @@ from typing import Optional
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
+from scipy.spatial.transform import Rotation
 
 from constants import ASSEMBLY_TOLERANCE
 from field_generators import ElementMagnetCollection, Collection, HalbachLens
@@ -214,7 +215,6 @@ class MagnetBender(MagneticOptic):
                                                           use_solenoid_field=self.use_solenoid,
                                                           use_mag_errors=use_mag_errors,
                                                           magnet_width=self.magnet_width)
-        bender_field_generator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return bender_field_generator
 
     def magpylib_magnets_model(self, use_mag_errors) -> Collection:
