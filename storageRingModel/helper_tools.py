@@ -118,6 +118,11 @@ def shrink_bounds_around_vals(bounds: sequence, vals: sequence, shrink_frac: flo
     return bounds
 
 
+def random_num_for_seeding() -> int:
+    """Return a random number appropriate to use as a seed with numpy or python"""
+    UNSIGNED_32_BIT_MAX = int(2 ** 32)  # biggest seed size for numpy random
+    return np.random.randint(UNSIGNED_32_BIT_MAX)
+
 def is_even(x: int) -> bool:
     """Return True if a number is even, False if it is odd"""
     assert type(x) is int and x > 0
@@ -224,12 +229,13 @@ def round_and_make_odd(num: RealNum) -> int:
 
 @contextmanager
 def temporary_seed(seed: int) -> None:
-    """context manager that temporarily override numpy and python random
-    generators by seeding with the value 'seed', then restore the previous state"""
+    """context manager that temporarily overrides numpy and python random
+    generators by seeding with the value 'seed', then restores the previous state"""
     if seed is not None:
         state_np = np.random.get_state()
         state_py = random.getstate()
-        np.random.seed(seed)
+        np.random.seed(seed=seed)
+        random.seed(a=seed)
         yield
         np.random.set_state(state_np)
         random.setstate(state_py)

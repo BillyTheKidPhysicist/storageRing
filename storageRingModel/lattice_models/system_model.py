@@ -5,6 +5,7 @@ import lattice_models.ring_model_2 as ring_model_2
 import lattice_models.ring_model_3 as ring_model_3
 from lattice_models.injector_model_any import injector_param_bounds
 from lattice_models.injector_model_any import make_injector_lattice as make_injector_lattice_any
+from lattice_models.lattice_model_functions import check_and_add_default_values
 from lattice_models.ring_model_surrogate_any import make_ring_surrogate_for_injector
 from lattice_models.utilities import assert_combiners_are_valid, LockedDict
 from particle_tracer_lattice import ParticleTracerLattice
@@ -43,8 +44,9 @@ def make_surrogate_ring_for_injector(injector_params, ring_version, system_optio
 
 def make_system_model(ring_params, injector_params, ring_version: str,
                       system_options: Optional[dict]) -> tuple[ParticleTracerLattice, ParticleTracerLattice]:
-    lattice_ring = make_ring_lattice(ring_params, ring_version, system_options)
-    lattice_injector = make_injector_lattice_any(injector_params, options=system_options)
+    options = check_and_add_default_values(system_options)
+    lattice_ring = make_ring_lattice(ring_params, ring_version, options)
+    lattice_injector = make_injector_lattice_any(injector_params, options=options)
     assert_combiners_are_valid(lattice_injector, lattice_ring)
     return lattice_ring, lattice_injector
 

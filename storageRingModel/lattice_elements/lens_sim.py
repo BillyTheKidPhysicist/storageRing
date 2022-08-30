@@ -13,9 +13,10 @@ from lattice_elements.utilities import MAGNET_ASPECT_RATIO, ElementTooShortError
     round_down_to_nearest_tube_OD, B_GRAD_STEP_SIZE, TINY_INTERP_STEP, \
     INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_2D, shape_field_data_3D
 from numba_functions_and_objects import lens_sim_numba_functions
+from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_2D
 
 
-# todo: the structure here is confusing and brittle because of the extra field length logic
+# IMPROVEMENT: the structure here is confusing and brittle because of the extra field length logic
 
 
 class HalbachLensSim(LensIdeal):
@@ -144,7 +145,7 @@ class HalbachLensSim(LensIdeal):
             x_max = self.L + TINY_INTERP_STEP
             x_min = -TINY_INTERP_STEP
             num_points_x = round_and_make_odd(self.L * points_per_length)
-            num_points_x_max = 501
+            num_points_x_max = 1001
             if num_points_x > num_points_x_max:
                 warnings.warn("number of z points is being truncated.\n desired is " + str(num_points_x) +
                               " but limit is " + str(num_points_x_max))
@@ -202,7 +203,7 @@ class HalbachLensSim(LensIdeal):
         if exploit_very_long_lens:
             interp_data_2D = shape_field_data_2D(self.make_unshaped_interp_data_2D())
         else:
-            interp_data_2D = (np.ones(1) * np.nan,) * 5  # dummy data to make Numba happy
+            interp_data_2D = DUMMY_FIELD_DATA_2D  # dummy data to make Numba happy
 
         y_arr, z_arr = interp_data_3D[1], interp_data_3D[2]
         max_grid_sep = np.sqrt(2) * (y_arr[1] - y_arr[0])

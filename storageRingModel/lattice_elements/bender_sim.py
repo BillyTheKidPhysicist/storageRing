@@ -15,9 +15,8 @@ from lattice_elements.utilities import TINY_OFFSET, is_even, mirror_across_angle
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP, shape_field_data_3D
 from numba_functions_and_objects import bender_sim_numba_functions
+from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
 from type_hints import ndarray, RealNum
-
-dummy_field_data_empty = (np.ones(1) * np.nan,) * 7
 
 
 def speed_with_energy_correction(U_longitudinal: RealNum, atom_speed: RealNum) -> float:
@@ -42,7 +41,9 @@ class BenderSim(BenderIdeal):
     num_model_lenses: int = 7  # number of lenses in halbach model to represent repeating system. Testing has shown
     # this to be optimal
 
-    num_points_bore_ap_default = 25
+    default_interp_points_per_ap_symmetry = 25
+    default_interp_points_per_length_factor_full = 5.0
+    default_interp_points_per_rp_full = 35
 
     def __init__(self, PTL, Lm: float, rp: float, num_magnets: Optional[int], rb: float, ap: Optional[float],
                  r_offset_fact: float):
@@ -58,7 +59,8 @@ class BenderSim(BenderIdeal):
         self.r_offset_fact = r_offset_fact  # factor to times the theoretic optimal bending radius by
         self.L_cap = self.fringe_frac_outer * self.rp
         self.num_magnets = num_magnets
-        self.numPointsBoreAp: int = round_and_make_odd(self.num_points_bore_ap_default * self.PTL.field_dens_mult)
+        self.interp_points_per_ap_symmetry: int = round_and_make_odd(self.default_interp_points_per_ap_symmetry
+                                                                     * self.PTL.field_dens_mult)
         self.magnet = None
         # This many points should span the bore ap for good field sampling
 
@@ -67,7 +69,7 @@ class BenderSim(BenderIdeal):
         # use simple geoemtry of the bending radius that touches the top inside corner of a segment
         ap_max_geom = max_tube_IR_in_segmented_bend(self.rb, self.rp, self.Lm, TUBE_WALL_THICKNESS,
                                                     use_standard_sizes=self.PTL.use_standard_tube_OD)
-        delta = sqrt(2) * self.rp / self.numPointsBoreAp  # maximum interp grid spacing
+        delta = sqrt(2) * self.rp / self.interp_points_per_ap_symmetry  # maximum interp grid spacing
         ap_max_interp = (self.rp - INTERP_MAGNET_MATERIAL_OFFSET) - delta
         # without particles seeing field interpolation reaching into magnetic materal. Will not be exactly true for
         # several reasons (using int, and non equal grid in xy), so I include a small safety factor
@@ -123,8 +125,6 @@ class BenderSim(BenderIdeal):
         """Get the angle that a single unit cell spans. Each magnet is composed of two unit cells because of symmetry.
         The unit cell includes half of the magnet and half the gap between the two"""
 
-        # todo: why is this a function actually? and why is it called in the roffset thing?
-
         return calc_unit_cell_angle(self.Lm, self.rb, self.rp + self.magnet_width)
 
     def fill_post_constrained_parameters(self) -> None:
@@ -147,15 +147,18 @@ class BenderSim(BenderIdeal):
 
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         """compute field values and build fast numba helper"""
-        field_data_seg = self.generate_segment_field_data()
-        field_data_internal = self.generate_internal_fringe_field_data()
-        field_data_cap = self.generate_cap_field_data()
-        use_field_perturbations = self.PTL.use_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0)
-        field_data_perturbation = self.generate_perturbation_data(
-            extra_magnets) if use_field_perturbations else dummy_field_data_empty
-        assert np.all(field_data_cap[0] == field_data_internal[0]) and np.all(
-            field_data_cap[2] == field_data_internal[2])
-        field_data = (field_data_seg, field_data_internal, field_data_cap, field_data_perturbation)
+        use_symmetry = not (self.PTL.use_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0))
+        if use_symmetry:
+            field_data_seg = self.generate_segment_field_data()
+            field_data_internal = self.generate_internal_fringe_field_data()
+            field_data_cap = self.generate_cap_field_data()
+            field_data_full = DUMMY_FIELD_DATA_3D
+            assert np.all(field_data_cap[0] == field_data_internal[0]) and np.all(
+                field_data_cap[2] == field_data_internal[2])
+        else:
+            field_data_full = self.generate_full_bender_data(extra_magnets)
+            field_data_seg = field_data_internal = field_data_cap = DUMMY_FIELD_DATA_3D
+        field_data = (field_data_seg, field_data_internal, field_data_cap, field_data_full)
 
         m = np.tan(self.ucAng)
         M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
@@ -164,7 +167,7 @@ class BenderSim(BenderIdeal):
         RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
 
         numba_func_constants = (self.rb, self.ap, self.L_cap, self.ang, self.num_magnets,
-                                self.ucAng, M_ang, RIn_Ang, M_uc, self.field_fact, use_field_perturbations)
+                                self.ucAng, M_ang, RIn_Ang, M_uc, self.field_fact, use_symmetry)
 
         force_args = (numba_func_constants, field_data)
         potential_args = (numba_func_constants, field_data)
@@ -175,12 +178,13 @@ class BenderSim(BenderIdeal):
     def make_Grid_Coords(self, x_min: float, x_max: float, y_min: float, y_max: float) -> ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
-        assert not is_even(self.numPointsBoreAp)  # points should be odd to there is a point at zero field, if possible
+        assert not is_even(self.interp_points_per_ap_symmetry)  # points should be odd to there is a point
+        # at zero field, if possible
         longitudinal_coord_spacing: float = (.8 * self.rp / 10.0) / self.PTL.field_dens_mult  # Spacing
         # through unit cell. .8 was carefully chosen
-        num_x = round_and_make_odd(self.numPointsBoreAp * (x_max - x_min) / self.ap)
+        num_x = round_and_make_odd(self.interp_points_per_ap_symmetry * (x_max - x_min) / self.ap)
         z_min, z_max = -TINY_INTERP_STEP, (self.ap + TINY_INTERP_STEP)  # same for every part of bender
-        num_z = self.numPointsBoreAp
+        num_z = self.interp_points_per_ap_symmetry
         num_y = round_and_make_odd((y_max - y_min) / longitudinal_coord_spacing)
         assert (num_x + 1) / num_z >= (x_max - x_min) / (z_max - z_min)  # should be at least this ratio
         coord_arrs = []
@@ -224,11 +228,9 @@ class BenderSim(BenderIdeal):
         value"""
 
         Ls = 2 * self.L_cap + self.ang * self.rb
-
-        warnings.warn("These values need to be changed when the better system is implemented")
-
-        num_s = round_and_make_odd(5 * (self.num_magnets + 2))
-        num_yc = round_and_make_odd(self.num_points_bore_ap_default * self.PTL.field_dens_mult)
+        num_s = round_and_make_odd(
+            (self.default_interp_points_per_length_factor_full * Ls / self.rp) * self.PTL.field_dens_mult)
+        num_yc = round_and_make_odd(self.default_interp_points_per_rp_full * self.PTL.field_dens_mult)
         num_xc = num_yc
 
         s_arr = np.linspace(-TINY_OFFSET, Ls + TINY_OFFSET, num_s)  # distance through bender along center
@@ -242,9 +244,9 @@ class BenderSim(BenderIdeal):
         coords = np.asarray([self.convert_center_to_cartesian_coords(*coordCenter) for coordCenter in coords_center])
         return coords_center, coords
 
-    def generate_perturbation_data(self, extra_magnets) -> tuple[ndarray, ...]:
+    def generate_full_bender_data(self, extra_magnets) -> tuple[ndarray, ...]:
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
-        B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_perturbation(coords_center, coords_cartesian,
+        B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_full(coords_center, coords_cartesian,
                                                                                   extra_magnets,
                                                                                   self.PTL.use_mag_errors)
         interp_data = shape_field_data_3D(np.column_stack((coords_center, B_norm_grad_arr, B_norm_arr)))

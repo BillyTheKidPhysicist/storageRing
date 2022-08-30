@@ -81,8 +81,8 @@ class ParticleTracer:
         return _transform_To_Next_Element(q, p, r01, r02, el1.R_Out, el2.R_In)
 
     def initialize(self) -> None:
-        # prepare for a single particle to be traced
-        self.T = 0.0
+        assert self.PTL.are_fast_field_helpers_built
+        self.T = self.particle.T
         if self.particle.clipped is not None:
             self.particle.clipped = False
         LMin = norm_3D(self.particle.pi) * self.h * self.minTimeStepsPerElement

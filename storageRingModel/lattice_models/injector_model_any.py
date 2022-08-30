@@ -6,7 +6,7 @@ from constants import gas_masses
 from helper_tools import inch_to_meter
 from helper_tools import meter_to_cm
 from kevin_bumper import add_Kevin_Bumper_Elements
-from lattice_models.lattice_model_functions import el_fringe_space, add_drift_if_needed, check_and_add_default_values
+from lattice_models.lattice_model_functions import el_fringe_space, add_drift_if_needed
 from lattice_models.lattice_model_parameters import system_constants, atom_characteristics, flange_OD
 from lattice_models.utilities import LockedDict, InjectorGeometryError
 from particle_tracer_lattice import ParticleTracerLattice
@@ -43,9 +43,7 @@ injector_param_bounds: LockedDict = LockedDict({
 
 def make_injector_lattice(injector_params: dict, options: dict = None) -> ParticleTracerLattice:
     injector_params = LockedDict(injector_params)
-    options = check_and_add_default_values(options)
 
-    options = check_and_add_default_values(options)
     gap1 = injector_params["gap1"]
     gap2 = injector_params["gap2"]
     gap3 = injector_params["gap3"]

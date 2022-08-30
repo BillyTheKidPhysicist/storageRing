@@ -1,4 +1,3 @@
-import copy
 from collections.abc import Sequence
 from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
 from typing import Iterable, Union, Optional, Callable
@@ -35,27 +34,31 @@ def inv(M):
     return _inv(M)
 
 
-class ElementRecycler:
-    """Class to assist with recycling transfer matrices generated from identical lattice elements. This saves 
-    significant time"""
+def sim_element_fingerprint(el) -> tuple:
+    """hashable fingerprint of an element. Used for memoizing"""
+    if type(el) in (BenderSim, CombinerLensSim, HalbachLensSim):
+        finger_print = (el.ap, el.rp, el.L, el.Lm, el.ang, el.magnet.magnet_grade)
+    else:
+        raise NotImplementedError
+    return finger_print
 
-    def __init__(self):
-        self.elements_sim = []
-        self.elements_matrix = []
 
-    def add_sim_and_matrix(self, el_sim, el_matrix):
-        self.elements_sim.append(el_sim)
-        self.elements_matrix.append(el_matrix)
+class Memoize_Elements:
+    """To save time, memorize the results of elements that are identical from the matrix elements perspective.
+    Known as memoization"""
 
-    def reusable_matrix_el(self, el_sim):
-        for i, el in enumerate(self.elements_sim):
-            if type(el_sim) is BenderSim and type(el) is type(el_sim):
-                if el.rp == el_sim.rp and el.num_magnets == el_sim.num_magnets and el.ro == el_sim.ro and el.ucAng == el_sim.ucAng:
-                    return self.elements_matrix[i]
-            elif type(el_sim) is HalbachLensSim and type(el) is type(el_sim):
-                if el.rp == el_sim.rp and el.L == el_sim.L and el.Lm == el_sim.Lm:
-                    return self.elements_matrix[i]
-        return None
+    def __init__(self, el_func):
+        self.el_func = el_func
+        self.cache = {}
+
+    def __call__(self, el):
+        key = sim_element_fingerprint(el)
+        if key in self.cache:
+            return self.cache[key]
+        else:
+            result = self.el_func(el)
+            self.cache[key] = result
+            return result
 
 
 def make_atom_speed_kwarg_iterable(func) -> Callable:
@@ -734,15 +737,15 @@ def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum
     return value * sign
 
 
-def twiss_parameters(M: ndarray) -> tuple[float, float, float, float]:
+def twiss_parameters(M: ndarray) -> tuple[float, float, float]:
     """Return twiss parameters (phi, alpha, beta, gamma)"""
     matrix_vals = matrix_components(M)
     assert isclose(determinant(M), 1.0, abs_tol=1e-9)
-    phi = phi_twiss(*matrix_vals)
+    # phi = phi_twiss(*matrix_vals)
     alpha = alpha_from_components(*matrix_vals)
     beta = beta_from_components(*matrix_vals)
     gamma = gamma_from_components(*matrix_vals)
-    return phi, alpha, beta, gamma
+    return alpha, beta, gamma
 
 
 def beta(M: ndarray) -> float:
@@ -782,7 +785,7 @@ def tunes_incremental(elements: Iterable[Element],
                       atom_speed: RealNum = DEFAULT_ATOM_SPEED) -> tuple[float, float]:
     """Return tune value tune value, ie the total tune minus nearest half integer int. This is between 0 and .5 .
     This method cannot distinguish between a tune of 1.25 and 1.75, both would result in .25"""
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
     tunes = []
     for M in [Mx, My]:
         if not is_stable_matrix(M):
@@ -796,7 +799,8 @@ def tunes_incremental(elements: Iterable[Element],
     return tune_x, tune_y
 
 
-def total_lattice_transfer_matrix(elements: Iterable[Element], atom_speed) -> tuple[ndarray, ndarray]:
+def total_lattice_transfer_matrix(elements: Iterable[Element], atom_speed=DEFAULT_ATOM_SPEED) -> tuple[
+    ndarray, ndarray]:
     """Transfer matrix for a sequence of elements start to end"""
     matrices_x_and_y = [el.M(atom_speed=atom_speed) for el in elements]
     matrices_x = [entry[0] for entry in matrices_x_and_y]
@@ -864,12 +868,98 @@ def acceptance_profile(elements: Sequence[Element], atom_speed=DEFAULT_ATOM_SPEE
 def minimum_acceptance(elements: Sequence[Element], atom_speed: RealNum = DEFAULT_ATOM_SPEED,
                        num_points: int = 300):
     """Return the minimum acceptance value in lattice. """
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
     if not is_stable_matrix(Mx) and not is_stable_matrix(My):
         return np.nan, np.nan
     else:
         _, (acceptances_x, acceptances_y) = acceptance_profile(elements, atom_speed=atom_speed, num_points=num_points)
         return np.min(acceptances_x), np.min(acceptances_y)
+
+
+def emittance_from_ellipse_parameters(u: float, u_slope: float, alpha: float, beta: float, gamma: float) -> float:
+    """return emittance of particle given the phase space coordinates and twiss parameters"""
+    assert beta > 0.0 and gamma >= 0.0
+    return gamma * u ** 2 + 2 * alpha * u * u_slope + beta * u_slope ** 2
+
+
+def emittance_from_particle(particle, elements: Sequence[Element]) -> tuple[float, float]:
+    """Return x and y emittances of a particle in a periodic lattice of elements"""
+    X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
+    M_xy = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
+    emittances = []
+    for ((ui, ui_slope), Mu) in zip((X, Y), M_xy):
+        twiss_params = twiss_parameters(Mu)
+        emittances.append(emittance_from_ellipse_parameters(ui, ui_slope, *twiss_params))
+    return tuple(emittances)
+
+
+def orbit_phase_space_coords_initial(particle) -> tuple[tuple, tuple, float]:
+    """Return phase space coords in orbit frame from initial particle coords. This assumes that the particle is located
+    at the origin and aimed along the negative x direction. Further, it is assumed that the positive x dimension of the
+    orbit points radially outward for clockwise trajectories and thus points in the negative cartesian y direction
+    for a linear lattice"""
+    x_lab, y_lab, z_lab = particle.qi
+    px_lab, py_lab, pz_lab = particle.pi
+    assert px_lab < 0.0
+    assert isclose(x_lab, -1e-10)
+    orbit_velocity = -px_lab
+    xi, yi = -y_lab, z_lab
+    xi_slope, yi_slope = -py_lab / orbit_velocity, pz_lab / orbit_velocity
+    return (xi, xi_slope), (yi, yi_slope), orbit_velocity
+
+
+def will_particle_clip_on_aperture(particle, elements: Sequence[Element]) -> bool:
+    """Return whether particle will be lost clipping on an element aperture, assuming the lattice is periodic.
+    This is determined by checking if the particle's emittance is larger than the minimum viable emittance in either
+    dimension"""
+    _, _, atom_speed = orbit_phase_space_coords_initial(particle)
+    emittance_xy = emittance_from_particle(particle, elements)
+    accept_xy_min = minimum_acceptance(atom_speed=atom_speed)
+    for emittance, acceptance in zip(accept_xy_min, emittance_xy):
+        if emittance > acceptance:
+            return True
+    return False
+
+
+def y_ellipse(x: float, eps: float, twiss_params: tuple[float, float, float]) -> tuple[float, float]:
+    """Return the y values (positive and negative) in the ellipse equation gamma*x^2+2*alpha*x*y+beta*y^2=eps"""
+    alpha, beta, gamma = twiss_params
+    term = np.sqrt((alpha * x) ** 2 + beta * eps - beta * gamma * x ** 2)
+    val1 = (-alpha * x + term) / beta
+    val2 = (-alpha * x - term) / beta
+    return val1, val2
+
+
+def phase_space_ellipse(emittance, twiss_params: tuple[float, float, float]) -> tuple[list[float], list[float]]:
+    """Return x and y values of path on curve of phase space ellipse. Easily used for plotting"""
+    _, beta, _ = twiss_params
+    offset_to_prevent_nan = 1e-12
+    x_max = np.sqrt(emittance * beta) - offset_to_prevent_nan
+    x_min = -x_max
+    x_vals = np.linspace(x_min, x_max, 10000)
+    y_vals = np.array([y_ellipse(x, emittance, twiss_params) for x in x_vals])
+    x_vals_path = [*x_vals, *np.flip(x_vals), x_vals[0]]
+    y_vals_path = [*y_vals[:, 0], *np.flip(y_vals[:, 1]), y_vals[0, 0]]
+    return x_vals_path, y_vals_path
+
+
+@Memoize_Elements  # reuse identical output rather than recreating them
+def build_numeric_element(el) -> NumericElement:
+    """Return a numeric matrix element given a ParticleTracerLattice element"""
+    if type(el) is HalbachLensSim:
+        M_func = transfer_matrix_func_from_lens(el)
+        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=el.ap)
+    elif type(el) is BenderSim:
+        M_func = transfer_matrix_func_from_bender(el)
+        ap = el.ap - (el.ro - el.rb)
+        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=ap)
+    elif type(el) is CombinerLensSim:
+        M_func = transfer_matrix_func_from_combiner(el)
+        ap = el.ap - el.output_offset
+        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=ap)
+    else:
+        raise NotImplementedError
+    return matrix_element
 
 
 class Lattice(Sequence):
@@ -918,7 +1008,7 @@ class Lattice(Sequence):
         return Mx, My
 
     def M_total(self, atom_speed: float = DEFAULT_ATOM_SPEED):
-        Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed)
+        Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed=atom_speed)
         return Mx, My
 
     def M_total_components(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -953,15 +1043,6 @@ class Lattice(Sequence):
     def total_length(self) -> float:
         return total_length(self.elements)
 
-    def add_element_from_sim_lens(self, el_lens: HalbachLensSim) -> None:
-        M_func = transfer_matrix_func_from_lens(el_lens)
-        self.elements.append(NumericElement(el_lens.Lo, M_func=M_func, ap=el_lens.ap))
-
-    def add_element_from_sim_seg_bender(self, el_bend: BenderSim) -> None:
-        M_func = transfer_matrix_func_from_bender(el_bend)
-        ap = el_bend.ap - (el_bend.ro - el_bend.rb)
-        self.elements.append(NumericElement(el_bend.Lo, M_func=M_func, ap=ap))
-
     def add_element_from_sim_combiner(self, el_combiner: CombinerLensSim) -> None:
         M_func = transfer_matrix_func_from_combiner(el_combiner)
         ap = el_combiner.ap - el_combiner.output_offset
@@ -971,25 +1052,15 @@ class Lattice(Sequence):
         """Build the lattice from an existing ParticleTracerLattice object"""
 
         assert isclose(abs(simulated_lattice.initial_ang), np.pi)  # must be pointing along -x in polar coordinates
-
-        reuser = ElementRecycler()  # saves time to recycle the matrices for the same elements
+        assert not simulated_lattice.use_mag_errors
         for el in simulated_lattice:
-            el_matrix_reusable = reuser.reusable_matrix_el(el)
-            if el_matrix_reusable is not None:
-                el_matrix_reusable = copy.deepcopy(el_matrix_reusable)
-                self.elements.append(el_matrix_reusable)
+            if type(el) is Drift_Sim:
+                self.add_drift(el.L, ap=el.ap)
+            elif type(el) in (HalbachLensSim, BenderSim, CombinerLensSim):
+                numeric_element = build_numeric_element(el)
+                self.elements.append(numeric_element)
             else:
-                if type(el) is Drift_Sim:
-                    self.add_drift(el.L, ap=el.ap)
-                elif type(el) is HalbachLensSim:
-                    self.add_element_from_sim_lens(el)
-                elif type(el) is BenderSim:
-                    self.add_element_from_sim_seg_bender(el)
-                elif type(el) is CombinerLensSim:
-                    self.add_element_from_sim_combiner(el)
-                else:
-                    raise NotImplementedError
-                reuser.add_sim_and_matrix(el, self.elements[-1])
+                raise NotImplementedError
 
     def trace_swarm(self, swarm, copy_swarm=True, atom_speed=DEFAULT_ATOM_SPEED):
         assert len(self.elements) > 0

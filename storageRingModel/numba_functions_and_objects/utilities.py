@@ -14,6 +14,7 @@ def full_arctan2(y, x):
 TupleOf3Floats = tuple[float, float, float]
 nanArr7Tuple = tuple([np.ones(1) * np.nan] * 7)
 DUMMY_FIELD_DATA_3D = (np.ones(1) * np.nan,) * 7
+DUMMY_FIELD_DATA_2D = (np.ones(1) * np.nan,) * 5
 
 
 class jitclass_Wrapper:

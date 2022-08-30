@@ -11,8 +11,10 @@ from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
+from constants import MAGNET_MAGNETIZATION_ANGLE_TOLERANCE, MAGNET_DIMENSIONAL_TOLERANCE, \
+    MAGNET_MAGNETIZATION_NORM_TOLERANCE
 from demag_functions import apply_demag
-from helper_tools import Union, Optional, math, inch_to_meter, radians, within_tol
+from helper_tools import Union, Optional, math, within_tol
 from helper_tools import temporary_seed
 from lattice_elements.utilities import halbach_magnet_width, max_tube_IR_in_segmented_bend
 from type_hints import ndarray, sequence
@@ -461,9 +463,9 @@ class HalbachLens(Collection):
 
     def standard_Magnet_Errors(self):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
-        dim_tol = inch_to_meter(.004)  # dimension variation,inch to meter, +/- meters
-        mag_vec_angle_tol = radians(2)  # magnetization vector angle tolerane,degree to radian,, +/- radians
-        mag_norm_tol = .0125  # magnetization value tolerance, +/- fraction
+        dim_tol = MAGNET_DIMENSIONAL_TOLERANCE  # dimension variation,inch to meter, +/- meters
+        mag_vec_angle_tol = MAGNET_MAGNETIZATION_ANGLE_TOLERANCE  # magnetization vector angle tolerance, max tilt
+        mag_norm_tol = MAGNET_MAGNETIZATION_NORM_TOLERANCE  # magnetization value tolerance, +/- fraction
         with temporary_seed(self.seed):  # if None, then no special seeding happens
             dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
             MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol
@@ -477,7 +479,7 @@ class HalbachLens(Collection):
     def make_Base_Error_Arr_Circular(self) -> ndarray:
         """Make error array confined inside unit circle. Return results in cartesian with shape (12,2)"""
         theta = 2 * np.pi * np.random.random_sample(self.num_magnets_in_layer)
-        radius = np.random.random_sample(self.num_magnets_in_layer)
+        radius = np.sqrt(np.random.random_sample(self.num_magnets_in_layer))  # sqrt because polar
         x, y = np.cos(theta) * radius, np.sin(theta) * radius
         return np.column_stack((x, y))
 

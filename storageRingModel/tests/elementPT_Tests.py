@@ -351,67 +351,6 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
     def run_Tests(self):
         tester = ElementTestRunner(self)
         tester.run_Tests()
-        self.test_Perturbation_Field()
-
-    def test_Perturbation_Field(self):
-        """Test that perturbation field from bender agrees with directly calculating the perturbation field values.
-        This also implictely tests the accuracy of the unit cell model becuase the force is calculated assuming the
-        bender"""
-
-        num_magnets = 15
-        PTL_Perf = PTL_Dummy(field_dens_mult=.75)
-        elPerfect = BenderSim(PTL_Perf, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
-        PTL_Dev = PTL_Dummy(field_dens_mult=.75, use_mag_errors=True)
-        elDeviation = BenderSim(PTL_Dev, self.Lm, self.rp, num_magnets, self.rb, None, 1.0)
-        for el in [elDeviation, elPerfect]:
-            # BE CAUTIOUS HOW RANDOMNESS IS USED HERE. each MagneticOptic instance initializes a new random.seed
-            # so seeding must be done after that
-            el.fill_pre_constrained_parameters()
-            el.theta = 0.0
-            el.fill_post_constrained_parameters()
-            np.random.seed(42)
-            el.build_fast_field_helper()
-        Ls = 2 * elPerfect.L_cap + elPerfect.ang * elPerfect.rb
-        coords_center, coords_cartesian = elPerfect.make_perturbation_data_coords()
-        magnet_width = halbach_magnet_width(self.rp)
-        np.random.seed(42)
-        lensIdeal = HalbachBender_FieldGenerator(elPerfect.rp, elPerfect.rb, elPerfect.ucAng, elPerfect.Lm, 'N52',
-                                                 num_magnets + 1, (True, True), use_method_of_moments=False,
-                                                 use_pos_mag_angs_only=True, use_mag_errors=False,
-                                                 magnet_width=magnet_width)
-        lensIdeal.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
-        np.random.seed(42)
-        lensDeviated = HalbachBender_FieldGenerator(elDeviation.rp, elDeviation.rb, elDeviation.ucAng, elDeviation.Lm,
-                                                    'N52', num_magnets + 1, (True, True),
-                                                    use_method_of_moments=False, magnet_width=magnet_width,
-                                                    use_pos_mag_angs_only=True, use_mag_errors=True)
-        lensDeviated.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
-        testStrategy = st.integers(min_value=0, max_value=len(coords_cartesian) - 1)
-
-        @given(testStrategy)
-        @settings(max_examples=100, deadline=None)
-        def check_Field_Perturbation(index):
-            x, y, z = coords_cartesian[index]
-            s, xc, yc = coords_center[index]
-            if np.sqrt(xc ** 2 + yc ** 2) > elPerfect.ap * .9 or not 0.0 < s < Ls:
-                return
-            q_el = np.asarray([x, y, z])
-            [B_grad_x, B_grad_y, B_grad_z], B0 = lensIdeal.B_norm_grad(q_el, return_norm=True, use_approx=True)
-            valsIdeal = np.array([B_grad_x, B_grad_y, B_grad_z, B0])
-            [B_grad_x, B_grad_y, B_grad_z], B0 = lensDeviated.B_norm_grad(q_el, return_norm=True, use_approx=True)
-            valsDeviated = np.array([B_grad_x, B_grad_y, B_grad_z, B0])
-            vals = valsDeviated - valsIdeal
-            Fx, Fy, Fz = -vals[:3] * SIMULATION_MAGNETON
-            deltaV_Direct = vals[-1] * SIMULATION_MAGNETON
-            deltaF_Direct = np.asarray([Fx, Fy, Fz])
-            x, y, z = coords_cartesian[index]
-            q_el = np.asarray([x, y, z])
-            deltaF_el = elDeviation.force(q_el) - elPerfect.force(q_el)
-            assert is_close_all(deltaF_el, deltaF_Direct, abstol=1e-6)
-            deltaV_El = elDeviation.magnetic_potential(q_el) - elPerfect.magnetic_potential(q_el)
-            assert isclose(deltaV_El, deltaV_Direct, abs_tol=1e-6)
-
-        check_Field_Perturbation()
 
 
 class CombinerIdealTestHelper(ElementTestHelper):

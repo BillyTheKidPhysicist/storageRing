@@ -34,7 +34,7 @@ class LockedDict(dict):
         self._isKeyUsed[key] = True
         return super().__getitem__(key)
 
-    def super_Special_Change_Item(self, key, item):
+    def super_special_change_item(self, key, item):
 
         assert key in super().keys()
         assert type(item) in real_numer and item >= 0.0
@@ -66,3 +66,5 @@ def assert_combiners_are_valid(lattice_injector: ParticleTracerLattice, lattice_
     combiner_ring, combiner_inj = lattice_ring.combiner, lattice_injector.combiner
     assert combiner_inj.output_offset == combiner_ring.output_offset
     assert lattice_injector.combiner.ang < 0 < lattice_ring.combiner.ang
+    magnet_ring_seed, magnet_inj_seed = combiner_ring.magnet.seed, combiner_inj.magnet.seed
+    assert magnet_ring_seed == magnet_inj_seed and magnet_inj_seed is not None

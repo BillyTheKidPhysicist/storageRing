@@ -13,9 +13,9 @@ from helper_tools import *
 from lattice_elements.base_element import BaseElement
 from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift, BenderSim
 
-INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift)  # ,BenderSim)  # elements that can include magnetic fields
+INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift ,BenderSim)  # elements that can include magnetic fields
 # produced by neighboring magnets into their own interpolation
-FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim)#, BenderSim)  # elements that can be used to
+FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim , BenderSim)  # elements that can be used to
 # generate  magnetic fields
 # that act on another elements
 
@@ -148,10 +148,11 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
 
 def move_bender_to_target_el_frame(el_to_move, el_target, magnet_options):
     assert type(el_to_move) is BenderSim
+    magnet_errors, _=magnet_options
     if type(el_target) not in (Drift, HalbachLensSim):
         raise NotImplementedError
 
-    magnets = el_to_move.magnet.magpylib_magnets_model()
+    magnets = el_to_move.magnet.magpylib_magnets_model(magnet_errors)
     ang_perp = el_to_move.ang + np.pi / 2
     norm_out = np.array([cos(ang_perp), sin(ang_perp), 0.0])
     x = cos(el_to_move.ang) * el_to_move.ro + norm_out[0] * el_to_move.L_cap
@@ -176,8 +177,6 @@ def field_generator_in_different_frame1(el_to_move: Element, el_target: Element,
     elif type(el_to_move) is HalbachLensSim:
         return move_lens_to_target_el_frame(el_to_move, el_target, magnet_options)
     elif type(el_to_move) is BenderSim:
-        if magnet_options[0]:
-            raise NotImplementedError("magnet errors are not implemented here yet")
         return move_bender_to_target_el_frame(el_to_move, el_target, magnet_options)
     else:
         raise NotImplementedError

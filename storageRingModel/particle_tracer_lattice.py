@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
+from helper_tools import parallel_evaluate
 from lattice_elements.arrange_magnets import collect_valid_neighboring_magpylib_magnets
 from lattice_elements.elements import BenderIdeal, BenderSim, LensIdeal, CombinerIdeal, \
     CombinerSim, CombinerLensSim, HalbachLensSim, Drift, ELEMENT_PLOT_COLORS
@@ -33,9 +34,6 @@ class ParticleTracerLattice:
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
-        if use_mag_errors:
-            warnings.warn("need to recheck the magnet error stuff, especially with combiner!. "
-                          "Perhaps a better seeding system also. Include a combiner assert that checks this")
         self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring,
         # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
         # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along
@@ -243,7 +241,7 @@ class ParticleTracerLattice:
         self.combiner_index = el.index
         self.el_list.append(el)  # add element to the list holding lattice elements in order
 
-    def build_lattice(self, constrain: bool, build_field_helpers: bool):
+    def build_lattice(self, constrain: bool, build_field_helpers: bool, parallel: bool):
         """Build the specified lattice. This includes:
         - Fill pre constrained parameters derive from simple inputs of length, field strength etc of each element.
         - Solve the floor plan layout. If constrained, solve for bumber of magnets and lengths of bending segment and
@@ -258,7 +256,7 @@ class ParticleTracerLattice:
         self.fill_post_constrained_parameters()
 
         if build_field_helpers:
-            self.build_fast_field_helpers()
+            self.build_fast_field_helpers(parallel)
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could
         # still be closed
@@ -269,10 +267,19 @@ class ParticleTracerLattice:
         for el in self.el_list:  # total length of particle's orbit in an element
             self.total_length += el.Lo
 
-    def build_fast_field_helpers(self) -> None:
-        for el in self.el_list:
-            magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
-            el.build_fast_field_helper(extra_magnets=magnets)
+    def _build_fast_field_helper(self, el: Element) -> Element:
+        magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
+        el.build_fast_field_helper(extra_magnets=magnets)
+        return el
+
+    def build_fast_field_helpers(self, parallel: bool) -> None:
+        if self.use_mag_errors and parallel:
+            warnings.warn(
+                "Using parallel==True with magnet errors will not produce the same results as with parallel==False")
+        built_els = parallel_evaluate(self._build_fast_field_helper, self.el_list,
+                                      parallel=parallel, re_randomize=False)
+        for i, el in enumerate(built_els):
+            self.el_list[i] = el
         self.are_fast_field_helpers_built = True
 
     def fill_pre_constrained_parameters(self) -> None:
@@ -288,13 +295,13 @@ class ParticleTracerLattice:
         update_and_place_elements_from_floor_plan(self, floor_plan)
 
     def end_lattice(self, constrain: bool = False, build_lattice: bool = True,
-                    build_field_helpers: bool = True) -> None:
+                    build_field_helpers: bool = True, parallel: bool = False) -> None:
         # for element in self.el_list:
         #     element.build()
         assert len(self) > 0
         self.catch_errors(constrain)
         if build_lattice:
-            self.build_lattice(constrain, build_field_helpers)
+            self.build_lattice(constrain, build_field_helpers, parallel)
 
     def catch_errors(self, constrain: bool) -> None:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other

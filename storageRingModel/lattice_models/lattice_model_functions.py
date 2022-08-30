@@ -1,11 +1,18 @@
 from typing import Optional
 
-from particle_tracer_lattice import ParticleTracerLattice
 from constants import DEFAULT_ATOM_SPEED
+from helper_tools import random_num_for_seeding
 from lattice_elements.elements import CombinerLensSim, HalbachLensSim, BenderSim
 from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SYSTEM_OPTIONS, atom_characteristics
 from lattice_models.utilities import LockedDict
 from particle_tracer import ParticleTracer
+from particle_tracer_lattice import ParticleTracerLattice
+
+
+def set_cominer_seed_if_unset(options: LockedDict):
+    """If combiner seed is None, set to an integer value. This ensures both combiners have the same random behaviour"""
+    if options['combiner_seed'] is None:
+        options.super_special_change_item('combiner_seed', random_num_for_seeding())
 
 
 def check_and_add_default_values(options: Optional[dict]) -> LockedDict:
@@ -20,6 +27,7 @@ def check_and_add_default_values(options: Optional[dict]) -> LockedDict:
         options = LockedDict(options)
     else:
         options = DEFAULT_SYSTEM_OPTIONS
+    set_cominer_seed_if_unset(options)
     return options
 
 
@@ -58,7 +66,6 @@ def initialize_ring_lattice(ring_params: dict, options: dict,
                             num_ring_params: int) -> tuple[ParticleTracerLattice, LockedDict, LockedDict]:
     assert len(ring_params) == num_ring_params
     ring_params = LockedDict(ring_params)
-    options = check_and_add_default_values(options)
 
     lattice = ParticleTracerLattice(speed_nominal=atom_characteristics["nominalDesignSpeed"],
                                     lattice_type='storage_ring',

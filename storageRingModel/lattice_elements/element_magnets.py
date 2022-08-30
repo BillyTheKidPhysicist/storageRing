@@ -1,3 +1,5 @@
+import functools
+import random
 from math import cos, sin, sqrt, tan
 from typing import Optional
 
@@ -5,14 +7,29 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import ASSEMBLY_TOLERANCE
-from field_generators import ElementMagnetCollection, Collection
-from field_generators import HalbachLens, HalbachBender
+from field_generators import ElementMagnetCollection, Collection, HalbachLens
+from field_generators import HalbachBender as _HalbachBender
+from helper_tools import random_num_for_seeding
 from helper_tools import temporary_seed, is_even
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from type_hints import ndarray
 
+
+@functools.lru_cache
+def _HalbachBender_Cached(state, *args, **kwargs):
+    """State is required so that magnet errors can be accounted for"""
+    return _HalbachBender(*args, **kwargs)
+
+
+def HalbachBender_Cached(state, *args, **kwargs) -> _HalbachBender:
+    """Because method of moments can take a while with HalbachBender, and multiple identical HalbachBenders can be
+    initialized with the same magnet object, cache the results. But I need to return copies of the object
+    since the object will need to be manipulated independently of each other"""
+    bender = _HalbachBender_Cached(state, *args, **kwargs).copy()
+    return bender
+
+
 Dim1_Arr = ndarray
-BIG_INT = int(1e9)
 
 
 # IMPROVEMENT: the naming of valid is silly
@@ -75,7 +92,7 @@ def alignment_shifts() -> tuple[float, float, float, float, float]:
 
 class MagneticOptic:
     def __init__(self, seed: Optional[int]):
-        self.seed = np.random.randint(BIG_INT) if seed is None else seed
+        self.seed = random_num_for_seeding() if seed is None else seed
         self.neighbors: list[MagneticOptic] = []
 
 
@@ -187,20 +204,22 @@ class MagnetBender(MagneticOptic):
                               use_method_of_moments: bool, num_lenses: int,
                               use_mag_errors: bool):
         """Return magpylib magnet model representing a portion or all of the bender"""
-        bender_field_generator = HalbachBender(self.rp, self.rb, self.uc_angle, self.Lm,
-                                               self.magnet_grade,
-                                               num_lenses, use_half_cap_end,
-                                               use_method_of_moments=use_method_of_moments,
-                                               use_pos_mag_angs_only=use_pos_mag_angs_only,
-                                               use_solenoid_field=self.use_solenoid,
-                                               use_mag_errors=use_mag_errors,
-                                               magnet_width=self.magnet_width)
+        with temporary_seed(self.seed):
+            state = np.random.random() * random.random()  # poor man's state
+            bender_field_generator = HalbachBender_Cached(state, self.rp, self.rb, self.uc_angle, self.Lm,
+                                                          self.magnet_grade,
+                                                          num_lenses, use_half_cap_end,
+                                                          use_method_of_moments=use_method_of_moments,
+                                                          use_pos_mag_angs_only=use_pos_mag_angs_only,
+                                                          use_solenoid_field=self.use_solenoid,
+                                                          use_mag_errors=use_mag_errors,
+                                                          magnet_width=self.magnet_width)
         bender_field_generator.rotate(Rot.from_rotvec([-np.pi / 2, 0, 0]))
         return bender_field_generator
 
-    def magpylib_magnets_model(self, use_mag_errors: bool = False, use_method_of_moments: bool = False) -> Collection:
+    def magpylib_magnets_model(self, use_mag_errors) -> Collection:
         """Return full magpylib magnet model of bender"""
-        return self.make_magpylib_magnets(True, (True, True), use_method_of_moments, self.num_lenses, use_mag_errors)
+        return self.make_magpylib_magnets(True, (True, True), True, self.num_lenses, use_mag_errors)
 
     def magpylib_magnets_internal_model(self) -> Collection:
         """Return full magpylib magnet model representing repeating interior region of bender"""
@@ -267,19 +286,14 @@ class MagnetBender(MagneticOptic):
         B_norm_grad_arr, B_norm_arr = valid_field_values_col(magnets, coords, valid_indices, False)
         return B_norm_grad_arr, B_norm_arr
 
-    def valid_field_values_perturbation(self, coords_center, coords_cartesian,
-                                        extra_elements: Optional[list[Collection]],
-                                        use_mag_errors) -> tuple[ndarray, ndarray]:
-        magnets_perfect = self.magpylib_magnets_model(use_mag_errors=False)
-        magnets_perturbed = self.magpylib_magnets_model(use_mag_errors=use_mag_errors)
-        r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
-        valid_indices = r_center_arr < self.rp
-        vals_perfect = np.column_stack(valid_field_values_col(magnets_perfect, coords_cartesian, valid_indices, True))
-        vals_perturbed = np.column_stack(valid_field_values_col(magnets_perturbed, coords_cartesian, valid_indices,
-                                                                True, extra_elements=extra_elements))
+    def valid_field_values_full(self, coords_center, coords_cartesian,
+                                extra_elements: Optional[list[Collection]],
+                                use_mag_errors) -> tuple[ndarray, ndarray]:
 
-        vals_perturbation = vals_perturbed - vals_perfect
-        vals_perturbation[np.isnan(vals_perturbation)] = 0.0
-        B_norm_grad_arr = vals_perturbation[:, 0]
-        B_norm_arr = vals_perturbation[:, 1:]
+        magnets = self.magpylib_magnets_model(use_mag_errors=use_mag_errors)
+
+        r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
+        valid_indices = r_center_arr < self.rp  # IMPROVEMENT: implement the more accurate valid checker thing
+        B_norm_grad_arr, B_norm_arr = valid_field_values_col(magnets, coords_cartesian, valid_indices, True,
+                                                             extra_elements=extra_elements)
         return B_norm_grad_arr, B_norm_arr

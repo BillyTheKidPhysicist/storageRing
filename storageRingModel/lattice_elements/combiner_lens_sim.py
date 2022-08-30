@@ -80,9 +80,8 @@ class CombinerLensSim(CombinerIdeal):
         self.ap = self.max_valid_aperture() if self.ap is None else self.ap
         assert self.is_apeture_valid(self.ap)
 
-        seed = DEFAULT_SEED if self.seed is None else self.seed
         self.magnet = MagneticLens(self.Lm, rp_layers, magnet_widths, self.PTL.magnet_grade,
-                                   self.PTL.use_solenoid_field, self.space, seed=seed)
+                                   self.PTL.use_solenoid_field, self.space, seed=self.seed)
 
         self.Lb = self.space + self.Lm  # the combiner vacuum tube will go from a short distance from the ouput right up
         # to the hard edge of the input in a straight line. This is that section

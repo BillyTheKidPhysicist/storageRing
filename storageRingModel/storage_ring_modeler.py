@@ -189,7 +189,7 @@ class StorageRingModel:
         return shapes_inner, shapes_outer, shapes_trajectories
 
     def show_floor_plan(self, defer_show=False, true_aspect_ratio=True, save_fig=None, dpi=300,
-                        fig_size=None) -> None:  # todo: change this dumb name
+                        fig_size=None) -> None:
 
         shapes_system = (make_shapes(self.lattice_ring), self.injector_shapes_in_lab_frame())
         if fig_size is not None:
@@ -275,10 +275,10 @@ class StorageRingModel:
         assert 0.0 <= cost <= self.max_cost
         return cost, flux_mult
 
-    def build_field_helpers_if_unbuilt(self) -> None:
+    def build_field_helpers_if_unbuilt(self, parallel: bool = False) -> None:
         for lattice in [self.lattice_ring, self.lattice_injector]:
             if not lattice.are_fast_field_helpers_built:
-                lattice.build_fast_field_helpers()
+                lattice.build_fast_field_helpers(parallel)
 
     def inject_swarm(self, parallel: bool = False) -> Swarm:
         self.build_field_helpers_if_unbuilt()
@@ -366,10 +366,12 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
                              use_collisions: bool = False, include_mag_cross_talk: bool = False,
                              use_energy_correction: bool = False, use_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False,
-                             include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
+                             include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME,
+                             build_field_helpers: bool = True):
     """Convenience function for building a StorageRingModel"""
     options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
-               'include_mag_cross_talk_in_ring': include_mag_cross_talk, 'include_misalignments': include_misalignments}
+               'include_mag_cross_talk_in_ring': include_mag_cross_talk,
+               'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
                              num_particles=num_particles, use_collisions=use_collisions,
@@ -382,7 +384,8 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 use_energy_correction: bool = False,
                                 include_mag_cross_talk: bool = False,
                                 include_misalignments: bool = False,
-                                sim_time_max=DEFAULT_SIMULATION_TIME) -> StorageRingModel:
+                                sim_time_max=DEFAULT_SIMULATION_TIME,
+                                build_field_helpers: bool = True) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params(ring_version)
@@ -391,5 +394,5 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                      use_energy_correction=use_energy_correction,
                                      include_mag_cross_talk=include_mag_cross_talk,
                                      include_misalignments=include_misalignments,
-                                     sim_time_max=sim_time_max)
+                                     sim_time_max=sim_time_max, build_field_helpers=build_field_helpers)
     return model
