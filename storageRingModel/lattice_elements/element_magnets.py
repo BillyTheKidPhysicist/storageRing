@@ -5,7 +5,6 @@ from typing import Optional
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
-from scipy.spatial.transform import Rotation
 
 from constants import ASSEMBLY_TOLERANCE
 from field_generators import ElementMagnetCollection, Collection, HalbachLens
@@ -203,7 +202,7 @@ class MagnetBender(MagneticOptic):
 
     def make_magpylib_magnets(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
                               use_method_of_moments: bool, num_lenses: int,
-                              use_mag_errors: bool):
+                              use_mag_errors: bool, use_approx_method_of_moments):
         """Return magpylib magnet model representing a portion or all of the bender"""
         with temporary_seed(self.seed):
             state = np.random.random() * random.random()  # poor man's state
@@ -214,22 +213,25 @@ class MagnetBender(MagneticOptic):
                                                           use_pos_mag_angs_only=use_pos_mag_angs_only,
                                                           use_solenoid_field=self.use_solenoid,
                                                           use_mag_errors=use_mag_errors,
-                                                          magnet_width=self.magnet_width)
+                                                          magnet_width=self.magnet_width,
+                                                          use_approx_method_of_moments=use_approx_method_of_moments)
         return bender_field_generator
 
-    def magpylib_magnets_model(self, use_mag_errors) -> Collection:
+    def magpylib_magnets_model(self, use_mag_errors, use_approx_method_of_moments=False) -> Collection:
         """Return full magpylib magnet model of bender"""
-        return self.make_magpylib_magnets(True, (True, True), True, self.num_lenses, use_mag_errors)
+        use_method_of_moments = not use_approx_method_of_moments
+        return self.make_magpylib_magnets(True, (True, True), use_method_of_moments, self.num_lenses, use_mag_errors,
+                                          use_approx_method_of_moments)
 
     def magpylib_magnets_internal_model(self) -> Collection:
         """Return full magpylib magnet model representing repeating interior region of bender"""
         num_lenses = self.num_model_lenses
         assert not is_even(num_lenses)
-        return self.make_magpylib_magnets(False, (False, False), True, num_lenses, False)
+        return self.make_magpylib_magnets(False, (False, False), True, num_lenses, False, False)
 
     def magpylib_magnets_fringe_cap_model(self) -> Collection:
         """Return full magpylib magnet model representing input section of bender"""
-        return self.make_magpylib_magnets(True, (True, False), True, self.num_model_lenses, False)
+        return self.make_magpylib_magnets(True, (True, False), True, self.num_model_lenses, False, False)
 
     def is_valid_in_lens_of_bender(self, x: bool, y: bool, z: bool) -> bool:
         """Check that the coordinates x,y,z are valid for a lens in the bender. The lens is centered on (self.rb,0,0)

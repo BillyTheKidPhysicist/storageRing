@@ -524,10 +524,12 @@ class HalbachBender(Collection):
     def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnet_grade: str, num_lenses,
                  use_half_cap_end: tuple[bool, bool],
                  use_pos_mag_angs_only: bool = False, use_method_of_moments=False, use_mag_errors: bool = False,
-                 use_solenoid_field: bool = False, magnet_width: float = None):
+                 use_solenoid_field: bool = False, magnet_width: float = None,
+                 use_approx_method_of_moments: bool = False):
         # todo: by default I think it should be positive angles only
         super().__init__()
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(num_lenses, int)
+        assert not (use_approx_method_of_moments and use_method_of_moments)
         self.use_half_cap_end = (False, False) if use_half_cap_end is None else use_half_cap_end
         self.rp: float = rp  # radius of bore of magnet, ie to the pole
         self.rb: float = rb  # bending radius
@@ -547,6 +549,7 @@ class HalbachBender(Collection):
         self.lens_list: list[HalbachLens] = []  # list to hold lenses
         self.lens_angles_arr: ndarray = self.make_lens_angle_array()
         self.use_method_of_moments = use_method_of_moments
+        self.use_approx_method_of_moments = use_approx_method_of_moments
         self.useStandardMagnetErrors = use_mag_errors
         self._build()
 
@@ -583,10 +586,10 @@ class HalbachBender(Collection):
             lens = HalbachLens(self.rp, self.magnet_width, Lm, magnet_grade=self.magnet_grade,
                                position=(self.rb, 0.0, 0.0),
                                use_standard_mag_errors=self.useStandardMagnetErrors,
-                               use_method_of_moments=False)
+                               use_method_of_moments=self.use_approx_method_of_moments)
             # rotate so that magnetization vector is along z when finally rotated about x
             lens.rotate(Rotation.from_rotvec([0.0, 0.0, np.pi / 2]))  # step 1
-            #now rotate about y to form the ring
+            # now rotate about y to form the ring
             lens.rotate(Rotation.from_rotvec([0.0, -angle, 0.0]), anchor=0)  # step 2
 
             # my angle convention is unfortunately opposite what it should be here. positive theta
@@ -599,6 +602,7 @@ class HalbachBender(Collection):
         if self.use_solenoid_field:
             self.add_solenoid_coils()
         self.rotate(Rotation.from_rotvec([-np.pi / 2, 0, 0]))  # step3: finally rotate about x
+
     def B_vec(self, eval_coords: ndarray, use_approx=False) -> ndarray:
         """
         overrides Collection

@@ -93,7 +93,6 @@ class BenderSim(BenderIdeal):
                                             (False, False), use_pos_mag_angs_only=False,
                                             magnet_width=self.magnet_width,
                                             use_method_of_moments=True, use_solenoid_field=self.PTL.use_solenoid_field)
-        lens.rotate(Rot.from_rotvec([np.pi / 2, 0, 0]))
         theta_arr = np.linspace(0.0, 2 * uc_ang_approx, 100)
         z_arr = np.zeros(len(theta_arr))
 

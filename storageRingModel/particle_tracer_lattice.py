@@ -1,5 +1,6 @@
 # from geneticLensElement_Wrapper import GeneticLens
 import warnings
+from math import isclose
 from typing import Iterable, Union, Optional
 
 import matplotlib.pyplot as plt
@@ -293,6 +294,11 @@ class ParticleTracerLattice:
     def place_elements(self, constrain):
         floor_plan = solve_Floor_Plan(self, constrain)
         update_and_place_elements_from_floor_plan(self, floor_plan)
+
+    def is_lattice_straight(self):
+        """Return True if the lattice is straight, False if there is some bend to it"""
+        total_angle = sum([el.ang for el in self])
+        return isclose(total_angle, 0.0)
 
     def end_lattice(self, constrain: bool = False, build_lattice: bool = True,
                     build_field_helpers: bool = True, parallel: bool = False) -> None:

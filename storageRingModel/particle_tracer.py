@@ -379,3 +379,48 @@ class ParticleTracer:
                     if el.is_coord_inside(el.transform_lab_coords_into_element_frame(q_lab)):
                         return el
             return None
+
+
+def step_particle_past_end(particle: Particle, lattice) -> None:
+    """Walk a particle up to just past the end of the lattice"""
+    dx = lattice[-1].r2[0] - particle.qf[0]
+    overshoot_frac = 1e-6
+    dt = dx * (1 + overshoot_frac) / particle.pf[0]
+    particle.qf = particle.qf + particle.pf * dt
+    particle.T += dt
+
+
+def apply_periodicity_to_particle(particle, PTL):
+    """Assuming a periodic lattice return a particle to the beginning and correctly adjust the particle time and
+    x position. Particle should be very close to end because it will be walked up to just past the end as the first
+    step"""
+    assert not particle.data_logging and not particle.clipped
+    assert np.all(PTL[-1].ne == np.array([-1.0, 0, 0]))
+    total_lattice_angle = sum(abs(el.ang) for el in PTL)
+    assert total_lattice_angle == 0
+    step_particle_past_end(particle, PTL)
+    particle.qi = particle.qf.copy()
+    particle.qi[0] -= PTL[-1].r2[0]
+    particle.pi = particle.pf.copy()
+    particle.qf = particle.pf = None
+    particle.traced = False
+
+
+def trace_particle_periodic_linear_lattice(particle, pt, h, T):
+    """Trace a particle through a linear lattice assuming it is periodic"""
+    lattice = pt.PTL
+    assert lattice.is_lattice_straight()
+    qi, pi = particle.qi.copy(), particle.pi.copy()
+    particle = pt.trace(particle, h, T, fast_mode=True)
+    iter, max_iters = 0, 10_000
+    x = particle.qf[0]
+
+    while not particle.clipped and particle.T < T:
+        apply_periodicity_to_particle(particle, lattice)
+        particle = pt.trace(particle, h, T, fast_mode=True)
+        x += particle.qf[0]
+        iter += 1
+        assert iter < max_iters
+    particle.qf[0] = x
+    particle.qi, particle.pi = qi, pi
+    return particle

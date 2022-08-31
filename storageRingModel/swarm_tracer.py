@@ -3,12 +3,12 @@ from typing import Union
 
 import numpy as np
 
-from particle_class import Swarm,Particle
-from particle_tracer import ParticleTracer
-from particle_tracer_lattice import ParticleTracerLattice
-from helper_tools import low_discrepancy_sample,parallel_evaluate, temporary_seed,arr_product
-from type_hints import RealNum
 from constants import DEFAULT_ATOM_SPEED
+from helper_tools import low_discrepancy_sample, parallel_evaluate, temporary_seed, arr_product
+from particle_class import Swarm, Particle
+from particle_tracer import ParticleTracer, trace_particle_periodic_linear_lattice
+from particle_tracer_lattice import ParticleTracerLattice
+from type_hints import RealNum
 
 
 def lorentz_function(x, gamma):
@@ -22,11 +22,11 @@ real_number = (int, float)
 # todo: I this shouldn't be neccesary, I can find a better solution
 TINY_NEG_OFFSET_FROM_ELEMENT_EDGE = -1e-10  # to prevent the particle from starting righ on edge of element, which causes
 
-
 # unnecesary evaluation time
 
-initial_dict_var_and_index_for_dim={'x': ('qi',0),'y':('qi',1),'z':('qi',2),
-                                    'px':('pi',0),'py':('pi',1),'pz': ('pi',2)}
+initial_dict_var_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
+                                      'px': ('pi', 0), 'py': ('pi', 1), 'pz': ('pi', 2)}
+
 
 class SwarmTracer:
 
@@ -252,24 +252,22 @@ class SwarmTracer:
             swarm.add_new_particle(qi=qi, pi=pi)
         return swarm
 
-    def initialize_grid_2_dim_swarm(self,dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
-                                    dim1_name: str,dim2_name: str,px=DEFAULT_ATOM_SPEED) -> Swarm:
+    def initialize_grid_2_dim_swarm(self, dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
+                                    dim1_name: str, dim2_name: str, px=DEFAULT_ATOM_SPEED) -> Swarm:
         """Initialize a swarm in 2 dimensions along specified dimensions"""
-        var1,idx1=initial_dict_var_and_index_for_dim[dim1_name]
-        var2,idx2=initial_dict_var_and_index_for_dim[dim2_name]
-        vals_dim1=np.linspace(-dim1_max,dim1_max,num_points_per_dim)
-        vals_dim2=np.linspace(-dim2_max,dim2_max,num_points_per_dim)
-        coords_vals=arr_product(vals_dim1,vals_dim2)
-        swarm=Swarm()
+        var1, idx1 = initial_dict_var_and_index_for_dim[dim1_name]
+        var2, idx2 = initial_dict_var_and_index_for_dim[dim2_name]
+        vals_dim1 = np.linspace(-dim1_max, dim1_max, num_points_per_dim)
+        vals_dim2 = np.linspace(-dim2_max, dim2_max, num_points_per_dim)
+        coords_vals = arr_product(vals_dim1, vals_dim2)
+        swarm = Swarm()
         for coords in coords_vals:
-            val1,val2=coords
-            particle=Particle(qi=np.array([-1e-10,0,0]),pi=np.array([-px,0,0]))
-            particle.__dict__[var1][idx1]=val1
-            particle.__dict__[var2][idx2]=val2
+            val1, val2 = coords
+            particle = Particle(qi=np.array([-1e-10, 0, 0]), pi=np.array([-px, 0, 0]))
+            particle.__dict__[var1][idx1] = val1
+            particle.__dict__[var2][idx2] = val2
             swarm.add(particle)
         return swarm
-
-
 
     def combiner_output_offset_shift(self) -> np.ndarray:
         # combiner may have an output offset (ie hexapole combiner). This return the 3d vector (x,y,0) that connects the
@@ -319,3 +317,13 @@ class SwarmTracer:
         swarm_traced = swarm.copy() if copy_swarm else swarm
         swarm_traced.particles = parallel_evaluate(trace_particle, swarm_traced.particles, parallel=parallel)
         return swarm_traced
+
+
+def trace_swarm_periodic_linear_lattice(swarm_initial: Swarm, st: SwarmTracer, h: float,
+                                        T: float, parallel: bool = False) -> Swarm:
+    """Trace a swarm through a linear lattice assuming that the lattice is periodic"""
+    pt = st.particle_tracer
+    swarm_traced = Swarm()
+    wrap = lambda particle: trace_particle_periodic_linear_lattice(particle, pt, h, T)
+    swarm_traced.particles = parallel_evaluate(wrap, swarm_initial.particles, parallel=parallel)
+    return swarm_traced

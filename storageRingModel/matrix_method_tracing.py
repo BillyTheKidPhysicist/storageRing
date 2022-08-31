@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Sequence
 from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
 from typing import Iterable, Union, Optional, Callable
@@ -516,7 +517,7 @@ def stitch_bender_values(values_start: sequence, values_uc: sequence, num_intern
 def K_mag_vals_and_lengths_from_bender_el(el: BenderSim) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """Magnetic spring constants and lengths at each spring constant value along the orbit trajectory through the
     bender"""
-    magnets = el.magnet.magpylib_magnets_model()
+    magnets = el.magnet.magpylib_magnets_model(False, use_approx_method_of_moments=True)
     s_slices_fringe, s_slices_uc, s_slices_total, lengths_total = s_slices_and_lengths_bender(el)
     num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
     K_vals_mag_uc = np.array([bender_K_mag_for_slice(s, magnets, el) for s in s_slices_uc])
@@ -566,6 +567,8 @@ class Element:
 
     def __init__(self, L: RealNum, ap: Union[RealNum, sequence] = np.inf):
         assert L > 0.0
+        ap = (ap, ap) if isinstance(ap, (int, float)) else tuple(ap)
+        assert len(ap) == 2
         self.L = L
         self.ap = ap
 
@@ -651,8 +654,8 @@ class Bender(Element):
         self.Bp = Bp
         L = self.ro * bending_angle  # length of particle orbit
         ap_x = self.rp - centrifugal_offset
-        ap_y = self.rp  # IMPROVEMENT: implement two different values
-        super().__init__(L, ap=ap_x)
+        ap_y = sqrt(self.rp ** 2 - centrifugal_offset ** 2)  # IMPROVEMENT: implement two different values
+        super().__init__(L, ap=(ap_x, ap_y))
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
         assert 0 <= s <= self.L
@@ -766,9 +769,14 @@ def beta_profile(elements: Sequence[Element], atom_speed: RealNum,
     """Return (x,y) beta functions value along lattice. Also return the locations of the beta functions"""
     L = total_length(elements)
     s_vals = np.linspace(0, L, num_points)
-    betas = np.array([betas_at_s(s, elements, atom_speed) for s in s_vals])
-    betas_x, betas_y = np.abs(betas.T)
-    return s_vals, (betas_x, betas_y)
+    is_stable_x, is_stable_y = is_stable_lattice(elements, atom_speed)
+    if not is_stable_x and not is_stable_y:
+        nan_arr = np.nan * np.ones(len(s_vals))
+        return s_vals, (nan_arr, nan_arr)
+    else:
+        betas = np.array([betas_at_s(s, elements, atom_speed) for s in s_vals])
+        betas_x, betas_y = np.abs(betas.T)
+        return s_vals, (betas_x, betas_y)
 
 
 def tunes_absolute(elements: Sequence[Element], atom_speed: RealNum = DEFAULT_ATOM_SPEED,
@@ -785,7 +793,7 @@ def tunes_incremental(elements: Iterable[Element],
                       atom_speed: RealNum = DEFAULT_ATOM_SPEED) -> tuple[float, float]:
     """Return tune value tune value, ie the total tune minus nearest half integer int. This is between 0 and .5 .
     This method cannot distinguish between a tune of 1.25 and 1.75, both would result in .25"""
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
     tunes = []
     for M in [Mx, My]:
         if not is_stable_matrix(M):
@@ -799,8 +807,7 @@ def tunes_incremental(elements: Iterable[Element],
     return tune_x, tune_y
 
 
-def total_lattice_transfer_matrix(elements: Iterable[Element], atom_speed=DEFAULT_ATOM_SPEED) -> tuple[
-    ndarray, ndarray]:
+def total_lattice_transfer_matrix(elements: Iterable[Element], atom_speed) -> tuple[ndarray, ndarray]:
     """Transfer matrix for a sequence of elements start to end"""
     matrices_x_and_y = [el.M(atom_speed=atom_speed) for el in elements]
     matrices_x = [entry[0] for entry in matrices_x_and_y]
@@ -821,7 +828,7 @@ def stability_factors_lattice(elements: Iterable[Element],
     """Factor describing stability of periodic lattice of elements. If value is greater than 0 it is stable, though
     higher values are "more" stable in some sense"""
 
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
     stability_factor_x = stability_factor(*matrix_components(Mx))
     stability_factor_y = stability_factor(*matrix_components(My))
     return stability_factor_x, stability_factor_y
@@ -845,7 +852,7 @@ def total_length(elements: Iterable[Element]) -> float:
     return length
 
 
-def lattice_aperture(s, elements: Sequence[Element]):
+def lattice_apertures(s, elements: Sequence[Element]):
     """Return aperture of lattice of position s. Assumed to be same for both dimensions"""
     s = s % total_length(elements)
     length_cumulative = np.cumsum([el.L for el in elements])
@@ -858,17 +865,17 @@ def acceptance_profile(elements: Sequence[Element], atom_speed=DEFAULT_ATOM_SPEE
     """Return (x,y) profile for acceptance through the lattice, and the corresponding position values. Assumes periodic
     lattice. This is the maximum emittance that would survive at each point in the lattice."""
     s_vals, (beta_x, beta_y) = beta_profile(elements, atom_speed, num_points)
-    aps = np.array([lattice_aperture(s, elements) for s in s_vals])
-    acceptances_x = aps ** 2 / beta_x
-    acceptances_y = aps ** 2 / beta_y
+    aps_x, aps_y = np.array([lattice_apertures(s, elements) for s in s_vals]).T
+    acceptances_x = aps_x ** 2 / beta_x
+    acceptances_y = aps_y ** 2 / beta_y
     return s_vals, (acceptances_x, acceptances_y)
 
 
+@functools.lru_cache
 @make_atom_speed_kwarg_iterable
-def minimum_acceptance(elements: Sequence[Element], atom_speed: RealNum = DEFAULT_ATOM_SPEED,
-                       num_points: int = 300):
+def minimum_acceptance(elements: Sequence[Element], atom_speed, num_points: int = 300):
     """Return the minimum acceptance value in lattice. """
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
     if not is_stable_matrix(Mx) and not is_stable_matrix(My):
         return np.nan, np.nan
     else:
@@ -885,7 +892,7 @@ def emittance_from_ellipse_parameters(u: float, u_slope: float, alpha: float, be
 def emittance_from_particle(particle, elements: Sequence[Element]) -> tuple[float, float]:
     """Return x and y emittances of a particle in a periodic lattice of elements"""
     X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
-    M_xy = total_lattice_transfer_matrix(elements, atom_speed=atom_speed)
+    M_xy = total_lattice_transfer_matrix(elements, atom_speed)
     emittances = []
     for ((ui, ui_slope), Mu) in zip((X, Y), M_xy):
         twiss_params = twiss_parameters(Mu)
@@ -914,7 +921,7 @@ def will_particle_clip_on_aperture(particle, elements: Sequence[Element]) -> boo
     dimension"""
     _, _, atom_speed = orbit_phase_space_coords_initial(particle)
     emittance_xy = emittance_from_particle(particle, elements)
-    accept_xy_min = minimum_acceptance(atom_speed=atom_speed)
+    accept_xy_min = minimum_acceptance(atom_speed)
     for emittance, acceptance in zip(accept_xy_min, emittance_xy):
         if emittance > acceptance:
             return True
@@ -943,6 +950,16 @@ def phase_space_ellipse(emittance, twiss_params: tuple[float, float, float]) -> 
     return x_vals_path, y_vals_path
 
 
+def acceptance_ellipses(elements: Sequence[Element], atom_speed):
+    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
+    max_emittances = minimum_acceptance(elements, atom_speed)
+    ellipes = []
+    for eps, M in zip(max_emittances, [Mx, My]):
+        twiss_params = twiss_parameters(M)
+        ellipes.append(phase_space_ellipse(eps, twiss_params))
+    return ellipes
+
+
 @Memoize_Elements  # reuse identical output rather than recreating them
 def build_numeric_element(el) -> NumericElement:
     """Return a numeric matrix element given a ParticleTracerLattice element"""
@@ -951,12 +968,15 @@ def build_numeric_element(el) -> NumericElement:
         matrix_element = NumericElement(el.Lo, M_func=M_func, ap=el.ap)
     elif type(el) is BenderSim:
         M_func = transfer_matrix_func_from_bender(el)
-        ap = el.ap - (el.ro - el.rb)
-        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=ap)
+        r_offset = (el.ro - el.rb)
+        apx = el.ap - r_offset
+        apy = sqrt(el.ap ** 2 - r_offset ** 2)
+        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=(apx, apy))
     elif type(el) is CombinerLensSim:
         M_func = transfer_matrix_func_from_combiner(el)
-        ap = el.ap - el.output_offset
-        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=ap)
+        apx = el.ap - el.output_offset
+        apy = sqrt(el.ap ** 2 - el.output_offset ** 2)
+        matrix_element = NumericElement(el.Lo, M_func=M_func, ap=(apx, apy))
     else:
         raise NotImplementedError
     return matrix_element
@@ -1008,7 +1028,7 @@ class Lattice(Sequence):
         return Mx, My
 
     def M_total(self, atom_speed: float = DEFAULT_ATOM_SPEED):
-        Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed=atom_speed)
+        Mx, My = total_lattice_transfer_matrix(self.elements, atom_speed)
         return Mx, My
 
     def M_total_components(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -1016,6 +1036,9 @@ class Lattice(Sequence):
         x_components = matrix_components(Mx)
         y_components = matrix_components(My)
         return x_components, y_components
+
+    def acceptance_ellipses(self, atom_speed=DEFAULT_ATOM_SPEED):
+        return acceptance_ellipses(self, atom_speed)
 
     def beta_profiles(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=500):
         s_vals, (beta_x, beta_y) = beta_profile(self.elements, atom_speed=atom_speed, num_points=num_points)
@@ -1025,7 +1048,7 @@ class Lattice(Sequence):
         return acceptance_profile(self, atom_speed=atom_speed, num_points=num_points)
 
     def minimum_acceptance(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300):
-        return minimum_acceptance(self, atom_speed=atom_speed, num_points=num_points)
+        return minimum_acceptance(self, atom_speed, num_points=num_points)
 
     def tunes_incremental(self, atom_speed=DEFAULT_ATOM_SPEED):
         return tunes_incremental(self.elements, atom_speed=atom_speed)
@@ -1042,11 +1065,6 @@ class Lattice(Sequence):
 
     def total_length(self) -> float:
         return total_length(self.elements)
-
-    def add_element_from_sim_combiner(self, el_combiner: CombinerLensSim) -> None:
-        M_func = transfer_matrix_func_from_combiner(el_combiner)
-        ap = el_combiner.ap - el_combiner.output_offset
-        self.elements.append(NumericElement(el_combiner.Lo, M_func=M_func, ap=ap))
 
     def build_matrix_lattice_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
