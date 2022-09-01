@@ -5,14 +5,14 @@ import random
 import time
 import warnings
 from contextlib import contextmanager
-from typing import Optional, Union, Callable, Any
+from typing import Optional, Union, Callable, Any, Iterable
 
 import multiprocess as mp
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.stats.qmc import Sobol
 
-from type_hints import RealNum, sequence
+from type_hints import RealNum, sequence, ndarray
 
 
 def parallel_evaluate(func: Callable, args: Any, results_as_arr: bool = False, processes: int = -1,
@@ -118,10 +118,23 @@ def shrink_bounds_around_vals(bounds: sequence, vals: sequence, shrink_frac: flo
     return bounds
 
 
+def grid_from_bounds(bounds: Iterable, num_points_edge: int) -> ndarray:
+    """Return coordinates of points in a grid within specified bounds, and 'num_points_edge' points per dim. returned
+    shaped is (dimensionality^num_points_edge,len(bounds))"""
+    arrays = []
+    for (lower, upper) in bounds:
+        assert upper >= lower
+        arr = np.linspace(lower, upper, num_points_edge)
+        arrays.append(arr)
+    grid_points = arr_product(*arrays)
+    return grid_points
+
+
 def random_num_for_seeding() -> int:
     """Return a random number appropriate to use as a seed with numpy or python"""
     UNSIGNED_32_BIT_MAX = int(2 ** 32)  # biggest seed size for numpy random
     return np.random.randint(UNSIGNED_32_BIT_MAX)
+
 
 def is_even(x: int) -> bool:
     """Return True if a number is even, False if it is odd"""

@@ -7,7 +7,6 @@ import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
-from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from helper_tools import arr_product, round_and_make_odd
 from lattice_elements.bender_ideal import BenderIdeal
 from lattice_elements.element_magnets import MagnetBender
@@ -87,12 +86,13 @@ class BenderSim(BenderIdeal):
         """Find the radial offset that accounts for the centrifugal force moving the particles deeper into the
         potential well"""
 
-        m = 1  # in simulation units mass is 1kg
+        # IMPROVEMENT: THIS SHOULD BE INTEGRATED WITH full magnet stuff
         uc_ang_approx = self.unit_cell_angle()  # this will be different if the bore radius changes
-        lens = HalbachBender_FieldGenerator(self.rp, self.rb, uc_ang_approx, self.Lm, self.PTL.magnet_grade, 10,
-                                            (False, False), use_pos_mag_angs_only=False,
-                                            magnet_width=self.magnet_width,
-                                            use_method_of_moments=True, use_solenoid_field=self.PTL.use_solenoid_field)
+        num_magnets_dummy = 100
+        bender_approx = MagnetBender(self.rp, self.rb, uc_ang_approx, self.Lm, self.magnet_width,
+                                     self.PTL.magnet_grade, num_magnets_dummy, self.PTL.use_solenoid_field)
+        bender = bender_approx.magpylib_magnets_internal_model()
+
         theta_arr = np.linspace(0.0, 2 * uc_ang_approx, 100)
         z_arr = np.zeros(len(theta_arr))
 
@@ -103,11 +103,11 @@ class BenderSim(BenderIdeal):
             y_arr = r * np.sin(theta_arr)
             coords = np.column_stack((x_arr, y_arr, z_arr))
             norms = [coord / np.linalg.norm(coord) for coord in coords]
-            forces = lens.B_norm_grad(coords) * SIMULATION_MAGNETON
-            V_vals = lens.B_norm(coords) * SIMULATION_MAGNETON
+            forces = bender.B_norm_grad(coords) * SIMULATION_MAGNETON
+            V_vals = bender.B_norm(coords) * SIMULATION_MAGNETON
             Fr = np.array([np.dot(force, norm) for force, norm in zip(forces, norms)])
             atom_speeds = np.array([speed_with_energy_correction(V, self.PTL.speed_nominal) for V in V_vals])
-            FCen = m * atom_speeds ** 2 / r
+            FCen = atom_speeds ** 2 / r
             error = np.sqrt(np.sum((Fr - FCen) ** 2)) / np.mean(FCen)
             return error
 
@@ -246,8 +246,8 @@ class BenderSim(BenderIdeal):
     def generate_full_bender_data(self, extra_magnets) -> tuple[ndarray, ...]:
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
         B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_full(coords_center, coords_cartesian,
-                                                                                  extra_magnets,
-                                                                                  self.PTL.use_mag_errors)
+                                                                          extra_magnets,
+                                                                          self.PTL.use_mag_errors)
         interp_data = shape_field_data_3D(np.column_stack((coords_center, B_norm_grad_arr, B_norm_arr)))
         return interp_data
 

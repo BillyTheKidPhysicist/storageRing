@@ -1,7 +1,7 @@
 import functools
 from collections.abc import Sequence
 from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
-from typing import Iterable, Union, Optional, Callable
+from typing import Iterable, Union, Callable
 
 import numba
 import numpy as np
@@ -517,7 +517,7 @@ def stitch_bender_values(values_start: sequence, values_uc: sequence, num_intern
 def K_mag_vals_and_lengths_from_bender_el(el: BenderSim) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """Magnetic spring constants and lengths at each spring constant value along the orbit trajectory through the
     bender"""
-    magnets = el.magnet.magpylib_magnets_model(False, use_approx_method_of_moments=True)
+    magnets = el.magnet.magpylib_magnets_model(False)
     s_slices_fringe, s_slices_uc, s_slices_total, lengths_total = s_slices_and_lengths_bender(el)
     num_internal_mags = (el.num_magnets - 2 * NUM_FRINGE_MAGNETS_MIN)
     K_vals_mag_uc = np.array([bender_K_mag_for_slice(s, magnets, el) for s in s_slices_uc])
@@ -920,9 +920,12 @@ def will_particle_clip_on_aperture(particle, elements: Sequence[Element]) -> boo
     This is determined by checking if the particle's emittance is larger than the minimum viable emittance in either
     dimension"""
     _, _, atom_speed = orbit_phase_space_coords_initial(particle)
+    stablex, stabley = is_stable_lattice(elements, atom_speed)
+    if not stablex or not stabley:
+        return False
     emittance_xy = emittance_from_particle(particle, elements)
-    accept_xy_min = minimum_acceptance(atom_speed)
-    for emittance, acceptance in zip(accept_xy_min, emittance_xy):
+    accept_xy_min = minimum_acceptance(elements, atom_speed)
+    for acceptance, emittance in zip(accept_xy_min, emittance_xy):
         if emittance > acceptance:
             return True
     return False
@@ -986,7 +989,7 @@ class Lattice(Sequence):
     """Model of a series (assumed to be periodic) of elements"""
 
     def __init__(self):
-        self.elements: Optional[list[Element]] = []
+        self.elements: list[Element] = []
 
     def __iter__(self):
         return iter(self.elements)

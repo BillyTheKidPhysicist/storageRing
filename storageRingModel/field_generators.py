@@ -10,9 +10,8 @@ from magpylib.magnet import Cuboid as _Cuboid
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 
+import constants
 from constants import MAGNETIC_PERMEABILITY, MAGNET_WIRE_DIAM, SPIN_FLIP_AVOIDANCE_FIELD, GRADE_MAGNETIZATION
-from constants import MAGNET_MAGNETIZATION_ANGLE_TOLERANCE, MAGNET_DIMENSIONAL_TOLERANCE, \
-    MAGNET_MAGNETIZATION_NORM_TOLERANCE
 from demag_functions import apply_demag
 from helper_tools import Union, Optional, math, within_tol
 from helper_tools import temporary_seed
@@ -463,9 +462,10 @@ class HalbachLens(Collection):
 
     def standard_Magnet_Errors(self):
         """Make standard tolerances for permanent magnets. From various sources, particularly K&J magnetics"""
-        dim_tol = MAGNET_DIMENSIONAL_TOLERANCE  # dimension variation,inch to meter, +/- meters
-        mag_vec_angle_tol = MAGNET_MAGNETIZATION_ANGLE_TOLERANCE  # magnetization vector angle tolerance, max tilt
-        mag_norm_tol = MAGNET_MAGNETIZATION_NORM_TOLERANCE  # magnetization value tolerance, +/- fraction
+        dim_tol = constants.MAGNET_DIMENSIONAL_TOLERANCE  # dimension variation,inch to meter, +/- meters
+        mag_vec_angle_tol = constants.MAGNET_MAGNETIZATION_ANGLE_TOLERANCE  # magnetization vector angle tolerance,
+        # max tilt
+        mag_norm_tol = constants.MAGNET_MAGNETIZATION_NORM_TOLERANCE  # magnetization value tolerance, +/- fraction
         with temporary_seed(self.seed):  # if None, then no special seeding happens
             dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
             MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol

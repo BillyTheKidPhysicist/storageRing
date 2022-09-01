@@ -24,7 +24,7 @@ TINY_NEG_OFFSET_FROM_ELEMENT_EDGE = -1e-10  # to prevent the particle from start
 
 # unnecesary evaluation time
 
-initial_dict_var_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
+initial_dict_key_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
                                       'px': ('pi', 0), 'py': ('pi', 1), 'pz': ('pi', 2)}
 
 
@@ -101,14 +101,6 @@ class SwarmTracer:
                                                                  num_particles: int, gamma_space: float = 3.5e-3,
                                                                  same_seed: bool = False, use_z_symmetry: bool = False,
                                                                  probability_min: float = 0.01) -> Swarm:
-        # this function generates a swarm that models the observed swarm. This is done by first generating a pseudorandom
-        # swarm that is well spread out in space, then weighitng each particle by it's probability according to the
-        # observed data. The probability is finally rescaled
-        # captureDiam: Diameter of the circle of atoms we wish to collect, meters
-        # collectorOutputAngle: Maximum angle of atoms leaving the collector, radians
-        # num_particles: Number of particles to sample. Will not always equal exactly this
-        # gamma_space: The FWHM of the lorentz function that models our spatial data, meters
-        # temperature: The temperature of the atoms, kelvin. Decides thermal velocity spread
 
         assert 0.0 < capture_diam <= .1 and 0.0 < collector_output_angle <= .2 and 0.0 < gamma_space <= .01 \
                and probability_min >= 0.0  # reasonable values
@@ -168,11 +160,6 @@ class SwarmTracer:
                                                     use_z_symmetry: bool = False,
                                                     same_seed: bool = False, circular: bool = True,
                                                     small_x_offset: bool = True) -> Swarm:
-        # return a swarm object who position and momentum values have been randomly generated inside a phase space hypercube
-        # and that is heading in the negative x direction with average velocity lattice.speed_nominal. A seed can be reused to
-        # get repeatable random results. a sobol sequence is used that is then jittered. In additon points are added at
-        # each corner exactly and midpoints between corners if desired
-        # NOTE: it's not guaranteed that there will be exactly num particles.
         if circular:
             for _bounds in (q_trans_bounds, p_trans_bounds):
                 assert isinstance(_bounds, real_number) and _bounds > 0.0
@@ -255,8 +242,8 @@ class SwarmTracer:
     def initialize_grid_2_dim_swarm(self, dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
                                     dim1_name: str, dim2_name: str, px=DEFAULT_ATOM_SPEED) -> Swarm:
         """Initialize a swarm in 2 dimensions along specified dimensions"""
-        var1, idx1 = initial_dict_var_and_index_for_dim[dim1_name]
-        var2, idx2 = initial_dict_var_and_index_for_dim[dim2_name]
+        key1, idx1 = initial_dict_key_and_index_for_dim[dim1_name]
+        key2, idx2 = initial_dict_key_and_index_for_dim[dim2_name]
         vals_dim1 = np.linspace(-dim1_max, dim1_max, num_points_per_dim)
         vals_dim2 = np.linspace(-dim2_max, dim2_max, num_points_per_dim)
         coords_vals = arr_product(vals_dim1, vals_dim2)
@@ -264,8 +251,8 @@ class SwarmTracer:
         for coords in coords_vals:
             val1, val2 = coords
             particle = Particle(qi=np.array([-1e-10, 0, 0]), pi=np.array([-px, 0, 0]))
-            particle.__dict__[var1][idx1] = val1
-            particle.__dict__[var2][idx2] = val2
+            particle.__dict__[key1][idx1] = val1
+            particle.__dict__[key2][idx2] = val2
             swarm.add(particle)
         return swarm
 

@@ -1,33 +1,16 @@
-import functools
-import random
 from math import cos, sin, sqrt, tan
 from typing import Optional
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
-from constants import ASSEMBLY_TOLERANCE
+import constants
 from field_generators import ElementMagnetCollection, Collection, HalbachLens
-from field_generators import HalbachBender as _HalbachBender
+from field_generators import HalbachBender
 from helper_tools import random_num_for_seeding
 from helper_tools import temporary_seed, is_even
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from type_hints import ndarray
-
-
-@functools.lru_cache
-def _HalbachBender_Cached(state, *args, **kwargs):
-    """State is required so that magnet errors can be accounted for"""
-    return _HalbachBender(*args, **kwargs)
-
-
-def HalbachBender_Cached(state, *args, **kwargs) -> _HalbachBender:
-    """Because method of moments can take a while with HalbachBender, and multiple identical HalbachBenders can be
-    initialized with the same magnet object, cache the results. But I need to return copies of the object
-    since the object will need to be manipulated independently of each other"""
-    bender = _HalbachBender_Cached(state, *args, **kwargs).copy()
-    return bender
-
 
 Dim1_Arr = ndarray
 
@@ -77,7 +60,7 @@ def transform_coords_to_misaligned(self, coords):
 
 def yz_random_samp() -> tuple[float, float]:
     """Generate 2 random samples, y and z,  in circle"""
-    r_shift = sqrt(np.random.random()) * ASSEMBLY_TOLERANCE  # sqrt neccesary cause it's polar
+    r_shift = sqrt(np.random.random()) * constants.ASSEMBLY_TOLERANCE  # sqrt neccesary cause it's polar
     angle = np.random.random() * 2 * np.pi
     return r_shift * cos(angle), r_shift * sin(angle)
 
@@ -86,7 +69,7 @@ def alignment_shifts() -> tuple[float, float, float, float, float]:
     """Generate the 5 shift values that represent misalingment of the lens. dx, dy1,dz1,dy2,dz2"""
     dy1, dz1 = yz_random_samp()
     dy2, dz2 = yz_random_samp()
-    dx = 2 * (np.random.random() - .5) * ASSEMBLY_TOLERANCE
+    dx = 2 * (np.random.random() - .5) * constants.ASSEMBLY_TOLERANCE
     return dx, dy1, dy2, dz1, dz2
 
 
@@ -105,7 +88,8 @@ class MagneticLens(MagneticOptic):
         self.magnet_widths = magnet_widths
         self.magnet_grade = magnet_grade
         self.use_solenoid = use_solenoid
-        self.alignment_shifts = alignment_shifts()  # dx, dy1, dz1, dy2, dz2
+        with temporary_seed(self.seed):
+            self.alignment_shifts = alignment_shifts()  # dx, dy1, dz1, dy2, dz2
         self.x_in_offset = x_in_offset
         self.r_in_el = np.array([x_in_offset, 0.0, 0.0])
 
@@ -201,37 +185,34 @@ class MagnetBender(MagneticOptic):
         self.magnet_width = magnet_width
 
     def make_magpylib_magnets(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
-                              use_method_of_moments: bool, num_lenses: int,
-                              use_mag_errors: bool, use_approx_method_of_moments):
+                              num_lenses: int, use_mag_errors: bool, use_full_method_of_moments: bool = False):
         """Return magpylib magnet model representing a portion or all of the bender"""
+        use_approx_method_of_moments = not use_full_method_of_moments
         with temporary_seed(self.seed):
-            state = np.random.random() * random.random()  # poor man's state
-            bender_field_generator = HalbachBender_Cached(state, self.rp, self.rb, self.uc_angle, self.Lm,
-                                                          self.magnet_grade,
-                                                          num_lenses, use_half_cap_end,
-                                                          use_method_of_moments=use_method_of_moments,
-                                                          use_pos_mag_angs_only=use_pos_mag_angs_only,
-                                                          use_solenoid_field=self.use_solenoid,
-                                                          use_mag_errors=use_mag_errors,
-                                                          magnet_width=self.magnet_width,
-                                                          use_approx_method_of_moments=use_approx_method_of_moments)
+            bender_field_generator = HalbachBender(self.rp, self.rb, self.uc_angle, self.Lm,
+                                                   self.magnet_grade,
+                                                   num_lenses, use_half_cap_end,
+                                                   use_pos_mag_angs_only=use_pos_mag_angs_only,
+                                                   use_solenoid_field=self.use_solenoid,
+                                                   use_mag_errors=use_mag_errors,
+                                                   magnet_width=self.magnet_width,
+                                                   use_approx_method_of_moments=use_approx_method_of_moments)
         return bender_field_generator
 
-    def magpylib_magnets_model(self, use_mag_errors, use_approx_method_of_moments=False) -> Collection:
+    def magpylib_magnets_model(self, use_mag_errors, use_full_method_of_moments=False) -> Collection:
         """Return full magpylib magnet model of bender"""
-        use_method_of_moments = not use_approx_method_of_moments
-        return self.make_magpylib_magnets(True, (True, True), use_method_of_moments, self.num_lenses, use_mag_errors,
-                                          use_approx_method_of_moments)
+        return self.make_magpylib_magnets(True, (True, True), self.num_lenses,
+                                          use_mag_errors, use_full_method_of_moments=use_full_method_of_moments)
 
     def magpylib_magnets_internal_model(self) -> Collection:
         """Return full magpylib magnet model representing repeating interior region of bender"""
         num_lenses = self.num_model_lenses
         assert not is_even(num_lenses)
-        return self.make_magpylib_magnets(False, (False, False), True, num_lenses, False, False)
+        return self.make_magpylib_magnets(False, (False, False), num_lenses, False)
 
     def magpylib_magnets_fringe_cap_model(self) -> Collection:
         """Return full magpylib magnet model representing input section of bender"""
-        return self.make_magpylib_magnets(True, (True, False), True, self.num_model_lenses, False, False)
+        return self.make_magpylib_magnets(True, (True, False), self.num_model_lenses, False)
 
     def is_valid_in_lens_of_bender(self, x: bool, y: bool, z: bool) -> bool:
         """Check that the coordinates x,y,z are valid for a lens in the bender. The lens is centered on (self.rb,0,0)
@@ -281,8 +262,8 @@ class MagnetBender(MagneticOptic):
         B_norm_grad_arr, B_norm_arr = valid_field_values_col(magnets, coords, valid_indices, False)
         return B_norm_grad_arr, B_norm_arr
 
-    def valid_field_values_cap(self, coords) -> tuple[
-        ndarray, ndarray]:  # IMPROVEMENT: CAP NAMING IS AWFUL. BOTH HERE AND IN LENS
+    def valid_field_values_cap(self, coords) -> tuple[ndarray, ndarray]:
+        # IMPROVEMENT: CAP NAMING IS AWFUL. BOTH HERE AND IN LENS
         valid_indices = np.sqrt((coords[:, 0] - self.rb) ** 2 + coords[:, 2] ** 2) < self.rp - B_GRAD_STEP_SIZE
         magnets = self.magpylib_magnets_fringe_cap_model()
         B_norm_grad_arr, B_norm_arr = valid_field_values_col(magnets, coords, valid_indices, False)

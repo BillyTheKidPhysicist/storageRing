@@ -61,8 +61,8 @@ class Particle:
         string = '------particle-------\n'
         string += 'qi: ' + str(self.qi) + '\n'
         string += 'pi: ' + str(self.pi) + '\n'
-        string += 'p: ' + str(self.pf) + '\n'
-        string += 'q: ' + str(self.qf) + '\n'
+        string += 'pf: ' + str(self.pf) + '\n'
+        string += 'qf: ' + str(self.qf) + '\n'
         string += 'current element: ' + str(self.current_el) + ' \n '
         string += 'revolution: ' + str(self.revolutions) + ' \n'
         return string
