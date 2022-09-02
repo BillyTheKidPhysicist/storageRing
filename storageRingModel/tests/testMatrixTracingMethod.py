@@ -19,7 +19,7 @@ def test_sim_and_matrix_similiarity():
     PTL.add_drift(L_drift)
     PTL.end_lattice()
     lattice = Lattice()
-    lattice.build_matrix_lattice_from_sim_lattice(PTL)
+    lattice.add_matrix_elements_from_sim_lattice(PTL)
     st = SwarmTracer(PTL)
 
     yi_vals = 2 * (np.random.random(1000) - .5) * rp * .2
@@ -34,7 +34,7 @@ def test_sim_and_matrix_similiarity():
     for particle, particle_traced in zip(swarm_initial, swarm):
         if not particle_traced.clipped:
             Xi = [particle.qi[1], particle.pi[1] / DEFAULT_ATOM_SPEED]
-            yf, yf_ang = lattice.trace(Xi)
+            yf, yf_ang = lattice.trace(Xi,DEFAULT_ATOM_SPEED)
             yf_vals.append(yf)
             yf_ang_vals.append(yf_ang)
     yf_std_matrix, yf_ang_std_matrix = np.std(yf_vals), np.std(yf_ang_vals)

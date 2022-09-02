@@ -3,23 +3,25 @@ from collections.abc import Sequence
 from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
 from typing import Iterable, Union, Callable
 
+import matplotlib.pyplot as plt
 import numba
 import numpy as np
 
 from constants import SIMULATION_MAGNETON, SIMULATION_MASS, DEFAULT_ATOM_SPEED
 from field_generators import Collection
-from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from helper_tools import multiply_matrices
 from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_correction
 from lattice_elements.elements import Drift as Drift_Sim
 from lattice_elements.elements import HalbachLensSim, BenderSim, CombinerLensSim
 from lattice_elements.orbit_trajectories import combiner_orbit_coords_el_frame
+from particle_class import Swarm, Particle
 from particle_tracer_lattice import ParticleTracerLattice
 from type_hints import ndarray, RealNum
 from type_hints import sequence
 
 SMALL_ROUNDING_NUM: float = 1e-14
 NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model internal behaviour of bender
+ORBIT_DIM_INDEX = {'x': 0, 'y': 1}
 
 
 class NonViableLattice(Exception):
@@ -60,6 +62,47 @@ class Memoize_Elements:
             result = self.el_func(el)
             self.cache[key] = result
             return result
+
+
+@numba.njit
+def update_Mu_and_Mu_cum(Mu_previous, Mu_cum, Ku, L):
+    """Update cumulative transfer matrix IN PLACE, and append a copy to a list"""
+    Mu_slice = transfer_matrix(Ku, L)
+    Mu_previous[:] = Mu_slice @ Mu_previous
+    Mu_current = Mu_previous.copy()
+    # now append a copy of the new array.
+    Mu_cum.append(Mu_current)  # must come last
+
+
+@numba.njit
+def arr_float64_list():
+    """Because numba is type sensitive, the type of empty lists must be known. It can often be inferred, but if not a
+    contrived solution must be used"""
+    temp = [np.ones((2, 2))]
+    temp = temp[1:]
+    return temp
+
+
+def cumulative_M_func(s_vals: ndarray, s_max: float, M_cum: Callable) -> Callable:
+    """Return a function that return the transfer matrix at a specified position in the element. Uses a saved list
+    of cumulative transfer matrices to dramatically reduce computation time"""
+
+    idx_max = len(s_vals) - 1
+
+    def M_func(s0: float, atom_speed: float) -> tuple[ndarray, ndarray]:
+        """Return x and y transfer matrix at a specified position. Because the element is modeled as a series of
+        slices, there are only discrete values for the transfer matrix"""
+        assert 0 <= s0 <= s_max
+        M_cum_x, M_cum_y = M_cum(atom_speed)
+        if isclose(s0, s_max):
+            idx = idx_max
+        elif isclose(s0, 0):
+            idx = 0
+        else:
+            idx = np.argmax(s0 < s_vals)
+        return M_cum_x[idx], M_cum_y[idx]
+
+    return M_func
 
 
 def make_atom_speed_kwarg_iterable(func) -> Callable:
@@ -117,8 +160,7 @@ def transfer_matrix(K: RealNum, L: RealNum, K_dispersion=None) -> ndarray:
 
 def magnet_force(magnets, coords):
     """Force in magnet at given point"""
-    use_approx = True if type(magnets) is HalbachBender_FieldGenerator else False
-    B_norm_grad = magnets.B_norm_grad(coords, use_approx=use_approx, dx=1e-6, diff_method='central')
+    B_norm_grad = magnets.B_norm_grad(coords, use_approx=True, dx=1e-6, diff_method='forward')
     forces = -SIMULATION_MAGNETON * B_norm_grad
     return forces
 
@@ -190,20 +232,6 @@ def matrix_components(M: ndarray) -> tuple[RealNum, RealNum, RealNum, RealNum]:
     return m11, m12, m21, m22
 
 
-def lens_transfer_matrix_for_slice(rp: RealNum, magnets: Collection, x_slice: RealNum,
-                                   slice_length: RealNum, atom_speed: RealNum) -> ndarray:
-    num_samples = 30
-    x_vals = np.ones(num_samples) * x_slice
-    y_vals = np.linspace(-rp / 4.0, rp / 4.0, num_samples)
-    z_vals = np.zeros(num_samples)
-    coords = np.column_stack((x_vals, y_vals, z_vals))
-    F_y = magnet_force(magnets, coords)[:, 1]
-    m = np.polyfit(y_vals, F_y, 1)[0]
-    K = -m / atom_speed ** 2
-    M_slice = transfer_matrix(K, slice_length)
-    return M_slice
-
-
 def Ki_mag_lens(magnets: Collection, s: RealNum, num_samples: int, which_dim: str, range_max: RealNum) -> float:
     """Magnetic spring constants from lens at position s along xo or yo axes"""
     x_vals = np.ones(num_samples) * s
@@ -222,7 +250,7 @@ def Ki_mag_lens(magnets: Collection, s: RealNum, num_samples: int, which_dim: st
 
 def lens_K_mags_for_slice(s: RealNum, magnets: Collection, el: HalbachLensSim) -> tuple[float, float]:
     """Magnetic spring constans for lens element at position x. Return spring constant for xo and yo axes"""
-    num_samples = 30
+    num_samples = 7
     fit_range_max = el.rp / 4.0
     Kx = Ki_mag_lens(magnets, s, num_samples, 'xo', fit_range_max)
     Ky = Ki_mag_lens(magnets, s, num_samples, 'yo', fit_range_max)
@@ -236,7 +264,7 @@ def s_slices_and_lengths_lens(el: HalbachLensSim) -> tuple[ndarray, ndarray, flo
     s_fringe_depth = (el.fringe_frac_outer + 3) * el.rp
     if s_fringe_depth >= el.L / 2.0:
         s_fringe_depth = el.L / 2.0
-    num_slices_per_bore_rad = 100
+    num_slices_per_bore_rad = 10
     num_slices = round(num_slices_per_bore_rad * s_fringe_depth / el.rp)
     num_slices = int(2 * (num_slices // 2))
     s_slices_fringing, slice_length_fringe = split_range_into_slices(0.0, s_fringe_depth, num_slices)
@@ -272,24 +300,21 @@ def transfer_matrix_func_from_lens(el: HalbachLensSim) -> Callable:
     """Create equivalent transfer matric from lens. Built by slicing lens into short transfer matrices"""
     slice_lengths, K_vals_mag = K_mag_vals_and_slice_lengths_from_lens_el(el)
     s_max = el.Lo
+    s_vals = np.cumsum(slice_lengths)
 
-    @numba.njit()
-    def M_func(s0, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
-        # IMPROVEMENT: this method is really slow for some things I'm doing. I should return a list of matrices
-        assert 0 <= s0 <= s_max
-        s = 0
-        Mx = np.eye(2)
-        My = np.eye(2)
+    @functools.lru_cache(maxsize=1000)
+    @numba.njit
+    def M_cum(atom_speed: RealNum):
+        Mx, My = np.eye(2), np.eye(2)
+        Mx_cum, My_cum = arr_float64_list(), arr_float64_list()
         for [Kx_mag, Ky_mag], L in zip(K_vals_mag, slice_lengths):
-            s += L
-            if s > s0 + SMALL_ROUNDING_NUM:
-                break
             Kx = Kx_mag / atom_speed ** 2
             Ky = Ky_mag / atom_speed ** 2
-            Mx = transfer_matrix(Kx, L) @ Mx
-            My = transfer_matrix(Ky, L) @ My
-        return Mx, My
+            update_Mu_and_Mu_cum(Mx, Mx_cum, Kx, L)
+            update_Mu_and_Mu_cum(My, My_cum, Ky, L)
+        return Mx_cum, My_cum
 
+    M_func = cumulative_M_func(s_vals, s_max, M_cum)
     return M_func
 
 
@@ -375,7 +400,7 @@ def combiner_K_mag_and_R_vals(coords_path: ndarray, p_path: ndarray, el: Combine
     magnets = el.magnet.magpylib_magnets_model(False, False)
     norms_xo_path = unit_vec_perp_to_path(coords_path)
     xo_max = min([(el.rp - el.output_offset), el.output_offset])
-    num_points = 11
+    num_points = 7
     xo_vals = np.linspace(-xo_max / 5.0, xo_max / 5.0, num_points)
     yo_max = sqrt(el.rp ** 2 - el.output_offset ** 2)
     yo_vals = np.linspace(-yo_max / 5.0, yo_max / 5.0, num_points)
@@ -392,22 +417,17 @@ def transfer_matrix_func_from_combiner(el: CombinerLensSim) -> Callable:
     coords_path, p_path = np.flip(coords_path, axis=0), np.flip(p_path, axis=0)
     speeds_path = np.linalg.norm(p_path, axis=1)
     lengths = np.array([combiner_slice_length_at_traj_index(idx, coords_path) for idx in range(len(speeds_path))])
-
+    s_vals = np.cumsum(lengths)
     K_vals_mag, R_vals = combiner_K_mag_and_R_vals(coords_path, p_path, el)
     s_max = el.Lo
 
-    @numba.njit()
-    def M_func(s0, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
-        assert 0 <= s0 <= s_max
-        s = 0
-        Mx = np.eye(2)
-        My = np.eye(2)
+    @functools.lru_cache(maxsize=1000)
+    @numba.njit
+    def M_cum(atom_speed: RealNum):
+        Mx, My = np.eye(2), np.eye(2)
+        Mx_cum, My_cum = arr_float64_list(), arr_float64_list()
         speed_factor = atom_speed / DEFAULT_ATOM_SPEED
         for idx, [[Kx_mag, Ky_mag], R, speed, L] in enumerate(zip(K_vals_mag, R_vals, speeds_path, lengths)):
-            s += L
-            if s > s0 + SMALL_ROUNDING_NUM:
-                break
-
             speed *= speed_factor
             Kx = Kx_mag / speed ** 2
             Ky = Ky_mag / speed ** 2
@@ -415,10 +435,11 @@ def transfer_matrix_func_from_combiner(el: CombinerLensSim) -> Callable:
             K_cent = 3 / R ** 2
             Kx += K_cent
             # IMPROVEMENT: Should the length change depending on the speed factor and the bending radius?
-            Mx = transfer_matrix(Kx, L) @ Mx
-            My = transfer_matrix(Ky, L) @ My
-        return Mx, My
+            update_Mu_and_Mu_cum(Mx, Mx_cum, Kx, L)
+            update_Mu_and_Mu_cum(My, My_cum, Ky, L)
+        return Mx_cum, My_cum
 
+    M_func = cumulative_M_func(s_vals, s_max, M_cum)
     return M_func
 
 
@@ -475,7 +496,7 @@ def s_slices_and_lengths_bender(el) -> tuple[ndarray, ndarray, ndarray, ndarray]
     s_unit_cell = el.ro * el.ucAng
     s_length_magnet = 2 * s_unit_cell
     s_fringe_depth = el.L_cap + NUM_FRINGE_MAGNETS_MIN * s_length_magnet
-    num_slices_per_bore_radius = 8
+    num_slices_per_bore_radius = 10
     num_slices_fringe = round(num_slices_per_bore_radius * s_fringe_depth / el.rp)
     num_slices_uc = round(num_slices_per_bore_radius * s_unit_cell / el.rp)
     s_slices_fringe, _ = split_range_into_slices(0.0, s_fringe_depth, num_slices_fringe)
@@ -500,7 +521,7 @@ def bender_K_mag_for_slice(s: RealNum, magnets, el) -> tuple[float, float]:
     deltar_orbit = el.ro - el.rb
     xo_max = el.ap - deltar_orbit
     zo_max = sqrt(el.rp ** 2 - deltar_orbit ** 2)
-    num_samples = 11
+    num_samples = 7
     Kx = bender_K_mag_xo(el, s, magnets, xo_max, num_samples)
     Ky = bender_K_mag_yo(el, s, magnets, zo_max, num_samples)
     return Kx, Ky
@@ -534,31 +555,29 @@ def transfer_matrix_func_from_bender(el: BenderSim) -> Callable:
     multiplying them together"""
     if el.num_magnets < 2 * NUM_FRINGE_MAGNETS_MIN:
         raise NotImplementedError
-    s_slices_total, lengths_total, Kx_vals_mag, Ky_vals_mag = K_mag_vals_and_lengths_from_bender_el(el)
+    s_vals, lengths_total, Kx_vals_mag, Ky_vals_mag = K_mag_vals_and_lengths_from_bender_el(el)
     s_max, ro, rb, L_cap, ang = el.Lo, el.ro, el.rb, el.L_cap, el.ang
 
-    @numba.njit()
-    def M_func(s0, atom_speed: RealNum) -> tuple[ndarray, ndarray]:
-        assert 0 <= s0 <= s_max
-        Mx = np.eye(2)
-        My = np.eye(2)
-        for s, L, Kx_mag, Ky_mag in zip(s_slices_total, lengths_total, Kx_vals_mag, Ky_vals_mag):
-            if s > s0 + SMALL_ROUNDING_NUM:
-                break
+    @functools.lru_cache(maxsize=1000)
+    @numba.njit
+    def M_cum(atom_speed: RealNum):
+        Mx, My = np.eye(2), np.eye(2)
+        Mx_cum, My_cum = arr_float64_list(), arr_float64_list()
+        for s, L, Kx_mag, Ky_mag in zip(s_vals, lengths_total, Kx_vals_mag, Ky_vals_mag):
             orbit_offset = (ro - rb) * (atom_speed / DEFAULT_ATOM_SPEED) ** 2
             V = .5 * Kx_mag * orbit_offset ** 2
             atom_speed_corrected = speed_with_energy_correction(V, atom_speed)
             Kx = Kx_mag / atom_speed_corrected ** 2
             Ky = Ky_mag / atom_speed_corrected ** 2
-
             if L_cap < s < ang * ro + L_cap:
                 r_orbit = rb + orbit_offset
                 K_cent = 3.0 / r_orbit ** 2
                 Kx += K_cent
-            Mx = transfer_matrix(Kx, L) @ Mx
-            My = transfer_matrix(Ky, L) @ My
-        return Mx, My
+            update_Mu_and_Mu_cum(Mx, Mx_cum, Kx, L)
+            update_Mu_and_Mu_cum(My, My_cum, Ky, L)
+        return Mx_cum, My_cum
 
+    M_func = cumulative_M_func(s_vals, s_max, M_cum)
     return M_func
 
 
@@ -740,10 +759,14 @@ def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum
     return value * sign
 
 
+def is_wronskian_valid(M) -> bool:
+    return isclose(determinant(M), 1.0, abs_tol=1e-9)
+
+
 def twiss_parameters(M: ndarray) -> tuple[float, float, float]:
     """Return twiss parameters (phi, alpha, beta, gamma)"""
     matrix_vals = matrix_components(M)
-    assert isclose(determinant(M), 1.0, abs_tol=1e-9)
+    assert is_wronskian_valid(M)
     # phi = phi_twiss(*matrix_vals)
     alpha = alpha_from_components(*matrix_vals)
     beta = beta_from_components(*matrix_vals)
@@ -764,13 +787,14 @@ def betas_at_s(s: RealNum, elements: Sequence[Element], atom_speed: RealNum) -> 
     return beta_x, beta_y
 
 
+@functools.lru_cache(maxsize=1000)
 def beta_profile(elements: Sequence[Element], atom_speed: RealNum,
                  num_points: int) -> tuple[ndarray, tuple[ndarray, ndarray]]:
     """Return (x,y) beta functions value along lattice. Also return the locations of the beta functions"""
     L = total_length(elements)
     s_vals = np.linspace(0, L, num_points)
     is_stable_x, is_stable_y = is_stable_lattice(elements, atom_speed)
-    if not is_stable_x and not is_stable_y:
+    if not (is_stable_x and is_stable_y):
         nan_arr = np.nan * np.ones(len(s_vals))
         return s_vals, (nan_arr, nan_arr)
     else:
@@ -779,8 +803,7 @@ def beta_profile(elements: Sequence[Element], atom_speed: RealNum,
         return s_vals, (betas_x, betas_y)
 
 
-def tunes_absolute(elements: Sequence[Element], atom_speed: RealNum = DEFAULT_ATOM_SPEED,
-                   num_points: int = 1000) -> tuple[float, float]:
+def tunes_absolute(elements: Sequence[Element], atom_speed: RealNum, num_points: int = 1000) -> tuple[float, float]:
     """Return absolute value of tune. Calculated by integrating beta function profile along lattice"""
     s_vals, (betas_x, betas_y) = beta_profile(elements, atom_speed, num_points)
     tune_x = np.trapz(1 / betas_x, x=s_vals) / (2 * np.pi)
@@ -788,9 +811,7 @@ def tunes_absolute(elements: Sequence[Element], atom_speed: RealNum = DEFAULT_AT
     return tune_x, tune_y
 
 
-@make_atom_speed_kwarg_iterable
-def tunes_incremental(elements: Iterable[Element],
-                      atom_speed: RealNum = DEFAULT_ATOM_SPEED) -> tuple[float, float]:
+def tunes_incremental(elements: Iterable[Element], atom_speed: RealNum) -> tuple[float, float]:
     """Return tune value tune value, ie the total tune minus nearest half integer int. This is between 0 and .5 .
     This method cannot distinguish between a tune of 1.25 and 1.75, both would result in .25"""
     Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
@@ -807,6 +828,7 @@ def tunes_incremental(elements: Iterable[Element],
     return tune_x, tune_y
 
 
+@functools.lru_cache(maxsize=1000)
 def total_lattice_transfer_matrix(elements: Iterable[Element], atom_speed) -> tuple[ndarray, ndarray]:
     """Transfer matrix for a sequence of elements start to end"""
     matrices_x_and_y = [el.M(atom_speed=atom_speed) for el in elements]
@@ -822,9 +844,7 @@ def stability_factor(m11, m12, m21, m22):
     return 2.0 - (m11 ** 2 + 2 * m12 * m21 + m22 ** 2)
 
 
-@make_atom_speed_kwarg_iterable
-def stability_factors_lattice(elements: Iterable[Element],
-                              atom_speed: Union[RealNum, Iterable] = DEFAULT_ATOM_SPEED):
+def stability_factors_lattice(elements: Iterable[Element], atom_speed: RealNum) -> tuple[float, float]:
     """Factor describing stability of periodic lattice of elements. If value is greater than 0 it is stable, though
     higher values are "more" stable in some sense"""
 
@@ -834,15 +854,15 @@ def stability_factors_lattice(elements: Iterable[Element],
     return stability_factor_x, stability_factor_y
 
 
-def is_stable_lattice(elements: Iterable[Element],
-                      atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[bool, bool]:
+def is_stable_lattice(elements: Iterable[Element], atom_speed: RealNum) -> tuple[bool, bool]:
     """Determine if the lattice is stable. This can be done by computing eigenvalues, or the method below works. If
     unstable, then raising he transfer matrix to N results in large matrix elements for large N"""
-    stability_factor_x, stability_factor_y = stability_factors_lattice(elements, atom_speed=atom_speed)
+    stability_factor_x, stability_factor_y = stability_factors_lattice(elements, atom_speed)
     return stability_factor_x > 0.0, stability_factor_y > 0.0
 
 
 def is_stable_matrix(M: ndarray) -> bool:
+    """Return True if periodic matrix is stable, False if unstable"""
     return stability_factor(*matrix_components(M)) >= 0
 
 
@@ -860,26 +880,56 @@ def lattice_apertures(s, elements: Sequence[Element]):
     return elements[el_index].ap
 
 
-def acceptance_profile(elements: Sequence[Element], atom_speed=DEFAULT_ATOM_SPEED,
-                       num_points=300) -> tuple[ndarray, tuple[ndarray, ndarray]]:
+@functools.lru_cache(maxsize=1000)
+def lattice_apertures_arr(elements: Sequence[Element], num_points: int) -> tuple[ndarray, ndarray]:
+    """Return two arrays of lattice aperture along lattice at locations 's_vals' """
+    s_vals = np.linspace(0.0, total_length(elements), num_points)
+    aps_x, aps_y = np.array([lattice_apertures(s, elements) for s in s_vals]).T
+    return aps_x, aps_y
+
+
+def acceptance_profile(elements: Sequence[Element],
+                       atom_speed: RealNum, num_points: int) -> tuple[ndarray, tuple[ndarray, ndarray]]:
     """Return (x,y) profile for acceptance through the lattice, and the corresponding position values. Assumes periodic
     lattice. This is the maximum emittance that would survive at each point in the lattice."""
     s_vals, (beta_x, beta_y) = beta_profile(elements, atom_speed, num_points)
-    aps_x, aps_y = np.array([lattice_apertures(s, elements) for s in s_vals]).T
+    aps_x, aps_y = lattice_apertures_arr(elements, num_points)
     acceptances_x = aps_x ** 2 / beta_x
     acceptances_y = aps_y ** 2 / beta_y
     return s_vals, (acceptances_x, acceptances_y)
 
 
-@functools.lru_cache
-@make_atom_speed_kwarg_iterable
-def minimum_acceptance(elements: Sequence[Element], atom_speed, num_points: int = 300):
+def revolutions_from_matrix_method(particle: Particle, elements: Sequence[Element], T_max: RealNum) -> float:
+    """Return number of expected revolutions for a particle"""
+    revs_max = T_max * abs(particle.pi[0]) / total_length(elements)
+    will_clip = will_particle_clip_on_aperture(particle, elements)
+    return 0.0 if will_clip else revs_max
+
+
+def swarm_flux_mult_from_matrix_method(swarm_initial: Swarm, elements: Sequence[Element],
+                                       T_max: RealNum, min_speed_points: int) -> float:
+    """Return expected flux multiplication for a swarm. To reduce computation, particle speeds are rounded to
+    nearest value in an array of speed so memoization of underlying functions can be used"""
+    _atom_speeds = np.abs(swarm_initial[:, 'pi', 0])
+    speed_range = np.linspace(min(_atom_speeds), max(_atom_speeds), min_speed_points)
+    flux_mat = 00.0
+    for particle in swarm_initial:
+        atom_speed = abs(particle.pi[0])
+        speed_rounded = speed_range[np.argmin(np.abs(atom_speed - speed_range))]
+        particle_new = particle.copy()
+        particle_new.pi[0] = -speed_rounded
+        flux = revolutions_from_matrix_method(particle_new, elements, T_max)
+        flux_mat += flux
+    return flux_mat / len(swarm_initial)
+
+
+def minimum_acceptance(elements: Sequence[Element], atom_speed: RealNum, num_points: int) -> tuple[float, float]:
     """Return the minimum acceptance value in lattice. """
-    Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
-    if not is_stable_matrix(Mx) and not is_stable_matrix(My):
+    is_stable_x, is_stable_y = is_stable_lattice(elements, atom_speed)
+    if not (is_stable_x and is_stable_y):
         return np.nan, np.nan
     else:
-        _, (acceptances_x, acceptances_y) = acceptance_profile(elements, atom_speed=atom_speed, num_points=num_points)
+        _, (acceptances_x, acceptances_y) = acceptance_profile(elements, atom_speed, num_points)
         return np.min(acceptances_x), np.min(acceptances_y)
 
 
@@ -889,7 +939,16 @@ def emittance_from_ellipse_parameters(u: float, u_slope: float, alpha: float, be
     return gamma * u ** 2 + 2 * alpha * u * u_slope + beta * u_slope ** 2
 
 
-def emittance_from_particle(particle, elements: Sequence[Element]) -> tuple[float, float]:
+def twiss_paremeters_from_lattice(elements: Sequence[Element], atom_speed) -> tuple:
+    """Return twiss parameters for x and y for given lattice. Parameters are (alpha, beta, gamma)"""
+    M_xy = total_lattice_transfer_matrix(elements, atom_speed)
+    twiss_params = []
+    for M in M_xy:
+        twiss_params.append(twiss_parameters(M))
+    return tuple(twiss_params)
+
+
+def emittance_from_particle(particle, elements: Sequence[Element]) -> tuple:
     """Return x and y emittances of a particle in a periodic lattice of elements"""
     X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
     M_xy = total_lattice_transfer_matrix(elements, atom_speed)
@@ -909,7 +968,7 @@ def orbit_phase_space_coords_initial(particle) -> tuple[tuple, tuple, float]:
     px_lab, py_lab, pz_lab = particle.pi
     assert px_lab < 0.0
     assert isclose(x_lab, -1e-10)
-    orbit_velocity = -px_lab
+    orbit_velocity = abs(px_lab)
     xi, yi = -y_lab, z_lab
     xi_slope, yi_slope = -py_lab / orbit_velocity, pz_lab / orbit_velocity
     return (xi, xi_slope), (yi, yi_slope), orbit_velocity
@@ -919,16 +978,43 @@ def will_particle_clip_on_aperture(particle, elements: Sequence[Element]) -> boo
     """Return whether particle will be lost clipping on an element aperture, assuming the lattice is periodic.
     This is determined by checking if the particle's emittance is larger than the minimum viable emittance in either
     dimension"""
+
+    # IMPROVEMENT: this can falsely predict a particle clipping if one of the profile is much smaller than the other
+
     _, _, atom_speed = orbit_phase_space_coords_initial(particle)
     stablex, stabley = is_stable_lattice(elements, atom_speed)
     if not stablex or not stabley:
-        return False
-    emittance_xy = emittance_from_particle(particle, elements)
-    accept_xy_min = minimum_acceptance(elements, atom_speed)
-    for acceptance, emittance in zip(accept_xy_min, emittance_xy):
-        if emittance > acceptance:
-            return True
-    return False
+        return True
+    else:
+
+        emittance_x, emittance_y = emittance_from_particle(particle, elements)
+        s_vals, (betas_x, betas_y) = beta_profile(elements, atom_speed, 500)
+        r = np.sqrt(betas_x * emittance_x + betas_y * emittance_y)
+        aps_x, aps_y = lattice_apertures_arr(elements, len(s_vals))
+        return np.any(r > aps_x) or np.any(r > aps_y)
+
+
+def plot_swarm_survival_against_emittance(elements, swarm_traced, atom_speed, which_orbit_dim: str):
+    idx = ORBIT_DIM_INDEX[which_orbit_dim]
+    for i, particle in enumerate(swarm_traced):
+        Xi, Yi, _ = orbit_phase_space_coords_initial(particle)
+        Ui = (Xi, Yi)[idx]
+        c = 'r' if particle.clipped else 'g'
+        ui, u_slopei = Ui
+        u_speedi = u_slopei * atom_speed
+        ui /= 1e-3
+        plt.scatter(ui, u_speedi, c=c)
+    stabilities = is_stable_lattice(elements, atom_speed)
+    if stabilities[idx]:
+        ellipse_x, ellipse_y = acceptance_ellipses(elements, atom_speed, 500)
+        pos_ellipse, vel_ellipse = (ellipse_x, ellipse_y)[idx]
+        pos_ellipse, vel_ellipse = np.array(pos_ellipse), np.array(vel_ellipse)
+        vel_ellipse *= atom_speed
+        pos_ellipse /= 1e-3
+        plt.plot(pos_ellipse, vel_ellipse, linewidth=5)
+    plt.xlabel("Position, mm")
+    plt.ylabel("Velocity, m/s")
+    plt.show()
 
 
 def y_ellipse(x: float, eps: float, twiss_params: tuple[float, float, float]) -> tuple[float, float]:
@@ -953,9 +1039,9 @@ def phase_space_ellipse(emittance, twiss_params: tuple[float, float, float]) -> 
     return x_vals_path, y_vals_path
 
 
-def acceptance_ellipses(elements: Sequence[Element], atom_speed):
+def acceptance_ellipses(elements: Sequence[Element], atom_speed, num_points):
     Mx, My = total_lattice_transfer_matrix(elements, atom_speed)
-    max_emittances = minimum_acceptance(elements, atom_speed)
+    max_emittances = minimum_acceptance(elements, atom_speed, num_points)
     ellipes = []
     for eps, M in zip(max_emittances, [Mx, My]):
         twiss_params = twiss_parameters(M)
@@ -985,11 +1071,20 @@ def build_numeric_element(el) -> NumericElement:
     return matrix_element
 
 
+def dipole_resonance_strength_factor_amplitude(elements: Sequence[Element], atom_speed):
+    """Return factor that relates the total dipole errors to orbit offset. Larger values result in more impact of
+     dipole errors on particle orbit"""
+    tunex, tuney = tunes_incremental(elements, atom_speed)
+    resx_rel_amp = 1 / np.sin(np.pi * tunex)
+    resy_rel_amp = 1 / np.sin(np.pi * tuney)
+    return resx_rel_amp, resy_rel_amp
+
+
 class Lattice(Sequence):
     """Model of a series (assumed to be periodic) of elements"""
 
     def __init__(self):
-        self.elements: list[Element] = []
+        self.elements: tuple[Element, ...] = ()
 
     def __iter__(self):
         return iter(self.elements)
@@ -1000,30 +1095,36 @@ class Lattice(Sequence):
     def __len__(self):
         return len(self.elements)
 
+    def add_element(self, element):
+        self.elements = (*self.elements, element)
+
     def add_drift(self, L: RealNum, ap=np.inf) -> None:
-        self.elements.append(Drift(L, ap))
+        self.add_element(Drift(L, ap))
 
     def add_lens(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
-        self.elements.append(Lens(L, Bp, rp))
+        self.add_element(Lens(L, Bp, rp))
 
     def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
-        self.elements.append(Bender(Bp, rb, rp, bending_angle))
+        self.add_element(Bender(Bp, rb, rp, bending_angle))
 
     def add_combiner(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
-        self.elements.append(Combiner(L, Bp, rp))
+        self.add_element(Combiner(L, Bp, rp))
+
+    def twiss_parameters(self, atom_speed=DEFAULT_ATOM_SPEED):
+        return twiss_paremeters_from_lattice(self, atom_speed)
 
     def is_stable(self, atom_speed: float = DEFAULT_ATOM_SPEED) -> tuple[bool, bool]:
-        return is_stable_lattice(self, atom_speed=atom_speed)
+        return is_stable_lattice(self, atom_speed)
 
     def stability_factors(self, atom_speed: Union[RealNum, sequence] = DEFAULT_ATOM_SPEED,
                           clip_to_positive: bool = False):
-        fact_x, fact_y = stability_factors_lattice(self, atom_speed=atom_speed)
+        fact_x, fact_y = stability_factors_lattice(self, atom_speed)
         if clip_to_positive:
             return np.clip(fact_x, 0.0, np.inf), np.clip(fact_y, 0.0, np.inf)
         else:
             return fact_x, fact_y
 
-    def M(self, atom_speed: float = DEFAULT_ATOM_SPEED, s=None) -> tuple[ndarray, ndarray]:
+    def M(self, atom_speed: float = DEFAULT_ATOM_SPEED, s: RealNum = None) -> tuple[ndarray, ndarray]:
         if s is None:
             Mx, My = self.M_total(atom_speed=atom_speed)
         else:
@@ -1040,23 +1141,23 @@ class Lattice(Sequence):
         y_components = matrix_components(My)
         return x_components, y_components
 
-    def acceptance_ellipses(self, atom_speed=DEFAULT_ATOM_SPEED):
-        return acceptance_ellipses(self, atom_speed)
+    def acceptance_ellipses(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300):
+        return acceptance_ellipses(self, atom_speed, num_points)
 
-    def beta_profiles(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=500):
-        s_vals, (beta_x, beta_y) = beta_profile(self.elements, atom_speed=atom_speed, num_points=num_points)
+    def beta_profiles(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
+        s_vals, (beta_x, beta_y) = beta_profile(self.elements, atom_speed, num_points)
         return s_vals, (beta_x, beta_y)
 
-    def acceptance_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300):
-        return acceptance_profile(self, atom_speed=atom_speed, num_points=num_points)
+    def acceptance_profile(self, atom_speed, num_points: int = 300):
+        return acceptance_profile(self, atom_speed, num_points)
 
-    def minimum_acceptance(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300):
-        return minimum_acceptance(self, atom_speed, num_points=num_points)
+    def minimum_acceptance(self, atom_speed: RealNum, num_points: int = 300):
+        return minimum_acceptance(self, atom_speed, num_points)
 
-    def tunes_incremental(self, atom_speed=DEFAULT_ATOM_SPEED):
-        return tunes_incremental(self.elements, atom_speed=atom_speed)
+    def tunes_incremental(self, atom_speed: RealNum):
+        return tunes_incremental(self.elements, atom_speed)
 
-    def trace(self, Xi, atom_speed=DEFAULT_ATOM_SPEED, which='y') -> ndarray:
+    def trace(self, Xi, atom_speed: RealNum, which='y') -> ndarray:
         assert which in ('y', 'z')
         Mx, My = self.M(atom_speed=atom_speed)
         M = Mx if which == 'y' else My
@@ -1069,7 +1170,7 @@ class Lattice(Sequence):
     def total_length(self) -> float:
         return total_length(self.elements)
 
-    def build_matrix_lattice_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
+    def add_matrix_elements_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
 
         assert isclose(abs(simulated_lattice.initial_ang), np.pi)  # must be pointing along -x in polar coordinates
@@ -1079,7 +1180,7 @@ class Lattice(Sequence):
                 self.add_drift(el.L, ap=el.ap)
             elif type(el) in (HalbachLensSim, BenderSim, CombinerLensSim):
                 numeric_element = build_numeric_element(el)
-                self.elements.append(numeric_element)
+                self.add_element(numeric_element)
             else:
                 raise NotImplementedError
 

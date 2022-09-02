@@ -10,6 +10,9 @@ import numpy.linalg as npl
 from constants import DEFAULT_ATOM_SPEED
 from lattice_elements.elements import Element
 
+def get_obj_var(obj,var_name,var_index):
+    var=vars(obj)[var_name]
+    return var[var_index] if var_index is not None else var
 
 class Particle:
     # This object represents a single particle with unit mass. It can track parameters such as position, momentum, and
@@ -174,13 +177,13 @@ class Swarm:
         if isinstance(item, (int, slice)):
             return self.particles[item]
         elif len(item) in (2, 3):
-            item = item if len(item) == 3 else (*item, slice(None))
+            item = item if len(item) == 3 else (*item, None)
             particle_slice, var, var_index = item
-            particles = self.particles[particle_slice]
             if isinstance(particle_slice, int):
-                return vars(particles)[var][var_index]
+                particle=self.particles[particle_slice]
+                return get_obj_var(particle,var,var_index)
             elif isinstance(particle_slice, slice):
-                return [vars(particle)[var][var_index] for particle in self.particles]
+                return [get_obj_var(particle,var,var_index) for particle in self.particles[particle_slice]]
         else:
             raise NotImplementedError
 
