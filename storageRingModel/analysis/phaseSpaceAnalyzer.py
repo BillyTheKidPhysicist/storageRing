@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from particle_class import Particle as ParticleBase
-from particle_class import Swarm
+from particle import Particle as ParticleBase
+from particle import Swarm
 from particle_tracer_lattice import ParticleTracerLattice
 from swarm_tracer import SwarmTracer
 

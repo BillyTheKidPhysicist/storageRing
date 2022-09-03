@@ -18,7 +18,7 @@ from helper_tools import is_close_all
 from lattice_elements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerLensSim, \
     BenderSim, HalbachLensSim, Element
 from lattice_elements.utilities import halbach_magnet_width
-from particle_class import Particle
+from particle import Particle
 from particle_tracer import ParticleTracer
 from particle_tracer_lattice import ParticleTracerLattice
 from helper_tools import *

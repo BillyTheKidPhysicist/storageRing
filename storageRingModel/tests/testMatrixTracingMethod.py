@@ -1,6 +1,6 @@
 from math import isclose
 
-from particle_class import Swarm
+from particle import Swarm
 from particle_tracer_lattice import ParticleTracerLattice
 from swarm_tracer import SwarmTracer
 from constants import DEFAULT_ATOM_SPEED

@@ -8,7 +8,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import voigt_profile
 
-from particle_class import Swarm
+from particle import Swarm
 from particle_tracer_lattice import ParticleTracerLattice
 from constants import GRAVITATIONAL_ACCELERATION
 from lattice_elements.elements import HalbachLensSim, Drift

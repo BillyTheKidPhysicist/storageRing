@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
-from particle_class import Particle, Swarm
+from particle import Particle, Swarm
 from helper_tools import parallel_evaluate
 from storage_ring_modeler import StorageRingModel
 from type_hints import RealNum

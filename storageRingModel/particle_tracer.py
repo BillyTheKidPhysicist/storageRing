@@ -10,7 +10,7 @@ from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
     CombinerSim, CombinerLensSim
-from particle_class import Particle
+from particle import Particle
 from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
     fast_qNew, dot_Prod_3D
 

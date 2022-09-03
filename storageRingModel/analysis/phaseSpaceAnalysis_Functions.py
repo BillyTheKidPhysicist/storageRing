@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-from particle_class import Swarm, Particle
+from particle import Swarm, Particle
 from helper_tools import *
 from phaseSpaceAnalyzer import SwarmSnapShot
 from storage_ring_modeler import StorageRingModel

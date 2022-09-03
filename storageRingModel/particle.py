@@ -15,10 +15,7 @@ def get_obj_var(obj,var_name,var_index):
     return var[var_index] if var_index is not None else var
 
 class Particle:
-    # This object represents a single particle with unit mass. It can track parameters such as position, momentum, and
-    # energies, though these are computationally intensive and are not enabled by default. It also tracks where it was
-    # clipped if a collision with an apeture occured, the number of revolutions before clipping and other parameters of
-    # interest.
+    # IMPROVEMENT: Many of these methods do need need to be attached to particle
 
     def __init__(self, qi: Optional[np.ndarray] = None, pi: Optional[np.ndarray] = None, probability: float = 1.0):
         if qi is None:

@@ -13,7 +13,7 @@ from lattice_elements.elements import Element
 from lattice_elements.elements import HalbachLensSim, Drift, CombinerLensSim, CombinerSim, CombinerIdeal
 from lattice_models.lattice_model_parameters import INJECTOR_TUNABILITY_LENGTH
 from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params, make_system_model
-from particle_class import Swarm, Particle
+from particle import Swarm, Particle
 from particle_tracer_lattice import ParticleTracerLattice
 from swarm_tracer import SwarmTracer
 

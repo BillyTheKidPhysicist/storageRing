@@ -5,7 +5,7 @@ import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
 from helper_tools import low_discrepancy_sample, parallel_evaluate, temporary_seed, arr_product
-from particle_class import Swarm, Particle
+from particle import Swarm, Particle
 from particle_tracer import ParticleTracer, trace_particle_periodic_linear_lattice
 from particle_tracer_lattice import ParticleTracerLattice
 from type_hints import RealNum
