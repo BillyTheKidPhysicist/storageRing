@@ -369,9 +369,9 @@ class Layer(Collection):
         magnetization_single = np.asarray([mag_magpy_units, 0.0, 0.0])
         magnetization_all = magnetization_single * np.ones((self.num_magnets_in_layer, 3))
         magnetization_all *= (1 + self.M_norm_shift_relative)  # add specified fraction shifts, typically errors
-        for M_norm, M_Angle in zip(magnetization_all, self.R_angle_shift):
+        for i, M_Angle in enumerate(self.R_angle_shift):
             R = Rotation.from_rotvec([0.0, M_Angle[0], M_Angle[1]])
-            M_norm[:] = R.as_matrix() @ M_norm[:]  # edit in place
+            magnetization_all[i] = R.as_matrix() @ magnetization_all[i]
         assert magnetization_all.shape == (self.num_magnets_in_layer, 3)
         return magnetization_all
 

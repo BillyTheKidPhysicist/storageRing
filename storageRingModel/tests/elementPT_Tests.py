@@ -184,8 +184,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnet_width = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.1312810001224713, 0.0051788119496849845, -0.008166406095328954])
-        pf0 = np.array([-201.14880323739555, -3.793505197250757, 4.931954481391578])
+        qf0 = np.array([-0.1312807574312542  ,  0.005178788282905027,-0.00816648689675629 ])
+        pf0 = np.array([-201.14794370397757  ,   -3.7926521311036514,4.931167809763893 ])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):

@@ -24,6 +24,7 @@ class HalbachLensSim(LensIdeal):
     fringe_frac_inner_min = 4.0  # if the total hard edge magnet length is longer than this value * rp, then it can
     num_points_per_rp_x = 25
     num_points_r = 25
+    max_spacing = 1e-3
 
     # can safely be modeled as a magnet "cap" with a 2D model of the interior
 
@@ -127,6 +128,17 @@ class HalbachLensSim(LensIdeal):
         mount_thickness = 1e-3  # outer thickness of mount, likely from space required by epoxy and maybe clamp
         self.outer_half_width = max(self.rp_layers) + self.magnet_widths[np.argmax(self.rp_layers)] + mount_thickness
 
+    def round_lens_points_to_max_spacing(self, x_min, x_max, y_min, y_max, num_points_x, num_points_r) -> tuple[
+        int, int]:
+        """Return number of points in x and r that respect a maximum allowed spacing in points"""
+        delta_x = (x_max - x_min) / num_points_x
+        delta_r = np.sqrt(2) * (y_max - y_min) / num_points_r
+        num_points_x_space = round_and_make_odd(num_points_x * delta_x / self.max_spacing)
+        num_points_r_space = round_and_make_odd(num_points_r * delta_r / self.max_spacing)
+        num_points_x = max([num_points_x_space, num_points_x])
+        num_points_r = max([num_points_r_space, num_points_r])
+        return num_points_x, num_points_r
+
     def make_grid_coord_arrays(self, use_symmetry: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
@@ -151,6 +163,9 @@ class HalbachLensSim(LensIdeal):
                               " but limit is " + str(num_points_x_max))
             num_points_x = np.clip(num_points_x, 0, num_points_x_max)
             num_points_r = round_and_make_odd(self.num_points_r * 2)
+
+        num_points_x, num_points_r = self.round_lens_points_to_max_spacing(x_min, x_max, y_min, y_max,
+                                                                           num_points_x, num_points_r)
         x_arr = np.linspace(x_min, x_max, num_points_x)
         y_arr_quadrant = np.linspace(y_min, y_max, num_points_r)
         z_arr_quadrant = y_arr_quadrant.copy()

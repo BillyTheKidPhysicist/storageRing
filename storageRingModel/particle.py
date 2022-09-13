@@ -10,12 +10,13 @@ import numpy.linalg as npl
 from constants import DEFAULT_ATOM_SPEED
 from lattice_elements.elements import Element
 
-def get_obj_var(obj,var_name,var_index):
-    var=vars(obj)[var_name]
+def get_obj_var(obj, var_name, var_index):
+    var = vars(obj)[var_name]
     return var[var_index] if var_index is not None else var
 
+
 class Particle:
-    # IMPROVEMENT: Many of these methods do need need to be attached to particle
+    # IMPROVEMENT: Many of these methods do need need to be attached to particle. It reduces pickling performance
 
     def __init__(self, qi: Optional[np.ndarray] = None, pi: Optional[np.ndarray] = None, probability: float = 1.0):
         if qi is None:
@@ -23,6 +24,8 @@ class Particle:
         if pi is None:
             pi = np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0])
         assert len(qi) == 3 and len(pi) == 3 and 0.0 <= probability <= 1.0
+        qi = qi.astype(float) #ints can have weird behaviour
+        pi = pi.astype(float)
         if probability != 1.0:
             raise NotImplementedError  # i'm not' sure how correct the methods depending on this are anymore
         self.qi = qi.copy()  # initial position, lab frame, meters
@@ -177,10 +180,10 @@ class Swarm:
             item = item if len(item) == 3 else (*item, None)
             particle_slice, var, var_index = item
             if isinstance(particle_slice, int):
-                particle=self.particles[particle_slice]
-                return get_obj_var(particle,var,var_index)
+                particle = self.particles[particle_slice]
+                return get_obj_var(particle, var, var_index)
             elif isinstance(particle_slice, slice):
-                return [get_obj_var(particle,var,var_index) for particle in self.particles[particle_slice]]
+                return [get_obj_var(particle, var, var_index) for particle in self.particles[particle_slice]]
         else:
             raise NotImplementedError
 

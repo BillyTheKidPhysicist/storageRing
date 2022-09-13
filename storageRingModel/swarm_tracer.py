@@ -1,6 +1,7 @@
 import os
 from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED
@@ -22,7 +23,7 @@ real_number = (int, float)
 # todo: I this shouldn't be neccesary, I can find a better solution
 TINY_NEG_OFFSET_FROM_ELEMENT_EDGE = -1e-10  # to prevent the particle from starting righ on edge of element, which causes
 
-# unnecesary evaluation time
+# IMPOROVEMENT: add method to correctly aim particles with the direction of the lattice
 
 initial_dict_key_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
                                       'px': ('pi', 0), 'py': ('pi', 1), 'pz': ('pi', 2)}
@@ -307,10 +308,46 @@ class SwarmTracer:
 
 
 def trace_swarm_periodic_linear_lattice(swarm_initial: Swarm, st: SwarmTracer, h: float,
-                                        T: float, parallel: bool = False) -> Swarm:
+                                        T: float, parallel: bool = False, fast_mode=True) -> Swarm:
     """Trace a swarm through a linear lattice assuming that the lattice is periodic"""
     pt = st.particle_tracer
     swarm_traced = Swarm()
-    wrap = lambda particle: trace_particle_periodic_linear_lattice(particle, pt, h, T)
+    wrap = lambda particle: trace_particle_periodic_linear_lattice(particle, pt, h, T, fast_mode=fast_mode)
     swarm_traced.particles = parallel_evaluate(wrap, swarm_initial.particles, parallel=parallel)
     return swarm_traced
+
+
+def histogram_particle_survival(swarm_traced:Swarm, weighting: str, which_orbit_dim: str):
+    """Make image (2d array) of swarm's survival along specified dimension"""
+    which_orbit_dim_index = {'x': 1, 'y': 2}
+    idx = which_orbit_dim_index[which_orbit_dim]
+    x_plot, y_plot = [], []
+    weights = []
+    max_revolutions = max(swarm_traced[:, 'revolutions'])
+    for i, particle in enumerate(swarm_traced):
+        ui, pui = particle.qi[idx], particle.pi[idx]
+        ui = ui / 1e-3
+        x_plot.append(ui)
+        y_plot.append(pui)
+        if weighting == 'revolutions':
+            weight = particle.revolutions / max_revolutions
+        elif weighting == 'clipped':
+            weight = particle.clipped
+        else:
+            raise NotImplementedError
+        weights.append(weight)
+    num_bins = round(np.sqrt(swarm_traced.num_particles()))
+    image, binx, biny = np.histogram2d(x_plot, y_plot, weights=weights, bins=num_bins)
+    image = np.rot90(image)
+    return image, binx, biny
+
+
+def plot_2d_histogram_particle_survival(swarm_traced:Swarm, weighting:str='revolutions', which_orbit_dim:str='x'):
+    """Plot image of swarm's survival along specified dimension"""
+    image, binx, biny = histogram_particle_survival(swarm_traced, weighting, which_orbit_dim)
+    extent = [binx.min(), binx.max(), biny.min(), biny.max()]
+    aspect = (extent[1] - extent[0]) / (extent[3] - extent[2])
+    plt.imshow(image, extent=extent, aspect=aspect)
+    plt.xlabel("Position, mm")
+    plt.ylabel("Velocity, m/s")
+    plt.show()

@@ -17,8 +17,7 @@ from storage_ring_constraint_solver import is_particle_tracer_lattice_closed
 from storage_ring_constraint_solver import solve_Floor_Plan, update_and_place_elements_from_floor_plan
 from type_hints import ndarray, RealNum
 
-# todo: There is a ridiculous naming convention here with r0 r1 and r2. If I ever hope for this to be helpful to other
-# people, I need to change that. This was before my cleaner code approach
+# IMPROVEMENT: There is a ridiculous naming convention here with r0 r1 and r2
 
 
 benderTypes = Union[BenderIdeal, BenderSim]
@@ -361,7 +360,7 @@ class ParticleTracerLattice:
                      show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
                      final_coords=True,
                      save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
-                     plot_inner: bool = True):
+                     plot_inner: bool = True, show_grid=True):
         # plot the lattice using shapely. if user provides particle_coords plot that on the graph. If users provides particle
         # or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
         # revolutions, then the x marker is not shown
@@ -377,7 +376,7 @@ class ParticleTracerLattice:
         # functionality right now
         plt.close('all')
 
-        def plot_Particle(particle, xMarkerSize=default_marker_size):
+        def plot_particle(particle, xMarkerSize=default_marker_size):
             color = 'red' if particle.clipped else 'green'
             if show_markers:
                 if particle.qf is not None:
@@ -408,7 +407,7 @@ class ParticleTracerLattice:
                 plt.scatter(*particle_coords, marker='x', s=1000, c='r')
                 plt.scatter(*particle_coords, marker='o', s=50, c='r')
         elif particle is not None:  # instead plot from provided particle
-            plot_Particle(particle)
+            plot_particle(particle)
         if swarm is not None:
             max_revs = swarm.longest_particle_life_revolutions()
             if max_revs == 0.0:  # if it hasn't been traced
@@ -418,20 +417,21 @@ class ParticleTracerLattice:
                 if revs is None:
                     revs = 0
                 if show_Rel_Survival:
-                    plot_Particle(particle, xMarkerSize=1000 * revs / max_revs)
+                    plot_particle(particle, xMarkerSize=1000 * revs / max_revs)
                 else:
-                    plot_Particle(particle)
+                    plot_particle(particle)
 
         if extra_objects is not None:  # plot shapely objects that the used passed through. SO far this has limited
             # functionality
             for plot_object in extra_objects:
                 plt.plot(*plot_object.coords.xy, linewidth=1, c='black')
-
-        plt.grid()
+        if show_grid:
+            plt.grid()
         if true_aspect_ratio:
             plt.gca().set_aspect('equal')
         plt.xlabel('meters')
         plt.ylabel('meters')
+        plt.tight_layout()
         if save_title is not None:
             plt.savefig(save_title, dpi=dpi)
         if show_immediately:

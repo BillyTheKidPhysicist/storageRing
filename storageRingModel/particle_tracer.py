@@ -8,6 +8,7 @@ from numba.core.errors import NumbaPerformanceWarning
 
 from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
+from helper_tools import is_close_all
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
     CombinerSim, CombinerLensSim
 from particle import Particle
@@ -388,14 +389,15 @@ def step_particle_past_end(particle: Particle, lattice) -> None:
     dt = dx * (1 + overshoot_frac) / particle.pf[0]
     particle.qf = particle.qf + particle.pf * dt
     particle.T += dt
+    particle.cumulative_length += lattice[-1].Lo
 
 
 def apply_periodicity_to_particle(particle, PTL):
     """Assuming a periodic lattice return a particle to the beginning and correctly adjust the particle time and
     x position. Particle should be very close to end because it will be walked up to just past the end as the first
     step"""
-    assert not particle.data_logging and not particle.clipped
-    assert np.all(PTL[-1].ne == np.array([-1.0, 0, 0]))
+    assert not particle.clipped
+    assert is_close_all(PTL[-1].ne, np.array([-1.0, 0, 0]), 1e-12)
     total_lattice_angle = sum(abs(el.ang) for el in PTL)
     assert total_lattice_angle == 0
     step_particle_past_end(particle, PTL)
@@ -404,20 +406,27 @@ def apply_periodicity_to_particle(particle, PTL):
     particle.pi = particle.pf.copy()
     particle.qf = particle.pf = None
     particle.traced = False
+    particle.q_vals = list(particle.q_vals)
+    particle.p_vals = list(particle.p_vals)
+    particle.po_vals = list(particle.po_vals)
+    particle.qo_vals = list(particle.qo_vals)
+    particle.E_vals = list(particle.E_vals)
+    particle.KE_vals = list(particle.KE_vals)
+    particle.V_vals = list(particle.V_vals)
 
 
-def trace_particle_periodic_linear_lattice(particle, pt, h, T):
+def trace_particle_periodic_linear_lattice(particle, pt, h, T, fast_mode=False):
     """Trace a particle through a linear lattice assuming it is periodic"""
     lattice = pt.PTL
     assert lattice.is_lattice_straight()
     qi, pi = particle.qi.copy(), particle.pi.copy()
-    particle = pt.trace(particle, h, T, fast_mode=True)
+    particle = pt.trace(particle, h, T, fast_mode=fast_mode)
     iter, max_iters = 0, 10_000
     x = particle.qf[0]
 
     while not particle.clipped and particle.T < T:
         apply_periodicity_to_particle(particle, lattice)
-        particle = pt.trace(particle, h, T, fast_mode=True)
+        particle = pt.trace(particle, h, T, fast_mode=fast_mode)
         x += particle.qf[0]
         iter += 1
         assert iter < max_iters

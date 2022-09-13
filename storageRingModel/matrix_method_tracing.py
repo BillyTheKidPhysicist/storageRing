@@ -1,7 +1,7 @@
 import functools
 from collections.abc import Sequence
 from math import sqrt, cos, sin, cosh, sinh, tan, acos, atan2, isclose
-from typing import Iterable, Union, Callable
+from typing import Iterable, Union, Callable, Any
 
 import matplotlib.pyplot as plt
 import numba
@@ -14,10 +14,11 @@ from helper_tools import multiply_matrices
 from lattice_elements.bender_sim import mirror_across_angle, speed_with_energy_correction
 from lattice_elements.elements import Drift as Drift_Sim
 from lattice_elements.elements import Element as SimElement
-from lattice_elements.elements import HalbachLensSim, BenderSim, CombinerLensSim
+from lattice_elements.elements import HalbachLensSim, BenderSim, CombinerLensSim, BenderIdeal, LensIdeal
 from lattice_elements.orbit_trajectories import combiner_orbit_coords_el_frame
 from particle import Swarm, Particle
 from particle_tracer_lattice import ParticleTracerLattice
+from swarm_tracer import histogram_particle_survival
 from type_hints import ndarray, RealNum, sequence
 
 SMALL_ROUNDING_NUM: float = 1e-14
@@ -25,6 +26,9 @@ NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model 
 ORBIT_DIM_INDEX = {'x': 0, 'y': 1}
 
 ThreeNumpyMatrices = tuple[ndarray, ndarray, ndarray]
+
+
+# IMPROVEMENT: unify profile naming
 
 
 def make_arrays_read_only(*arrays) -> None:
@@ -52,6 +56,7 @@ def sim_element_fingerprint(el: SimElement) -> tuple:
 class Memoize_Elements:
     """To save time, memorize the results of elements that are identical from the matrix elements perspective.
     Known as memoization"""
+    max_cache_size = 16
 
     def __init__(self, el_func):
         self.el_func = el_func
@@ -64,7 +69,86 @@ class Memoize_Elements:
         else:
             result = self.el_func(el)
             self.cache[key] = result
+            if len(self.cache) > self.max_cache_size:
+                first_key = list(self.cache.keys())[0]
+                self.cache.pop(first_key)
             return result
+
+
+def length_hard_edge(el: SimElement) -> float:
+    """Return the hard edge length of a simulation element"""
+    if type(el) is BenderSim:
+        L = el.ang * el.ro
+    elif type(el) is HalbachLensSim:
+        L = el.Lm
+    else:
+        raise NotImplementedError
+    return L
+
+
+def cumulative_path_length(coords: ndarray) -> ndarray:
+    """Return the cumulative length of a path specified as an array of coordinates"""
+    _, dim = coords.shape
+    dr = coords[1:] - coords[:-1]
+    dr = np.row_stack((np.zeros(dim), dr))
+    dr = np.linalg.norm(dr, axis=1)
+    path_length = np.cumsum(dr)
+    return path_length
+
+
+def make_s_vals(rp: float, s_max: float) -> ndarray:
+    """Return array of position values along path"""
+    num_s_points_per_bore_radius = 10
+    num_s_points = round((s_max / rp) * num_s_points_per_bore_radius)
+    s_min = 0.0
+    s_vals = np.linspace(s_min, s_max, num_s_points)
+    return s_vals
+
+
+def total_momentum_kick(F_vals: ndarray, s_vals: ndarray) -> float:
+    """Return total momentum kick from force along path defined by s_vals"""
+    return np.trapz(F_vals, s_vals)
+
+
+def effective_Bp(F_vals: ndarray, s_vals: ndarray, r_offset: float, L_hard_edge: float, rp: float) -> float:
+    """Return an effective magnetic field at the pole face (Bp) that accounts for the fringin field for some degree
+    by using the total transfered momentum"""
+    delta_p = total_momentum_kick(F_vals, s_vals)
+    K = -delta_p / (r_offset * L_hard_edge)
+    Bp_effective = K * rp ** 2 / (2 * SIMULATION_MAGNETON)
+    return Bp_effective
+
+
+def Bp_effective_lens(el: SimElement) -> float:
+    """Return the effective magnetic field at the pole face for a lens"""
+    assert type(el) is HalbachLensSim
+    magnets = el.magnet.magpylib_magnets_model(False, False)
+    s_vals = make_s_vals(el.rp, el.L)
+    r_offset = el.rp / 4.0
+    x_vals = np.ones(len(s_vals)) * r_offset
+    y_vals = np.zeros(len(s_vals))
+    coords = np.column_stack((s_vals, x_vals, y_vals))
+    Fx_vals = magnet_force(magnets, coords)[:, 1]
+    L_hard_edge = length_hard_edge(el)
+    Bp_effective = effective_Bp(Fx_vals, s_vals, r_offset, L_hard_edge, el.rp)
+    return Bp_effective
+
+
+def Bp_effective_bender(el: SimElement) -> float:
+    """Return the effective magnetic field at the pole face for a lens"""
+    assert type(el) is BenderSim
+    magnets = el.magnet.magpylib_magnets_model(False)
+    sc_max = 2 * el.L_cap + el.ang * el.rb
+    sc_vals = make_s_vals(el.rp, sc_max)
+    r_offset = el.rp / 4.0
+    coords = np.array([el.convert_center_to_cartesian_coords(s, r_offset, 0.0) for s in sc_vals])
+    unit_vecs_perp = np.array([xo_unit_vector_bender_el_frame(el, coord) for coord in coords])
+    F_vals = magnet_force(magnets, coords)
+    Fr_vals = np.array([np.dot(unit_vec, F) for unit_vec, F in zip(unit_vecs_perp, F_vals)])
+    s_vals = cumulative_path_length(coords)
+    L_hard_edge = length_hard_edge(el)
+    Bp_effective = effective_Bp(Fr_vals, s_vals, r_offset, L_hard_edge, el.rp)
+    return Bp_effective
 
 
 @numba.njit
@@ -153,7 +237,10 @@ def make_atom_speed_kwarg_iterable(func) -> Callable:
 @numba.njit()
 def transfer_matrix(K: RealNum, L: RealNum, R=None) -> ndarray:
     """Build the 2x2 transfer matrix (ABCD matrix) for an element that represents a harmonic potential.
-    Transfer matrix is for one dimension only"""
+    Transfer matrix is for one dimension only
+
+    unfortunately I use reverse K convention than I do in my thesis..
+    """
     assert L >= 0.0
     if K == 0.0:
         A = 1.0
@@ -174,6 +261,8 @@ def transfer_matrix(K: RealNum, L: RealNum, R=None) -> ndarray:
         C = sqrt(K) * sinh(psi)
         D = cosh(psi)
     if R is not None:
+        if K == 0.0:
+            assert R == np.inf
         phi = sqrt(K) * L
         if K == 0.0:
             E = F = 0.0
@@ -359,9 +448,8 @@ def split_range_into_slices(x_min: RealNum, x_max: RealNum, num_slices: int) -> 
 
 
 def unit_vec_perp_to_path(path_coords: ndarray) -> ndarray:
-    """Along the path path_coords, find the perpindicualr normal vector for each point. Assume the path is
-    counter-clockwise, and the normal point radially outwards
-    """
+    """Along the path 'path_coords', find the perpindicualr normal vector for each point. Assume the path is
+    counter-clockwise, and the normal points radially outwards"""
     # IMPROVEMENT: This could be more accurate by using the speed at each point I think
     norm_perps = []
     vec_vertical = np.array([0, 0, 1.0])
@@ -659,10 +747,11 @@ class NumericElement(Element):
 class Lens(Element):
     """Element representing a lens"""
 
-    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum, ):
+    def __init__(self, L: RealNum, Bp: RealNum, rp: RealNum, ap=None):
         self.Bp = Bp
         self.rp = rp
-        super().__init__(L, ap=rp)
+        ap = rp if ap is None else ap
+        super().__init__(L, ap=ap)
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> ThreeNumpyMatrices:
         assert 0 <= s <= self.L
@@ -706,8 +795,12 @@ class Drift(Element):
 class Bender(Element):
     """Element representing a bending component"""
 
-    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
-        self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp, DEFAULT_ATOM_SPEED)
+    def __init__(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum, ro=None, ap=None):
+        if ro is None:
+            self.ro = bender_orbit_radius_no_energy_correction(Bp, rb, rp, DEFAULT_ATOM_SPEED)
+        else:
+            self.ro = ro
+        ap = rp if ap is None else ap
         centrifugal_offset = self.ro - rb
         if centrifugal_offset >= rp:
             raise ValueError("particle cannot survive in bender because centrifugal offset is too large")
@@ -715,8 +808,8 @@ class Bender(Element):
         self.rp = rp
         self.Bp = Bp
         L = self.ro * bending_angle  # length of particle orbit
-        ap_x = self.rp - centrifugal_offset
-        ap_y = sqrt(self.rp ** 2 - centrifugal_offset ** 2)  # IMPROVEMENT: implement two different values
+        ap_x = ap - centrifugal_offset
+        ap_y = sqrt(ap ** 2 - centrifugal_offset ** 2)  # IMPROVEMENT: implement two different values
         super().__init__(L, ap=(ap_x, ap_y))
 
     def M_func(self, s: RealNum, atom_speed: RealNum) -> ThreeNumpyMatrices:
@@ -730,9 +823,46 @@ class Bender(Element):
         return Mx, My, Md
 
 
-import typing
+HashableElements = Union[tuple[Element], dict[Any, Element]]
 
-HashableElements = Union[tuple[Element], dict[typing.Any, Element]]
+
+def make_effective_lens_elements(el: HalbachLensSim) -> tuple[Drift, Lens, Drift]:
+    """Return matrix elements (Drift, lens,Drift) that most effectively capture the behaviour of a fully simulated
+    lens"""
+    assert type(el) is HalbachLensSim
+    Bp = Bp_effective_lens(el)
+    ap = el.ap
+    L_lens = length_hard_edge(el)
+    L_drift = el.fringe_frac_outer * el.rp
+    drift1 = Drift(L_drift, ap)
+    drift2 = Drift(L_drift, ap)
+    lens = Lens(L_lens, Bp, el.rp)
+    return drift1, lens, drift2
+
+
+def make_effective_bender_elements(el: BenderSim) -> tuple[Drift, Bender, Drift]:
+    """Return matrix elements (Drift, Bender,Drift) that most effectively capture the behaviour of a fully simulated
+    bender"""
+    assert type(el) is BenderSim
+    Bp = Bp_effective_bender(el)
+    L_drift = el.fringe_frac_outer * el.rp
+
+    ap = el.ap
+    drift1 = Drift(L_drift, ap)
+    drift2 = Drift(L_drift, ap)
+    bender = Bender(Bp, el.rb, el.rp, el.ang, ro=el.ro)
+    return drift1, bender, drift2
+
+
+@Memoize_Elements
+def make_effective_elements(el) -> tuple[Element, Element, Element]:
+    """Return matrix elements that most effectively model the behaviour of a fully simulated element"""
+    if type(el) is BenderSim:
+        return make_effective_bender_elements(el)
+    elif type(el) is HalbachLensSim:
+        return make_effective_lens_elements(el)
+    else:
+        raise NotImplementedError
 
 
 def mult_el_matrices(Mx: ndarray, My: ndarray, Md: ndarray, el: Element,
@@ -812,8 +942,8 @@ def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum
 
 def dispersion_from_components(m11, m12, m13, m21, m22, m23, unused_m31, unused_m32, unused_m33):
     """Return value of dispersion function given dispersion transfer matrix values"""
-    D0_prime = (m21 * m13 + m23 * (1 - m11)) / (2 - m11 - m22)
-    D = (m12 * D0_prime + m13) / (1 - m11)
+    D_prime = (m21 * m13 + m23 * (1 - m11)) / (2 - m11 - m22)
+    D = (m12 * D_prime + m13) / (1 - m11)
     return D
 
 
@@ -875,6 +1005,25 @@ def beta_profile(elements, atom_speed, num_points):
         return s_vals, (betas_x, betas_y)
 
 
+def alpha_profile(elements: HashableElements, atom_speed: float,
+                  num_points: int) -> tuple[ndarray, tuple[ndarray, ndarray]]:
+    """Return gamma profile through periodic lattice of elements"""
+    s_vals, (beta_x, beta_y) = beta_profile(elements, atom_speed, num_points)
+    alphas_x = np.gradient(beta_x, s_vals)
+    alphas_y = np.gradient(beta_y, s_vals)
+    return s_vals, (alphas_x, alphas_y)
+
+
+def gamma_profiles(elements: HashableElements, atom_speed: float,
+                   num_points: int) -> tuple[ndarray, tuple[ndarray, ndarray]]:
+    """Return gamma profile through periodic lattice of elements"""
+    s_vals, (betas_x, betas_y) = beta_profile(elements, atom_speed, num_points)
+    _, (alphas_x, alphas_y) = alpha_profile(elements, atom_speed, num_points)
+    gammas_x = (1 + alphas_x ** 2) / betas_x
+    gammas_y = (1 + alphas_y ** 2) / betas_y
+    return s_vals, (gammas_x, gammas_y)
+
+
 @functools.lru_cache
 def dispersion_profile(elements: HashableElements, atom_speed: RealNum,
                        num_points: int) -> tuple[ndarray, ndarray]:
@@ -891,7 +1040,7 @@ def dispersion_profile(elements: HashableElements, atom_speed: RealNum,
         return s_vals, dispersions
 
 
-def tunes_absolute(elements: HashableElements, atom_speed: RealNum, num_points: int = 1000) -> tuple[float, float]:
+def tunes_absolute(elements: HashableElements, atom_speed: RealNum, num_points) -> tuple[float, float]:
     """Return absolute value of tune. Calculated by integrating beta function profile along lattice"""
     s_vals, (betas_x, betas_y) = beta_profile(elements, atom_speed, num_points)
     tune_x = np.trapz(1 / betas_x, x=s_vals) / (2 * np.pi)
@@ -937,7 +1086,7 @@ def stability_factors_lattice(elements: HashableElements, atom_speed: RealNum) -
     """Factor describing stability of periodic lattice of elements. If value is greater than 0 it is stable, though
     higher values are "more" stable in some sense"""
 
-    Mx, My, Md = total_lattice_transfer_matrix(elements, atom_speed)
+    Mx, My, _ = total_lattice_transfer_matrix(elements, atom_speed)
     stability_factor_x = stability_factor(*matrix_components(Mx))
     stability_factor_y = stability_factor(*matrix_components(My))
     return stability_factor_x, stability_factor_y
@@ -1029,10 +1178,26 @@ def twiss_paremeters_from_lattice(elements: HashableElements, atom_speed) -> tup
     return tuple(twiss_params)
 
 
-def emittance_from_particle(particle, elements: HashableElements) -> tuple:
+def orbit_phase_space_coords_final(particle: Particle) -> tuple[float, tuple, tuple, float]:
+    """Return orbit phase space coordinates from particle. Requires that orbit coordinates were logged"""
+    z, x, y = particle.qo_vals[-1]
+    orbit_velocity, px, py = particle.po_vals[-1]
+    x_slope = px / orbit_velocity
+    y_slope = py / orbit_velocity
+    return z, (x, x_slope), (y, y_slope), orbit_velocity
+
+
+def emittance_from_particle(particle, elements: HashableElements, which_coords='initial') -> tuple:
     """Return x and y emittances of a particle in a periodic lattice of elements"""
-    X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
-    Mx, My, Md = total_lattice_transfer_matrix(elements, atom_speed)
+    if which_coords == 'initial':
+        _, X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
+        Mx, My, _ = total_lattice_transfer_matrix(elements, atom_speed)
+    elif which_coords == 'final':
+        z, X, Y, atom_speed = orbit_phase_space_coords_final(particle)
+        Mx, My, _ = lattice_transfer_matrix_at_s(z, elements, atom_speed)
+    else:
+        raise NotImplementedError
+
     emittances = []
     for ((ui, ui_slope), Mu) in zip((X, Y), (Mx, My)):
         twiss_params = twiss_parameters(Mu)
@@ -1045,14 +1210,14 @@ def does_envelope_clip_on_aperture(xo: ndarray, yo: ndarray, apx: ndarray,
     """Return True if the particle's envelope increases beyond the value of an aperture in a periodic lattice. Assumes
     that the aperture are all cylinderical, though the orbit may be displaced horizontally in the bore"""
     aps_r = (apx ** 2 + apy ** 2) / (2 * apx)
-    delta = (apy - apx) * (apy + apx) / (2 * apx)
-    x_bore = xo + delta + dispersion_shift
+    delta_x_bore = (apy - apx) * (apy + apx) / (2 * apx)
+    x_bore = xo + delta_x_bore + dispersion_shift
     y_bore = yo
     r = np.sqrt(x_bore ** 2 + y_bore ** 2)
     return np.any(r > aps_r)
 
 
-def orbit_phase_space_coords_initial(particle: Particle) -> tuple[tuple, tuple, float]:
+def orbit_phase_space_coords_initial(particle: Particle) -> tuple[float, tuple, tuple, float]:
     """Return phase space coords in orbit frame from initial particle coords. This assumes that the particle is located
     at the origin and aimed along the negative x direction. Further, it is assumed that the positive x dimension of the
     orbit points radially outward for clockwise trajectories and thus points in the negative cartesian y direction
@@ -1064,7 +1229,8 @@ def orbit_phase_space_coords_initial(particle: Particle) -> tuple[tuple, tuple, 
     orbit_velocity = abs(px_lab)
     xi, yi = -y_lab, z_lab
     xi_slope, yi_slope = -py_lab / orbit_velocity, pz_lab / orbit_velocity
-    return (xi, xi_slope), (yi, yi_slope), orbit_velocity
+    z = 0.0
+    return z, (xi, xi_slope), (yi, yi_slope), orbit_velocity
 
 
 def will_particle_clip_on_aperture(particle: Particle, elements: HashableElements,
@@ -1075,7 +1241,7 @@ def will_particle_clip_on_aperture(particle: Particle, elements: HashableElement
 
     # IMPROVEMENT: this can falsely predict a particle clipping if one of the profile is much smaller than the other
 
-    _, _, atom_speed = orbit_phase_space_coords_initial(particle)
+    _, _, _, atom_speed = orbit_phase_space_coords_initial(particle)
     if not is_stable_both_xy(elements, atom_speed):
         return True
     else:
@@ -1095,21 +1261,21 @@ def swarm_flux_mult_from_matrix_method(swarm_initial: Swarm, elements: HashableE
     oriented such that it is nominally traveling along -x initially"""
     _atom_speeds = np.abs(swarm_initial[:, 'pi', 0])
     speed_range = np.linspace(min(_atom_speeds), max(_atom_speeds), num_points_speed_range)
-    flux_mat = 00.0
+    flux_mat_method = 0.0
     for particle in swarm_initial:
         atom_speed = abs(particle.pi[0])
         speed_rounded = speed_range[np.argmin(np.abs(atom_speed - speed_range))]
         particle_new = particle.copy()
         particle_new.pi[0] = -speed_rounded
         flux = revolutions_from_matrix_method(particle_new, elements, T_max)
-        flux_mat += flux
-    return flux_mat / len(swarm_initial)
+        flux_mat_method += flux
+    return flux_mat_method / len(swarm_initial)
 
 
 def plot_particle_and_acceptance(particle: Particle, elements: HashableElements) -> None:
     """Plot particle's x and y initial values in side phase space ellipse from minimal surviving emittance given by
     minimum acceptance. Accounts for disperion"""
-    (xi, xi_slope), (yi, yi_slope), orbit_velocity = orbit_phase_space_coords_initial(particle)
+    _, (xi, xi_slope), (yi, yi_slope), orbit_velocity = orbit_phase_space_coords_initial(particle)
     ellipsex, ellipsey = acceptance_ellipses(elements, orbit_velocity, 100)
     plt.plot(*ellipsex)
     plt.scatter(xi, xi_slope)
@@ -1119,18 +1285,18 @@ def plot_particle_and_acceptance(particle: Particle, elements: HashableElements)
 
 
 def plot_swarm_survival_against_emittance(elements: HashableElements, swarm_traced: Swarm,
-                                          atom_speed: RealNum, which_orbit_dim: str) -> None:
+                                          atom_speed: RealNum, which_orbit_dim: str, save_title) -> None:
     """Generate plot of particle's simulated survival in phase space against acceptance ellipse in one dimension,
     x or y"""
     idx = ORBIT_DIM_INDEX[which_orbit_dim]
-    for i, particle in enumerate(swarm_traced):
-        Xi, Yi, _ = orbit_phase_space_coords_initial(particle)
-        Ui = (Xi, Yi)[idx]
-        c = 'r' if particle.clipped else 'g'
-        ui, u_slopei = Ui
-        u_speedi = u_slopei * atom_speed
-        ui /= 1e-3
-        plt.scatter(ui, u_speedi, c=c)
+    assert atom_speed > 0
+    image, binx, biny = histogram_particle_survival(swarm_traced, 'revolutions', which_orbit_dim)
+    if which_orbit_dim == 'x':
+        # need to flip for sign convention
+        image = np.rot90(image, k=2)
+        binx = np.flip(-binx)
+        biny = np.flip(-biny)
+
     stabilities = is_stable_xy(elements, atom_speed)
     if stabilities[idx]:
         ellipse_x, ellipse_y = acceptance_ellipses(elements, atom_speed, 500)
@@ -1138,9 +1304,16 @@ def plot_swarm_survival_against_emittance(elements: HashableElements, swarm_trac
         pos_ellipse, vel_ellipse = np.array(pos_ellipse), np.array(vel_ellipse)
         vel_ellipse *= atom_speed
         pos_ellipse /= 1e-3
-        plt.plot(pos_ellipse, vel_ellipse, linewidth=5)
+        plt.plot(pos_ellipse, vel_ellipse, linewidth=5, c='r', linestyle=':', label='Acceptance ellipse')
+    extent = [binx.min(), binx.max(), biny.min(), biny.max()]
+    aspect = (extent[1] - extent[0]) / (extent[3] - extent[2])
+    plt.imshow(image, extent=extent, aspect=aspect, alpha=.75)
     plt.xlabel("Position, mm")
     plt.ylabel("Velocity, m/s")
+    plt.colorbar(label='Relative survival')
+    plt.legend()
+    if save_title is not None:
+        plt.savefig(save_title, dpi=300)
     plt.show()
 
 
@@ -1175,7 +1348,7 @@ def acceptance_ellipses(elements: HashableElements, atom_speed: RealNum, num_poi
     for eps, M in zip(max_emittances, [Mx, My]):
         twiss_params = twiss_parameters(M)
         ellipses.append(phase_space_ellipse(eps, twiss_params))
-    return ellsipes
+    return ellipses
 
 
 @Memoize_Elements  # reuse identical output rather than recreating them
@@ -1230,11 +1403,11 @@ class Lattice(Sequence):
     def add_drift(self, L: RealNum, ap=np.inf) -> None:
         self.add_element(Drift(L, ap))
 
-    def add_lens(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
-        self.add_element(Lens(L, Bp, rp))
+    def add_lens(self, L: RealNum, Bp: RealNum, rp: RealNum, ap=None) -> None:
+        self.add_element(Lens(L, Bp, rp, ap=ap))
 
-    def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum):
-        self.add_element(Bender(Bp, rb, rp, bending_angle))
+    def add_bender(self, Bp: RealNum, rb: RealNum, rp: RealNum, bending_angle: RealNum, ap=None, ro=None):
+        self.add_element(Bender(Bp, rb, rp, bending_angle, ap=ap, ro=ro))
 
     def add_combiner(self, L: RealNum, Bp: RealNum, rp: RealNum) -> None:
         self.add_element(Combiner(L, Bp, rp))
@@ -1278,14 +1451,25 @@ class Lattice(Sequence):
         s_vals, (beta_x, beta_y) = beta_profile(self.elements, atom_speed, num_points)
         return s_vals, (beta_x, beta_y)
 
-    def acceptance_profile(self, atom_speed, num_points: int = 300):
+    def alpha_profiles(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
+        s_vals, (alphas_x, alphas_y) = alpha_profile(self.elements, atom_speed, num_points)
+        return s_vals, (alphas_x, alphas_y)
+
+    def gamma_profiles(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
+        s_vals, (gammas_x, gammas_y) = gamma_profiles(self.elements, atom_speed, num_points)
+        return s_vals, (gammas_x, gammas_y)
+
+    def acceptance_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points: int = 300):
         return acceptance_profile(self.elements, atom_speed, num_points)
 
-    def minimum_acceptance(self, atom_speed: RealNum, num_points: int = 300):
+    def minimum_acceptance(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
         return minimum_acceptance(self.elements, atom_speed, num_points)
 
-    def tunes_incremental(self, atom_speed: RealNum):
+    def tunes_incremental(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED):
         return tunes_incremental(self.elements, atom_speed)
+
+    def tunes_absolute(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
+        return tunes_absolute(self.elements, atom_speed, num_points)
 
     def trace(self, Xi, atom_speed: RealNum, which='y') -> ndarray:
         assert which in ('y', 'z')
@@ -1300,7 +1484,8 @@ class Lattice(Sequence):
     def total_length(self) -> float:
         return total_length(self.elements)
 
-    def add_matrix_elements_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice) -> None:
+    def add_matrix_elements_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice,
+                                             use_effective_elements=False) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
 
         assert isclose(abs(simulated_lattice.initial_ang), np.pi, abs_tol=1e-9)  # must be pointing along -x
@@ -1309,14 +1494,36 @@ class Lattice(Sequence):
         for el in simulated_lattice:
             if type(el) is Drift_Sim:
                 self.add_drift(el.L, ap=el.ap)
-            elif type(el) in (HalbachLensSim, BenderSim, CombinerLensSim):
+            elif type(el) is CombinerLensSim or (
+                    type(el) in (HalbachLensSim, BenderSim) and not use_effective_elements):
                 numeric_element = build_numeric_element(el)
                 self.add_element(numeric_element)
+            elif type(el) in (HalbachLensSim, BenderSim) and use_effective_elements:
+                effective_elements = make_effective_elements(el)
+                for el in effective_elements:
+                    self.add_element(el)
+            else:
+                raise NotImplementedError
+
+    def add_matrix_elements_from_ideal_lattice(self, ideal_lattice: ParticleTracerLattice):
+        for el in ideal_lattice:
+            if type(el) is LensIdeal:
+                self.add_lens(el.L, el.Bp, el.rp, ap=el.ap)
+            elif type(el) is Drift_Sim:
+                self.add_drift(el.L, ap=el.ap)
+            elif type(el) is BenderIdeal:
+                self.add_bender(el.Bp, el.rb, el.rp, el.ang, ap=el.ap, ro=el.ro)
             else:
                 raise NotImplementedError
 
     def predicted_swarm_flux(self, swarm: Swarm, T_max: RealNum, num_points_speed_range: int = 50):
         return swarm_flux_mult_from_matrix_method(swarm, self.elements, T_max, num_points_speed_range)
+
+    def plot_swarm_survival_against_emittance(self, swarm_traced: Swarm, which_orbit_dim: str, save_title=None) -> None:
+        atom_speeds = np.array(swarm_traced[:, 'pi', 0])
+        assert isclose(np.std(atom_speeds), 0.0)  # must all be the same
+        atom_speed = abs(atom_speeds[0])
+        plot_swarm_survival_against_emittance(self.elements, swarm_traced, atom_speed, which_orbit_dim, save_title)
 
     def trace_swarm(self, swarm, copy_swarm=True, atom_speed=DEFAULT_ATOM_SPEED):
         assert len(self.elements) > 0

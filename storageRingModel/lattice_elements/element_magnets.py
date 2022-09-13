@@ -18,7 +18,7 @@ Dim1_Arr = ndarray
 # IMPROVEMENT: the naming of valid is silly
 
 def valid_field_values_col(element_magnet, coords, valid_indices, use_approx,
-                           extra_elements: list[Collection] = None):  # IMPROVEMENT: apply this to lens also
+                           extra_elements: list[Collection] = None):
     """Get valid field values, ie those specified by 'valid_indices, from 'element_magnet' and possible extra
      magnets"""
     col = ElementMagnetCollection(element_magnet)
@@ -28,7 +28,8 @@ def valid_field_values_col(element_magnet, coords, valid_indices, use_approx,
     B_norm_grad_arr, B_norm_arr = np.zeros((len(coords), 3)) * np.nan, np.zeros(len(coords)) * np.nan
     B_norm_grad_arr[valid_indices], B_norm_arr[valid_indices] = col.B_norm_grad(coords[valid_indices],
                                                                                 return_norm=True,
-                                                                                use_approx=use_approx)
+                                                                                use_approx=use_approx,
+                                                                                dx=B_GRAD_STEP_SIZE)
     return B_norm_grad_arr, B_norm_arr
 
 
@@ -144,27 +145,25 @@ class MagneticLens(MagneticOptic):
     def magpylib_magnets_model(self, magnet_errors, include_misalignments):
         return self.make_magpylib_magnets(magnet_errors, include_misalignments)
 
-    def get_valid_coord_indices(self, coords: ndarray, interp_step_size: float, include_misalignments) -> Dim1_Arr:
+    def get_valid_coord_indices(self, coords: ndarray, include_misalignments) -> Dim1_Arr:
         if include_misalignments:
             coords = coords.copy()  # to not modify original
             coords = self.transform_coords_to_misaligned(coords)
-        valid_x_a = coords[:, 0] < self.x_in_offset - interp_step_size
-        valid_x_b = coords[:, 0] > self.x_in_offset + self.Lm + interp_step_size
+        valid_x_a = coords[:, 0] < self.x_in_offset - INTERP_MAGNET_MATERIAL_OFFSET
+        valid_x_b = coords[:, 0] > self.x_in_offset + self.Lm + INTERP_MAGNET_MATERIAL_OFFSET
         rarr = np.linalg.norm(coords[:, 1:], axis=1)
 
         r_inner = np.min(self.rp_layers)
         r_outer = np.max(self.rp_layers) + self.magnet_widths[np.argmax(self.rp_layers)]
-        valid_r_a = rarr < r_inner - interp_step_size
-        valid_r_b = rarr > r_outer + interp_step_size
+        valid_r_a = rarr < r_inner - INTERP_MAGNET_MATERIAL_OFFSET
+        valid_r_b = rarr > r_outer + INTERP_MAGNET_MATERIAL_OFFSET
         valid_indices = valid_x_a + valid_x_b + valid_r_a + valid_r_b
         return valid_indices
 
     def get_valid_field_values(self, coords: ndarray, use_mag_errors: bool = False,
-                               extra_magnets: Collection = None, interp_rounding_guard: float = 1e-12,
-                               include_misalignments=False, interp_step_size: float = B_GRAD_STEP_SIZE,
-                               use_approx=True) -> tuple[ndarray, ndarray]:
-        assert interp_step_size > 0.0 and interp_rounding_guard > 0.0
-        valid_indices = self.get_valid_coord_indices(coords, interp_step_size, include_misalignments)
+                               extra_magnets: Collection = None,
+                               include_misalignments=False,use_approx=True) -> tuple[ndarray, ndarray]:
+        valid_indices = self.get_valid_coord_indices(coords, include_misalignments)
         magnets = self.magpylib_magnets_model(use_mag_errors, include_misalignments)
         return valid_field_values_col(magnets, coords, valid_indices, use_approx, extra_elements=extra_magnets)
 
