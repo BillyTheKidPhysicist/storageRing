@@ -160,11 +160,11 @@ class MagneticLens(MagneticOptic):
         valid_indices = valid_x_a + valid_x_b + valid_r_a + valid_r_b
         return valid_indices
 
-    def get_valid_field_values(self, coords: ndarray, use_mag_errors: bool = False,
+    def get_valid_field_values(self, coords: ndarray, include_mag_errors: bool = False,
                                extra_magnets: Collection = None,
                                include_misalignments=False,use_approx=True) -> tuple[ndarray, ndarray]:
         valid_indices = self.get_valid_coord_indices(coords, include_misalignments)
-        magnets = self.magpylib_magnets_model(use_mag_errors, include_misalignments)
+        magnets = self.magpylib_magnets_model(include_mag_errors, include_misalignments)
         return valid_field_values_col(magnets, coords, valid_indices, use_approx, extra_elements=extra_magnets)
 
 
@@ -184,7 +184,7 @@ class MagnetBender(MagneticOptic):
         self.magnet_width = magnet_width
 
     def make_magpylib_magnets(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
-                              num_lenses: int, use_mag_errors: bool, use_full_method_of_moments: bool = False):
+                              num_lenses: int, include_mag_errors: bool, use_full_method_of_moments: bool = False):
         """Return magpylib magnet model representing a portion or all of the bender"""
         use_approx_method_of_moments = not use_full_method_of_moments
         with temporary_seed(self.seed):
@@ -193,15 +193,15 @@ class MagnetBender(MagneticOptic):
                                                    num_lenses, use_half_cap_end,
                                                    use_pos_mag_angs_only=use_pos_mag_angs_only,
                                                    use_solenoid_field=self.use_solenoid,
-                                                   use_mag_errors=use_mag_errors,
+                                                   include_mag_errors=include_mag_errors,
                                                    magnet_width=self.magnet_width,
                                                    use_approx_method_of_moments=use_approx_method_of_moments)
         return bender_field_generator
 
-    def magpylib_magnets_model(self, use_mag_errors, use_full_method_of_moments=False) -> Collection:
+    def magpylib_magnets_model(self, include_mag_errors, use_full_method_of_moments=False) -> Collection:
         """Return full magpylib magnet model of bender"""
         return self.make_magpylib_magnets(True, (True, True), self.num_lenses,
-                                          use_mag_errors, use_full_method_of_moments=use_full_method_of_moments)
+                                          include_mag_errors, use_full_method_of_moments=use_full_method_of_moments)
 
     def magpylib_magnets_internal_model(self) -> Collection:
         """Return full magpylib magnet model representing repeating interior region of bender"""
@@ -270,9 +270,9 @@ class MagnetBender(MagneticOptic):
 
     def valid_field_values_full(self, coords_center, coords_cartesian,
                                 extra_elements: Optional[list[Collection]],
-                                use_mag_errors) -> tuple[ndarray, ndarray]:
+                                include_mag_errors) -> tuple[ndarray, ndarray]:
 
-        magnets = self.magpylib_magnets_model(use_mag_errors=use_mag_errors)
+        magnets = self.magpylib_magnets_model(include_mag_errors=include_mag_errors)
 
         r_center_arr = np.linalg.norm(coords_center[:, 1:], axis=1)
         valid_indices = r_center_arr < self.rp  # IMPROVEMENT: implement the more accurate valid checker thing

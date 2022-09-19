@@ -522,7 +522,7 @@ class HalbachBender(Collection):
 
     def __init__(self, rp: float, rb: float, UCAngle: float, Lm: float, magnet_grade: str, num_lenses,
                  use_half_cap_end: tuple[bool, bool],
-                 use_pos_mag_angs_only: bool = False, use_method_of_moments=False, use_mag_errors: bool = False,
+                 use_pos_mag_angs_only: bool = False, use_method_of_moments=False, include_mag_errors: bool = False,
                  use_solenoid_field: bool = False, magnet_width: float = None,
                  use_approx_method_of_moments: bool = False):
         # todo: by default I think it should be positive angles only
@@ -549,7 +549,7 @@ class HalbachBender(Collection):
         self.lens_angles_arr: ndarray = self.make_lens_angle_array()
         self.use_method_of_moments = use_method_of_moments
         self.use_approx_method_of_moments = use_approx_method_of_moments
-        self.useStandardMagnetErrors = use_mag_errors
+        self.useStandardMagnetErrors = include_mag_errors
         self._build()
 
     def make_lens_angle_array(self) -> ndarray:

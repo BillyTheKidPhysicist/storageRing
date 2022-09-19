@@ -83,7 +83,7 @@ def build_collector_lattice(interp_density_mult=2.0, ap=None,direction=0.0) -> P
     lens_element_length = magnet_length + 2 * fringe_field_length
 
     lattice = ParticleTracerLattice(lattice_type='injector', initial_ang=direction, field_dens_mult=interp_density_mult,
-                                    magnet_grade='N40',include_mag_cross_talk=False)
+                                    magnet_grade='N40',use_long_range_fields=False)
     lattice.add_drift(pre_lens_drift_length, ap=rp_layers[1])
     lattice.add_halbach_lens_sim(rp_layers, lens_element_length, ap=ap, magnet_width=magnet_widths)
     lattice.add_drift(post_lens_drift_length, rp_layers[1])
@@ -405,7 +405,7 @@ def make_Fake_Flat_Data():
 #     LImage -= LFringe
 #
 #     lattice = ParticleTracerLattice(lattice_type='injector', field_dens_mult=1.0,
-#                                 use_mag_errors=False)
+#                                 include_mag_errors=False)
 #     lattice.add_drift(LObject, ap=.07)
 #     lattice.add_halbach_lens_sim(rpLens, LLens, apFrac=None, magnet_width=magnet_width)
 #     lattice.add_drift(LImage * 2, ap=.07)

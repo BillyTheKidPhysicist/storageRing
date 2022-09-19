@@ -5,8 +5,7 @@ import numpy as np
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
 from field_generators import Collection
-from helper_tools import is_close_all
-from helper_tools import round_and_make_odd
+from helper_tools import is_close_all,arr_product,round_and_make_odd
 from lattice_elements.combiner_ideal import CombinerIdeal
 from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.utilities import CombinerDimensionError, \
@@ -142,7 +141,7 @@ class CombinerLensSim(CombinerIdeal):
         x_vals_temp[x_ind_mag_min] -= INTERP_MAGNET_MATERIAL_OFFSET
         x_vals_temp[x_ind_mag_max] += INTERP_MAGNET_MATERIAL_OFFSET
         field_data = self.make_field_data(x_vals_temp, y_vals, z_vals, extra_magnets=extra_magnets,
-                                          use_mag_errors=self.PTL.use_mag_errors,
+                                          include_mag_errors=self.PTL.include_mag_errors,
                                           include_misalignments=self.PTL.include_misalignments)
         field_data[0][:] = x_vals  # replace the values
         return field_data
@@ -169,7 +168,7 @@ class CombinerLensSim(CombinerIdeal):
 
     def build_fast_field_helper(self, extra_magnets: Collection = None) -> None:
         use_symmetry = False if (
-                self.PTL.use_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
+                self.PTL.include_mag_errors or extra_magnets is not None or self.PTL.include_misalignments) else True
         if use_symmetry:
             field_data_internal = self.make_internal_symmetry_field_data()
             field_data_external = self.make_external_symmetry_field_data()
@@ -272,11 +271,11 @@ class CombinerLensSim(CombinerIdeal):
         return ap_max_interp
 
     def make_field_data(self, x_arr, y_arr, z_arr, extra_magnets: Collection = None,
-                        use_mag_errors: bool = False, include_misalignments: bool = False) -> tuple[ndarray, ...]:
+                        include_mag_errors: bool = False, include_misalignments: bool = False) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords,
-                                                                 use_mag_errors=use_mag_errors,
+                                                                 include_mag_errors=include_mag_errors,
                                                                  extra_magnets=extra_magnets,
                                                                  include_misalignments=include_misalignments)
         field_data_unshaped = np.column_stack((volume_coords, B_norm_grad, B_norm))

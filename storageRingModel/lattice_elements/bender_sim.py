@@ -104,7 +104,7 @@ class BenderSim(BenderIdeal):
             forces = bender.B_norm_grad(coords) * SIMULATION_MAGNETON
             V_vals = bender.B_norm(coords) * SIMULATION_MAGNETON
             Fr = np.array([np.dot(force, norm) for force, norm in zip(forces, norms)])
-            atom_speeds = np.array([speed_with_energy_correction(V, self.PTL.speed_nominal) for V in V_vals])
+            atom_speeds = np.array([speed_with_energy_correction(V, self.PTL.design_speed) for V in V_vals])
             FCen = atom_speeds ** 2 / r
             error = np.sqrt(np.sum((Fr - FCen) ** 2)) / np.mean(FCen)
             return error
@@ -144,7 +144,7 @@ class BenderSim(BenderIdeal):
 
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         """compute field values and build fast numba helpers"""
-        use_symmetry = not (self.PTL.use_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0))
+        use_symmetry = not (self.PTL.include_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0))
         if use_symmetry:
             field_data_seg = self.generate_segment_field_data()
             field_data_internal = self.generate_internal_fringe_field_data()
@@ -245,7 +245,7 @@ class BenderSim(BenderIdeal):
         coords_center, coords_cartesian = self.make_perturbation_data_coords()
         B_norm_grad_arr, B_norm_arr = self.magnet.valid_field_values_full(coords_center, coords_cartesian,
                                                                           extra_magnets,
-                                                                          self.PTL.use_mag_errors)
+                                                                          self.PTL.include_mag_errors)
         interp_data = shape_field_data_3D(np.column_stack((coords_center, B_norm_grad_arr, B_norm_arr)))
         return interp_data
 

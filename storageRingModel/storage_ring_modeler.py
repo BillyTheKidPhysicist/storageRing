@@ -316,7 +316,7 @@ class StorageRingModel:
     def swarm_flux_mult_percent_of_max(self, swarm_traced: Swarm) -> float:
         # What percent of the maximum flux multiplication is the swarm reaching? It's cruical I consider that not
         # all particles survived through the lattice.
-        max_flux_mult = self.T * self.lattice_ring.speed_nominal / self.lattice_ring.total_length
+        max_flux_mult = self.T * self.lattice_ring.design_speed / self.lattice_ring.total_length
         flux_mult_perc = 1e2 * swarm_traced.weighted_flux_mult() / max_flux_mult
         assert 0.0 <= flux_mult_perc <= 100.0
         return flux_mult_perc
@@ -363,14 +363,14 @@ class StorageRingModel:
 
 
 def build_storage_ring_model(ring_params, injector_params, ring_version, num_particles: int = 1024,
-                             use_collisions: bool = False, include_mag_cross_talk: bool = False,
-                              use_mag_errors: bool = False,
+                             use_collisions: bool = False, use_long_range_fields: bool = False,
+                              include_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False,
                              include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME,
                              build_field_helpers: bool = True):
     """Convenience function for building a StorageRingModel"""
-    options = {'use_mag_errors': use_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
-               'include_mag_cross_talk_in_ring': include_mag_cross_talk,
+    options = {'include_mag_errors': include_mag_errors, 'use_solenoid_field': use_solenoid_field, 'has_bumper': use_bumper,
+               'include_mag_cross_talk_in_ring': use_long_range_fields,
                'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector,
@@ -380,8 +380,8 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
 
 
 def make_optimal_solution_model(ring_version, use_bumper: bool = True,
-                                use_solenoid_field: bool = True, use_mag_errors=False,
-                                include_mag_cross_talk: bool = False,
+                                use_solenoid_field: bool = True, include_mag_errors=False,
+                                use_long_range_fields: bool = False,
                                 include_misalignments: bool = False,
                                 sim_time_max=DEFAULT_SIMULATION_TIME,
                                 build_field_helpers: bool = True) -> StorageRingModel:
@@ -389,8 +389,8 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params(ring_version)
     model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
-                                     use_solenoid_field=use_solenoid_field, use_mag_errors=use_mag_errors,
-                                     include_mag_cross_talk=include_mag_cross_talk,
+                                     use_solenoid_field=use_solenoid_field, include_mag_errors=include_mag_errors,
+                                     use_long_range_fields=use_long_range_fields,
                                      include_misalignments=include_misalignments,
                                      sim_time_max=sim_time_max, build_field_helpers=build_field_helpers)
     return model

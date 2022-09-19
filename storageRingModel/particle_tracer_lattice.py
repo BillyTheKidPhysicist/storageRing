@@ -25,13 +25,30 @@ number = (int, float)
 
 class ParticleTracerLattice:
 
-    def __init__(self, speed_nominal: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
-                 field_dens_mult: RealNum = 1.0, use_mag_errors: bool = False,
+    def __init__(self, design_speed: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
+                 field_dens_mult: RealNum = 1.0, include_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None,
-                 initial_ang: RealNum = -pi,
-                 magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
-                 include_mag_cross_talk: bool = False, include_misalignments: bool = False):
-        # IMPROVEMENT: MAKE INITIAL_LOCATION MORE CONSISTENT WITH EVERYTHING
+                 initial_ang: RealNum = -pi, magnet_grade: str = 'N52', use_standard_mag_size: bool = False,
+                 use_standard_tube_OD: bool = False, use_long_range_fields: bool = False,
+                 include_misalignments: bool = False):
+        """
+
+
+
+        :param design_speed:
+        :param lattice_type:
+        :param field_dens_mult: Multiplier to modulate density of interpolation in elements. Carefull, computation time
+            will scale as third power
+        :param include_mag_errors:
+        :param use_solenoid_field:
+        :param initial_location:
+        :param initial_ang:
+        :param magnet_grade:
+        :param use_standard_mag_size:
+        :param use_standard_tube_OD:
+        :param use_long_range_fields:
+        :param include_misalignments:
+        """
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
@@ -39,7 +56,7 @@ class ParticleTracerLattice:
         # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
         # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along
         # the positive x axis
-        self.speed_nominal = speed_nominal  # Design particle speed
+        self.design_speed = design_speed  # Design particle speed
         self.bender_indices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
@@ -47,10 +64,10 @@ class ParticleTracerLattice:
         self.initial_ang = initial_ang
         self.total_length = None  # total length of lattice, m
         self.field_dens_mult = field_dens_mult
-        self.use_mag_errors = use_mag_errors
+        self.include_mag_errors = include_mag_errors
         self.use_standard_tube_OD = use_standard_tube_OD
         self.use_standard_mag_size = use_standard_mag_size
-        self.include_mag_cross_talk = include_mag_cross_talk
+        self.use_long_range_fields = use_long_range_fields
         self.include_misalignments = include_misalignments
         self.are_fast_field_helpers_built = False
 
@@ -251,12 +268,12 @@ class ParticleTracerLattice:
             self.total_length += el.Lo
 
     def _build_fast_field_helper(self, el: Element) -> Element:
-        magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.include_mag_cross_talk else None
+        magnets = collect_valid_neighboring_magpylib_magnets(el, self) if self.use_long_range_fields else None
         el.build_fast_field_helper(extra_magnets=magnets)
         return el
 
     def build_fast_field_helpers(self, parallel: bool) -> None:
-        if self.use_mag_errors and parallel:
+        if self.include_mag_errors and parallel:
             warnings.warn(
                 "Using parallel==True with magnet errors will not produce the same results as with parallel==False")
         built_els = parallel_evaluate(self._build_fast_field_helper, self.el_list,

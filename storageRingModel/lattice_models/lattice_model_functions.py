@@ -67,13 +67,13 @@ def initialize_ring_lattice(ring_params: dict, options: dict,
     assert len(ring_params) == num_ring_params
     ring_params = LockedDict(ring_params)
 
-    lattice = ParticleTracerLattice(speed_nominal=atom_characteristics["nominalDesignSpeed"],
+    lattice = ParticleTracerLattice(design_speed=atom_characteristics["nominalDesignSpeed"],
                                     lattice_type='storage_ring',
-                                    use_mag_errors=options['use_mag_errors'],
+                                    include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_standard_mag_size=options['use_standard_mag_size'],
-                                    include_mag_cross_talk=options['include_mag_cross_talk_in_ring'],
+                                    use_long_range_fields=options['include_mag_cross_talk_in_ring'],
                                     include_misalignments=options['include_misalignments'])
     return lattice, ring_params, options
 

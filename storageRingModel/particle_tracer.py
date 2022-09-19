@@ -192,7 +192,7 @@ class ParticleTracer:
                 self.particle.clipped = self.does_particle_survive_to_end()
 
     def multi_step_verlet(self) -> None:
-        # collision_params = get_Collision_Params(self.current_el, self.PTL.speed_nominal) if \
+        # collision_params = get_Collision_Params(self.current_el, self.PTL.design_speed) if \
         #     self.use_collisions else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = multi_step_verlet(self.q_el, self.p_el, self.T, self.T0, self.h,
                                     self.current_el.numba_functions['force'])
@@ -200,7 +200,7 @@ class ParticleTracer:
         q_el_new = np.array(q_el_new)
         self.particle.T = self.T
         if particleOutside:
-            self.check_if_particle_is_outside_and_handle_edge_event(q_el_new, self.q_el, self.p_el)
+            self.check_if_particle_is_outside_and_handle_edge_event(q_el_new, self.p_el)
 
     def time_step_verlet(self) -> None:
         # the velocity verlet time stepping algorithm. This version recycles the force from the previous step when
@@ -219,13 +219,13 @@ class ParticleTracer:
         F_new = self.current_el.force(q_el_new)
         F_new[2] = F_new[2] - GRAVITATIONAL_ACCELERATION  # simulated mass is 1kg always
         if isnan(F_new[0]):  # particle is outside element if an array of length 1 with np.nan is returned
-            self.check_if_particle_is_outside_and_handle_edge_event(q_el_new, q_el,
+            self.check_if_particle_is_outside_and_handle_edge_event(q_el_new,
                                                                     p_el)  # check if element has changed.
             return
         # a_n = F_new  # acceleration new or acceleration sub n+1
         p_el_new = fast_pNew(p_el, F, F_new, self.h)
         if self.use_collisions:
-            collision_params = make_collision_params(self.current_el, self.PTL.speed_nominal)
+            collision_params = make_collision_params(self.current_el, self.PTL.design_speed)
             if collision_params[0] != 'NONE':
                 if np.random.rand() < self.h * collision_params[1]:
                     p_el_new[:] = post_collision_momentum(tuple(p_el_new), tuple(q_el_new), collision_params)

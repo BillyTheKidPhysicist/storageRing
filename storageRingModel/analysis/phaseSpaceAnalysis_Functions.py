@@ -110,7 +110,7 @@ def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list,
 
 
 def make_phase_space_x_positions(model: StorageRingModel, x0, numStops, Tmax) -> list:
-    x_max = model.lattice_injector.speed_nominal * Tmax
+    x_max = model.lattice_injector.design_speed * Tmax
     revs_max = x_max / model.lattice_ring.total_length - 1
     if numStops != -1:
         assert revs_max / numStops > 1

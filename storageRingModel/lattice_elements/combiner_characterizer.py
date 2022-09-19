@@ -96,7 +96,7 @@ def characterize_combiner_ideal(el: CombinerIdeal):
         assert abs(q[2]) < el.apz and -el.ap_left < q[1] < el.ap_right
         return np.array(combiner_Ideal_Force(*q, el.Lm, el.c1, el.c2))
 
-    q_arr, p_arr = compute_particle_trajectory(force, el.PTL.speed_nominal, 0.0, el.Lm)
+    q_arr, p_arr = compute_particle_trajectory(force, el.PTL.design_speed, 0.0, el.Lm)
     assert isclose(q_arr[-1, 0], el.Lm) and isclose(q_arr[0, 0], 0.0)
     trajectory_length = calculate_trajectory_length(q_arr)
     input_ang = input_angle(p_arr)
@@ -110,7 +110,7 @@ def characterize_combiner_halbach(el: CombinerLensSim, atom_state=None, particle
         'HIGH_FIELD_SEEKER' if el.field_fact == -1 else 'LOW_FIELD_SEEKER') if atom_state is None else atom_state
     particle_y_offset_start = el.output_offset if particleOffset is None else particleOffset
     force_func = make_halbach_combiner_force_function(el)
-    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm,
+    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.design_speed, 0.0, 2 * el.space + el.Lm,
                                                particle_y_offset_start=particle_y_offset_start, atom_state=atom_state)
 
     assert isclose(q_arr[-1, 0], el.Lm + 2 * el.space) and isclose(q_arr[0, 0], 0.0)
@@ -134,7 +134,7 @@ def characterize_combiner_sim(el: CombinerSim):
         F[2] = 0.0
         return F
 
-    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.speed_nominal, 0.0, 2 * el.space + el.Lm)
+    q_arr, p_arr = compute_particle_trajectory(force_func, el.PTL.design_speed, 0.0, 2 * el.space + el.Lm)
     assert isclose(q_arr[-1, 0], 2 * el.space + el.Lm) and isclose(q_arr[0, 0], 0.0)
     trajectory_length = calculate_trajectory_length(q_arr)
     input_ang = input_angle(p_arr)

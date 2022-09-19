@@ -312,7 +312,7 @@ def is_sim_lattice_viable(simulated_lattice: ParticleTracerLattice, atom_speed: 
     """Check that the matrix lattice generated from the simulated lattice is viable. It will not be if the
     atom speed is such that the orbit in the bender is shifted into the wall"""
     # IMPROVEMENT: reimplement this
-    speed_ratio = atom_speed / simulated_lattice.speed_nominal
+    speed_ratio = atom_speed / simulated_lattice.design_speed
     for el in simulated_lattice:
         if type(el) is BenderSim:
             if orbit_offset_bender(el, speed_ratio) > el.ap:
@@ -1512,7 +1512,7 @@ class Lattice(Sequence):
 
         assert isclose(abs(simulated_lattice.initial_ang), np.pi, abs_tol=1e-9)  # must be pointing along -x
         # in polar coordinates
-        assert not simulated_lattice.use_mag_errors
+        assert not simulated_lattice.include_mag_errors
         for el in simulated_lattice:
             if type(el) is Drift_Sim:
                 self.add_drift(el.L, ap=el.ap)

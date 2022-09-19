@@ -184,7 +184,7 @@ def field_generator_in_different_frame1(el_to_move: Element, el_target: Element,
 
 def collect_valid_neighboring_magpylib_magnets(el: Element, lattice) -> Optional[list[Collection]]:
     if is_valid_interperable_el(el):
-        magnet_options = (lattice.use_mag_errors, lattice.include_misalignments)
+        magnet_options = (lattice.include_mag_errors, lattice.include_misalignments)
         neighboring_elements = [_el for _el in lattice if is_valid_neighbors(el, _el)]
         col = [field_generator_in_different_frame1(el_neighb, el, magnet_options) for el_neighb in neighboring_elements]
         return col if len(col) != 0 else None

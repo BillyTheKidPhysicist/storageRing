@@ -16,7 +16,7 @@ cmap = plt.get_cmap('viridis')
 
 
 def make_Test_Swarm_And_Lattice(num_particles=128, totalTime=.1) -> (Swarm, ParticleTracerLattice):
-    PTL = ParticleTracerLattice(speed_nominal=210.0)
+    PTL = ParticleTracerLattice(design_speed=210.0)
     PTL.add_lens_ideal(.4, 1.0, .025)
     PTL.add_drift(.1)
     PTL.add_lens_ideal(.4, 1.0, .025)
@@ -318,7 +318,7 @@ class PhaseSpaceAnalyzer:
             num_particlesurvived = np.sum(TSurvivedArr > T)
             survival = 100 * num_particlesurvived / self.swarm.num_particles()
             survivalList.append(survival)
-        TRev = self.lattice.total_length / self.lattice.speed_nominal
+        TRev = self.lattice.total_length / self.lattice.design_speed
         if axis is None:
             plt.title('Percent particle survival versus revolution time')
             plt.plot(T_arr, survivalList)

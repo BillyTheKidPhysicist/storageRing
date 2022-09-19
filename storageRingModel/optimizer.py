@@ -73,7 +73,7 @@ class Solver:
                  use_solenoid_field=False,
                  use_collisions=False,
                  use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
-                 use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME, include_mag_cross_talk=False):
+                 use_standard_mag_size=False, sim_time_max=DEFAULT_SIMULATION_TIME, use_long_range_fields=False):
         assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
         self.which_system = which_system
         self.ring_version = ring_version
@@ -88,7 +88,7 @@ class Solver:
             'has_bumper': use_bumper,
             'use_standard_tube_OD': use_standard_tube_OD,
             'use_standard_mag_size': use_standard_mag_size,
-            'include_mag_cross_talk_in_ring': include_mag_cross_talk,
+            'include_mag_cross_talk_in_ring': use_long_range_fields,
             'build_field_helpers': False  # When the floor plan is violated, fast field helpers are not used, so don't
             # waste time computing them unless needed to trace swarm
         }
@@ -199,14 +199,14 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
 
 def get_cost_function(which_system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
                       use_solenoid_field, use_bumper, num_particles, use_standard_tube_OD,
-                      use_standard_mag_size, use_energy_correction, include_mag_cross_talk) -> Callable[[tuple], float]:
+                      use_standard_mag_size, use_energy_correction, use_long_range_fields) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
     solver = Solver(which_system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
                     use_bumper=use_bumper,
                     num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
                     use_standard_mag_size=use_standard_mag_size, injector_params=injector_params,
-                    use_energy_correction=use_energy_correction, include_mag_cross_talk=include_mag_cross_talk)
+                    use_energy_correction=use_energy_correction, use_long_range_fields=use_long_range_fields)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
@@ -278,7 +278,7 @@ def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, r
              use_bumper: bool = False, local_search_region=.01, num_particles=1024,
              use_standard_tube_OD=False, use_standard_mag_size=False, injector_params=None,
              use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None,
-             save_population: str = None, include_mag_cross_talk=False, init_pop_file=None):
+             save_population: str = None, use_long_range_fields=False, init_pop_file=None):
     """Optimize a model of the ring and injector"""
     assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
     assert method in ('global', 'local')
@@ -291,7 +291,7 @@ def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, r
     cost_func = get_cost_function(which_system, ring_version, ring_params, injector_params, use_solenoid_field,
                                   use_bumper,
                                   num_particles, use_standard_tube_OD, use_standard_mag_size,
-                                  use_energy_correction, include_mag_cross_talk)
+                                  use_energy_correction, use_long_range_fields)
     if method == 'global':
         bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else bounds
         x_optimal, cost_min = _global_optimize(cost_func, bounds, time_out_seconds, processes, disp,

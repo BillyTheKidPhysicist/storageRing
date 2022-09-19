@@ -90,7 +90,7 @@ class SwarmTracer:
         swarm = Swarm()
         for [y, z, py, pz] in phase_space_coords:
             qi = np.asarray([0.0, y, z])
-            pi = np.asarray([-self.lattice.speed_nominal, py, pz])
+            pi = np.asarray([-self.lattice.design_speed, py, pz])
             swarm.add_new_particle(qi, pi)
         return swarm
 
@@ -125,7 +125,7 @@ class SwarmTracer:
         assert 0.0 < capture_diam <= .1 and 0.0 < collector_output_angle <= .2 and 0.0 < gamma_space <= .01 \
                and probability_min >= 0.0  # reasonable values
 
-        p_trans_max = self.lattice.speed_nominal * np.tan(
+        p_trans_max = self.lattice.design_speed * np.tan(
             collector_output_angle)  # transverse velocity dominates thermal velocity,
         # ie, geometric heating
         # sigmaVelocity=np.sqrt(BOLTZMANN_CONSTANT*temperature/MASS_LITHIUM_7) #thermal velocity spread. Used for
@@ -145,7 +145,7 @@ class SwarmTracer:
             px, py, pz = particle.pi
             probability = probability * lorentz_function(r, gamma_space)  # spatial probability
             p_trans = np.sqrt(py ** 2 + pz ** 2)
-            px = -np.sqrt(self.lattice.speed_nominal ** 2 - p_trans ** 2)
+            px = -np.sqrt(self.lattice.design_speed ** 2 - p_trans ** 2)
             particle.pi[0] = px
             assert probability < 1.0
             probabilities.append(probability)
@@ -168,10 +168,10 @@ class SwarmTracer:
             pT_bounds = [(-pT_bounds, pT_bounds), (-pT_bounds, pT_bounds)]
         if isinstance(delta_px_bounds, real_number):
             delta_px_bounds = (
-                self.lattice.speed_nominal - delta_px_bounds, self.lattice.speed_nominal + delta_px_bounds)
+                self.lattice.design_speed - delta_px_bounds, self.lattice.design_speed + delta_px_bounds)
         else:
-            delta_px_bounds = (self.lattice.speed_nominal - delta_px_bounds[0],
-                               self.lattice.speed_nominal + delta_px_bounds[1])
+            delta_px_bounds = (self.lattice.design_speed - delta_px_bounds[0],
+                               self.lattice.design_speed + delta_px_bounds[1])
         generator_bounds = [*qT_bounds, delta_px_bounds, *pT_bounds]
         return generator_bounds
 
@@ -223,7 +223,7 @@ class SwarmTracer:
         :param same_seed: Whether to use the same seed for repeatability.
         :return: A new swarm.
         """
-        p0 = self.lattice.speed_nominal  # the momentum of each particle
+        p0 = self.lattice.design_speed  # the momentum of each particle
         p_trans_bounds = np.tan(source_angle) * p0
         swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
                                                       num_particles=num_particles)
@@ -248,7 +248,7 @@ class SwarmTracer:
         lattice"""
         assert which_dim in ('y', 'z')
         swarm = Swarm()
-        px0 = -self.lattice.speed_nominal
+        px0 = -self.lattice.design_speed
         bounds = [(-pos_max, pos_max), (-p_max, p_max), (px0 - px_spread, px0 + px_spread)]
         samples = low_discrepancy_sample(bounds, num_particles, seed=seed)
         for [pos, p, px] in samples:

@@ -13,7 +13,7 @@ def find_Optimal_Offset_Factor(self, rp: float, rb: float, Lm: float, parallel: 
 
     def errorFunc(offset):
         h = 5e-6
-        particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.speed_nominal, 0.0, 0.0]))
+        particle = Particle(qi=np.array([-1e-10, offset, 0.0]), pi=np.array([-self.design_speed, 0.0, 0.0]))
         particleTracer = ParticleTracer(lattice_ring)
         particle = particleTracer.trace(particle, h, 1.0, use_fast_mode=False)
         qo_arr = particle.qo_vals

@@ -19,7 +19,7 @@ def make_ring_surrogate_for_injector(injector_params: dict,
     injector_params = LockedDict(injector_params)
     options = check_and_add_default_values(options)
 
-    lattice = ParticleTracerLattice(speed_nominal=atom_characteristics["nominalDesignSpeed"],
+    lattice = ParticleTracerLattice(design_speed=atom_characteristics["nominalDesignSpeed"],
                                     lattice_type='storage_ring',
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],

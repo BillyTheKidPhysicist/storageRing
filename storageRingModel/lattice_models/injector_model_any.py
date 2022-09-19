@@ -54,7 +54,7 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
     if gap1 < injector_constants["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
     lattice = ParticleTracerLattice(atom_characteristics["nominalDesignSpeed"], lattice_type='injector',
-                                    use_mag_errors=options['use_mag_errors'],
+                                    include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_standard_mag_size=options['use_standard_mag_size'],

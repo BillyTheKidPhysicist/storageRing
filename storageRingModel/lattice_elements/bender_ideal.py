@@ -53,7 +53,7 @@ class BenderIdeal(BaseElement):
         """Overrides abstract method from Element"""
         self.K = (2 * self.Bp * SIMULATION_MAGNETON / self.rp ** 2)  # 'spring' constant
         self.output_offset = sqrt(
-            self.rb ** 2 / 4 + self.PTL.speed_nominal ** 2 / self.K) - self.rb / 2  # self.output_Offset(self.rb)
+            self.rb ** 2 / 4 + self.PTL.design_speed ** 2 / self.K) - self.rb / 2  # self.output_Offset(self.rb)
         self.ro = self.rb + self.output_offset
         if self.ang is not None:  # calculation is being delayed until constraints are solved
             self.L = self.rb * self.ang

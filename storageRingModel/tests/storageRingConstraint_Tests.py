@@ -99,7 +99,7 @@ def save_Results(PTL: ParticleTracerLattice, fileName: str):
 def _test_Storage_Ring_Constraint_3(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 1 lattice in my naming scheme"""
 
-    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
+    PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='storage_ring')
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)
@@ -122,7 +122,7 @@ def _test_Storage_Ring_Constraint_3(save=False):
 def _test_Storage_Ring_Constraint_4(save=False):
     """Test that the results of constructing a lattice are repeatable. For a version 3 lattice in my naming scheme"""
 
-    PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
+    PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='storage_ring')
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)

@@ -8,7 +8,7 @@ from math import isclose
 def run_test_1():
     """Test that the misalignments keyword produces the same results in the optimizer"""
     t = time.time()
-    model = make_optimal_solution_model('2', include_mag_cross_talk=False, include_misalignments=False
+    model = make_optimal_solution_model('2', use_long_range_fields=False, include_misalignments=False
                                         ,build_field_helpers=False)
     model.build_field_helpers_if_unbuilt(parallel=True)
     cost, flux, = model.mode_match(parallel=True)
