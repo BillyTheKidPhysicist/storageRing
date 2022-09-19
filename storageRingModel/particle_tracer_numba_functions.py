@@ -118,3 +118,24 @@ def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
         T += h
         # if collisionRate!=0.0 and np.random.rand() < h * collisionRate:
         #     px, py, pz = post_collision_momentum((px, py, pz), (x, y, z), collision_params)
+
+
+@numba.njit(cache=False)
+def momentum_correction_at_bounday(E0, q_el, p_el, magnetic_potential, force,direction):
+    # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
+    assert direction in ('entering', 'leaving')
+    Fx, Fy, Fz = force(q_el[0], q_el[1], q_el[2])
+    F_norm = np.sqrt(Fx ** 2 + Fy ** 2 + Fz ** 2)
+    if F_norm < 1e-6:  # force is too small, and may cause a division error
+        return 0.0, 0.0, 0.0
+    else:
+        if direction == 'leaving':  # go from zero to non zero potential instantly
+            E_mew = dot_Prod_3D(p_el, p_el) / 2.0  # ideally, no magnetic field right at border
+            delta_E = E0 - E_mew  # need to lose energy to maintain E0 when the potential turns off
+        else:  # go from zero to non zero potentially instantly
+            delta_E = -np.array(
+                magnetic_potential(q_el[0], q_el[1], q_el[2]))  # need to lose this energy
+        Fx_unit, Fy_unit, Fz_unit = Fx / F_norm, Fy / F_norm, Fz / F_norm
+        delta_p_norm = delta_E / (Fx_unit * p_el[0] + Fy_unit * p_el[1] + Fz_unit * p_el[2])
+        delta_px, delta_py, delta_pz = delta_p_norm * Fx_unit, delta_p_norm * Fy_unit, delta_p_norm * Fz_unit
+        return delta_px, delta_py, delta_pz

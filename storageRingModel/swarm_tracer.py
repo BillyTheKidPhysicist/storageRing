@@ -3,13 +3,21 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.spatial.transform import Rotation as Rot
 
 from constants import DEFAULT_ATOM_SPEED
 from helper_tools import low_discrepancy_sample, parallel_evaluate, temporary_seed, arr_product
 from particle import Swarm, Particle
 from particle_tracer import ParticleTracer, trace_particle_periodic_linear_lattice
 from particle_tracer_lattice import ParticleTracerLattice
-from type_hints import RealNum
+from type_hints import RealNum, ndarray
+
+TINY_DISTANCE = 1e-12
+TupleOrNum = Union[tuple[RealNum, RealNum], RealNum]
+real_number = (int, float)
+
+initial_dict_key_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
+                                      'px': ('pi', 0), 'py': ('pi', 1), 'pz': ('pi', 2)}
 
 
 def lorentz_function(x, gamma):
@@ -17,16 +25,33 @@ def lorentz_function(x, gamma):
     return (gamma / 2) ** 2 / (x ** 2 + (gamma / 2) ** 2)
 
 
-TupleOrNum = Union[tuple[float, float], RealNum]
-real_number = (int, float)
+def tiny_offset_swarm(swarm: Swarm) -> None:
+    """Shift every particle in a swarm TINY_DISTANCE. This intended for preventing rounding issues of a particle being
+    located right at the origin which may cause it to be slightly shifted out of the lattice when rotated, even though
+    it isn't really"""
+    for particle in swarm:
+        dqi = TINY_DISTANCE * particle.pi / np.linalg.norm(particle.pi)
+        particle.qi += dqi
 
-# todo: I this shouldn't be neccesary, I can find a better solution
-TINY_NEG_OFFSET_FROM_ELEMENT_EDGE = -1e-10  # to prevent the particle from starting righ on edge of element, which causes
 
-# IMPOROVEMENT: add method to correctly aim particles with the direction of the lattice
+def rotate_particle_initial_vals(particle: Particle, R: ndarray) -> None:
+    """Rotate a particle's initial position and momentum coordinates"""
+    particle.qi = R @ particle.qi
+    particle.pi = R @ particle.pi
 
-initial_dict_key_and_index_for_dim = {'x': ('qi', 0), 'y': ('qi', 1), 'z': ('qi', 2),
-                                      'px': ('pi', 0), 'py': ('pi', 1), 'pz': ('pi', 2)}
+
+def rotate_swarm_initial_vals_about_z(swarm: Swarm, angle_z: RealNum) -> None:
+    """Rotate a swarm about the z axis going through the origin"""
+    R = Rot.from_rotvec([0, 0, angle_z]).as_matrix()
+    for particle in swarm:
+        rotate_particle_initial_vals(particle, R)
+
+
+def position_swarm_at_lattice_start(swarm, lattice: ParticleTracerLattice, tiny_offset):
+    """Position an initialized swarm at the lattice start"""
+    rotate_swarm_initial_vals_about_z(swarm, lattice.initial_ang)
+    if tiny_offset:
+        tiny_offset_swarm(swarm)
 
 
 class SwarmTracer:
@@ -45,24 +70,17 @@ class SwarmTracer:
                 particle.qi += t * particle.pi
         return swarm
 
-    def initialize_stablity_testing_swarm(self, q_max: RealNum) -> Swarm:
-        small_offset = TINY_NEG_OFFSET_FROM_ELEMENT_EDGE  # this prevents setting a particle right at a boundary which is takes time to sort out
+    def stablity_testing_swarm(self, q_max: RealNum) -> Swarm:
         swarm_test = Swarm()
-        swarm_test.add_new_particle(qi=np.asarray([small_offset, 0.0, 0.0]))
-        swarm_test.add_new_particle(qi=np.asarray([small_offset, q_max / 2, q_max / 2]))
-        swarm_test.add_new_particle(qi=np.asarray([small_offset, -q_max / 2, q_max / 2]))
-        swarm_test.add_new_particle(qi=np.asarray([small_offset, q_max / 2, -q_max / 2]))
-        swarm_test.add_new_particle(qi=np.asarray([small_offset, -q_max / 2, -q_max / 2]))
+        swarm_test.add_new_particle(qi=np.asarray([0.0, 0.0, 0.0]))
+        swarm_test.add_new_particle(qi=np.asarray([0.0, q_max / 2, q_max / 2]))
+        swarm_test.add_new_particle(qi=np.asarray([0.0, -q_max / 2, q_max / 2]))
+        swarm_test.add_new_particle(qi=np.asarray([0.0, q_max / 2, -q_max / 2]))
+        swarm_test.add_new_particle(qi=np.asarray([0.0, -q_max / 2, -q_max / 2]))
         return swarm_test
 
-    def initialize_hypercube_swarm_in_phase_space(self, q_max: np.ndarray, p_max: np.ndarray, num_grid_edge: int,
-                                                  use_z_symmetry: bool = False) -> Swarm:
-        # create a cloud of particles in phase space at the origin. In the xy plane, the average velocity vector points
-        # to the west. The transverse plane is the yz plane.
-        # q_max: absolute value maximum position in the transverse direction
-        # q_max: absolute value maximum position in the transverse momentum
-        # num: number of samples along each axis in phase space. Total is num^4
-        # use_z_symmetry: if this is true, exploit the symmetry between +/-z and ignore coordinates below z=0
+    def hypercube_swarm_in_phase_space(self, q_max: np.ndarray, p_max: np.ndarray, num_grid_edge: int,
+                                       use_z_symmetry: bool = False) -> Swarm:
         q_arr = np.linspace(-q_max, q_max, num=num_grid_edge)
         p_arr = np.linspace(-p_max, p_max, num=num_grid_edge)
         phase_space_coords = np.asarray(np.meshgrid(q_arr, q_arr, p_arr, p_arr)).T_max.reshape(-1, 4)
@@ -76,9 +94,9 @@ class SwarmTracer:
             swarm.add_new_particle(qi, pi)
         return swarm
 
-    def initialize_simulated_collector_focus_swarm(self, num_particles: int) -> Swarm:
+    def simulated_collector_focus_swarm(self, num_particles: int) -> Swarm:
         """
-        Initialize swarm particles with phase space coordinates from a simulation of the focus of the collector.
+        Return swarm with phase space coordinates from a simulation of the focus of the collector.
 
 
         :param num_particles: Number of particles to add to swarm from data file
@@ -93,8 +111,8 @@ class SwarmTracer:
         for qi, pi, in zip(q_arr, p_arr):
             assert np.all(np.abs(qi) < 1) and np.all(np.abs(pi) < 1000)  # avoid possible unit conversion error
             assert min_py < abs(pi[0]) < max_py and pi[0] < 0.0 and qi[0] == 0.0
-            qi[0] += TINY_NEG_OFFSET_FROM_ELEMENT_EDGE
             swarm.add_new_particle(qi=qi, pi=pi)
+        tiny_offset_swarm(swarm)
         return swarm
 
     def initialize_observed_collector_swarm_probability_weighted(self, capture_diam: float,
@@ -102,6 +120,7 @@ class SwarmTracer:
                                                                  num_particles: int, gamma_space: float = 3.5e-3,
                                                                  same_seed: bool = False, use_z_symmetry: bool = False,
                                                                  probability_min: float = 0.01) -> Swarm:
+        raise NotImplementedError
 
         assert 0.0 < capture_diam <= .1 and 0.0 < collector_output_angle <= .2 and 0.0 < gamma_space <= .01 \
                and probability_min >= 0.0  # reasonable values
@@ -114,10 +133,10 @@ class SwarmTracer:
         p_longitudinal_min = -1e-3
         p_longitudinal_max = 1e-3
         p_long_bounds = (p_longitudinal_min, p_longitudinal_max)
-        swarm_evenly_spread = self.initalize_pseudorandom_swarm_in_phase_space(capture_diam / 2.0, p_trans_max,
-                                                                               p_long_bounds,
-                                                                               num_particles, same_seed=same_seed,
-                                                                               use_z_symmetry=use_z_symmetry)
+        swarm_evenly_spread = self.pseudorandom_swarm(capture_diam / 2.0, p_trans_max,
+                                                      p_long_bounds,
+                                                      num_particles, same_seed=same_seed,
+                                                      use_z_symmetry=use_z_symmetry)
         probabilities = []
         for particle in swarm_evenly_spread:
             probability = 1.0
@@ -139,7 +158,7 @@ class SwarmTracer:
         return swarm_observed
 
     def _make_pseudorandom_swarm_bounds(self, qT_bounds: TupleOrNum, pT_bounds: TupleOrNum,
-                                        px_bounds: TupleOrNum, use_z_symmetry: bool = False) -> list:
+                                        delta_px_bounds: TupleOrNum, use_z_symmetry: bool = False) -> list:
 
         if isinstance(qT_bounds, real_number):
             y_bounds = (-qT_bounds, qT_bounds)
@@ -147,83 +166,84 @@ class SwarmTracer:
             qT_bounds = [y_bounds, z_bounds]
         if isinstance(pT_bounds, real_number):
             pT_bounds = [(-pT_bounds, pT_bounds), (-pT_bounds, pT_bounds)]
-        if isinstance(px_bounds, real_number):
-            px_bounds = (-px_bounds - self.lattice.speed_nominal, px_bounds - self.lattice.speed_nominal)
+        if isinstance(delta_px_bounds, real_number):
+            delta_px_bounds = (
+                self.lattice.speed_nominal - delta_px_bounds, self.lattice.speed_nominal + delta_px_bounds)
         else:
-            px_bounds = (px_bounds[0] - self.lattice.speed_nominal, px_bounds[1] - self.lattice.speed_nominal)
-        generator_bounds = [*qT_bounds, px_bounds, *pT_bounds]
-        px_min, px_max = generator_bounds[2]
-        assert len(generator_bounds) == 5 and px_min <= -self.lattice.speed_nominal <= px_max
+            delta_px_bounds = (self.lattice.speed_nominal - delta_px_bounds[0],
+                               self.lattice.speed_nominal + delta_px_bounds[1])
+        generator_bounds = [*qT_bounds, delta_px_bounds, *pT_bounds]
         return generator_bounds
 
-    def initalize_pseudorandom_swarm_in_phase_space(self, q_trans_bounds: TupleOrNum, p_trans_bounds: TupleOrNum,
-                                                    px_bounds: TupleOrNum, num_particles: int,
-                                                    use_z_symmetry: bool = False,
-                                                    same_seed: bool = False, circular: bool = True,
-                                                    small_x_offset: bool = True) -> Swarm:
+    def pseudorandom_swarm(self, q_trans_bounds: TupleOrNum = 0, p_trans_bounds: TupleOrNum = 0,
+                           delta_px_bounds: TupleOrNum = 0, num_particles: int = 100,
+                           use_z_symmetry: bool = False,
+                           same_seed: bool = False, circular: bool = True, tiny_offset: bool = True) -> Swarm:
         if circular:
             for _bounds in (q_trans_bounds, p_trans_bounds):
-                assert isinstance(_bounds, real_number) and _bounds > 0.0
+                assert isinstance(_bounds, real_number)
             q_trans_max = q_trans_bounds
             p_trans_max = p_trans_bounds
-        generator_bounds = self._make_pseudorandom_swarm_bounds(q_trans_bounds, p_trans_bounds, px_bounds,
+        generator_bounds = self._make_pseudorandom_swarm_bounds(q_trans_bounds, p_trans_bounds, delta_px_bounds,
                                                                 use_z_symmetry=use_z_symmetry)
-
         # The ratio of the are of the circle to the cross section. one factor for momentum and one for position
         num_particles_frac = 1 / ((np.pi / 4) ** 2) if circular else 1.0
 
         seed = 42 if same_seed else None
 
-        samples = low_discrepancy_sample(generator_bounds, round(num_particles * num_particles_frac), seed=seed)
+        coords = low_discrepancy_sample(generator_bounds, round(num_particles * num_particles_frac), seed=seed)
         with temporary_seed(seed):
-            np.random.shuffle(samples)
+            np.random.shuffle(coords)
 
-        x0 = TINY_NEG_OFFSET_FROM_ELEMENT_EDGE if small_x_offset else 0.0
-        samples = np.column_stack((np.ones(len(samples)) * x0, samples))
+        xi_vals = np.zeros(len(coords))
+        coords = np.column_stack((xi_vals, coords))
         particle_count = 0  # track how many particles have been added to swarm
         swarm = Swarm()
-        for xi in samples:
-            q = xi[:3]
-            p = xi[3:]
+        for x, y, z, px, py, pz in coords:
+            q = np.array([x, y, z])
+            p = np.array([px, py, pz])
             if circular:
-                y, z, py, pz = xi[[1, 2, 4, 5]]
-                if np.sqrt(y ** 2 + z ** 2) < q_trans_max and np.sqrt(py ** 2 + pz ** 2) < p_trans_max:
+                if np.sqrt(y ** 2 + z ** 2) <= q_trans_max and np.sqrt(py ** 2 + pz ** 2) <= p_trans_max:
                     swarm.add_new_particle(qi=q, pi=p)
                     particle_count += 1
                 if particle_count == num_particles:
                     break
             else:
                 swarm.add_new_particle(qi=q, pi=p)
+        position_swarm_at_lattice_start(swarm, self.lattice, tiny_offset)
+
         return swarm
 
-    def initialize_point_source_swarm(self, source_angle: float, num_particles: int, small_x_offset: bool = True,
-                                      same_seed: bool = False) -> Swarm:
+    def point_source_swarm(self, source_angle: float, num_particles: int, same_seed: bool = False) -> Swarm:
+        """
+        Return a pseudo-random swarm originating from a point at the origin
+
+        :param source_angle: Half angle of swarm, radians.
+        :param num_particles: Number of particles in swarm.
+        :param same_seed: Whether to use the same seed for repeatability.
+        :return: A new swarm.
+        """
         p0 = self.lattice.speed_nominal  # the momentum of each particle
-        q_trans_bounds, px_bounds = 1e-12, 1e-12  # force to a point spatialy, and no speed spread
         p_trans_bounds = np.tan(source_angle) * p0
-        swarm_pseudo_random = self.initalize_pseudorandom_swarm_in_phase_space(q_trans_bounds, p_trans_bounds,
-                                                                               px_bounds, num_particles,
-                                                                               same_seed=same_seed, circular=True,
-                                                                               small_x_offset=small_x_offset)
+        swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
+                                                      num_particles=num_particles)
         for particle in swarm_pseudo_random:
             px, py, pz = particle.pi
-            px = -np.sqrt(p0 ** 2 - (py ** 2 + pz ** 2))
+            px = np.sqrt(p0 ** 2 - (py ** 2 + pz ** 2)) * np.sign(px)
             particle.pi = np.asarray([px, py, pz])
         return swarm_pseudo_random
 
-    def initalize_pseudorandom_swarm_at_combiner_output(self, q_t_bounds, p_trans_bounds, px_bounds, num_particles,
-                                                        use_z_symmetry=False,
-                                                        same_seed=False, circular=True, small_x_offset=True):
-        swarm_at_origin = self.initalize_pseudorandom_swarm_in_phase_space(q_t_bounds, p_trans_bounds, px_bounds,
-                                                                           num_particles,
-                                                                           use_z_symmetry=use_z_symmetry,
-                                                                           same_seed=same_seed, circular=circular,
-                                                                           small_x_offset=small_x_offset)
+    def swarm_at_combiner_output(self, q_t_bounds, p_trans_bounds, px_bounds, num_particles,
+                                 use_z_symmetry=False, same_seed=False, circular=True):
+        swarm_at_origin = self.pseudorandom_swarm(q_t_bounds, p_trans_bounds, px_bounds,
+                                                  num_particles,
+                                                  use_z_symmetry=use_z_symmetry,
+                                                  same_seed=same_seed, circular=circular)
         swarm_at_combiner = self.move_swarm_to_combiner_output(swarm_at_origin, copy_swarm=False, scoot=True)
         return swarm_at_combiner
 
-    def initialize_pseudorandom_1_dim_swarm(self, pos_max: RealNum, p_max: RealNum, num_particles: int,
-                                            seed: int = None, px_spread: RealNum = 0.0, which_dim='y') -> Swarm:
+    def one_dim_swarm(self, pos_max: RealNum, p_max: RealNum, num_particles: int,
+                      seed: int = None, px_spread: RealNum = 0.0, which_dim='y') -> Swarm:
         """Build a swarm only along the y dimension ([x,y,z]). Useful for tracing particle through matrix model
         lattice"""
         assert which_dim in ('y', 'z')
@@ -240,8 +260,8 @@ class SwarmTracer:
             swarm.add_new_particle(qi=qi, pi=pi)
         return swarm
 
-    def initialize_grid_2_dim_swarm(self, dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
-                                    dim1_name: str, dim2_name: str, px=DEFAULT_ATOM_SPEED) -> Swarm:
+    def two_dim_swarm(self, dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,
+                      dim1_name: str, dim2_name: str, px=DEFAULT_ATOM_SPEED) -> Swarm:
         """Initialize a swarm in 2 dimensions along specified dimensions"""
         key1, idx1 = initial_dict_key_and_index_for_dim[dim1_name]
         key2, idx2 = initial_dict_key_and_index_for_dim[dim2_name]
@@ -288,16 +308,14 @@ class SwarmTracer:
         return swarm
 
     def trace_swarm_through_lattice(self, swarm: Swarm, h: float, T_max: float, parallel: bool = False,
-                                    use_fast_mode: bool = True,
+                                    use_fast_mode: bool = False,
                                     copy_swarm: bool = True, accelerated: bool = False, steps_per_logging: int = 1,
-                                    use_energy_correction: bool = False, use_collisions: bool = False,
-                                    log_el_phase_space_coords: bool = False) -> Swarm:
+                                     use_collisions: bool = False, log_el_phase_space_coords: bool = False) -> Swarm:
 
         def trace_particle(particle):
             particle_new = self.particle_tracer.trace(particle, h, T_max, fast_mode=use_fast_mode,
                                                       accelerated=accelerated,
                                                       steps_between_logging=steps_per_logging,
-                                                      use_energy_correction=use_energy_correction,
                                                       log_el_phase_space_coords=log_el_phase_space_coords,
                                                       use_collisions=use_collisions)
             return particle_new
@@ -317,7 +335,7 @@ def trace_swarm_periodic_linear_lattice(swarm_initial: Swarm, st: SwarmTracer, h
     return swarm_traced
 
 
-def histogram_particle_survival(swarm_traced:Swarm, weighting: str, which_orbit_dim: str):
+def histogram_particle_survival(swarm_traced: Swarm, weighting: str, which_orbit_dim: str):
     """Make image (2d array) of swarm's survival along specified dimension"""
     which_orbit_dim_index = {'x': 1, 'y': 2}
     idx = which_orbit_dim_index[which_orbit_dim]
@@ -342,7 +360,8 @@ def histogram_particle_survival(swarm_traced:Swarm, weighting: str, which_orbit_
     return image, binx, biny
 
 
-def plot_2d_histogram_particle_survival(swarm_traced:Swarm, weighting:str='revolutions', which_orbit_dim:str='x'):
+def plot_2d_histogram_particle_survival(swarm_traced: Swarm, weighting: str = 'revolutions',
+                                        which_orbit_dim: str = 'x'):
     """Plot image of swarm's survival along specified dimension"""
     image, binx, biny = histogram_particle_survival(swarm_traced, weighting, which_orbit_dim)
     extent = [binx.min(), binx.max(), biny.min(), biny.max()]

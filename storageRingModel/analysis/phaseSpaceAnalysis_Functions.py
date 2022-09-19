@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 
 from particle import Swarm, Particle
 from helper_tools import *
-from phaseSpaceAnalyzer import SwarmSnapShot
+from phaseSpaceAnalyzer import SwarmPoincare
 from storage_ring_modeler import StorageRingModel
 
 
@@ -48,7 +48,7 @@ def emittance_from_particles(particles: list) -> tuple[float, float]:
 
 
 def plot_ring_lattice_with_stops(model: StorageRingModel, phase_space_info, savefig=None, dpi=100):
-    model.lattice_ring.show_lattice(show_immediately=False)
+    model.lattice_ring.show(show_immediately=False)
 
     for i, particle_stops in enumerate(phase_space_info):
         first_stop = particle_stops[1]
@@ -84,7 +84,7 @@ def initial_phase_space_info(model: StorageRingModel, info: list, h: float) -> l
         particle_injector.T += particle_ring.T
         particle_injector.revolutions = particle_ring.revolutions
 
-    snap = SwarmSnapShot(swarm_injector_traced, x_start + 1e-9)
+    snap = SwarmPoincare(swarm_injector_traced, x_start + 1e-9)
     return snap.particles
 
 
@@ -99,7 +99,7 @@ def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list,
         _, swarm_traced = trace_swarm_through_ring(model, swarm_to_trace, h=h, T=T, parallel=parallel)
         for phase_space_stop, x_stops in zip(phase_space_info, xPositions):
             for info, x in zip(phase_space_stop, x_stops):
-                snap = SwarmSnapShot(swarm_traced, x)
+                snap = SwarmPoincare(swarm_traced, x)
                 info.extend(snap.particles)
         numParticlesLeft -= worksize if worksize < numParticlesLeft else numParticlesLeft
 

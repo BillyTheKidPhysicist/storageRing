@@ -2,8 +2,7 @@ import numba
 import numpy as np
 
 from numba_functions_and_objects.interpFunctions import vec_interp3D, scalar_interp3D
-from numba_functions_and_objects.utilities import full_arctan2
-
+from numba_functions_and_objects.utilities import full_arctan2,eps
 
 @numba.njit()
 def cartesian_To_Center(x, y, z, params):
@@ -48,11 +47,6 @@ def _magnetic_potential_func(x, y, z, field_data_seg):
 
 @numba.njit()
 def transform_Unit_Cell_Force_Into_Element_Frame_NUMBA(Fx, Fy, Fz, x, y, ucAng, M_uc):
-    # transform the coordinates in the unit cell frame into element frame. The crux of the logic is to notice
-    # that exploiting the unit cell symmetry requires dealing with the condition where the particle is approaching
-    # or leaving the element interface as mirror images of each other.
-    # FNew: Force to be rotated out of unit cell frame
-    # q: particle's position in the element frame where the force is acting
     phi = full_arctan2(y, x)  # calling a fast numba version that is global
     cellNum = int(phi / ucAng) + 1  # cell number that particle is in, starts at one
     if cellNum % 2 == 1:  # if odd number cell. Then the unit cell only needs to be rotated into that position
@@ -86,19 +80,22 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z, ang, ucAng):
 
 @numba.njit()
 def is_coord_in_vacuum(x, y, z, params):
-    phi = full_arctan2(y, x)  # calling a fast numba version that is global
+    phi = full_arctan2(y, x)  
 
     rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
-    if phi < ang:  # if particle is inside bending angle region
-        return (np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2 < ap ** 2
+    if phi <= ang+eps:  # if particle is inside bending angle region
+        r_minor=np.sqrt((np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2)
+        return r_minor< ap 
     else:  # if outside bender's angle range
-        if (x - rb) ** 2 + z ** 2 <= ap ** 2 and (0 >= y >= -L_cap):  # If inside the cap on
+        r_minor_east=np.sqrt((x - rb) ** 2 + z ** 2)
+        if r_minor_east <= ap  and (eps >= y >= -L_cap-eps):  # If inside the cap on
             # eastward side
             return True
         else:
-            qTestx = RIn_Ang[0, 0] * x + RIn_Ang[0, 1] * y
-            qTesty = RIn_Ang[1, 0] * x + RIn_Ang[1, 1] * y
-            return (qTestx - rb) ** 2 + z ** 2 <= ap ** 2 and (L_cap >= qTesty >= 0)
+            x_rot = RIn_Ang[0, 0] * x + RIn_Ang[0, 1] * y
+            y_rot = RIn_Ang[1, 0] * x + RIn_Ang[1, 1] * y
+            r_minor_west = np.sqrt((x_rot - rb) ** 2 + z ** 2)
+            return r_minor_west <= ap  and (L_cap +eps>= y_rot >= -eps)
             # if on the westwards side
 
 
@@ -209,13 +206,13 @@ def force(x0, y0, z0, params, field_data):
             else:
                 Fx, Fy, Fz = np.nan, np.nan, np.nan
         else:  # if outside bender's angle range
-            if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (0 >= y >= -L_cap):  # If inside the cap on
+            if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (eps >= y >= -L_cap-eps):  # If inside the cap on
                 # eastward side
                 Fx, Fy, Fz = _force_func(x, y, z, field_data_cap)
             else:
                 x, y = M_ang[0, 0] * x + M_ang[0, 1] * y, M_ang[1, 0] * x + M_ang[1, 1] * y
                 if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (
-                        -L_cap <= y <= 0):  # if on the westwards side
+                        -L_cap-eps <= y <= eps):  # if on the westwards side
                     Fx, Fy, Fz = _force_func(x, y, z, field_data_cap)
                     Fx0 = Fx
                     Fy0 = Fy

@@ -186,7 +186,7 @@ def is_Stable(self, X: list_array_tuple, minRevsToTest=5.0) -> bool:
     self.update_Ring_And_Injector(X)
     maxInitialTransversePos = 1e-3
     T_Max = 1.1 * minRevsToTest * self.lattice_ring.total_length / self.lattice_ring.speed_nominal
-    swarmTestInitial = self.swarm_tracer_ring.initialize_stablity_testing_swarm(maxInitialTransversePos)
+    swarmTestInitial = self.swarm_tracer_ring.stablity_testing_swarm(maxInitialTransversePos)
     swarmTestAtCombiner = self.swarm_tracer_ring.move_swarm_to_combiner_output(swarmTestInitial)
     swarmTestTraced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarmTestAtCombiner, self.h,
                                                                        T_Max, accelerated=False, use_fast_mode=True,

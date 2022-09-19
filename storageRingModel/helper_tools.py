@@ -12,6 +12,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.stats.qmc import Sobol
 
+from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT
 from type_hints import RealNum, sequence, ndarray
 
 
@@ -132,8 +133,8 @@ def grid_from_bounds(bounds: Iterable, num_points_edge: int) -> ndarray:
 
 def random_num_for_seeding() -> int:
     """Return a random number appropriate to use as a seed with numpy or python"""
-    UNSIGNED_32_BIT_MAX = int(2 ** 32)  # biggest seed size for numpy random
-    return np.random.randint(UNSIGNED_32_BIT_MAX)
+    MAX_32_BIT = int(2 ** 31) - 1  # biggest seed size for numpy random
+    return np.random.randint(MAX_32_BIT)
 
 
 def is_even(x: int) -> bool:
@@ -158,6 +159,10 @@ def radians(value_in_degrees: RealNum) -> float:
 
 def degrees(value_in_radians: RealNum) -> float:
     return (value_in_radians / np.pi) * 180
+
+
+def simulation_energy_to_mk(E):
+    return 1e3 * E * MASS_LITHIUM_7 / BOLTZMANN_CONSTANT
 
 
 def clamp(a: RealNum, a_min: RealNum, a_max: RealNum) -> RealNum:

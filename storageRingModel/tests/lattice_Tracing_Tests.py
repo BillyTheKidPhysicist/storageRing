@@ -14,7 +14,8 @@ V0 = 200.0
 
 def generate_Test_Swarm(PTL):
     swarmTracer = SwarmTracer(PTL)
-    testSwarm = swarmTracer.initalize_pseudorandom_swarm_in_phase_space(10e-3, 10.0, 5.0, 30, same_seed=True)
+    testSwarm = swarmTracer.pseudorandom_swarm(q_trans_bounds=10e-3, p_trans_bounds=10.0,delta_px_bounds= 5.0,
+                                               num_particles=30, same_seed=True)
     return testSwarm
 
 

@@ -1,3 +1,4 @@
+import warnings
 from typing import Callable
 
 
@@ -92,8 +93,12 @@ def build_collector_lattice(interp_density_mult=2.0, ap=None,direction=0.0) -> P
 
 def val_at_cumulative_fraction(values: np.ndarray, fraction: float) -> float:
     assert 0.0 <= fraction <= 1.0
-    arg_at_frac = round(len(values) * fraction)
-    return np.sort(values)[arg_at_frac]
+    if len(values)==0:
+        warnings.warn("The provided array is empty, returning nan")
+        return np.nan
+    else:
+        arg_at_frac = round((len(values)-1) * fraction)
+        return np.sort(values)[arg_at_frac]
 
 
 # @numba.njit()

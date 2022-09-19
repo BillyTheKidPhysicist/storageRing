@@ -1,0 +1,5 @@
+This directory contains a simple tutorial on use of the codebase for simulation and optimization of a neutral atom storage ring. This codebase can also be used for tracing particles through linear series of magnets. For questions contact Billy (billydebenham@gmail.com)
+
+Before reading this document and doing the tutorial read the project readme. For this tutorial it is assumed that the user has a *working* knowledge of using functions and objects. You may find that the notebooks don't run as expected because of directories not being found. This can happen if you don't have your project configured to access modules everywhere in the project. Dealing with this can be frustrating for beginners at times and there are several ways to deal with it. There are a variety of solutions that can be found online. I recommend using DataSpell for notebooks if possible and PyCharm for an IDE.
+
+lab vs element vs orbit frame

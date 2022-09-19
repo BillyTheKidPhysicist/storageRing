@@ -4,18 +4,18 @@ from typing import Optional
 
 import numba
 import numpy as np
-from numba.core.errors import NumbaPerformanceWarning
+
 
 from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
-from helper_tools import is_close_all
+from helper_tools import is_close_all,full_arctan2
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
     CombinerSim, CombinerLensSim
 from particle import Particle
 from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
     fast_qNew, dot_Prod_3D
 
-warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
+
 
 
 class ElementTooShortError(Exception):
@@ -44,7 +44,6 @@ class ParticleTracer:
 
         self.T = None  # total time elapsed
         self.h = None  # step size
-        self.use_energy_correction = None
 
         self.el_has_changed = False  # to record if the particle has changed to another element in the previous step
         self.E0 = None  # total initial energy of particle
@@ -90,9 +89,6 @@ class ParticleTracer:
         for el in self.el_list:
             if el.Lo <= LMin:  # have at least a few steps in each element
                 raise ElementTooShortError
-        if self.particle.qi[0] == 0.0:
-            raise Exception("a particle appears to be starting with x=0 exactly. This can cause unpredictable "
-                            "behaviour")
         self.current_el = self.which_element_lab_coords(self.particle.qi)
         self.particle.current_el = self.current_el
         self.particle.data_logging = not self.use_fast_mode  # if using fast mode, there will NOT be logging
@@ -105,29 +101,16 @@ class ParticleTracer:
             self.particle.clipped = False
             self.q_el = self.current_el.transform_lab_coords_into_element_frame(self.particle.qi)
             self.p_el = self.current_el.transform_lab_frame_vector_into_element_frame(self.particle.pi)
-            if self.use_energy_correction:
-                self.E0 = self.particle.get_energy(self.current_el, self.q_el, self.p_el)
         if self.use_fast_mode is False and self.particle.clipped is False:
             self.particle.log_params(self.current_el, self.q_el, self.p_el)
 
     def trace(self, particle: Optional[Particle], h: float, T0: float, fast_mode: bool = False,
-              accelerated: bool = False,
-              use_energy_correction: bool = False, steps_between_logging: int = 1, use_collisions: bool = False,
+              accelerated: bool = False,steps_between_logging: int = 1, use_collisions: bool = False,
               log_el_phase_space_coords: bool = False) -> Particle:
-        # trace the particle through the lattice. This is done in lab coordinates. Elements affect a particle by having
-        # the particle's position transformed into the element frame and then the force is transformed out. This is obviously
-        # not very efficient.
-        # qi: initial position coordinates
-        # vi: initial velocity coordinates
-        # h: timestep
-        # T0: total tracing time
-        # use_fast_mode: wether to use the performance optimized versoin that doesn't track paramters
         if use_collisions:
             raise NotImplementedError  # the heterogenous tuple was killing performance. Need a new method
         assert 0 < h < 1e-4 and T0 > 0.0  # reasonable ranges
-        assert not (use_energy_correction and use_collisions)
         self.use_collisions = use_collisions
-        self.use_energy_correction = use_energy_correction
         self.steps_per_logging = steps_between_logging
         self.log_el_phase_space_coords = log_el_phase_space_coords
 
@@ -159,32 +142,34 @@ class ParticleTracer:
 
         return self.particle
 
-    def did_Particle_Survive_To_End(self):
+    def does_particle_survive_to_end(self):
         """
         Check if a particle survived to the end of a lattice. This is only intended for lattices that aren't closed.
         This isn't straight forward because the particle tracing stops when the particle is outside the lattice, then
         the previous position is the final position. Thus, it takes a little extra logic to find out wether a particle
         actually survived to the end in an unclosed lattice
 
-        :return: wether particle has survived to end or not
+        :return: True if particle survived to end, False if not
         """
 
         assert not self.PTL.is_closed
         el_last = self.el_list[-1]
-        # q_el = el_last.transform_lab_coords_into_element_frame(self.q_el)
-        # p_el = el_last.transform_lab_frame_vector_into_element_frame(self.p_el)
         if isinstance(el_last, LensIdeal):
-            timeStepToEnd = (el_last.L - self.q_el[0]) / self.p_el[0]
+            time_step_to_end = (el_last.L - self.q_el[0]) / self.p_el[0]
         elif isinstance(el_last, CombinerIdeal):
-            timeStepToEnd = self.q_el[0] / -self.p_el[0]
+            time_step_to_end = self.q_el[0] / -self.p_el[0]
+        elif type(el_last) is BenderIdeal:
+            time_step_to_end = -self.q_el[1] / self.p_el[1]
+        elif type(el_last) is BenderSim:
+            time_step_to_end=(-el_last.L_cap-self.q_el[1])/ self.p_el[1]
         else:
-            print('not implemented, falling back to previous behaviour')
+            warnings.warn('not implemented, falling back to previous behaviour')
             return self.particle.clipped
 
-        if not 0 <= timeStepToEnd <= self.h:
+        if not 0 <= time_step_to_end <= self.h:
             clipped = True
         else:
-            qElEnd = self.q_el + .99 * timeStepToEnd * self.p_el
+            qElEnd = self.q_el + .99 * time_step_to_end * self.p_el
             clipped = not el_last.is_coord_inside(qElEnd)
         return clipped
 
@@ -210,7 +195,7 @@ class ParticleTracer:
         if not self.PTL.is_closed:
             if self.current_el is self.el_list[-1] and self.particle.clipped:  # only bother if particle is
                 # in last element
-                self.particle.clipped = self.did_Particle_Survive_To_End()
+                self.particle.clipped = self.does_particle_survive_to_end()
 
     def multi_step_verlet(self) -> None:
         # collision_params = get_Collision_Params(self.current_el, self.PTL.speed_nominal) if \
@@ -265,11 +250,6 @@ class ParticleTracer:
         # p_el: momentum for both q_el_next and q_el
 
         if self.accelerated:
-            if self.use_energy_correction:
-                p_el[:] += self.momentum_correction_at_bounday(self.E0, q_el, p_el,
-                                                               self.current_el.numba_functions['magnetic_potential'],
-                                                               self.current_el.numba_functions['force'],
-                                                               'leaving')
             if self.log_el_phase_space_coords:
                 qElLab = self.current_el.transform_element_coords_into_lab_frame(
                     q_el_next)  # use the old  element for transform
@@ -281,11 +261,6 @@ class ParticleTracer:
             if not next_el.is_coord_inside(q_next_el):
                 self.particle.clipped = True
             else:
-                if self.use_energy_correction:
-                    p_nextEl[:] += self.momentum_correction_at_bounday(self.E0, q_next_el, p_nextEl,
-                                                                       next_el.numba_functions['magnetic_potential'],
-                                                                       next_el.numba_functions['force'],
-                                                                       'entering')
                 self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
                 self.current_el = next_el
                 self.particle.current_el = next_el
@@ -297,12 +272,6 @@ class ParticleTracer:
             if el is None:  # if outside the lattice
                 self.particle.clipped = True
             elif el is not self.current_el:  # element has changed
-                if self.use_energy_correction:
-                    p_el[:] += self.momentum_correction_at_bounday(self.E0, q_el, p_el,
-                                                                   self.current_el.numba_functions[
-                                                                       'magnetic_potential'],
-                                                                   self.current_el.numba_functions['force'],
-                                                                   'leaving')
                 next_el = el
                 self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
                 qElLab = self.current_el.transform_element_coords_into_lab_frame(
@@ -319,39 +288,10 @@ class ParticleTracer:
                     pElLab)  # at the beginning of the next
                 # element
                 self.el_has_changed = True
-                if self.use_energy_correction:
-                    self.p_el[:] += self.momentum_correction_at_bounday(self.E0, self.q_el, self.p_el,
-                                                                        self.current_el.numba_functions[
-                                                                            'magnetic_potential'],
-                                                                        self.current_el.numba_functions['force'],
-                                                                        'entering')
             else:
                 raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
                                 'interpolation extends into the magnetic material. Particle is also possibly frozen '
                                 'because of broken logic that returns it to the same location.')
-
-    @staticmethod
-    @numba.njit(cache=False)
-    def momentum_correction_at_bounday(E0, q_el: np.ndarray, p_el: np.ndarray, magnetic_potential, force,
-                                       direction: str) -> \
-            tuple[float, float, float]:
-        # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
-        assert direction in ('entering', 'leaving')
-        Fx, Fy, Fz = force(q_el[0], q_el[1], q_el[2])
-        F_norm = np.sqrt(Fx ** 2 + Fy ** 2 + Fz ** 2)
-        if F_norm < 1e-6:  # force is too small, and may cause a division error
-            return 0.0, 0.0, 0.0
-        else:
-            if direction == 'leaving':  # go from zero to non zero potential instantly
-                E_mew = dot_Prod_3D(p_el, p_el) / 2.0  # ideally, no magnetic field right at border
-                delta_E = E0 - E_mew  # need to lose energy to maintain E0 when the potential turns off
-            else:  # go from zero to non zero potentially instantly
-                delta_E = -np.array(
-                    magnetic_potential(q_el[0], q_el[1], q_el[2]))  # need to lose this energy
-            Fx_unit, Fy_unit, Fz_unit = Fx / F_norm, Fy / F_norm, Fz / F_norm
-            delta_p_norm = delta_E / (Fx_unit * p_el[0] + Fy_unit * p_el[1] + Fz_unit * p_el[2])
-            delta_px, delta_py, delta_pz = delta_p_norm * Fx_unit, delta_p_norm * Fy_unit, delta_p_norm * Fz_unit
-            return delta_px, delta_py, delta_pz
 
     def which_element_lab_coords(self, q_lab: np.ndarray) -> Optional[Element]:
         for el in self.el_list:

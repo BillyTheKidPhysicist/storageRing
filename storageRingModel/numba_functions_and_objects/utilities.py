@@ -1,6 +1,7 @@
 import numba
 import numpy as np
 from numba.experimental import jitclass
+import sys
 
 
 @numba.njit()
@@ -10,7 +11,7 @@ def full_arctan2(y, x):
         phi += 2 * np.pi
     return phi
 
-
+eps=sys.float_info.epsilon
 TupleOf3Floats = tuple[float, float, float]
 nanArr7Tuple = tuple([np.ones(1) * np.nan] * 7)
 DUMMY_FIELD_DATA_3D = (np.ones(1) * np.nan,) * 7

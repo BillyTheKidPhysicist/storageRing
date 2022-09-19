@@ -1,19 +1,16 @@
 import numba
 import numpy as np
-
 from constants import SIMULATION_MAGNETON
-from numba_functions_and_objects.utilities import full_arctan2
+from numba_functions_and_objects.utilities import full_arctan2,eps
 
 
 @numba.njit()
 def magnetic_potential(x, y, z, params):
-    # potential energy at provided coordinates
-    # q coords in element frame
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
     r_polar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     r_toroidal = np.sqrt((r_polar - rb) ** 2 + z ** 2)
-    if phi < ang and r_toroidal < ap:
+    if phi <=ang+eps and r_toroidal < ap:
         V0 = .5 * K * r_toroidal ** 2
     else:
         V0 = np.nan
@@ -23,13 +20,11 @@ def magnetic_potential(x, y, z, params):
 
 @numba.njit()
 def force(x, y, z, params):
-    # force at point q in element frame
-    # q: particle's position in element frame
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
     r_polar = np.sqrt(x ** 2 + y ** 2)  # radius in x y frame
     r_toroidal = np.sqrt((r_polar - rb) ** 2 + z ** 2)
-    if phi < ang and r_toroidal < ap:
+    if phi <=ang+eps and r_toroidal < ap:
         F0 = -K * (r_polar - rb)  # force in x y plane
         Fx = np.cos(phi) * F0
         Fy = np.sin(phi) * F0
@@ -46,18 +41,10 @@ def force(x, y, z, params):
 def is_coord_in_vacuum(x, y, z, params):
     rb, ap, ang, K, field_fact = params
     phi = full_arctan2(y, x)
-    if phi < 0:  # constraint to between zero and 2pi
-        phi += 2 * np.pi
-    if phi <= ang:  # if particle is in bending segment
+    if phi <= ang+eps:  # if particle is in bending segment
         rh = np.sqrt(x ** 2 + y ** 2) - rb  # horizontal radius
         r = np.sqrt(rh ** 2 + z ** 2)  # particle displacement from center of apeture
-        if r > ap:
-            return False
-        else:
-            return True
+        return r<ap
     else:
         return False
 
-# def update_Element_Perturb_Params( shift_y, shift_z, rot_angle_y, rot_angle_z):
-#     """update rotations and shifts of element relative to vacuum. pseudo-overrides BaseClassFieldHelper"""
-#     raise NotImplementedError

@@ -815,11 +815,10 @@ class Bender(Element):
     def M_func(self, s: RealNum, atom_speed: RealNum) -> ThreeNumpyMatrices:
         assert 0 <= s <= self.L
         Kx = bender_spring_constant(self.Bp, self.rp, self.ro, atom_speed)
-        # K_dispersion = bender_dispersion(self.ro)
         Ky = spring_constant_lens(self.Bp, self.rp, atom_speed)
         Mx = transfer_matrix(Kx, s)
         My = transfer_matrix(Ky, s)
-        Md = transfer_matrix(Kx, s, R=np.inf)
+        Md = transfer_matrix(Kx, s, R=self.ro)
         return Mx, My, Md
 
 
@@ -940,9 +939,14 @@ def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum
     return value * sign
 
 
-def dispersion_from_components(m11, m12, m13, m21, m22, m23, unused_m31, unused_m32, unused_m33):
-    """Return value of dispersion function given dispersion transfer matrix values"""
+def dispersion_slope_from_components(m11, unused_m12, m13, m21, m22, m23, unused_m31, unused_m32, unused_m33):
     D_prime = (m21 * m13 + m23 * (1 - m11)) / (2 - m11 - m22)
+    return D_prime
+
+
+def dispersion_from_components(m11, m12, m13, m21, m22, m23, m31, m32, m33):
+    """Return value of dispersion function given dispersion transfer matrix values"""
+    D_prime = dispersion_slope_from_components(m11, m12, m13, m21, m22, m23, m31, m32, m33)
     D = (m12 * D_prime + m13) / (1 - m11)
     return D
 
@@ -968,6 +972,10 @@ def beta(M: ndarray) -> float:
     return beta_from_components(*matrix_components(M))
 
 
+def dispersion_slope(M: ndarray) -> float:
+    return dispersion_slope_from_components(*matrix_components(M))
+
+
 def dispersion(M: ndarray) -> float:
     """Return value of dispersion function from matrix 'M', assuming periodicity"""
     return dispersion_from_components(*matrix_components(M))
@@ -986,6 +994,12 @@ def dispersion_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum)
     _, _, Md = lattice_transfer_matrix_at_s(s, elements, atom_speed)
     D = dispersion(Md)
     return D
+
+
+def dispersion_slope_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum) -> float:
+    _, _, Md = lattice_transfer_matrix_at_s(s, elements, atom_speed)
+    D_prime = dispersion_slope(Md)
+    return D_prime
 
 
 @functools.lru_cache
@@ -1191,15 +1205,20 @@ def emittance_from_particle(particle, elements: HashableElements, which_coords='
     """Return x and y emittances of a particle in a periodic lattice of elements"""
     if which_coords == 'initial':
         _, X, Y, atom_speed = orbit_phase_space_coords_initial(particle)
+        z = 0
         Mx, My, _ = total_lattice_transfer_matrix(elements, atom_speed)
     elif which_coords == 'final':
         z, X, Y, atom_speed = orbit_phase_space_coords_final(particle)
         Mx, My, _ = lattice_transfer_matrix_at_s(z, elements, atom_speed)
     else:
         raise NotImplementedError
-
+    D = dispersion_at_s(z, elements, atom_speed)
+    D_prime = dispersion_slope_at_s(z, elements, atom_speed)
+    X = list(X)
+    X[0] -= D * delta(atom_speed)
+    X[1] -= D_prime * delta(atom_speed)
     emittances = []
-    for ((ui, ui_slope), Mu) in zip((X, Y), (Mx, My)):
+    for i, ((ui, ui_slope), Mu) in enumerate(zip((X, Y), (Mx, My))):
         twiss_params = twiss_parameters(Mu)
         emittances.append(emittance_from_ellipse_parameters(ui, ui_slope, *twiss_params))
     return tuple(emittances)
@@ -1208,7 +1227,7 @@ def emittance_from_particle(particle, elements: HashableElements, which_coords='
 def does_envelope_clip_on_aperture(xo: ndarray, yo: ndarray, apx: ndarray,
                                    apy: ndarray, dispersion_shift: ndarray) -> bool:
     """Return True if the particle's envelope increases beyond the value of an aperture in a periodic lattice. Assumes
-    that the aperture are all cylinderical, though the orbit may be displaced horizontally in the bore"""
+    that the aperture are all circular, though the orbit may be displaced horizontally in the bore"""
     aps_r = (apx ** 2 + apy ** 2) / (2 * apx)
     delta_x_bore = (apy - apx) * (apy + apx) / (2 * apx)
     x_bore = xo + delta_x_bore + dispersion_shift
@@ -1461,6 +1480,9 @@ class Lattice(Sequence):
 
     def acceptance_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points: int = 300):
         return acceptance_profile(self.elements, atom_speed, num_points)
+
+    def dispersion_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points: int = 300):
+        return dispersion_profile(self.elements, atom_speed, num_points)
 
     def minimum_acceptance(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
         return minimum_acceptance(self.elements, atom_speed, num_points)

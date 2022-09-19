@@ -3,7 +3,7 @@ import numpy as np
 
 from constants import FLAT_WALL_VACUUM_THICKNESS
 from numba_functions_and_objects.interpFunctions import magnetic_potential_interp_3D,force_interp_3D
-
+from numba_functions_and_objects.utilities import eps
 
 @numba.njit()
 def force(x0, y0, z0, params, field_data):
@@ -31,7 +31,7 @@ def force(x0, y0, z0, params, field_data):
             x = 2 * symmetry_plane_x - x
             Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_internal)
             Fx = -Fx
-        elif space + Lm < x:
+        elif space + Lm <= x:
             x = 2 * symmetry_plane_x - x
             Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_external)
             Fx = -Fx
@@ -87,7 +87,7 @@ def is_coord_in_vacuum(x, y, z, params):
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)
         return False
-    elif 0 <= x <= Lb + FLAT_WALL_VACUUM_THICKNESS:  # particle is in the horizontal section (in element frame) that passes
+    elif -eps <= x <= Lb + FLAT_WALL_VACUUM_THICKNESS+eps:  # particle is in the horizontal section (in element frame) that passes
         # through the combiner.
         if np.sqrt(y ** 2 + z ** 2) < ap:
             return True
@@ -96,7 +96,7 @@ def is_coord_in_vacuum(x, y, z, params):
     elif x < 0:
         return False
     else:  # particle is in the bent section leading into combiner. It's bounded by 3 lines
-        # todo: these should be in functions if they are used elsewhere
+        # IMPROVEMENT: these should be in functions if they are used elsewhere
         m = np.tan(ang)
         Y1 = m * x + (acceptance_width - m * Lb)  # upper limit
         Y2 = (-1 / m) * x + La * np.sin(ang) + (Lb + La * np.cos(ang)) / m

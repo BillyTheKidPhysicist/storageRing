@@ -1,7 +1,8 @@
-import copy
+from copy import deepcopy
 import warnings
 from math import isnan
-from typing import Union, Optional, Iterable
+from typing import Union, Optional, Iterable,Sequence
+from type_hints import ndarray
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,19 +11,18 @@ import numpy.linalg as npl
 from constants import DEFAULT_ATOM_SPEED
 from lattice_elements.elements import Element
 
+Vector3D=Union[Sequence,ndarray] 
 def get_obj_var(obj, var_name, var_index):
     var = vars(obj)[var_name]
     return var[var_index] if var_index is not None else var
 
 
 class Particle:
-    # IMPROVEMENT: Many of these methods do need need to be attached to particle. It reduces pickling performance
 
-    def __init__(self, qi: Optional[np.ndarray] = None, pi: Optional[np.ndarray] = None, probability: float = 1.0):
-        if qi is None:
-            qi = np.array([-1e-10, 0, 0])
-        if pi is None:
-            pi = np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0])
+    def __init__(self, qi: Vector3D = None, pi:Vector3D = None, probability: float = 1.0):
+        qi = np.array([0, 0, 0]) if qi is None else np.array(qi)
+        pi = np.asarray([-DEFAULT_ATOM_SPEED, 0.0, 0.0]) if pi is None else np.array(pi)
+
         assert len(qi) == 3 and len(pi) == 3 and 0.0 <= probability <= 1.0
         qi = qi.astype(float) #ints can have weird behaviour
         pi = pi.astype(float)
@@ -139,27 +139,28 @@ class Particle:
         plt.grid()
         plt.show()
 
-    def plot_orbit_reference_frame_position(self, plot_y_axis: bool = 'y') -> None:
-        if plot_y_axis not in ('y', 'z'):
-            raise Exception('plot_y_axis MUST BE EITHER \'y\' or \'z\'')
-        if self.qo_vals.shape[0] == 0:
-            warnings.warn('Particle has no logged position values')
-            qo_vals = np.zeros((1, 3)) + np.nan
+    def plot_orbit_coordinate(self, plot_dim: str='x') -> None:
+        if plot_dim not in ('x','y','px','py'):
+            raise Exception('Dimension must be an orbit coordinate that is not longitudinal, options are ps,px,py, x,y')
+        indices={'ps':0,'px':1,'py':2,'x':1,'y':2}
+        idx=indices[plot_dim]
+        x_plot=self.qo_vals[:,0]
+        if plot_dim in ('x','y'):
+            y_plot=self.qo_vals[:,idx]
+        elif plot_dim in ('ps','px','py'):
+            y_plot=self.po_vals[:,idx]
         else:
-            qo_vals = self.qo_vals
-        if plot_y_axis == 'y':
-            y_plot = qo_vals[:, 1]
-        else:
-            y_plot = qo_vals[:, 2]
+            raise Exception('Dimension must be an orbit coordinate that is not longitudinal, options are ps,px,py, x,y')
         plt.close('all')
-        plt.plot(qo_vals[:, 0], y_plot)
+        plt.title("Particle coordinate relative to design orbit")
+        plt.plot(x_plot, y_plot)
         plt.ylabel('Trajectory offset, m')
         plt.xlabel('Trajectory length, m')
         plt.grid()
         plt.show()
 
     def copy(self):
-        return copy.deepcopy(self)
+        return deepcopy(self)
 
 
 class Swarm:
@@ -239,7 +240,7 @@ class Swarm:
             return num_survived
 
     def copy(self):
-        return copy.deepcopy(self)
+        return deepcopy(self)
 
     def quick_copy(self):  # only copy the initial conditions. For swarms that havn't been traced or been monkeyed
         # with at all

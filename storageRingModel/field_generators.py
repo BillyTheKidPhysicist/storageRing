@@ -1,6 +1,6 @@
 import copy
 from numbers import Number
-
+from demag_functions import mesh_cuboid
 import magpylib.current
 import numba
 import numpy as np
@@ -426,7 +426,6 @@ class HalbachLens(Collection):
         self.magnet_width: tuple = magnet_width if isinstance(magnet_width, tuple) else (magnet_width,)
         self.use_method_of_moments: bool = use_method_of_moments
         self.use_standard_mag_errors: bool = use_standard_mag_errors
-        self.seed = seed
         self.magnet_grade = magnet_grade
         self.num_disks = num_disks
         self.num_layers = len(self.rp)
@@ -434,7 +433,8 @@ class HalbachLens(Collection):
         self.mur = 1.05
 
         self.layer_list: list[Layer] = []
-        self.build()
+        with temporary_seed(seed):  # if None, then no special seeding happens
+            self.build()
 
     def build(self):
         z_arr, length_arr = self.subdivide_Lens()
@@ -466,10 +466,9 @@ class HalbachLens(Collection):
         mag_vec_angle_tol = constants.MAGNET_MAGNETIZATION_ANGLE_TOLERANCE  # magnetization vector angle tolerance,
         # max tilt
         mag_norm_tol = constants.MAGNET_MAGNETIZATION_NORM_TOLERANCE  # magnetization value tolerance, +/- fraction
-        with temporary_seed(self.seed):  # if None, then no special seeding happens
-            dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
-            MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol
-            mag_norm_variation = self.make_Base_Error_Arr_Cartesian() * mag_norm_tol
+        dim_variation = self.make_Base_Error_Arr_Cartesian(num_params=3) * dim_tol
+        MagVecAngleVariation = self.make_Base_Error_Arr_Circular() * mag_vec_angle_tol
+        mag_norm_variation = self.make_Base_Error_Arr_Cartesian() * mag_norm_tol
         return dim_variation, MagVecAngleVariation, mag_norm_variation
 
     def make_Base_Error_Arr_Cartesian(self, num_params: int = 1) -> ndarray:

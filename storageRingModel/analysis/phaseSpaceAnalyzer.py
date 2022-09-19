@@ -49,14 +49,17 @@ class Particle(ParticleBase):
         self.T=None
 
 
-class SwarmSnapShot:
+class SwarmPoincare:
     def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0):
         assert xSnapShot > 0.0  # orbit coordinates, not real coordinates
-        self.particles: list[Particle] = None
+        self.particles = []
         self.xSnapShot=xSnapShot
         self.swarm=swarm
         self.min_Survival_T=min_Survival_T
         self._take_SnapShot()
+
+    def __iter__(self):
+        return iter(self.particles)
 
     def _take_Particle_Snapshot(self,particle):
         particleSnapShot = Particle(qi=particle.qi.copy(), pi=particle.pi.copy())
@@ -121,7 +124,8 @@ class SwarmSnapShot:
         ESnapShot = self._interpolate_Array(E_arr, indexBefore, stepFraction)
         qLabSnapShot=self._interpolate_Array(particle.q_vals, indexBefore, stepFraction)
         pLabSnapShot=self._interpolate_Array(particle.p_vals, indexBefore, stepFraction)
-        assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot))
+        assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot)) # this can occure because
+        # a particle is in the bender. IMPROVEMENT: fix this
         return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
     def _interpolate_Array(self, arr, indexBegin, stepFraction):
@@ -219,7 +223,7 @@ class PhaseSpaceAnalyzer:
         axes[latticeAxisIndex].set_xlabel('meters')
         axes[latticeAxisIndex].set_ylabel('meters')
         for xOrbit, i in zip(xOrbitSnapShotArr, range(len(xOrbitSnapShotArr))):
-            snapShotPhaseSpaceCoords = SwarmSnapShot(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
+            snapShotPhaseSpaceCoords = SwarmPoincare(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
             if len(snapShotPhaseSpaceCoords) == 0:
                 break
             else:
@@ -338,7 +342,7 @@ class PhaseSpaceAnalyzer:
         EList_Max = []
         survivalList = []
         for xOrbit in tqdm(xSnapShotArr):
-            snapShot = SwarmSnapShot(self.swarm, xOrbit)
+            snapShot = SwarmPoincare(self.swarm, xOrbit)
             deltaESnapShot = snapShot.get_Particles_Energy(returnChangeInE=True, survivingOnly=survivingOnly)
             minParticlesForStatistics = 5
             if len(deltaESnapShot) < minParticlesForStatistics:
@@ -489,7 +493,7 @@ class PhaseSpaceAnalyzer:
             revCoordsList = []
             for xOrbit in xSnapShotArr:
                 xOrbit += self.lattice.total_length * revNumber
-                snapShotPhaseSpaceCoords = SwarmSnapShot(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
+                snapShotPhaseSpaceCoords = SwarmPoincare(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
                 revCoordsList.append(snapShotPhaseSpaceCoords[:, yCoordIndex])
             envelopeData = np.column_stack((envelopeData, revCoordsList))
             # rmsArr=np.std(np.asarray(revCoordsList),axis=1)

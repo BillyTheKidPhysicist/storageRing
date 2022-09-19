@@ -6,6 +6,8 @@ import numpy as np
 from shapely.affinity import rotate, translate
 from shapely.geometry import LineString, Polygon
 
+from kevin_bumper import swarmShift_y
+
 from floor_plan_checker import does_fit_in_room, plot_floor_plan_in_lab
 from helper_tools import full_arctan2
 from kevin_bumper import swarmShift_x
@@ -61,7 +63,7 @@ class StorageRingModel:
     max_floor_plan_cost = 1.0
 
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
-                 num_particles: int = 1024, use_collisions: bool = False, use_energy_correction: bool = False,
+                 num_particles: int = 1024, use_collisions: bool = False,
                  use_bumper: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
         assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
@@ -74,15 +76,16 @@ class StorageRingModel:
         self.swarm_tracer_ring = SwarmTracer(self.lattice_ring)
         self.has_bumper = use_bumper
         self.use_collisions = use_collisions
-        self.use_energy_correction = use_energy_correction
         self.swarm_injector_initial = self.generate_swarm(num_particles)
 
     def generate_swarm(self, num_particlesSwarm: int) -> Swarm:
         """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
-        swarm = self.swarm_tracer_injector.initialize_simulated_collector_focus_swarm(num_particlesSwarm)
+        swarm = self.swarm_tracer_injector.simulated_collector_focus_swarm(num_particlesSwarm)
         if self.has_bumper:
             swarm = self.swarm_tracer_injector.time_step_swarm_distance_along_x(swarm, swarmShift_x,
                                                                                 hold_position_in_x=True)
+            for particle in swarm: #shift the swarm
+                particle.qi[1]-=swarmShift_y
         return swarm
 
     def convert_position_injector_to_ring_frame(self, q_lab_inject: np.ndarray) -> np.ndarray:
@@ -226,7 +229,6 @@ class StorageRingModel:
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             swarm, self.h, 1.0, parallel=False,
             use_fast_mode=False, copy_swarm=True, accelerated=False, log_el_phase_space_coords=True,
-            use_energy_correction=True,
             use_collisions=self.use_collisions)
         for particle in swarm_injector_traced:
             particle.clipped = True if self.does_ring_clip_injector_particle(particle) else particle.clipped
@@ -235,7 +237,6 @@ class StorageRingModel:
         swarm_ring_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_ring_initial, self.h, T_max,
                                                                                use_fast_mode=False,
                                                                                parallel=parallel,
-                                                                               use_energy_correction=True,
                                                                                steps_per_logging=4,
                                                                                use_collisions=self.use_collisions)
 
@@ -286,7 +287,6 @@ class StorageRingModel:
         swarm_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_initial, self.h, self.T,
                                                                           use_fast_mode=True, accelerated=True,
                                                                           copy_swarm=False,
-                                                                          use_energy_correction=self.use_energy_correction,
                                                                           use_collisions=self.use_collisions,
                                                                           parallel=parallel)
         return swarm_traced
@@ -364,7 +364,7 @@ class StorageRingModel:
 
 def build_storage_ring_model(ring_params, injector_params, ring_version, num_particles: int = 1024,
                              use_collisions: bool = False, include_mag_cross_talk: bool = False,
-                             use_energy_correction: bool = False, use_mag_errors: bool = False,
+                              use_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False,
                              include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME,
                              build_field_helpers: bool = True):
@@ -373,7 +373,7 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
                'include_mag_cross_talk_in_ring': include_mag_cross_talk,
                'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
-    model = StorageRingModel(lattice_ring, lattice_injector, use_energy_correction=use_energy_correction,
+    model = StorageRingModel(lattice_ring, lattice_injector,
                              num_particles=num_particles, use_collisions=use_collisions,
                              use_bumper=use_bumper, sim_time_max=sim_time_max)
     return model
@@ -381,7 +381,6 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
 
 def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 use_solenoid_field: bool = True, use_mag_errors=False,
-                                use_energy_correction: bool = False,
                                 include_mag_cross_talk: bool = False,
                                 include_misalignments: bool = False,
                                 sim_time_max=DEFAULT_SIMULATION_TIME,
@@ -391,7 +390,6 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
     injector_params_optimal = get_optimal_injector_params(ring_version)
     model = build_storage_ring_model(ring_params_optimal, injector_params_optimal, ring_version, use_bumper=use_bumper,
                                      use_solenoid_field=use_solenoid_field, use_mag_errors=use_mag_errors,
-                                     use_energy_correction=use_energy_correction,
                                      include_mag_cross_talk=include_mag_cross_talk,
                                      include_misalignments=include_misalignments,
                                      sim_time_max=sim_time_max, build_field_helpers=build_field_helpers)

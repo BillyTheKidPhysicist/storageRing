@@ -1,8 +1,9 @@
 # from geneticLensElement_Wrapper import GeneticLens
 import warnings
-from math import isclose
+from math import isclose,pi
 from typing import Iterable, Union, Optional
-
+import warnings
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -28,9 +29,11 @@ class ParticleTracerLattice:
 
     def __init__(self, speed_nominal: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
                  field_dens_mult: RealNum = 1.0, use_mag_errors: bool = False,
-                 use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None, initial_ang=None,
+                 use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None,
+                 initial_ang: RealNum=-pi,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
                  include_mag_cross_talk: bool = False, include_misalignments: bool = False):
+        #IMPROVEMENT: MAKE INITIAL_LOCATION MORE CONSISTENT WITH EVERYTHING
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
@@ -43,7 +46,7 @@ class ParticleTracerLattice:
         # first one that the particle sees
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.initial_location = (0.0, 0.0) if initial_location is None else initial_location
-        self.initial_ang = -np.pi if initial_ang is None else initial_ang
+        self.initial_ang = initial_ang
         self.combiner_index = None  # the index in the lattice where the combiner is
         self.total_length = None  # total length of lattice, m
         self.field_dens_mult = field_dens_mult
@@ -154,14 +157,14 @@ class ParticleTracerLattice:
 
     def add_lens_ideal(self, L: RealNum, Bp: RealNum, rp: RealNum, constrain: bool = False, ap: RealNum = None) -> None:
         """
-        Simple model of an ideal lens. Field norm goes as B0=Bp*r^2/rp^2
+        Add to the lattice an ideal magnetic hexapole lens. Field norm goes as B0=Bp*r^2/rp^2
 
-        :param L: Length of element, m. Lens hard edge length is this as well
-        :param Bp: Field at bore/pole radius of lens
-        :param rp: Bore/pole radius of lens
-        :param ap: aperture of vacuum tube in magnet
-        :param constrain:
-        :return:
+        :param L: Hard edge length of element, m.
+        :param Bp: Field at bore face of lens,T.
+        :param rp: Bore/pole radius of lens, m.
+        :param ap: Aperture of lens, possibly a limit set by a vacuum tube, m.
+        :param constrain: To use the element as a constraint, under construction
+        :return: None
         """
 
         el = LensIdeal(self, L, Bp, rp, ap)  # create a lens element object
@@ -169,24 +172,24 @@ class ParticleTracerLattice:
         self.el_list.append(el)  # add element to the list holding lattice elements in order
         if constrain:
             self.set_constrained_linear_element(el)
-            print('not fully supported feature')
+            warnings.warn("Not sure if this fully works, use with caution")
 
     def add_drift(self, L: RealNum, ap: RealNum = .03, input_tilt_angle: RealNum = 0.0,
                   output_tilt_angle: RealNum = 0.0, outer_half_width: RealNum = None) -> None:
         """
         Add drift region. This is simply a vacuum tube.
 
-        The general shape is a trapezoid in the xy lab/element frame, and a circle in the zx,zy element frame. In the
-        element frame in the xy plane the two bases are parallel with \vec{x}, and the input output can be at saome
-        angle relative to \vec{y}. Positive angles are counterclockwise notation. The length of the drift region is the
+        The general shape is a trapezoid in the xy lab frame, and a circle in the yz element frame. In the
+        element frame in the xy plane the two bases are parallel with x-axis, and the input output can be at same
+        angle relative to y-axis. Positive angles are counterclockwise notation. The length of the drift region is the
         same no matter the input/output tilt because the tilt is pinned at the centerline of the two bases of the
         trapezoid.
 
         :param L: Length of drift region, m
         :param ap: Aperture of drift region, m
-        :param input_tilt_angle: Tilt angle of the input plane to the drift region.
-        :param output_tilt_angle: Tilt angle of the output to the drift region.
-        :param outer_half_width: Outer half width of drift region. For example, a valve.
+        :param input_tilt_angle: Tilt angle of the input plane to the drift region, radians
+        :param output_tilt_angle: Tilt angle of the output to the drift region, radians
+        :param outer_half_width: Outer half width of drift region. For example, a valve body
         :return: None
         """
 
@@ -355,25 +358,12 @@ class ParticleTracerLattice:
         x_lab, y_lab, z_lab = element.transform_orbit_frame_into_lab_frame(np.asarray([x_in_orbit_frame, 0, 0]))
         return x_lab, y_lab
 
-    def show_lattice(self, particle_coords=None, particle=None, swarm=None, show_Rel_Survival=True,
+    def show(self, particle_coords=None, particle=None, swarm=None, show_Rel_Survival=True,
                      show_trace_lines=True, show_immediately=True,
                      show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
                      final_coords=True,
                      save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
                      plot_inner: bool = True, show_grid=True):
-        # plot the lattice using shapely. if user provides particle_coords plot that on the graph. If users provides particle
-        # or swarm then plot the last position of the particle/particles. If particles have not been traced, ie no
-        # revolutions, then the x marker is not shown
-        # particle_coords: Array or list holding particle coordinate such as [x,y]
-        # particle: particle object
-        # swarm: swarm of particles to plot.
-        # show_Rel_Survival: when plotting swarm indicate relative particle survival by varying size of marker
-        # show_markers: Wether to plot a marker at the position of the particle
-        # trace_line_alpha: Darkness of the trace line
-        # true_aspect_ratio: Wether to plot the width and height to respect the actual width and height of the plot dimensions
-        # it can make things hard to see
-        # extra_objects: List of shapely objects to add to the plot. Used for adding things like apetures. Limited
-        # functionality right now
         plt.close('all')
 
         def plot_particle(particle, xMarkerSize=default_marker_size):
@@ -429,8 +419,8 @@ class ParticleTracerLattice:
             plt.grid()
         if true_aspect_ratio:
             plt.gca().set_aspect('equal')
-        plt.xlabel('meters')
-        plt.ylabel('meters')
+        plt.xlabel('y dimension, meters')
+        plt.ylabel('x dimension, meters')
         plt.tight_layout()
         if save_title is not None:
             plt.savefig(save_title, dpi=dpi)

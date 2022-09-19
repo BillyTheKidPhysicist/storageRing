@@ -1,12 +1,13 @@
 import numba
 import numpy as np
+from numba_functions_and_objects.utilities import eps
 
 
 @numba.njit()
 def is_coord_in_vacuum(x: float, y: float, z: float, params) -> bool:
     """Check if coord is inside vacuum tube."""
     K, L, ap, field_fact = params
-    return 0 <= x <= L and np.sqrt(y ** 2 + z ** 2) < ap
+    return -eps <= x <= L+eps and np.sqrt(y ** 2 + z ** 2) < ap
 
 
 @numba.njit()

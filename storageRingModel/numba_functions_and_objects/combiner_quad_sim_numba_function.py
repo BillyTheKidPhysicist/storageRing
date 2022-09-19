@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 from numba_functions_and_objects.interpFunctions import vec_interp3D, scalar_interp3D
-
+from numba_functions_and_objects.utilities import  eps
 
 @numba.njit()
 def _force_Func(x, y, z, field_data):
@@ -36,7 +36,7 @@ def force_Without_isInside_Check(x, y, z, params, field_data):
         if z < 0:  # if particle is in the lower plane
             z = -z  # flip position to upper plane
             zFact = -1  # z force is opposite in lower half
-    elif (Lm / 2 + space) < x:  # if the particle is in the last half of the magnet
+    elif (Lm / 2 + space) <= x:  # if the particle is in the last half of the magnet
         x = (Lm / 2 + space) - (x - (Lm / 2 + space))  # use the reflection of the particle
         xFact = -1  # x force is opposite in back plane
         if z < 0:  # if in the lower plane, need to use symmetry
@@ -70,7 +70,7 @@ def is_coord_in_vacuum(x, y, z, params) -> bool:
     ang, La, Lb, Lm, apz, ap_left, ap_right, space, field_fact = params
     if not -apz <= z <= apz:  # if outside the z apeture (vertical)
         return False
-    elif 0 <= x <= Lb:  # particle is in the horizontal section (in element frame) that passes
+    elif -eps <= x <= Lb+eps:  # particle is in the horizontal section (in element frame) that passes
         # through the combiner. Simple square apeture
         if -ap_left < y < ap_right:  # if inside the y (width) apeture
             return True

@@ -17,7 +17,6 @@ def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identic
     assert PTL.initial_location[0] == 0.0 and PTL.initial_location[1] == 0.0
     intitialValues = (PTL.use_standard_mag_size, PTL.use_standard_tube_OD)
     PTL.use_standard_mag_size, PTL.use_standard_tube_OD = (False, False)
-    PTL.initial_location = (0.0, swarmShift_y)
     PTL.add_halbach_lens_sim((0.0242, 0.0372), 0.321, magnet_width=(0.0127, 0.01905))
     PTL.add_drift(0.1274, .04, input_tilt_angle=0.1803, output_tilt_angle=0.0753)
     PTL.add_halbach_lens_sim(0.0183, 0.1564)
@@ -36,7 +35,7 @@ def add_Kevin_Bumper_Elements(PTL: ParticleTracerLattice):  # creates an identic
 
 # def create_swarm(PTL, focus_offset, n):  # this should work
 #     st = SwarmTracer(PTL)  # it seems like it needs a PTL to work
-#     swarm = st.initialize_simulated_collector_focus_swarm(n)
+#     swarm = st.simulated_collector_focus_swarm(n)
 #     for particle in swarm:
 #         particle.obj_qi = particle.qi.copy()
 #         t = (0.0372 * 1.5 + focus_offset - particle.qi[0]) / particle.pi[0]

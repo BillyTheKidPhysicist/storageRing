@@ -131,6 +131,8 @@ class HalbachLensSim(LensIdeal):
     def round_lens_points_to_max_spacing(self, x_min, x_max, y_min, y_max, num_points_x, num_points_r) -> tuple[
         int, int]:
         """Return number of points in x and r that respect a maximum allowed spacing in points"""
+        #IMPROVEMENT: MAKE THIS A FUNCTION THAT IS CALLED OPTIONALLY
+        #IMPROVEMENT: IMPLEMENT BASED ON SOME CRITERA?
         delta_x = (x_max - x_min) / num_points_x
         delta_r = np.sqrt(2) * (y_max - y_min) / num_points_r
         num_points_x_space = round_and_make_odd(num_points_x * delta_x / self.max_spacing)
@@ -197,7 +199,6 @@ class HalbachLensSim(LensIdeal):
         """
         assert not ((use_mag_errors or include_misalignments or extra_magnets is not None) and use_symmetry)
         x_arr, y_arr, z_arr = self.make_grid_coord_arrays(use_symmetry)
-
         volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)  # note that these coordinates
         # can have the wrong value for z if the magnet length is longer than the fringe field effects.
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords,
