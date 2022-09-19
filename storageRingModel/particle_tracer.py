@@ -2,21 +2,18 @@ import warnings
 from math import isnan
 from typing import Optional
 
-import numba
 import numpy as np
-
 
 from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
-from helper_tools import is_close_all,full_arctan2
+from helper_tools import is_close_all
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
     CombinerSim, CombinerLensSim
 from particle import Particle
 from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
-    fast_qNew, dot_Prod_3D
+    fast_qNew
 
-
-
+from type_hints import ndarray
 
 class ElementTooShortError(Exception):
     pass
@@ -40,7 +37,6 @@ class ParticleTracer:
         self.PTL = PTL
 
         self.use_collisions = None
-        self.accelerated = None
 
         self.T = None  # total time elapsed
         self.h = None  # step size
@@ -62,8 +58,7 @@ class ParticleTracer:
 
         self.log_el_phase_space_coords = False  # wether to log lab frame phase space coords at element inputs
 
-    def transform_To_Next_Element(self, q: np.ndarray, p: np.ndarray, nextEll: Element) \
-            -> tuple[np.ndarray, np.ndarray]:
+    def transform_To_Next_Element(self, q: ndarray, p: ndarray, nextEll: Element) -> tuple[ndarray, ndarray]:
         el1 = self.current_el
         el2 = nextEll
         if type(el1) in (BenderIdeal, BenderSim):
@@ -105,7 +100,7 @@ class ParticleTracer:
             self.particle.log_params(self.current_el, self.q_el, self.p_el)
 
     def trace(self, particle: Optional[Particle], h: float, T0: float, fast_mode: bool = False,
-              accelerated: bool = False,steps_between_logging: int = 1, use_collisions: bool = False,
+              steps_between_logging: int = 1, use_collisions: bool = False,
               log_el_phase_space_coords: bool = False) -> Particle:
         if use_collisions:
             raise NotImplementedError  # the heterogenous tuple was killing performance. Need a new method
@@ -126,7 +121,6 @@ class ParticleTracer:
         self.h = h
         self.T0 = float(T0)
         self.initialize()
-        self.accelerated = accelerated
         if self.particle.clipped:  # some a particles may be clipped after initializing them because they were about
             # to become clipped
             self.particle.finished(self.current_el, self.q_el, self.p_el, total_lattice_length=0,
@@ -161,7 +155,7 @@ class ParticleTracer:
         elif type(el_last) is BenderIdeal:
             time_step_to_end = -self.q_el[1] / self.p_el[1]
         elif type(el_last) is BenderSim:
-            time_step_to_end=(-el_last.L_cap-self.q_el[1])/ self.p_el[1]
+            time_step_to_end = (-el_last.L_cap - self.q_el[1]) / self.p_el[1]
         else:
             warnings.warn('not implemented, falling back to previous behaviour')
             return self.particle.clipped
@@ -241,59 +235,27 @@ class ParticleTracer:
         self.force_last = F_new  # record the force to be recycled
         self.el_has_changed = False
 
-    def check_if_particle_is_outside_and_handle_edge_event(self, q_el_next: np.ndarray, q_el: np.ndarray,
-                                                           p_el: np.ndarray) -> None:
-        # todo: goofy ass naming convention going on here with q_el_next vs q_next_el
+    def check_if_particle_is_outside_and_handle_edge_event(self, q_el_next: ndarray, p_el: ndarray) -> None:
 
-        # q_el_next: coordinates that are outside the current element and possibley in the next
-        # q_el: coordinates right before this method was called, should still be in the element
-        # p_el: momentum for both q_el_next and q_el
-
-        if self.accelerated:
-            if self.log_el_phase_space_coords:
-                qElLab = self.current_el.transform_element_coords_into_lab_frame(
-                    q_el_next)  # use the old  element for transform
-                pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
-                    p_el)  # use the old  element for transform
-                self.particle.el_phase_space_log.append((qElLab, pElLab))
-            next_el = self.get_next_element()
-            q_next_el, p_nextEl = self.transform_To_Next_Element(q_el_next, p_el, next_el)
-            if not next_el.is_coord_inside(q_next_el):
-                self.particle.clipped = True
-            else:
-                self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
-                self.current_el = next_el
-                self.particle.current_el = next_el
-                self.q_el = q_next_el
-                self.p_el = p_nextEl
-                self.el_has_changed = True
+        if self.log_el_phase_space_coords:
+            qElLab = self.current_el.transform_element_coords_into_lab_frame(
+                q_el_next)  # use the old  element for transform
+            pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
+                p_el)  # use the old  element for transform
+            self.particle.el_phase_space_log.append((qElLab, pElLab))
+        next_el = self.get_next_element()
+        q_next_el, p_nextEl = self.transform_To_Next_Element(q_el_next, p_el, next_el)
+        if not next_el.is_coord_inside(q_next_el):
+            self.particle.clipped = True
         else:
-            el = self.which_element(q_el_next)
-            if el is None:  # if outside the lattice
-                self.particle.clipped = True
-            elif el is not self.current_el:  # element has changed
-                next_el = el
-                self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
-                qElLab = self.current_el.transform_element_coords_into_lab_frame(
-                    q_el_next)  # use the old  element for transform
-                pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
-                    p_el)  # use the old  element for transform
-                if self.log_el_phase_space_coords:
-                    self.particle.el_phase_space_log.append((qElLab, pElLab))
-                self.current_el = next_el
-                self.particle.current_el = next_el
-                self.q_el = self.current_el.transform_lab_coords_into_element_frame(
-                    qElLab)  # at the beginning of the next element
-                self.p_el = self.current_el.transform_lab_frame_vector_into_element_frame(
-                    pElLab)  # at the beginning of the next
-                # element
-                self.el_has_changed = True
-            else:
-                raise Exception('Particle is likely in a region of magnetic field which is invalid because its '
-                                'interpolation extends into the magnetic material. Particle is also possibly frozen '
-                                'because of broken logic that returns it to the same location.')
+            self.particle.cumulative_length += self.current_el.Lo  # add the previous orbit length
+            self.current_el = next_el
+            self.particle.current_el = next_el
+            self.q_el = q_next_el
+            self.p_el = p_nextEl
+            self.el_has_changed = True
 
-    def which_element_lab_coords(self, q_lab: np.ndarray) -> Optional[Element]:
+    def which_element_lab_coords(self, q_lab: ndarray) -> Optional[Element]:
         for el in self.el_list:
             if el.is_coord_inside(el.transform_lab_coords_into_element_frame(q_lab)):
                 return el
@@ -306,7 +268,7 @@ class ParticleTracer:
             next_el = self.el_list[self.current_el.index + 1]
         return next_el
 
-    def which_element(self, q_el: np.ndarray) -> Optional[Element]:
+    def which_element(self, q_el: ndarray) -> Optional[Element]:
         # find which element the particle is in, but check the next element first ,which save time
         # and will be the case most of the time. Also, recycle the element coordinates for use in force evaluation later
         q_lab = self.current_el.transform_element_coords_into_lab_frame(q_el)

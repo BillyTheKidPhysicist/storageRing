@@ -10,16 +10,16 @@ def trace_swarm_through_ring(model: StorageRingModel, swarm_to_trace: Swarm, h=7
                              parallel=True) -> tuple[Swarm, Swarm]:
     swarm_injector_traced = model.swarm_tracer_injector.trace_swarm_through_lattice(
         swarm_to_trace, h, 1.0, use_fast_mode=False, copy_swarm=True,
-        log_el_phase_space_coords=True, accelerated=True, use_energy_correction=True)
+        log_el_phase_space_coords=True, use_energy_correction=True)
     swarm_ring_initial = model.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                            copy_particles=True)
     swarm_traced_ring = model.swarm_tracer_ring.trace_swarm_through_lattice(swarm_ring_initial, h, T,
-                                                                            use_fast_mode=False, accelerated=True,
+                                                                            use_fast_mode=False,
                                                                             copy_swarm=True,
                                                                             parallel=parallel, steps_per_logging=4,
                                                                             use_energy_correction=True)
 
-    xoStart = sum(model.lattice_ring.el_list[i].Lo for i in range(0, model.lattice_ring.combiner_index + 1))
+    xoStart = sum(model.lattice_ring.el_list[i].Lo for i in range(0, model.lattice_ring.combiner.index + 1))
 
     for particle in swarm_traced_ring:
         assert particle.clipped is not None

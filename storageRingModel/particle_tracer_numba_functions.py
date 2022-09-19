@@ -1,7 +1,7 @@
 import numba
 from constants import GRAVITATIONAL_ACCELERATION
 from math import sqrt,isnan
-
+import numpy as np
 
 @numba.njit()
 def norm_3D(vec):
@@ -120,7 +120,7 @@ def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
         #     px, py, pz = post_collision_momentum((px, py, pz), (x, y, z), collision_params)
 
 
-@numba.njit(cache=False)
+@numba.njit()
 def momentum_correction_at_bounday(E0, q_el, p_el, magnetic_potential, force,direction):
     # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
     assert direction in ('entering', 'leaving')

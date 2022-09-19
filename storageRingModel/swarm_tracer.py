@@ -83,7 +83,7 @@ class SwarmTracer:
                                        use_z_symmetry: bool = False) -> Swarm:
         q_arr = np.linspace(-q_max, q_max, num=num_grid_edge)
         p_arr = np.linspace(-p_max, p_max, num=num_grid_edge)
-        phase_space_coords = np.asarray(np.meshgrid(q_arr, q_arr, p_arr, p_arr)).T_max.reshape(-1, 4)
+        phase_space_coords = arr_product(q_arr, q_arr, p_arr, p_arr)
         if use_z_symmetry:
             z_index = 1
             phase_space_coords = phase_space_coords[phase_space_coords[:, z_index] >= 0.0]
@@ -308,13 +308,11 @@ class SwarmTracer:
         return swarm
 
     def trace_swarm_through_lattice(self, swarm: Swarm, h: float, T_max: float, parallel: bool = False,
-                                    use_fast_mode: bool = False,
-                                    copy_swarm: bool = True, accelerated: bool = False, steps_per_logging: int = 1,
-                                     use_collisions: bool = False, log_el_phase_space_coords: bool = False) -> Swarm:
+                                    use_fast_mode: bool = False, copy_swarm: bool = True, steps_per_logging: int = 1,
+                                    use_collisions: bool = False, log_el_phase_space_coords: bool = False) -> Swarm:
 
         def trace_particle(particle):
             particle_new = self.particle_tracer.trace(particle, h, T_max, fast_mode=use_fast_mode,
-                                                      accelerated=accelerated,
                                                       steps_between_logging=steps_per_logging,
                                                       log_el_phase_space_coords=log_el_phase_space_coords,
                                                       use_collisions=use_collisions)

@@ -103,8 +103,8 @@ class StorageRingGeometryConstraintsSolver:
         bending_params, lens_params = self.shape_and_round_params(params)
         assert len(bending_params) == self.storage_ring.numBenders
         for i, bender_params in enumerate(bending_params):
-            radius, num_magnets = bender_params
-            self.storage_ring.benders[i].set_number_magnets(num_magnets)
+            radius, num_lenses = bender_params
+            self.storage_ring.benders[i].set_number_magnets(num_lenses)
             if self.storage_ring.numBenders == 2:
                 self.storage_ring.benders[i].set_radius(radius)
             elif self.storage_ring.numBenders == 4:
@@ -131,7 +131,7 @@ class StorageRingGeometryConstraintsSolver:
     def number_magnets_cost(self, params: FloatTuple) -> float:
         """Cost for number of magnets in each bender being different than each other"""
         bender_params, _ = self.shape_and_round_params(params)
-        nums_of_magnets = [num_magnets for _, num_magnets in bender_params]
+        nums_of_magnets = [num_lenses for _, num_lenses in bender_params]
         assert all(isinstance(num, int) for num in nums_of_magnets)
         weight = 1  # different numbers of magnets isn't so bad
         cost = weight * sum([abs(a - b) for a, b in itertools.combinations(nums_of_magnets, 2)])

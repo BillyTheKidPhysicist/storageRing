@@ -326,9 +326,9 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
     def __init__(self):
         self.Lm = .0254
         self.rp = .014832
-        self.num_magnets = 150
+        self.num_lenses = 150
         self.rb = 1.02324
-        self.ang = self.num_magnets * self.Lm / self.rb
+        self.ang = self.num_lenses * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
         qf0 = np.array([6.2559654843256451e-01, 1.8268225133423863e+00,8.3597785201163064e-04])
         pf0 = np.array([ 156.4668861635784 , -126.11406318501261,   -4.06292085256291])
@@ -344,7 +344,7 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
     def make_Latice(self, magnetErrors=False, jitter_amp=0.0):
         PTL = ParticleTracerLattice(speed_nominal=200.0)
         PTL.add_drift(5e-3)
-        PTL.add_segmented_halbach_bender(self.Lm, self.rp, self.num_magnets, self.rb)
+        PTL.add_segmented_halbach_bender(self.Lm, self.rp, self.num_lenses, self.rb)
         PTL.end_lattice(constrain=False)
         return PTL
 
@@ -548,11 +548,9 @@ class ElementTestRunner:
         PT = ParticleTracer(PTL)
         particleList = []
         for use_fast_mode in (True, False):
-            for accelerated in (True, False):
-                if self.elTestHelper.particle0 is not None:
-                    particleList.append(
-                        PT.trace(self.elTestHelper.particle0.copy(), self.timeStepTracing, 1.0, fast_mode=use_fast_mode,
-                                 accelerated=accelerated))
+            if self.elTestHelper.particle0 is not None:
+                particleList.append(
+                    PT.trace(self.elTestHelper.particle0.copy(), self.timeStepTracing, 1.0, fast_mode=use_fast_mode))
         return particleList
 
     def assert_Particle_List_Is_Expected(self, particleList: list[Particle], qf0: np.ndarray, pf0: np.ndarray,

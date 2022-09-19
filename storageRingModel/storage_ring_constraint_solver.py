@@ -41,9 +41,9 @@ def _kink_From_Combiner(combiner: Union[CombinerLensSim, CombinerIdeal]) -> Kink
 def _cappedSlicedBend_From_HalbachBender(bender: BenderSim) -> CappedSlicedBend:
     """From an element in the ParticleTraceLattice, build a geometric shape object"""
 
-    length_seg, L_cap, radius, num_magnets = bender.Lm, bender.L_cap, bender.ro, bender.num_magnets
+    length_seg, L_cap, radius, num_lenses = bender.Lm, bender.L_cap, bender.ro, bender.num_lenses
     magnet_depth = bender.rp + bender.magnet_width + bender.output_offset  # todo: why does this have output_offset??
-    return CappedSlicedBend(length_seg, num_magnets, magnet_depth, L_cap, radius)
+    return CappedSlicedBend(length_seg, num_lenses, magnet_depth, L_cap, radius)
 
 
 def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
@@ -91,7 +91,7 @@ def _build_Lattice_Bending_Element(bender: Union[BenderIdeal, BenderSim],
     assert type(bender) in (BenderIdeal, BenderSim) and type(shape) in (Bend, CappedSlicedBend)
     bender.rb = shape.radius - bender.output_offset  # get the bending radius back from orbit radius
     if type(bender) is BenderSim:
-        bender.num_magnets = shape.num_magnets
+        bender.num_lenses = shape.num_lenses
     bender.r1 = np.array([*shape.pos_in, 0])
     bender.r2 = np.array([*shape.pos_out, 0])
     bender.nb = np.array([*shape.norm_in, 0])

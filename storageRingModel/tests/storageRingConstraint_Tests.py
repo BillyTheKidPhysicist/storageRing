@@ -12,12 +12,12 @@ testDataFolderPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'t
 """
     def cost(X):
         rb=X[0]
-        Lm, rp, num_magnets = .05, .01, 62
+        Lm, rp, num_lenses = .05, .01, 62
         PTL = ParticleTracerLattice(field_dens_mult=.5)
         PTL.add_drift(1.0)
-        PTL.add_segmented_halbach_bender(Lm, rp, num_magnets, rb)
+        PTL.add_segmented_halbach_bender(Lm, rp, num_lenses, rb)
         PTL.add_drift(1.0)
-        PTL.add_segmented_halbach_bender(Lm, rp, num_magnets, rb)
+        PTL.add_segmented_halbach_bender(Lm, rp, num_lenses, rb)
         PTL.end_lattice()
         floor_plan = solve_Floor_Plan(PTL,False)
         posSep, normSep = floor_plan.get_end_separation_vectors()
@@ -43,13 +43,13 @@ def _make_Lattice_1():
 
 def _make_Lattice_2():
     rb = 1.0016496743948662 # this was found by minimizing abs(angle-np.pi) as a functino of bending radus combined
-    # with tweaking num_magnets
-    Lm, rp, num_magnets = .05, .01, 62
+    # with tweaking num_lenses
+    Lm, rp, num_lenses = .05, .01, 62
     PTL = ParticleTracerLattice(field_dens_mult=.5)
     PTL.add_drift(1.0)
-    PTL.add_segmented_halbach_bender(Lm, rp, num_magnets, rb)
+    PTL.add_segmented_halbach_bender(Lm, rp, num_lenses, rb)
     PTL.add_drift(1.0)
-    PTL.add_segmented_halbach_bender(Lm, rp, num_magnets, rb)
+    PTL.add_segmented_halbach_bender(Lm, rp, num_lenses, rb)
     PTL.end_lattice()
     return PTL
 
@@ -107,11 +107,11 @@ def _test_Storage_Ring_Constraint_3(save=False):
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.add_halbach_lens_sim(.01, None, constrain=True)
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, None, constrain=True)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.end_lattice(constrain=True)
     if not save:
         _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest3')
@@ -130,15 +130,15 @@ def _test_Storage_Ring_Constraint_4(save=False):
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, .5)
     PTL.add_drift(.02)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.add_drift(.02)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.add_halbach_lens_sim(.01, None, constrain=True)
     PTL.add_drift(.02)
     PTL.add_halbach_lens_sim(.01, None, constrain=True)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.add_drift(.02)
-    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+    PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
     PTL.end_lattice(constrain=True)
     if not save:
         _assert_Consraint_Match_Saved_Vals(PTL, 'storageRingConstTest4')

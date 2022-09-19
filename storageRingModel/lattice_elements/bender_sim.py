@@ -44,9 +44,8 @@ class BenderSim(BenderIdeal):
     default_interp_points_per_length_factor_full = 5.0
     default_interp_points_per_rp_full = 35
 
-    def __init__(self, PTL, Lm: float, rp: float, num_magnets: Optional[int], rb: float, ap: Optional[float],
-                 r_offset_fact: float):
-        assert all(val > 0 for val in (Lm, rp, rb, r_offset_fact))
+    def __init__(self, PTL, Lm: float, rp: float, num_lenses: Optional[int], rb: float, ap: Optional[float]):
+        assert all(val > 0 for val in (Lm, rp, rb))
         assert rb > rp * 10  # this would be very dubious
         super().__init__(PTL, None, None, rp, rb, None)
         self.rb = rb
@@ -55,9 +54,8 @@ class BenderSim(BenderIdeal):
         self.ap = ap
         self.magnet_width = halbach_magnet_width(rp, use_standard_sizes=PTL.use_standard_mag_size)
         self.ucAng: Optional[float] = None
-        self.r_offset_fact = r_offset_fact  # factor to times the theoretic optimal bending radius by
         self.L_cap = self.fringe_frac_outer * self.rp
-        self.num_magnets = num_magnets
+        self.num_lenses = num_lenses
         self.interp_points_per_ap_symmetry: int = round_and_make_odd(self.default_interp_points_per_ap_symmetry
                                                                      * self.PTL.field_dens_mult)
         self.magnet = None
@@ -79,7 +77,7 @@ class BenderSim(BenderIdeal):
         return ap_max
 
     def fill_pre_constrained_parameters(self) -> None:
-        self.output_offset = self.find_optimal_radial_offset() * self.r_offset_fact
+        self.output_offset = self.find_optimal_radial_offset()
         self.ro = self.output_offset + self.rb
 
     def find_optimal_radial_offset(self) -> float:
@@ -127,12 +125,12 @@ class BenderSim(BenderIdeal):
         return calc_unit_cell_angle(self.Lm, self.rb, self.rp + self.magnet_width)
 
     def fill_post_constrained_parameters(self) -> None:
+        #IMPROVEMENT: improvement resolve the angle number of magnets  bug
         self.ap = self.ap if self.ap is not None else self.compute_maximum_aperture()
         assert self.ap <= self.compute_maximum_aperture()
         self.ucAng = self.unit_cell_angle()
-        self.ang = 2 * self.num_magnets * self.ucAng
+        self.ang = 2 * self.num_lenses * self.ucAng
         self.fill_in_and_out_rotation_matrices()
-        assert self.ang < 2 * pi * 3 / 4  # not sure why i put this here
         self.ro = self.rb + self.output_offset
         self.L = self.ang * self.rb + 2 * self.L_cap
 
@@ -140,12 +138,12 @@ class BenderSim(BenderIdeal):
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
         self.make_orbit()
 
-        num_lenses = self.num_magnets + 1  # half lens cause an additiona lens
+        num_lenses_magnet_model = self.num_lenses+1   # half lens cause an additiona lens
         self.magnet = MagnetBender(self.rp, self.rb, self.ucAng, self.Lm, self.magnet_width, self.PTL.magnet_grade,
-                                   num_lenses, self.PTL.use_solenoid_field)
+                                   num_lenses_magnet_model, self.PTL.use_solenoid_field)
 
     def build_fast_field_helper(self, extra_magnets=None) -> None:
-        """compute field values and build fast numba helper"""
+        """compute field values and build fast numba helpers"""
         use_symmetry = not (self.PTL.use_mag_errors or (extra_magnets is not None and len(extra_magnets) != 0))
         if use_symmetry:
             field_data_seg = self.generate_segment_field_data()
@@ -165,7 +163,7 @@ class BenderSim(BenderIdeal):
         M_ang = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         RIn_Ang = np.asarray([[np.cos(self.ang), np.sin(self.ang)], [-np.sin(self.ang), np.cos(self.ang)]])
 
-        numba_func_constants = (self.rb, self.ap, self.L_cap, self.ang, self.num_magnets,
+        numba_func_constants = (self.rb, self.ap, self.L_cap, self.ang, self.num_lenses,
                                 self.ucAng, M_ang, RIn_Ang, M_uc, self.field_fact, use_symmetry)
 
         force_args = (numba_func_constants, field_data)

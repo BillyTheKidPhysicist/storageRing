@@ -8,7 +8,7 @@ from numba_functions_and_objects.utilities import full_arctan2,eps
 def cartesian_To_Center(x, y, z, params):
     """Convert from cartesian coords to HalbachLensClass.BenderSim coored, ie "center coords" for
     evaluation by interpolator"""
-    rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
+    rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
 
     if x > 0.0 and -L_cap <= y <= 0.0:
         s = L_cap + y
@@ -82,7 +82,7 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z, ang, ucAng):
 def is_coord_in_vacuum(x, y, z, params):
     phi = full_arctan2(y, x)  
 
-    rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
+    rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
     if phi <= ang+eps:  # if particle is inside bending angle region
         r_minor=np.sqrt((np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2)
         return r_minor< ap 
@@ -103,7 +103,7 @@ def is_coord_in_vacuum(x, y, z, params):
 def magnetic_potential(x0, y0, z0, params, field_data):
     # magnetic potential at point q in element frame
     # q: particle's position in element frame
-    rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
+    rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
     field_data_seg, field_data_internal, field_data_cap, field_data_full = field_data
 
     if not is_coord_in_vacuum(x0, y0, z0, params):
@@ -116,7 +116,7 @@ def magnetic_potential(x0, y0, z0, params, field_data):
             revs = int((ang - phi) / ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
-            elif revs == num_magnets * 2 - 1 or revs == num_magnets * 2 - 2:
+            elif revs == num_lenses * 2 - 1 or revs == num_lenses * 2 - 2:
                 position = 'LAST'
             else:
                 position = 'INNER'
@@ -165,7 +165,7 @@ def force(x0, y0, z0, params, field_data):
     # force at point q in element frame
     # q: particle's position in element frame
 
-    rb, ap, L_cap, ang, num_magnets, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
+    rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
     field_data_seg, field_data_internal, field_data_cap, field_data_full = field_data
 
     if use_symmetry:
@@ -180,7 +180,7 @@ def force(x0, y0, z0, params, field_data):
                 revs = int(psi / ucAng)  # number of revolutions through unit cell
                 if revs == 0 or revs == 1:
                     position = 'FIRST'
-                elif revs == num_magnets * 2 - 1 or revs == num_magnets * 2 - 2:
+                elif revs == num_lenses * 2 - 1 or revs == num_lenses * 2 - 2:
                     position = 'LAST'
                 else:
                     position = 'INNER'

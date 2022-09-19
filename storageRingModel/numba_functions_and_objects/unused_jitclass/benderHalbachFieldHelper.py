@@ -12,7 +12,7 @@ spec_Bender_Halbach = [
     ('ang', numba.float64),
     ('ucAng', numba.float64),
     ('rb', numba.float64),
-    ('num_magnets', numba.float64),
+    ('num_lenses', numba.float64),
     ('M_uc', numba.float64[:, ::1]),
     ('M_ang', numba.float64[:, ::1]),
     ('L_cap', numba.float64),
@@ -28,7 +28,7 @@ spec_Bender_Halbach = [
 class SegmentedBenderSimFieldHelper_Numba:
 
     def __init__(self, field_data_seg, field_data_internal, field_data_cap, fieldPerturbationData, ap, ang, ucAng, rb,
-                 num_magnets, L_cap):
+                 num_lenses, L_cap):
         self.field_data_seg = field_data_seg
         self.field_data_internal = field_data_internal
         self.field_data_cap = field_data_cap
@@ -36,7 +36,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         self.ang = ang
         self.ucAng = ucAng
         self.rb = rb
-        self.num_magnets = num_magnets
+        self.num_lenses = num_lenses
         m = np.tan(self.ucAng)
         self.M_uc = np.asarray([[1 - m ** 2, 2 * m], [2 * m, m ** 2 - 1]]) * 1 / (1 + m ** 2)  # reflection matrix
         m = np.tan(self.ang / 2)
@@ -53,7 +53,7 @@ class SegmentedBenderSimFieldHelper_Numba:
         initParams = (
             self.field_data_seg, self.field_data_internal, self.field_data_cap, fieldPerturbationData, self.ap,
             self.ang,
-            self.ucAng, self.rb, self.num_magnets, self.L_cap)
+            self.ucAng, self.rb, self.num_lenses, self.L_cap)
         internalParams = (self.field_fact,)
         return initParams, internalParams
 
@@ -155,7 +155,7 @@ class SegmentedBenderSimFieldHelper_Numba:
                 revs = int(psi / self.ucAng)  # number of revolutions through unit cell
                 if revs == 0 or revs == 1:
                     position = 'FIRST'
-                elif revs == self.num_magnets * 2 - 1 or revs == self.num_magnets * 2 - 2:
+                elif revs == self.num_lenses * 2 - 1 or revs == self.num_lenses * 2 - 2:
                     position = 'LAST'
                 else:
                     position = 'INNER'
@@ -243,7 +243,7 @@ class SegmentedBenderSimFieldHelper_Numba:
             revs = int((self.ang - phi) / self.ucAng)  # number of revolutions through unit cell
             if revs == 0 or revs == 1:
                 position = 'FIRST'
-            elif revs == self.num_magnets * 2 - 1 or revs == self.num_magnets * 2 - 2:
+            elif revs == self.num_lenses * 2 - 1 or revs == self.num_lenses * 2 - 2:
                 position = 'LAST'
             else:
                 position = 'INNER'

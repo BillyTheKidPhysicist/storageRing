@@ -23,8 +23,7 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
     """swarm is traced through the lattice with all fancy features turned off"""
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
-    tracedSwarm = swarmTracer.trace_swarm_through_lattice(testSwarm, 1e-5, .25, use_fast_mode=False, parallel=False,
-                                                          accelerated=False)
+    tracedSwarm = swarmTracer.trace_swarm_through_lattice(testSwarm, 1e-5, .25, use_fast_mode=False, parallel=False)
     testData = []
     for particle in tracedSwarm:
         pf = particle.pf if particle.pf is not None else np.nan * np.empty(3)
@@ -35,12 +34,11 @@ def _save_TEST_Data(PTL, testSwarm, TESTDataFileName):
     np.savetxt(os.path.join(testDataFolderPath, TESTDataFilePath), np.asarray(testData))
 
 
-def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, accelerated, parallel):
+def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, parallel):
     np.set_printoptions(precision=100)
     TESTDataFilePath = os.path.join(testDataFolderPath, TESTDataFileName)
     swarmTracer = SwarmTracer(PTL)
     tracedSwarm = swarmTracer.trace_swarm_through_lattice(testSwarm, 1e-5, .25, use_fast_mode=use_fast_mode,
-                                                          accelerated=accelerated,
                                                           parallel=parallel)
     testData = np.loadtxt(TESTDataFilePath)
     assert tracedSwarm.num_particles() == testSwarm.num_particles() and len(testData) == tracedSwarm.num_particles()
@@ -83,7 +81,7 @@ def generate_Lattice(configuration):
     if configuration == '1':
         PTL = ParticleTracerLattice(speed_nominal=200.0, lattice_type='storage_ring')
         PTL.add_drift(.25)
-        PTL.add_segmented_halbach_bender(.0254, .01, 150, 1.0, r_offset_fact=1.015)
+        PTL.add_segmented_halbach_bender(.0254, .01, 150, 1.0)
         PTL.add_lens_ideal(1.0, 1.0, .01)
         PTL.add_halbach_lens_sim(.01, 1.0)
         PTL.add_drift(.1)
@@ -114,9 +112,9 @@ def generate_Lattice(configuration):
         else:
             PTL.add_combiner_sim_lens(.1, .02, layers=2)
         PTL.add_halbach_lens_sim(.01, .5)
-        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
         PTL.add_halbach_lens_sim(.01, None, constrain=True)
-        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0, r_offset_fact=1.015)
+        PTL.add_segmented_halbach_bender(.0254 / 2, .01, None, 1.0)
         PTL.end_lattice(constrain=True)
         PTL.el_list[0].update_field_fact(.3)
         PTL.el_list[2].update_field_fact(.3)
@@ -133,14 +131,13 @@ def TEST_Lattice_Configuration(configuration, fullTest=False, save_data=False, p
         _save_TEST_Data(PTL, testSwarm, TESTName)
     elif fullTest == True:
         for use_fast_mode in [True, False]:
-            for accelerated in [True, False]:
-                for parallel in [True, False]:
-                    TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode, accelerated, parallel)
+            for parallel in [True, False]:
+                TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode, parallel)
     elif fullTest == False:
-        use_fast_mode1, accelerated1, parallel1 = True, True, parallel
-        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode1, accelerated1, parallel)
-        use_fast_mode2, accelerated2, parallel2 = False, False, False
-        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode2, accelerated2, parallel)
+        use_fast_mode1, parallel1 = True, parallel
+        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode1, parallel)
+        use_fast_mode2, parallel2 = False, False
+        TEST_Lattice_Tracing(PTL, testSwarm, TESTName, use_fast_mode2, parallel)
 
 
 def _save_New_Data():

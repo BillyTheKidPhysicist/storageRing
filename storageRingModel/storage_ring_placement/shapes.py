@@ -150,30 +150,30 @@ class Bend(Shape):
 class SlicedBend(Bend):
     """Bending geometry, but with the geometry composed of integer numbers of segments"""
 
-    def __init__(self, length_seg: float, num_magnets: Optional[int], magnet_depth: float, radius: float):
+    def __init__(self, length_seg: float, num_lenses: Optional[int], magnet_depth: float, radius: float):
         assert length_seg > 0.0
-        assert (num_magnets > 0 and isinstance(num_magnets, int)) if num_magnets is not None else True
+        assert (num_lenses > 0 and isinstance(num_lenses, int)) if num_lenses is not None else True
         assert 0.0 <= magnet_depth < .1 and radius > 10 * magnet_depth  # this wouldn't make sense
         self.length_seg = length_seg
-        self.num_magnets = num_magnets
+        self.num_lenses = num_lenses
         self.magnet_depth = magnet_depth
         self.radius = radius
-        self.bending_ang = self.get_arc_angle() if num_magnets is not None else None
+        self.bending_ang = self.get_arc_angle() if num_lenses is not None else None
         super().__init__(radius, self.bending_ang)
 
     def get_arc_angle(self) -> float:
         """Get arc angle (bending angle) of bender"""
 
         unit_cell_angle = calc_unit_cell_angle(self.length_seg, self.radius, self.magnet_depth)
-        bending_ang = 2 * unit_cell_angle * self.num_magnets
+        bending_ang = 2 * unit_cell_angle * self.num_lenses
         assert 0 < bending_ang < 2 * np.pi
         return bending_ang
 
-    def set_number_magnets(self, num_magnets: int) -> None:
+    def set_number_magnets(self, num_lenses: int) -> None:
         """Set number of magnets (half number of unit cells) in the bender"""
 
-        assert num_magnets > 0 and isinstance(num_magnets, int)
-        self.num_magnets = num_magnets
+        assert num_lenses > 0 and isinstance(num_lenses, int)
+        self.num_lenses = num_lenses
         self.bending_ang = self.get_arc_angle()  # radians
 
     def set_radius(self, radius: float) -> None:
@@ -183,9 +183,9 @@ class SlicedBend(Bend):
 
 class CappedSlicedBend(SlicedBend):
 
-    def __init__(self, length_seg: float, num_magnets: Optional[int],  # pylint: disable=too-many-arguments
+    def __init__(self, length_seg: float, num_lenses: Optional[int],  # pylint: disable=too-many-arguments
                  magnet_depth: float, lengthCap: float, radius: float):
-        super().__init__(length_seg, num_magnets, magnet_depth, radius)
+        super().__init__(length_seg, num_lenses, magnet_depth, radius)
         self.lengthCap = lengthCap
         self.caps: list[Line] = [Line(self.lengthCap), Line(self.lengthCap)]
 

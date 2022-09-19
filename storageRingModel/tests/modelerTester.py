@@ -30,11 +30,11 @@ def test_Modeler():
     model.swarm_injector_initial.particles = model.swarm_injector_initial.particles[:500]
     swarm_injector_traced = model.swarm_tracer_injector.trace_swarm_through_lattice(
         model.swarm_injector_initial.quick_copy(), 1e-5, 1.0,
-        use_fast_mode=False, copy_swarm=False, log_el_phase_space_coords=True, accelerated=True)
+        use_fast_mode=False, copy_swarm=False, log_el_phase_space_coords=True)
     swarmRingInitial = model.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                                copy_particles=True)
-    swarmRingTraced = model.swarm_tracer_ring.trace_swarm_through_lattice(swarmRingInitial, 1e-5, 1, use_fast_mode=False,
-                                                                        accelerated=True)
+    swarmRingTraced = model.swarm_tracer_ring.trace_swarm_through_lattice(swarmRingInitial, 1e-5, 1,
+                                                                          use_fast_mode=False)
 
     clippable_elements = model.clippable_elements_in_ring()
     for particle_injector, particle_ring in zip(swarm_injector_traced, swarmRingTraced):

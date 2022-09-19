@@ -1,9 +1,7 @@
-# from geneticLensElement_Wrapper import GeneticLens
 import warnings
-from math import isclose,pi
+from math import isclose, pi
 from typing import Iterable, Union, Optional
-import warnings
-from matplotlib.lines import Line2D
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -30,10 +28,10 @@ class ParticleTracerLattice:
     def __init__(self, speed_nominal: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
                  field_dens_mult: RealNum = 1.0, use_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None,
-                 initial_ang: RealNum=-pi,
+                 initial_ang: RealNum = -pi,
                  magnet_grade: str = 'N52', use_standard_mag_size: bool = False, use_standard_tube_OD: bool = False,
                  include_mag_cross_talk: bool = False, include_misalignments: bool = False):
-        #IMPROVEMENT: MAKE INITIAL_LOCATION MORE CONSISTENT WITH EVERYTHING
+        # IMPROVEMENT: MAKE INITIAL_LOCATION MORE CONSISTENT WITH EVERYTHING
         assert field_dens_mult > 0.0
         if lattice_type != 'storage_ring' and lattice_type != 'injector':
             raise Exception('invalid lattice type provided')
@@ -47,7 +45,6 @@ class ParticleTracerLattice:
         # if it started from beginning of the lattice. Remember that lattice cannot begin with a bender
         self.initial_location = (0.0, 0.0) if initial_location is None else initial_location
         self.initial_ang = initial_ang
-        self.combiner_index = None  # the index in the lattice where the combiner is
         self.total_length = None  # total length of lattice, m
         self.field_dens_mult = field_dens_mult
         self.use_mag_errors = use_mag_errors
@@ -79,55 +76,63 @@ class ParticleTracerLattice:
     def set_constrained_linear_element(self, el: Element) -> None:
         self.linear_elements_to_constrain.append(el)
         if len(self.linear_elements_to_constrain) > 2:
-            raise ValueError("there can only be 2 constrained linear elements")
+            raise NotImplementedError("there can only be 2 constrained linear elements")  # Possibly not needed
 
-    def add_combiner_sim(self, size_scale: RealNum = 1.0) -> None:
+    def add_element(self, el: Element, constrain=False):
+        """Add an element to the lattice"""
+        el.index = len(self.el_list)  # where the element is in the lattice
+        self.el_list.append(el)  # add element to the list holding lattice elements in order
+        if type(el) in (CombinerIdeal, CombinerLensSim, CombinerSim):
+            assert self.combiner is None  # there can be only one!
+            self.combiner = el
+        if type(el) in (LensIdeal, HalbachLensSim):
+            if constrain:
+                self.set_constrained_linear_element(el)
+                if type(el) is LensIdeal:
+                    raise NotImplementedError('Behaviour has not been checked, though it should work')
+        if type(el) in (BenderIdeal, BenderSim):
+            self.bender_indices.append(el.index)
+
+    def add_drift(self, L: RealNum, ap: RealNum = .03, input_tilt_angle: RealNum = 0.0,
+                  output_tilt_angle: RealNum = 0.0, outer_half_width: RealNum = None) -> None:
         """
-        Add model of our combiner from COMSOL. rarely used
+        Add drift region, which is field free region, to the lattice
 
-        :param size_scale: How much to scale up or down dimensions of combiner
+        The general shape is a trapezoid in the xy lab frame, and a circle in the yz element frame. In the
+        element frame in the xy plane the two bases are parallel with x-axis, and the input output can be at same
+        angle relative to y-axis. Positive angles are counterclockwise notation. The length of the drift region is the
+        same no matter the input/output tilt because the tilt is pinned at the centerline of the two bases of the
+        trapezoid.
+
+        :param L: Length of drift region, m
+        :param ap: Aperture of drift region, m
+        :param input_tilt_angle: Tilt angle of the input plane to the drift region, radians
+        :param output_tilt_angle: Tilt angle of the output to the drift region, radians
+        :param outer_half_width: Outer half width of drift region. For example, a valve body
         :return: None
         """
 
-        file = 'combinerV3.txt'
-        el = CombinerSim(self, file, self.lattice_type, size_scale=size_scale)
-        el.index = len(self.el_list)  # where the element is in the lattice
-        assert self.combiner is None  # there can be only one!
-        self.combiner = el
-        self.combiner_index = el.index
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
+        self.add_element(Drift(self, L, ap, outer_half_width, input_tilt_angle, output_tilt_angle))
 
-    def add_combiner_sim_lens(self, Lm: RealNum, rp: RealNum, load_beam_offset: RealNum = 5e-3, layers: int = 1,
-                              ap: RealNum = None,
-                              seed: int = None) -> None:
-
+    def add_lens_ideal(self, L: RealNum, Bp: RealNum, rp: RealNum, constrain: bool = False, ap: RealNum = None) -> None:
         """
-        Add halbach hexapole lens combiner element.
+        Add an ideal magnetic hexapole lens to the lattice. Field norm goes as B0=Bp*r^2/rp^2
 
-        The edge of a hexapole lens is used to deflect high and weak field seeking states. Transvers dimension of
-        magnets are the maximum that can be used to for a halbach sextupole of given radius.
-
-        :param Lm: Hard edge length of magnet, m. Total length of element depends on degree of deflection of nominal
-        trajectory
-        :param rp: Bore radius of hexapole lens, m
-        :param load_beam_offset: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
-        :param layers: Number of concentric layers of magnets
+        :param L: Hard edge length of element, m.
+        :param Bp: Field at bore face of lens,T.
+        :param rp: Bore/pole radius of lens, m.
+        :param ap: Aperture of lens, possibly a limit set by a vacuum tube, m.
+        :param constrain: To use the element as a constraint, under construction
         :return: None
         """
-
-        el = CombinerLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed)
-        el.index = len(self.el_list)  # where the element is in the lattice
-        assert self.combiner is None  # there can be only one!
-        self.combiner = el
-        self.combiner_index = el.index
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
+        self.add_element(LensIdeal(self, L, Bp, rp, ap), constrain=constrain)
 
     def add_halbach_lens_sim(self, rp: Union[RealNum, tuple], L: Optional[RealNum], ap: RealNum = None,
                              constrain: bool = False, magnet_width: Union[RealNum, tuple] = None) -> None:
         """
         Add simulated halbach sextupole element to lattice.
 
-        Combinations of rp and magnet_width specify how to handle multiple layers, according to:
+        Combinations of rp and magnet_width specify how to handle multiple concentric layers, according to:
 
         rp    | magnet_width | Explanation
         RealNum | None        | Single layer with radius rp and magnet widths maximum possible
@@ -149,100 +154,75 @@ class ParticleTracerLattice:
         """
         rp_layers = rp if isinstance(rp, tuple) else (rp,)
         magnet_width = (magnet_width,) if isinstance(magnet_width, number) else magnet_width
-        el = HalbachLensSim(self, rp_layers, L, ap, magnet_width)
-        el.index = len(self.el_list)  # where the element is in the lattice
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
-        if constrain:
-            self.set_constrained_linear_element(el)
-
-    def add_lens_ideal(self, L: RealNum, Bp: RealNum, rp: RealNum, constrain: bool = False, ap: RealNum = None) -> None:
-        """
-        Add to the lattice an ideal magnetic hexapole lens. Field norm goes as B0=Bp*r^2/rp^2
-
-        :param L: Hard edge length of element, m.
-        :param Bp: Field at bore face of lens,T.
-        :param rp: Bore/pole radius of lens, m.
-        :param ap: Aperture of lens, possibly a limit set by a vacuum tube, m.
-        :param constrain: To use the element as a constraint, under construction
-        :return: None
-        """
-
-        el = LensIdeal(self, L, Bp, rp, ap)  # create a lens element object
-        el.index = len(self.el_list)  # where the element is in the lattice
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
-        if constrain:
-            self.set_constrained_linear_element(el)
-            warnings.warn("Not sure if this fully works, use with caution")
-
-    def add_drift(self, L: RealNum, ap: RealNum = .03, input_tilt_angle: RealNum = 0.0,
-                  output_tilt_angle: RealNum = 0.0, outer_half_width: RealNum = None) -> None:
-        """
-        Add drift region. This is simply a vacuum tube.
-
-        The general shape is a trapezoid in the xy lab frame, and a circle in the yz element frame. In the
-        element frame in the xy plane the two bases are parallel with x-axis, and the input output can be at same
-        angle relative to y-axis. Positive angles are counterclockwise notation. The length of the drift region is the
-        same no matter the input/output tilt because the tilt is pinned at the centerline of the two bases of the
-        trapezoid.
-
-        :param L: Length of drift region, m
-        :param ap: Aperture of drift region, m
-        :param input_tilt_angle: Tilt angle of the input plane to the drift region, radians
-        :param output_tilt_angle: Tilt angle of the output to the drift region, radians
-        :param outer_half_width: Outer half width of drift region. For example, a valve body
-        :return: None
-        """
-
-        el = Drift(self, L, ap, outer_half_width, input_tilt_angle, output_tilt_angle)  # create a drift element object
-        el.index = len(self.el_list)  # where the element is in the lattice
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
-
-    def add_segmented_halbach_bender(self, Lm: RealNum, rp: RealNum, num_magnets: Optional[int], rb: RealNum,
-                                     r_offset_fact: RealNum = 1.0, ap: RealNum = None) -> None:
-        # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        # L_cap: Length of element on the end/input of bender
-        # output_offsetFact: factor to multply the theoretical offset by to minimize oscillations in the bending segment.
-        # modeling shows that ~.675 is ideal
-        el = BenderSim(self, Lm, rp, num_magnets, rb, ap, r_offset_fact)
-        el.index = len(self.el_list)  # where the element is in the lattice
-        self.bender_indices.append(el.index)
-        self.el_list.append(el)
-
-    def add_bender_ideal(self, ang: RealNum, Bp: RealNum, rb: RealNum, rp: RealNum, ap: RealNum = None) -> None:
-        # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        # ang: Bending angle of bender, radians
-        # rb: nominal bending radius of element's centerline. Actual radius is larger because particle 'rides' a little
-        # outside this, m
-        # Bp: field strength at pole face of lens, T
-        # rp: bore radius of element, m
-        # ap: size of apeture. If none then a fraction of the bore radius. Can't be bigger than bore radius, unitless
-
-        el = BenderIdeal(self, ang, Bp, rp, rb, ap)  # create a bender element object
-        el.index = len(self.el_list)  # where the element is in the lattice
-        self.bender_indices.append(el.index)
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
+        self.add_element(HalbachLensSim(self, rp_layers, L, ap, magnet_width), constrain=constrain)
 
     def add_combiner_ideal(self, Lm: RealNum = .2, c1: RealNum = 1, c2: RealNum = 20, ap: RealNum = .015,
                            size_scale: RealNum = 1.0) -> None:
-        # Add element to the lattice. see elementPTPreFactor.py for more details on specific element
-        # add combiner (stern gerlacht) element to lattice
-        # La: input length of combiner. The bent portion outside of combiner
-        # Lm:  hard edge length of the magnet, which is the same as the vacuum tube
-        # ang: angle that particle enters the combiner at
-        # offset: particle enters inner section with some offset
-        # c1: dipole component of combiner
-        # c2: quadrupole component of bender
-        # check to see if inlet length is too short. The minimum length is a function of apeture and angle
-        # minLa=ap*np.sin(ang)
-        # if La<minLa:
-        #    raise Exception('INLET LENGTH IS SHORTER THAN MINIMUM')
 
-        el = CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, size_scale)  # create a combiner element object
-        el.index = len(self.el_list)  # where the element is in the lattice
-        assert self.combiner is None  # there can be only one!
-        self.combiner = el
-        self.combiner_index = el.index
-        self.el_list.append(el)  # add element to the list holding lattice elements in order
+        self.add_element(CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, size_scale))
+
+    def add_combiner_sim(self, size_scale: RealNum = 1.0, file: str = None) -> None:
+        """
+        Add model of our combiner from COMSOL. rarely used
+
+        :param size_scale: How much to scale up or down dimensions of combiner
+        :return: None
+        """
+
+        file = 'combinerV3.txt' if file is None else file
+        self.add_element(CombinerSim(self, file, self.lattice_type, size_scale=size_scale))
+
+    def add_combiner_sim_lens(self, Lm: RealNum, rp: RealNum, load_beam_offset: RealNum = 5e-3, layers: int = 1,
+                              ap: RealNum = None, seed: int = None) -> None:
+
+        """
+        Add halbach hexapole lens combiner element to lattice.
+
+        The edge of a hexapole lens is used to deflect high and weak field seeking states.
+        :param Lm: Hard edge length of magnet, m. Total length of element depends on degree of deflection of nominal
+        trajectory.
+        :param rp: Bore radius of hexapole lens, m.
+        :param load_beam_offset: Maximum desired acceptance diameter of load beam, m. Circulating beam is not specified
+        :param layers: Number of concentric layers of magnets.
+        :param seed: value that can be used as seed for numpy and python for reproducible results. This is provided
+        because the SAME combiner must be in the ring and injector, and that sameness is enforced by the same seed
+        between the two when using magnet imperfections and such
+        :return: None
+        """
+
+        self.add_element(CombinerLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed))
+
+    def add_bender_ideal(self, ang: RealNum, Bp: RealNum, rb: RealNum, rp: RealNum, ap: RealNum = None) -> None:
+        """
+        Add an ideal bender element, ie a revolved lens, to the lattice. Field norm goes as B0=Bp*r^2/rp^2
+
+
+        :param ang: Bending angle, radians.
+        :param Bp: Field strength at face of lenses, Tesla.
+        :param rb: Bending radius of bender, the radius of curvature or the center-line of the bore, m.
+        :param rp: Bore radius.
+        :param ap:
+        :return:
+        """
+
+        self.add_element(BenderIdeal(self, ang, Bp, rp, rb, ap))
+
+    def add_segmented_halbach_bender(self, L_lens: RealNum, rp: RealNum, num_lenses: Optional[int], rb: RealNum,
+                                     ap: RealNum = None) -> None:
+        """
+        Add a bender of simulated hexapole lenses to the lattice
+
+        The bender is a series of hexapole lenses. They are cylinderical, not wedge shaped. The beginning and end
+        of the bender are capped with half of a lens.
+
+        :param L_lens: The length of an individual lens segment, m
+        :param rp: Bore radius of each lens
+        :param num_lenses: Number of lenses in the arc. Two of them are half lenses
+        :param rb: Bending radius of bender, the radius of curvature or the center-line of the bore, m.
+        :param ap: Aperture of the bender. Must be smaller than the limit set by interpolation grid sizing
+        :return:
+        """
+        self.add_element(BenderSim(self, L_lens, rp, num_lenses, rb, ap))
 
     def build_lattice(self, constrain: bool, build_field_helpers: bool, parallel: bool):
         """Build the specified lattice. This includes:
@@ -359,11 +339,11 @@ class ParticleTracerLattice:
         return x_lab, y_lab
 
     def show(self, particle_coords=None, particle=None, swarm=None, show_Rel_Survival=True,
-                     show_trace_lines=True, show_immediately=True,
-                     show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
-                     final_coords=True,
-                     save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
-                     plot_inner: bool = True, show_grid=True):
+             show_trace_lines=True, show_immediately=True,
+             show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
+             final_coords=True,
+             save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
+             plot_inner: bool = True, show_grid=True):
         plt.close('all')
 
         def plot_particle(particle, xMarkerSize=default_marker_size):

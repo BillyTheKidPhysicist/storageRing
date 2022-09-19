@@ -228,7 +228,7 @@ class StorageRingModel:
         swarm.particles = self.swarm_injector_initial.particles[:num_particles]
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             swarm, self.h, 1.0, parallel=False,
-            use_fast_mode=False, copy_swarm=True, accelerated=False, log_el_phase_space_coords=True,
+            use_fast_mode=False, copy_swarm=True,  log_el_phase_space_coords=True,
             use_collisions=self.use_collisions)
         for particle in swarm_injector_traced:
             particle.clipped = True if self.does_ring_clip_injector_particle(particle) else particle.clipped
@@ -285,7 +285,7 @@ class StorageRingModel:
         self.build_field_helpers_if_unbuilt()
         swarm_initial = self.trace_through_injector_and_transform_to_ring()
         swarm_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_initial, self.h, self.T,
-                                                                          use_fast_mode=True, accelerated=True,
+                                                                          use_fast_mode=True,
                                                                           copy_swarm=False,
                                                                           use_collisions=self.use_collisions,
                                                                           parallel=parallel)
@@ -308,7 +308,7 @@ class StorageRingModel:
     def trace_through_injector_and_transform_to_ring(self) -> Swarm:
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             self.swarm_injector_initial.copy(), self.h, 1.0, use_fast_mode=True, copy_swarm=False,
-            log_el_phase_space_coords=True, accelerated=True, use_collisions=self.use_collisions)
+            log_el_phase_space_coords=True, use_collisions=self.use_collisions)
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                               copy_particles=True)
         return swarm_ring_initial

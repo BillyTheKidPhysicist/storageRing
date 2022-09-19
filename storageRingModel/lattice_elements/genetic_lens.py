@@ -82,7 +82,7 @@
 #         interpF, interpV = self.make_Interp_Functions(data)
 #
 #         # wrap the function in a more convenietly accesed function
-#         @numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64))
+#         #-@numba.njit(numba.types.UniTuple(numba.float64, 3)(numba.float64, numba.float64, numba.float64))
 #         def force_Func(x, y, z):
 #             Fx0, Fy0, Fz0 = interpF(-z, y, x)
 #             Fx = Fz0
