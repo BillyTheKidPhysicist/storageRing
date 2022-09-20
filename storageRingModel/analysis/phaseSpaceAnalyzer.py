@@ -1,3 +1,8 @@
+"""
+Class for Poincare analysis of a swarm. Quite a bit can done with this. The basic class is SwarmPoincare and is used
+with a traced swarm to produce a new swarm at that selected plane
+"""
+
 import warnings
 
 import celluloid
@@ -50,10 +55,23 @@ class Particle(ParticleBase):
 
 
 class SwarmPoincare:
-    def __init__(self, swarm: Swarm, xSnapShot,min_Survival_T=0.0):
-        assert xSnapShot > 0.0  # orbit coordinates, not real coordinates
+    def __init__(self, swarm: Swarm, s_poincare,min_Survival_T=0.0):
+        """
+        Return SwarmPoincare object that is used to construct poincare maps.
+        
+        Given a swarm where each particle had data logging, construct a new swarm, a SwarmPoincare, that holds 
+        particles with phase space coordinates at the slice s_poincare found by interpolation. 
+        
+        :param swarm: Traced swarm. Particle's must have logged data.
+        :param s_poincare: Distance along orbit, possibly periodic, where poincare slice is taken
+        :param min_Survival_T: Particle's must survive to at least this time for interpolation
+        """
+        assert s_poincare > 0.0  # orbit coordinates, not real coordinates
+        for particle in swarm:
+            if not particle.data_logging:
+                raise Exception("Particle's must have been logging data for poincare map to work")
         self.particles = []
-        self.xSnapShot=xSnapShot
+        self.s_poincare=s_poincare
         self.swarm=swarm
         self.min_Survival_T=min_Survival_T
         self._take_SnapShot()
@@ -66,8 +84,8 @@ class SwarmPoincare:
         particleSnapShot.probability = particle.probability
         particleSnapShot.T=particle.T
         particleSnapShot.revolutions=particle.revolutions
-        if self._check_If_Particle_Can_Be_Interpolated(particle, self.xSnapShot) :
-            E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.xSnapShot)
+        if self._check_If_Particle_Can_Be_Interpolated(particle, self.s_poincare) :
+            E, qo, po,q,p = self._get_Phase_Space_Coords_And_Energy_SnapShot(particle, self.s_poincare)
             particleSnapShot.E = E
             particleSnapShot.deltaE = E - particle.E_vals[0].copy()
             particleSnapShot.qo = qo
@@ -105,15 +123,15 @@ class SwarmPoincare:
         num = sum([not particle.clipped for particle in self.particles])
         return num
 
-    def _get_Phase_Space_Coords_And_Energy_SnapShot(self, particle, xSnapShot):
+    def _get_Phase_Space_Coords_And_Energy_SnapShot(self, particle, s_poincare):
         qo_arr = particle.qo_vals  # position in orbit coordinates
         po_arr = particle.po_vals
         E_arr = particle.E_vals
-        assert xSnapShot < qo_arr[-1, 0]
-        indexBefore = np.argmax(qo_arr[:, 0] > xSnapShot) - 1
+        assert s_poincare < qo_arr[-1, 0]
+        indexBefore = np.argmax(qo_arr[:, 0] > s_poincare) - 1
         qo1 = qo_arr[indexBefore]
         qo2 = qo_arr[indexBefore + 1]
-        stepFraction = (xSnapShot - qo1[0]) / (qo2[0] - qo1[0])
+        stepFraction = (s_poincare - qo1[0]) / (qo2[0] - qo1[0])
         qoSnapShot = self._interpolate_Array(qo_arr, indexBefore, stepFraction)
         poSnapShot = self._interpolate_Array(po_arr, indexBefore, stepFraction)
         if np.any(np.isnan(poSnapShot)):
@@ -161,9 +179,6 @@ class SwarmPoincare:
 
 class PhaseSpaceAnalyzer:
     def __init__(self, swarm, lattice: ParticleTracerLattice):
-        assert lattice.lattice_type == 'storage_ring'
-        assert all(type(particle.clipped) is bool for particle in swarm)
-        assert all(particle.traced is True for particle in swarm)
         self.swarm = swarm
         self.lattice = lattice
         self.max_revs = np.inf
@@ -290,8 +305,8 @@ class PhaseSpaceAnalyzer:
         numFrames = int(self._find_Max_Xorbit_For_Swarm() / self.lattice.total_length)
         fpsApprox = min(int(numFrames / videoLengthSeconds), 1)
         print(fpsApprox, numFrames)
-        xSnapShotArr = self._make_SnapShot_Position_Arr_At_Same_X(xVideoPoint)
-        self._make_Phase_Space_Video_For_X_Array(videoTitle, xSnapShotArr, xaxis, yaxis, alpha, fpsApprox, dpi)
+        s_poincareArr = self._make_SnapShot_Position_Arr_At_Same_X(xVideoPoint)
+        self._make_Phase_Space_Video_For_X_Array(videoTitle, s_poincareArr, xaxis, yaxis, alpha, fpsApprox, dpi)
 
     def make_Phase_Space_Movie_Through_Lattice(self, title, xaxis, yaxis, videoLengthSeconds=10.0, fps=30, alpha=.25,
                                                max_revs=np.inf, dpi=None):
@@ -336,12 +351,12 @@ class PhaseSpaceAnalyzer:
         else:
             fig, axes = plt.subplots(1, 1)
             axes = [axes]
-        xSnapShotArr = self._make_SnapShot_XArr(num_points)[:-10]
+        s_poincareArr = self._make_SnapShot_XArr(num_points)[:-10]
         EList_RMS = []
         EList_Mean = []
         EList_Max = []
         survivalList = []
-        for xOrbit in tqdm(xSnapShotArr):
+        for xOrbit in tqdm(s_poincareArr):
             snapShot = SwarmPoincare(self.swarm, xOrbit)
             deltaESnapShot = snapShot.get_Particles_Energy(returnChangeInE=True, survivingOnly=survivingOnly)
             minParticlesForStatistics = 5
@@ -352,7 +367,7 @@ class PhaseSpaceAnalyzer:
             EList_RMS.append(E_RMS)
             EList_Mean.append(np.mean(deltaESnapShot))
             EList_Max.append(np.max(deltaESnapShot))
-        revArr = xSnapShotArr[:len(EList_RMS)] / self.lattice.total_length
+        revArr = s_poincareArr[:len(EList_RMS)] / self.lattice.total_length
         axes[0].plot(revArr, EList_RMS, label='RMS')
         axes[0].plot(revArr, EList_Mean, label='mean')
         axes[0].set_ylabel('Energy change, sim units \n (Mass Li=1.0) ')
@@ -485,13 +500,13 @@ class PhaseSpaceAnalyzer:
         xStart = self._find_Inclusive_Min_XOrbit_For_Swarm()
         x_max = self.lattice.total_length
         numEnvPoints = 50
-        xSnapShotArr = np.linspace(xStart, x_max, numEnvPoints)
+        s_poincareArr = np.linspace(xStart, x_max, numEnvPoints)
         yCoordIndex = 1
         envelopeData = np.zeros((numEnvPoints, 1))  # this array will have each row filled with the relevant particle
         # particle parameters for all revolutions.
         for revNumber in range(maxCompletedRevs):
             revCoordsList = []
-            for xOrbit in xSnapShotArr:
+            for xOrbit in s_poincareArr:
                 xOrbit += self.lattice.total_length * revNumber
                 snapShotPhaseSpaceCoords = SwarmPoincare(self.swarm, xOrbit).get_Surviving_Particle_PhaseSpace_Coords()
                 revCoordsList.append(snapShotPhaseSpaceCoords[:, yCoordIndex])
@@ -500,7 +515,7 @@ class PhaseSpaceAnalyzer:
         meterToMM = 1e3
         rmsArr = np.std(envelopeData, axis=1)
         plt.title('RMS envelope of particle beam in storage ring.')
-        plt.plot(xSnapShotArr, rmsArr * meterToMM)
+        plt.plot(s_poincareArr, rmsArr * meterToMM)
         plt.ylabel('Displacement, mm')
         plt.xlabel('Distance along lattice, m')
         plt.ylim([0.0, rmsArr.max() * meterToMM])

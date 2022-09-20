@@ -1,3 +1,6 @@
+"""
+Contains various functions and parameters used in elements
+"""
 from math import atan2, floor
 
 import numpy as np
@@ -6,18 +9,13 @@ from constants import SPACE_BETWEEN_MAGNETS_IN_MOUNT, SIMULATION_MAGNETON
 from helper_tools import inch_to_meter
 from type_hints import FloatTuple, RealNum, ndarray
 
-TINY_STEP = 1e-9
 TINY_OFFSET = 1e-12  # tiny offset to avoid out of bounds right at edges of element
-SMALL_OFFSET = 1e-9  # small offset to avoid out of bounds right at edges of element
 MAGNET_ASPECT_RATIO = 2  # length of individual neodymium magnet relative to width of magnet
-
 B_GRAD_STEP_SIZE = 1e-7
 INTERP_MAGNET_MATERIAL_OFFSET = 1.5 * B_GRAD_STEP_SIZE
 TINY_INTERP_STEP = 1e-12
 
 STATE_FIELD_FACT = {'HIGH_SEEK': -1.0, 'LOW_SEEK': 1.0}
-
-INTERP_ROUNDING_GUARD: float = 1e-12
 
 
 def round_down_to_imperial(value: RealNum) -> float:
@@ -109,12 +107,6 @@ def calc_unit_cell_angle(length_seg: float, radius: float, segmentWidth: float) 
     """Get the arc angle associate with a single unit cell. Each lens contains two unit cells."""
     assert length_seg > 0.0 and radius > 0.0 and radius > segmentWidth >= 0.0
     return np.arctan(.5 * length_seg / (radius - segmentWidth))  # radians
-
-
-def is_even(x: int) -> bool:
-    """Test if a number is even"""
-    assert type(x) is int and x > 0
-    return True if x % 2 == 0 else False
 
 
 def mirror_across_angle(x: RealNum, y: RealNum, ang: RealNum) -> tuple[float, float]:

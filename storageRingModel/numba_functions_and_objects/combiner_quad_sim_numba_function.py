@@ -1,8 +1,13 @@
+"""
+Contains Numba functions for use with corresponding element. These are called by attributes of the element, and used in
+the fast time stepping method in particle_tracer.py  
+"""
 import numba
 import numpy as np
 
 from numba_functions_and_objects.interpFunctions import vec_interp3D, scalar_interp3D
-from numba_functions_and_objects.utilities import  eps
+from numba_functions_and_objects.utilities import eps, eps_fact
+
 
 @numba.njit()
 def _force_Func(x, y, z, field_data):
@@ -22,11 +27,11 @@ def force(x, y, z, params, field_data):
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan, np.nan, np.nan
     else:
-        return force_Without_isInside_Check(x, y, z, params, field_data)
+        return force_without_isinside_check(x, y, z, params, field_data)
 
 
 @numba.njit()
-def force_Without_isInside_Check(x, y, z, params, field_data):
+def force_without_isinside_check(x, y, z, params, field_data):
     # this function uses the symmetry of the combiner to extract the force everywhere.
     # I believe there are some redundancies here that could be trimmed to save time.
     ang, La, Lb, Lm, apz, ap_left, ap_right, space, field_fact = params
@@ -70,7 +75,7 @@ def is_coord_in_vacuum(x, y, z, params) -> bool:
     ang, La, Lb, Lm, apz, ap_left, ap_right, space, field_fact = params
     if not -apz <= z <= apz:  # if outside the z apeture (vertical)
         return False
-    elif -eps <= x <= Lb+eps:  # particle is in the horizontal section (in element frame) that passes
+    elif -eps <= x <= Lb * eps_fact:  # particle is in the horizontal section (in element frame) that passes
         # through the combiner. Simple square apeture
         if -ap_left < y < ap_right:  # if inside the y (width) apeture
             return True

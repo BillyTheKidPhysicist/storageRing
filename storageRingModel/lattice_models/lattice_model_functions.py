@@ -1,3 +1,6 @@
+"""
+Module contains functions for use in building injector and ring models.
+"""
 from typing import Optional
 
 from constants import DEFAULT_ATOM_SPEED
@@ -7,6 +10,9 @@ from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SY
 from lattice_models.utilities import LockedDict
 from particle_tracer import ParticleTracer
 from particle_tracer_lattice import ParticleTracerLattice
+
+h: float = 1e-5  # timestep, s. Assumed to be no larger than this
+min_time_step_gap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
 
 
 def set_cominer_seed_if_unset(options: LockedDict):
@@ -58,22 +64,21 @@ def el_fringe_space(elementName: str, elementBoreRadius: float) -> float:
     return fringe_fracs[elementName] * elementBoreRadius
 
 
-h: float = 1e-5  # timestep, s. Assumed to be no larger than this
-min_time_step_gap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
+def check_and_format_params(params: dict, expected_num_params: int) -> LockedDict:
+    """Check that params is the expected length, and cast to LockedDict."""
+    params = LockedDict(params)
+    assert len(params) == expected_num_params
+    return params
 
 
-def initialize_ring_lattice(ring_params: dict, options: dict,
-                            num_ring_params: int) -> tuple[ParticleTracerLattice, LockedDict, LockedDict]:
-    assert len(ring_params) == num_ring_params
-    ring_params = LockedDict(ring_params)
-
+def initialize_ring_lattice(options: dict) -> ParticleTracerLattice:
     lattice = ParticleTracerLattice(design_speed=atom_characteristics["nominalDesignSpeed"],
                                     include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_long_range_fields=options['include_mag_cross_talk_in_ring'],
                                     include_misalignments=options['include_misalignments'])
-    return lattice, ring_params, options #IMPROVEMENT: what is this business?
+    return lattice
 
 
 def finish_ring_lattice(lattice: ParticleTracerLattice, ring_params: LockedDict,
@@ -108,13 +113,13 @@ def add_split_bend_with_lens(lattice: ParticleTracerLattice, rp_bend, rp_lens, L
 
 
 def add_combiner_and_OP_ring(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_lens_after,
-                        options: Optional[dict], which_OP_ap: str) -> None:
+                             options: Optional[dict], which_OP_ap: str) -> None:
     """Add combiner + gap for optical pumping. Element after must be a lens. """
 
     # -------combiner-------
 
     lattice.add_combiner_sim_lens(Lm_combiner, rp_combiner, load_beam_offset=load_beam_offset, layers=1,
-                                  seed=options['combiner_seed'],atom_state='LOW_SEEK')
+                                  seed=options['combiner_seed'], atom_state='LOW_SEEK')
 
     # ------gap 3--------- combiner-> lens, Optical Pumping (OP) region
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long

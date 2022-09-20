@@ -1,3 +1,8 @@
+"""
+Contains models of the magnets used to generate magnetic fields in bender, lens and combiner. Uses the
+magpylib library. Magnetic imperfections and misalignments can be used.
+"""
+
 from math import cos, sin, sqrt, tan
 from typing import Optional
 
@@ -7,8 +12,7 @@ from scipy.spatial.transform import Rotation as Rot
 import constants
 from field_generators import ElementMagnetCollection, Collection, HalbachLens
 from field_generators import HalbachBender
-from helper_tools import random_num_for_seeding
-from helper_tools import temporary_seed, is_even
+from helper_tools import random_num_for_seeding, temporary_seed, is_even
 from lattice_elements.utilities import MAGNET_ASPECT_RATIO, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET
 from type_hints import ndarray
 
@@ -162,7 +166,7 @@ class MagneticLens(MagneticOptic):
 
     def get_valid_field_values(self, coords: ndarray, include_mag_errors: bool = False,
                                extra_magnets: Collection = None,
-                               include_misalignments=False,use_approx=True) -> tuple[ndarray, ndarray]:
+                               include_misalignments=False, use_approx=True) -> tuple[ndarray, ndarray]:
         valid_indices = self.get_valid_coord_indices(coords, include_misalignments)
         magnets = self.magpylib_magnets_model(include_mag_errors, include_misalignments)
         return valid_field_values_col(magnets, coords, valid_indices, use_approx, extra_elements=extra_magnets)

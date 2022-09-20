@@ -115,7 +115,6 @@ class LensHalbachFieldHelper_Numba:
         """
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan, np.nan, np.nan
-        # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         FySymmetryFact = 1.0 if y >= 0.0 else -1.0  # take advantage of symmetry
         FzSymmetryFact = 1.0 if z >= 0.0 else -1.0
         y = abs(y)  # confine to upper right quadrant
@@ -139,7 +138,6 @@ class LensHalbachFieldHelper_Numba:
     def _force_Field_Perturbations(self, x0: float, y0: float, z0: float) -> TupleOf3Floats:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan, np.nan, np.nan
-        # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
         Fx, Fy, Fz = self._force_Func_Outer(x, y, z,
                                             useImperfectInterp=True)  # being used to hold fields for entire lens
@@ -175,7 +173,6 @@ class LensHalbachFieldHelper_Numba:
         """
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan
-        # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)
         z = abs(z)
         if -self.extra_field_length <= x <= self.L_cap:
@@ -193,7 +190,6 @@ class LensHalbachFieldHelper_Numba:
     def _magnetic_potential_Perturbations(self, x0: float, y0: float, z0: float) -> float:
         if not self.is_Coord_Inside_Vacuum(x0, y0, z0):
             return np.nan
-        # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
         x, y, z = x0, y0, z0
         V0 = self._magnetic_potential_Func_Fringe(x, y, z, useImperfectInterp=True)
         return V0

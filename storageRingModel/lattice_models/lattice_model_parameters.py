@@ -1,3 +1,7 @@
+"""
+Contains parameters used in building ring and injector such as system wide constants or default values
+"""
+
 import numpy as np
 
 from constants import DEFAULT_ATOM_SPEED

@@ -35,7 +35,6 @@ class IdealLensFieldHelper:
     def magnetic_potential(self, x: float, y: float, z: float) -> float:
         """Magnetic potential of Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if self.is_Coord_Inside_Vacuum(x, y, z):
-            # x, y, z = self.baseClass.misalign_Coords(x, y, z)
             r = np.sqrt(y ** 2 + z ** 2)
             V0 = .5 * self.K * r ** 2
         else:
@@ -46,7 +45,6 @@ class IdealLensFieldHelper:
     def force(self, x: float, y: float, z: float) -> tuple:
         """Force on Li7 in simulation units at x,y,z. pseudo-overrides BaseClassFieldHelper"""
         if self.is_Coord_Inside_Vacuum(x, y, z) == True:
-            # x, y, z = self.baseClass.misalign_Coords(x, y, z)
             Fx = 0.0
             Fy = -self.K * y
             Fz = -self.K * z

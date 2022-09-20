@@ -1,10 +1,28 @@
 """
-Model of ring with mode match lenses at the apex of the benders, and mode matching lenses into and out of the
-combiner
+Module contains functions and parameters to produce ring model version 3. Also contains optimal parameters found so
+far. Also contains functions for automatic vacuum system analysis, but this has not been implemented fully.
+
+Sequence of elements:
+- Lens
+- Lens
+- Combiner
+- Lens
+- Lens
+- Bender
+- Lens
+- Bender
+- Lens
+- Lens
+- Bender
+- Lens
+- Bender
+
+With drift regions in between as needed for spacing requirements
 """
 
-from lattice_models.lattice_model_functions import add_drift_if_needed, \
-    add_split_bend_with_lens, add_combiner_and_OP_ring, initialize_ring_lattice
+from lattice_models.lattice_model_functions import (add_drift_if_needed, check_and_format_params,
+                                                    add_split_bend_with_lens, add_combiner_and_OP_ring,
+                                                    initialize_ring_lattice)
 from lattice_models.lattice_model_parameters import system_constants
 from lattice_models.utilities import LockedDict
 from particle_tracer_lattice import ParticleTracerLattice
@@ -28,7 +46,8 @@ num_ring_params = 14
 
 
 def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracerLattice:
-    lattice, ring_params, options = initialize_ring_lattice(ring_params, options, num_ring_params)
+    ring_params = check_and_format_params(ring_params, num_ring_params)
+    lattice = initialize_ring_lattice(options)
     rp_lens1 = ring_params['rp_lens1']
     rp_lens2 = ring_params['rp_lens2']
     rp_lens3 = ring_params['rp_lens3']
@@ -55,7 +74,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
 
     # ---combiner + OP magnet-----
     add_combiner_and_OP_ring(lattice, system_constants['rp_combiner'], ring_params['Lm_combiner'],
-                        ring_params['load_beam_offset'], rp_lens2, options, 'Circulating')
+                             ring_params['load_beam_offset'], rp_lens2, options, 'Circulating')
 
     # ---two lenses after combiner---
 

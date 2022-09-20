@@ -1,15 +1,20 @@
-"""I am violating SOLID principles with this because I started this project before being properly aware of them"""
+"""Contains base element object from which others inherit. An element has the following features and
+parameters:
 
-from typing import Optional
+- Attributes relating to element placement such as location and normals on input/output.
+- Methods for force and magnetic field calculation.
+- Methods for transforming coordinates and vectors between the lab, element and orbit frame.
+- For simulated elements, a magnet object that contains a magpylib model of the element used for computing magnetic
+    fields.
+
+This is not that well done and could use refactoring. A major issue is the attributes r1,r2, nb,ne are not
+consistently defined between elements. For some elements they represent the input/output of the elements' centerline,
+for others they represent the input/output of the design orbit."""
 
 import numba
 import numpy as np
-from shapely.geometry import Polygon
 
 from type_hints import ndarray
-
-
-# todo: a base geometry inheritance is most logical
 
 
 def wrap_numba_func(func, args):
@@ -33,42 +38,32 @@ class BaseElement:
 
     def __init__(self, PTL, ang: float = 0.0, L=None):
         self.theta = None  # angle that describes an element's rotation in the xy plane.
-        # SEE EACH ELEMENT FOR MORE DETAILS
-        # -Straight elements like lenses and drifts: theta=0 is the element's input at the origin and the output pointing
-        # east. for theta=90 the output is pointing up.
-        # -Bending elements without caps: at theta=0 the outlet is at (bending radius,0) pointing south with the input
-        # at some angle counterclockwise. a 180 degree bender would have the inlet at (-bending radius,0) pointing south.
-        # force is a continuous function of r and theta, ie a revolved cross section of a hexapole
-        # -Bending  elements with caps: same as without caps, but keep in mind that the cap on the output would be BELOW
-        # y=0
-        # combiner: theta=0 has the outlet at the origin and pointing to the west, with the inlet some distance to the right
-        # and pointing in the NE direction
-        # todo: r1,r2,ne,nb are not consistent. They describe either orbit coordinates, or physical element coordinates
+        # IMPROVEMENT: r1,r2,ne,nb are not consistent. They describe either orbit coordinates, or physical element coordinates
+        # IMPROVEMENT: change naming of the parameters, they are weird
         self.PTL = PTL  # particle tracer lattice object. Used for various constants
-        self.nb: Optional[ndarray] = None  # normal vector to beginning (clockwise sense) of element.
-        self.ne: Optional[ndarray] = None  # normal vector to end (clockwise sense) of element
+        self.nb = None  # normal vector to beginning (clockwise sense) of element.
+        self.ne = None  # normal vector to end (clockwise sense) of element
 
-        self.R_Out: Optional[ndarray] = None  # 2d matrix to rotate a vector out of the element's reference frame
-        self.R_In: Optional[ndarray] = None  # 2d matrix to rotate a vector into the element's reference frame
-        self.r1: Optional[ndarray] = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
-        self.r2: Optional[ndarray] = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
-        self.SO: Optional[Polygon] = None  # the shapely object for the element. These are used for plotting, and for
+        self.R_Out = None  # 2d matrix to rotate a vector out of the element's reference frame
+        self.R_In = None  # 2d matrix to rotate a vector into the element's reference frame
+        self.r1 = None  # 3D coordinates of beginning (clockwise sense) of element in lab frame
+        self.r2 = None  # 3D coordinates of ending (clockwise sense) of element in lab frame
+        self.SO = None  # the shapely object for the element. These are used for plotting, and for
         # finding if the coordinates
         # # are inside an element that can't be found with simple geometry
-        self.SO_outer: Optional[Polygon] = None  # shapely object that represents the outer edge of the element
-        self.outer_half_width: Optional[
-            float] = None  # outer diameter/width of the element, where applicable. For example,
+        self.SO_outer = None  # shapely object that represents the outer edge of the element
+        self.outer_half_width = None  # outer diameter/width of the element, where applicable. For example,
         # outer diam of lens is the bore radius plus magnets and mount material radial thickness
         self.ang = ang  # bending angle of the element. 0 for lenses and drifts
         self.orbit_trajectory = None
-        self.L: Optional[float] = L
-        self.index: Optional[int] = None
-        self.Lo: Optional[float] = None  # length of orbit for particle. For lenses and drifts this is the same as the
+        self.L = L
+        self.index = None
+        self.Lo = None  # length of orbit for particle. For lenses and drifts this is the same as the
         # length. This is a nominal value because for segmented benders the path length is not simple to compute
-        self.output_offset: float = 0.0  # some elements have an output offset, like from bender's centrifugal force or
+        self.output_offset = 0.0  # some elements have an output offset, like from bender's centrifugal force or
         # #lens combiner
-        self.field_fact: float = 1.0  # factor to modify field values everywhere in space by, including force
-        self.numba_functions: dict = {}
+        self.field_fact = 1.0  # factor to modify field values everywhere in space by, including force
+        self.numba_functions = {}
 
     def build_fast_field_helper(self, extra_magnets=None) -> None:
         raise NotImplementedError
@@ -76,23 +71,6 @@ class BaseElement:
     def set_field_fact(self, field_fact: bool):
         assert field_fact > 0.0
         self.field_fact = field_fact
-
-    def perturb_element(self, shift_y: float, shift_z: float, rot_angle_y: float, rot_angle_z: float):
-        """
-        perturb the alignment of the element relative to the vacuum tube. The vacuum tube will remain unchanged, but
-        the element will be shifted, and therefore the force it applies will be as well. This is modeled as shifting
-        and rotating the supplied coordinates to force and magnetic field function, then rotating the force
-
-        :param shift_y: Shift in the y direction in element frame
-        :param shift_z: Shift in the z direction in the element frame
-        :param rot_angle_y: Rotation about y axis of the element
-        :param rot_angle_z: Rotation about z axis of the element
-        :return:
-        """
-
-        raise NotImplementedError
-        self.fast_field_helper.numbaJitClass.numbaJitClass.update_Element_Perturb_args(shift_y, shift_z, rot_angle_y,
-                                                                                       rot_angle_z)
 
     def magnetic_potential(self, q_el: ndarray) -> float:
         """

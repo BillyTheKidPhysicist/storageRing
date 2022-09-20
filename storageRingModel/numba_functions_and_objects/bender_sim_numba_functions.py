@@ -1,8 +1,13 @@
+"""
+Contains Numba functions for use with corresponding element. These are called by attributes of the element, and used in
+the fast time stepping method in particle_tracer.py
+"""
 import numba
 import numpy as np
 
 from numba_functions_and_objects.interpFunctions import vec_interp3D, scalar_interp3D
-from numba_functions_and_objects.utilities import full_arctan2,eps
+from numba_functions_and_objects.utilities import full_arctan2, eps, eps_fact
+
 
 @numba.njit()
 def cartesian_To_Center(x, y, z, params):
@@ -80,29 +85,27 @@ def transform_Element_Coords_Into_Unit_Cell_Frame(x, y, z, ang, ucAng):
 
 @numba.njit()
 def is_coord_in_vacuum(x, y, z, params):
-    phi = full_arctan2(y, x)  
+    phi = full_arctan2(y, x)
 
     rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
-    if phi <= ang+eps:  # if particle is inside bending angle region
-        r_minor=np.sqrt((np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2)
-        return r_minor< ap 
+    if phi <= ang * eps_fact:  # if particle is inside bending angle region
+        r_minor = np.sqrt((np.sqrt(x ** 2 + y ** 2) - rb) ** 2 + z ** 2)
+        return r_minor < ap
     else:  # if outside bender's angle range
-        r_minor_east=np.sqrt((x - rb) ** 2 + z ** 2)
-        if r_minor_east <= ap  and (eps >= y >= -L_cap-eps):  # If inside the cap on
+        r_minor_east = np.sqrt((x - rb) ** 2 + z ** 2)
+        if r_minor_east <= ap and (eps >= y >= -L_cap * eps_fact):  # If inside the cap on
             # eastward side
             return True
         else:
             x_rot = RIn_Ang[0, 0] * x + RIn_Ang[0, 1] * y
             y_rot = RIn_Ang[1, 0] * x + RIn_Ang[1, 1] * y
             r_minor_west = np.sqrt((x_rot - rb) ** 2 + z ** 2)
-            return r_minor_west <= ap  and (L_cap +eps>= y_rot >= -eps)
+            return r_minor_west <= ap and (L_cap * eps_fact >= y_rot >= -eps)
             # if on the westwards side
 
 
 @numba.njit()
 def magnetic_potential(x0, y0, z0, params, field_data):
-    # magnetic potential at point q in element frame
-    # q: particle's position in element frame
     rb, ap, L_cap, ang, num_lenses, ucAng, M_ang, RIn_Ang, M_uc, field_fact, use_symmetry = params
     field_data_seg, field_data_internal, field_data_cap, field_data_full = field_data
 
@@ -206,13 +209,13 @@ def force(x0, y0, z0, params, field_data):
             else:
                 Fx, Fy, Fz = np.nan, np.nan, np.nan
         else:  # if outside bender's angle range
-            if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (eps >= y >= -L_cap-eps):  # If inside the cap on
+            if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (eps >= y >= -L_cap * eps_fact):  # If inside the cap on
                 # eastward side
                 Fx, Fy, Fz = _force_func(x, y, z, field_data_cap)
             else:
                 x, y = M_ang[0, 0] * x + M_ang[0, 1] * y, M_ang[1, 0] * x + M_ang[1, 1] * y
                 if np.sqrt((x - rb) ** 2 + z ** 2) < ap and (
-                        -L_cap-eps <= y <= eps):  # if on the westwards side
+                        -L_cap * eps_fact <= y <= eps):  # if on the westwards side
                     Fx, Fy, Fz = _force_func(x, y, z, field_data_cap)
                     Fx0 = Fx
                     Fy0 = Fy
@@ -223,7 +226,7 @@ def force(x0, y0, z0, params, field_data):
         Fz = Fz * Fz_symmetry_fact
     else:
         if not is_coord_in_vacuum(x0, y0, z0, params):
-            Fx, Fy, Fz= np.nan,np.nan,np.nan
+            Fx, Fy, Fz = np.nan, np.nan, np.nan
         else:
             s, xc, yc = cartesian_To_Center(x0, y0, z0, params)
             Fx, Fy, Fz = _force_func(s, xc, yc, field_data_full)

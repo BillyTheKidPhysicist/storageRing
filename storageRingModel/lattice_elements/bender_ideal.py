@@ -1,3 +1,7 @@
+"""
+Contains ideal bender element class. This is simply an ideal lens which has been revolved about the z axis.
+"""
+
 from math import sqrt, sin, cos
 
 import numpy as np
@@ -23,22 +27,23 @@ class BenderIdeal(BaseElement):
 
         Attributes
         ----------
-        Bp: Magnetic field at poleface of bender bore, Teslas.
+        Bp: Magnetic field at pole-face of bender bore, Tesla.
 
-        rp: Radius (minor) to poleface of bender bore, meters.
+        rp: Radius (minor) to pole-face of bender bore, meter.
 
-        ap: Radius (minor) of aperture bender bore, meters. Effectively the vacuum tube inner radius
+        ap: Radius (minor) of aperture bender bore, meter. Effectively the vacuum tube inner radius
 
-        rb: Nominal ending radius of bender/waveguide, meters. This is major radius of the toroid. Note that atoms will
+        rb: Nominal ending radius of bender/waveguide, meter. This is major radius of the toroid. Note that atoms will
             revolve at a slightly larger radius because of centrifugal effect
 
         shape: Gemeotric shape of element used for placement. ParticleTracerLatticeClass uses this to assemble lattice
 
-        ro: Orbit bending radius, meter. Larger than self.rb because of centrifugal effect
+        ro: Orbit bending radius, meter. Larger than 'rb' because of centrifugal effect
 
         """
 
     def __init__(self, PTL, ang: float, Bp: float, rp: float, rb: float, ap: float):
+        # IMPROVEMENT: GET RID OF THE SHAPE THING
         super().__init__(PTL, ang=ang)
         self.Bp = Bp
         self.rp = rp

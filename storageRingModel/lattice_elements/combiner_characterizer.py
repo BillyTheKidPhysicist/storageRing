@@ -1,3 +1,8 @@
+"""
+Contains functions for characterizing combiner's input angle and offsets with particle tracing. These
+functions are called everytime a combiner element is made.
+"""
+
 from math import isclose, sqrt
 
 from constants import SIMULATION_MAGNETON, FLAT_WALL_VACUUM_THICKNESS
@@ -8,15 +13,6 @@ from numba_functions_and_objects.combiner_ideal_numba_function import combiner_I
 
 def compute_particle_trajectory(force_func, speed, xStart, xStop, particle_y_offset_start: float = 0.0,
                                 atom_state='LOW_FIELD_SEEKER', h=5e-6) -> tuple[np.ndarray, np.ndarray]:
-    # this computes the output angle and offset for a combiner magnet.
-    # NOTE: for the ideal combiner this gives slightly inaccurate results because of lack of conservation of energy!
-    # NOTE: for the simulated bender, this also give slightly unrealisitc results because the potential is not allowed
-    # to go to zero (finite field space) so the the particle will violate conservation of energy
-    # limit: how far to carry the calculation for along the x axis. For the hard edge magnet it's just the hard edge
-    # length, but for the simulated magnets, it's that plus twice the length at the ends.
-    # h: timestep
-    # lowField: wether to model low or high field seekers
-
     # TODO: WHAT IS THE DEAL WITH THIS?
     particle_y_offset_start = -particle_y_offset_start  # temporary
     assert atom_state in ('LOW_FIELD_SEEKER', 'HIGH_FIELD_SEEKER')
@@ -122,7 +118,7 @@ def characterize_combiner_halbach(el: CombinerLensSim, atom_state=None, particle
 
 
 def characterize_combiner_sim(el: CombinerSim):
-    from numba_functions_and_objects.combiner_quad_sim_numba_function import force_Without_isInside_Check
+    from numba_functions_and_objects.combiner_quad_sim_numba_function import force_without_isinside_check
     params = (np.nan, np.nan, el.Lb, el.Lm, el.apz, el.ap_left, el.ap_right, el.space, el.field_fact)
 
     field_data = el.open_and_shape_field_data()
@@ -130,7 +126,7 @@ def characterize_combiner_sim(el: CombinerSim):
     def force_func(q):
         if el.space < q[0] < el.Lm + el.space:
             assert abs(q[2]) < el.apz and -el.ap_left < q[1] < el.ap_right
-        F = np.array(force_Without_isInside_Check(*q, params, field_data))
+        F = np.array(force_without_isinside_check(*q, params, field_data))
         F[2] = 0.0
         return F
 

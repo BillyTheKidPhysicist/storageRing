@@ -55,9 +55,9 @@ class CombinerIdealFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan, np.nan, np.nan
         else:
-            return self.force_Without_isInside_Check(x, y, z)
+            return self.force_without_isinside_check(x, y, z)
 
-    def force_Without_isInside_Check(self, x, y, z):
+    def force_without_isinside_check(self, x, y, z):
         # force at point q in element frame
         # q: particle's position in element frame
         Fx, Fy, Fz = combiner_Ideal_Force(x, y, z, self.Lb, self.c1, self.c2)

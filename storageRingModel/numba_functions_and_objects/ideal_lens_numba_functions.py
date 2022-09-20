@@ -1,13 +1,18 @@
+"""
+Contains Numba functions for use with corresponding element. These are called by attributes of the element, and used in
+the fast time stepping method in particle_tracer.py
+"""
 import numba
 import numpy as np
-from numba_functions_and_objects.utilities import eps
+
+from numba_functions_and_objects.utilities import eps, eps_fact
 
 
 @numba.njit()
 def is_coord_in_vacuum(x: float, y: float, z: float, params) -> bool:
     """Check if coord is inside vacuum tube."""
     K, L, ap, field_fact = params
-    return -eps <= x <= L+eps and np.sqrt(y ** 2 + z ** 2) < ap
+    return -eps <= x <= L * eps_fact and np.sqrt(y ** 2 + z ** 2) < ap
 
 
 @numba.njit()

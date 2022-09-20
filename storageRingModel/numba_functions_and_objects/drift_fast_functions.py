@@ -1,23 +1,28 @@
+"""
+Contains Numba functions for use with corresponding element. These are called by attributes of the element, and used in
+the fast time stepping method in particle_tracer.py
+"""
 import numba
 import numpy as np
 
 from numba_functions_and_objects.interpFunctions import force_interp_3D, magnetic_potential_interp_3D
-from numba_functions_and_objects.utilities import eps
+from numba_functions_and_objects.utilities import eps, eps_fact, eps_fact_reduced
+
 
 @numba.njit()
 def is_coord_in_vacuum(x, y, z, params):
-    #IMPROVEMENT: epsilon could be better implemented here
+    # IMPROVEMENT: epsilon could be better implemented here
     ap, L, input_angle_tilt, output_angle_tilt = params
     if input_angle_tilt == output_angle_tilt == 0.0:  # drift is a simple cylinder
-        return -eps <= x <= L+eps and np.sqrt(y ** 2 + z ** 2) < ap
+        return -eps <= x <= L * eps_fact and np.sqrt(y ** 2 + z ** 2) < ap
     else:
         # min max of purely cylinderical portion of drift region
-        x_min_cylinder = abs(np.tan(input_angle_tilt) * ap)-eps
-        x_max_cylinder = L - abs(np.tan(output_angle_tilt) * ap)+eps
+        x_min_cylinder = abs(np.tan(input_angle_tilt) * ap) * eps_fact_reduced
+        x_max_cylinder = (L - abs(np.tan(output_angle_tilt) * ap)) * eps_fact
         if x_min_cylinder <= x <= x_max_cylinder:  # if in simple straight section
             return np.sqrt(y ** 2 + z ** 2) < ap
         else:  # if in the tilted ends, our outside, along x
-            x_min_drift, x_max_drift = -x_min_cylinder-eps, L + abs(np.tan(output_angle_tilt) * ap)+eps
+            x_min_drift, x_max_drift = -x_min_cylinder * eps_fact, (L + abs(np.tan(output_angle_tilt) * ap)) * eps_fact
             if not x_min_drift <= x <= x_max_drift:  # if entirely outside
                 return False
             else:  # maybe it's in the tilted slivers now

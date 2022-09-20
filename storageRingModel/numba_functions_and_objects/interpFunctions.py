@@ -1,4 +1,8 @@
+"""
+Contains interpolation routines and wrappers. Bi-linear and Tri-linear interpolation is used.
+"""
 import numba
+
 
 @numba.njit()
 def force_interp_3D(x, y, z, field_data):
@@ -11,6 +15,7 @@ def force_interp_3D(x, y, z, field_data):
 def magnetic_potential_interp_3D(x, y, z, field_data_internal):
     x_arr, y_arr, z_arr, FxArr, FyArr, Fz_arr, V_arr = field_data_internal
     return scalar_interp3D(x, y, z, x_arr, y_arr, z_arr, V_arr)
+
 
 @numba.njit()
 def force_interp_2D(y: float, z: float, field_data):
@@ -28,6 +33,7 @@ def magnetic_potential_interp_2D(x: float, y: float, z: float, field_data) -> fl
     y_arr, z_arr, FyArr, Fz_arr, V_arr = field_data
     V = interp2D(y, z, y_arr, z_arr, V_arr)
     return V
+
 
 @numba.njit()
 def scalar_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vec):
@@ -79,9 +85,7 @@ def scalar_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vec):
     return c
 
 
-
-
-@numba.njit( )
+@numba.njit()
 def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
     X, Y, Z = len(xCoords), len(yCoords), len(zCoords)
     assert 2 < X and 2 < Y and 2 < Z, "need at least 2 points to interpolate"
@@ -143,9 +147,7 @@ def vec_interp3D(xLoc, yLoc, zLoc, xCoords, yCoords, zCoords, vecX, vecY, vecZ):
     return c_x, c_y, c_z
 
 
-
-
-@numba.njit( )
+@numba.njit()
 def interp2D(xLoc, yLoc, xCoords, yCoords, v_c):
     X, Y = len(xCoords), len(yCoords)
     min_x, max_x = xCoords[0], xCoords[-1]

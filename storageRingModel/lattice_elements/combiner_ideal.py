@@ -1,3 +1,6 @@
+"""
+Contains ideal model of combiner. This is simply a quadrupole and dipole multi-pole combination.
+"""
 import numpy as np
 
 from lattice_elements.base_element import BaseElement

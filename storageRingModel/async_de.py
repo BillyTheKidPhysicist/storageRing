@@ -1,3 +1,8 @@
+"""
+Contains an object, and supporting functions, for aynchronous differential evolution. It works by quering a pool of
+tasks every X milliseconds, but this scales poorly and would not work with large numbers of processors for fast
+tasks. Works well enough for what I am doing, even TACC Lonestar 6
+"""
 import random
 import time
 

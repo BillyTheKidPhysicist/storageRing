@@ -1,3 +1,8 @@
+"""
+Contains functions for producing design orbit trajectories through elements. End result is a shapely
+LineString object.
+"""
+
 from math import cos, sin, atan, tan, pi
 
 import numpy as np

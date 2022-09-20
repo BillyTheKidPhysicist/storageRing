@@ -69,12 +69,9 @@ class CombinerHalbachLensSimFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan, np.nan, np.nan
         else:
-            return self.force_Without_isInside_Check(x, y, z)
+            return self.force_without_isinside_check(x, y, z)
 
-    def force_Without_isInside_Check(self, x0, y0, z0):
-        # this function uses the symmetry of the combiner to extract the force everywhere.
-        # I believe there are some redundancies here that could be trimmed to save time.
-        # x, y, z = self.baseClass.misalign_Coords(x0, y0, z0)
+    def force_without_isinside_check(self, x0, y0, z0):
         x, y, z = x0, y0, z0
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location
         if self.use_symmetry:
@@ -112,7 +109,6 @@ class CombinerHalbachLensSimFieldHelper_Numba:
     def magnetic_potential(self, x, y, z):
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan
-        # x, y, z = self.baseClass.misalign_Coords(x, y, z)
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
         symmetryPlaneX = self.Lm / 2 + self.space  # field symmetry plane location

@@ -1,7 +1,11 @@
+"""
+Functions to aid in the analysis of phase space behaviour of a swarm in the system
+"""
+
 import matplotlib.pyplot as plt
 
-from particle import Swarm, Particle
 from helper_tools import *
+from particle import Swarm, Particle
 from phaseSpaceAnalyzer import SwarmPoincare
 from storage_ring_modeler import StorageRingModel
 
@@ -88,8 +92,8 @@ def initial_phase_space_info(model: StorageRingModel, info: list, h: float) -> l
     return snap.particles
 
 
-def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list, numParticles: int, h: float ,
-                                      T: float , parallel,swarm_initial) -> list:
+def get_phase_space_info_at_positions(model: StorageRingModel, xPositions: list, numParticles: int, h: float,
+                                      T: float, parallel, swarm_initial) -> list:
     phase_space_info = [[[] for _ in xStops] for xStops in xPositions]
     swarm_initial = model.generate_swarm(numParticles) if swarm_initial is None else swarm_initial
     numParticlesLeft = numParticles
@@ -124,11 +128,13 @@ def make_phase_space_x_positions(model: StorageRingModel, x0, numStops, Tmax) ->
     return x_positions
 
 
-def make_phase_space_info(model: StorageRingModel, x0, numStops, Tmax, numParticles,parallel=True,h=None,swarm_initial=None) -> tuple[list, list]:
+def make_phase_space_info(model: StorageRingModel, x0, numStops, Tmax, numParticles, parallel=True, h=None,
+                          swarm_initial=None) -> tuple[list, list]:
     x0 = (x0,) if isinstance(x0, (float, int)) else x0
-    h=model.h if h is None else h
+    h = model.h if h is None else h
     x_positions = make_phase_space_x_positions(model, x0, numStops, Tmax)
-    phase_space_info = get_phase_space_info_at_positions(model, x_positions, numParticles, h,Tmax + 1e-3,parallel,swarm_initial)
+    phase_space_info = get_phase_space_info_at_positions(model, x_positions, numParticles, h, Tmax + 1e-3, parallel,
+                                                         swarm_initial)
     for x_stop in x_positions:
         x_stop.insert(0, 0)
     return phase_space_info, x_positions

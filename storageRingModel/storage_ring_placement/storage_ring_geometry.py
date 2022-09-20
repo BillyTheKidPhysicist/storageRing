@@ -1,3 +1,6 @@
+"""
+Contains an object used to represent the geometry of a lattice such as where each element is, beginning and end, etc.
+"""
 # pylint: disable=missing-module-docstring
 from typing import Iterable
 from typing import Union, Optional

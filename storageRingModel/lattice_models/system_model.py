@@ -1,3 +1,6 @@
+"""
+Contains functions for putting injector and ring models easily together to make the full system
+"""
 from typing import Optional
 
 import lattice_models.ring_model_1 as ring_model_1

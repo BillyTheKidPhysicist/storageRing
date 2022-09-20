@@ -1,3 +1,6 @@
+"""
+Old class used for trying to implement lens shimming to reduce impact of unwanted fringing field effects.
+"""
 #
 # class geneticLens(LensIdeal):
 #     def __init__(self, PTL, geneticLens, ap):

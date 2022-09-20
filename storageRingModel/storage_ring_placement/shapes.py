@@ -1,3 +1,8 @@
+"""
+Contains objects, conceptually shapes, that describe the position and geometry of elements for assisting in placing
+elements and particularly for producing a closed lattice in storage_ring_geometry_solver.py.
+"""
+
 from math import isclose, sqrt
 from typing import Optional
 

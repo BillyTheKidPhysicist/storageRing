@@ -1,3 +1,8 @@
+"""
+Contains drift (field free) element. Can support field interpolation to allow fringing fields from elements
+to impose on the region.
+"""
+
 from typing import Optional
 
 import numpy as np
@@ -14,9 +19,6 @@ BIG_POS_VAL = 1e12  # to prevent any chance of out of bounds issue with big drif
 
 
 class Drift(LensIdeal):
-    """
-    Simple model of free space. Effectively a cylinderical vacuum tube
-    """
     num_points_per_meter_r = 1000  # 1 point per mm
     num_pointer_per_meter_x = 1000  # 1 point per 2 mm
     num_points_max = 101

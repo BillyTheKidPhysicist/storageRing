@@ -1,3 +1,8 @@
+"""
+Contains simulated hexapole lens combiner. Particle orbit is deflected by traveling through the lens offset
+from the centerline.
+"""
+
 from math import sin, cos, tan, isclose
 from typing import Optional
 
@@ -5,30 +10,28 @@ import numpy as np
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, COMBINER_TUBE_WALL_THICKNESS
 from field_generators import Collection
-from helper_tools import is_close_all,arr_product,round_and_make_odd
+from helper_tools import is_close_all, arr_product, round_and_make_odd, is_odd_length
 from lattice_elements.combiner_ideal import CombinerIdeal
 from lattice_elements.element_magnets import MagneticLens
-from lattice_elements.utilities import CombinerDimensionError, \
-    CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
-    TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_3D
+from lattice_elements.utilities import (CombinerDimensionError, CombinerIterExceededError,
+                                        get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD,
+                                        TINY_INTERP_STEP,
+                                        B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_3D)
 from lattice_elements.utilities import STATE_FIELD_FACT
 from numba_functions_and_objects import combiner_lens_sim_numba_functions
 from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
 from type_hints import ndarray
 
-DEFAULT_SEED = 42
 
+# IMPROVEMENT: MOVE THE CHARACTERIZE STUFF FROM HERE TO THE combiner_characterizer
+# IMPROVEMENT: THERE IS SOME GOOFINESS GOING ON WITH THE ATOM STATE STUFF AND COMBINER CHARACTERIZER
 
-# todo: think much more carefully about interp offset stuff and how it affects aperture, and in which direction it is
-# affected
-
-def make_arrays(x_min, x_max, y_min, y_max, z_min, z_max, num_x, num_y, num_z) -> tuple[
-    ndarray, ndarray, ndarray]:
+def make_arrays(x_min, x_max, y_min, y_max, z_min, z_max, num_x, num_y, num_z) -> tuple[ndarray, ndarray, ndarray]:
     assert x_max > x_min and y_max > y_min and z_max > z_min
     x_arr = np.linspace(x_min, x_max, num_x)  # this becomes z in element frame, with sign change
     y_arr = np.linspace(y_min, y_max, num_y)  # this remains y in element frame
     z_arr = np.linspace(z_min, z_max, num_z)  # this becomes x in element frame
-    assert not is_even(len(x_arr)) and not is_even(len(y_arr)) and not is_even(len(z_arr))
+    assert all(is_odd_length(values) for values in (x_arr, y_arr, z_arr))
     return x_arr, y_arr, z_arr
 
 
@@ -38,7 +41,7 @@ class CombinerLensSim(CombinerIdeal):
     num_points_per_rad_in_x: int = 15
 
     def __init__(self, PTL, Lm: float, rp: float, load_beam_offset: float, num_layers: int, ap: Optional[float],
-                 seed,atom_state):
+                 seed, atom_state):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # load_beam_offset: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -47,7 +50,7 @@ class CombinerLensSim(CombinerIdeal):
 
         assert all(val > 0 for val in (Lm, rp, load_beam_offset, num_layers))
         assert ap < rp if ap is not None else True
-        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0,atom_state)
+        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0, atom_state)
 
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
 
@@ -183,7 +186,7 @@ class CombinerLensSim(CombinerIdeal):
         numba_func_constants = (self.ap, self.Lm, self.La, self.Lb, self.space, self.ang, self.acceptance_width,
                                 self.field_fact, use_symmetry)
 
-        # todo: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
+        # IMPROVEMENT: there's repeated code here between modules with the force stuff, not sure if I can sanely remove that
 
         force_args = (numba_func_constants, field_data)
         potential_args = (numba_func_constants, field_data)
@@ -232,11 +235,7 @@ class CombinerLensSim(CombinerIdeal):
         return x_arr, y_arr, z_arr
 
     def make_grid_coords_arrays_external_symmetry(self) -> tuple[ndarray, ndarray, ndarray]:
-        # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
-        # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
-        # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
-
-        # todo: something is wrong here with the interp stuff. There is out of bounds error
+        # IMPROVEMENT: something is wrong here with the interp stuff. There is out of bounds error very rarely in tests
         x_min = self.space + self.Lm / 2 - self.full_interpolation_length() / 2.0
         x_max = self.space + TINY_INTERP_STEP
         num_x = self.num_points_x_interp(x_min, x_max)
@@ -249,9 +248,6 @@ class CombinerLensSim(CombinerIdeal):
         return make_arrays(x_min, x_max, y_min, y_max, z_min, z_max, num_x, num_y, num_z)
 
     def make_grid_coords_arrays_internal_symmetry(self) -> tuple[ndarray, ndarray, ndarray]:
-        # because the magnet here is orienated along z, and the field will have to be titled to be used in the particle
-        # tracer module, and I want to exploit symmetry by computing only one quadrant, I need to compute the upper left
-        # quadrant here so when it is rotated -90 degrees about y, that becomes the upper right in the y,z quadrant
 
         num_y = num_z = round_and_make_odd(self.num_grid_points_r * self.PTL.field_dens_mult)
         x_min = self.space - TINY_INTERP_STEP
@@ -274,7 +270,7 @@ class CombinerLensSim(CombinerIdeal):
     def make_field_data(self, x_arr, y_arr, z_arr, extra_magnets: Collection = None,
                         include_mag_errors: bool = False, include_misalignments: bool = False) -> tuple[ndarray, ...]:
         """Make field data as [[x,y,z,Fx,Fy,Fz,V]..] to be used in fast grid interpolator"""
-        volume_coords = np.asarray(np.meshgrid(x_arr, y_arr, z_arr)).T.reshape(-1, 3)
+        volume_coords = arr_product(x_arr, y_arr, z_arr)
         B_norm_grad, B_norm = self.magnet.get_valid_field_values(volume_coords,
                                                                  include_mag_errors=include_mag_errors,
                                                                  extra_magnets=extra_magnets,

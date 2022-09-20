@@ -1,3 +1,6 @@
+"""
+Contains an object that finds a closed lattice configuration by a minimization routine.
+"""
 # pylint: disable= missing-module-docstring
 import copy
 import itertools

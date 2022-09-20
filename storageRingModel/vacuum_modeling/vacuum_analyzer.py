@@ -1,3 +1,9 @@
+"""
+Contains methods and objects for computing vacuum system performance. A model of a vacuum is created component by
+component, then the system of equations of conductance and pump speed are converted to a matrix and solved. Currently
+only supports linear vacuum systems, but a circular vacuum system with gradual bender is basically a linear vacuum
+system
+"""
 import copy
 import warnings
 from math import pi, sqrt
@@ -10,12 +16,6 @@ import numpy as np
 from constants import ROOM_TEMPERATURE, BOLTZMANN_CONSTANT
 from helper_tools import is_ascending
 from vacuum_modeling.vacuum_constants import rate_coefficients
-
-'''
-Methods and objects for computing vacuum system performance. A model of a vacuum is created component by component,
-then the system of equations of conductance and pump speed are converted to a matrix and solved. Currently only
-supports linear vacuum systems 
-'''
 
 RealNum = Union[float, int]
 

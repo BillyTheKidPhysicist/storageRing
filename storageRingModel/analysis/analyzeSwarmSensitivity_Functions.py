@@ -1,8 +1,13 @@
+"""
+Functions to aid in analysis of how sensitive the lattice system is on initial conditions of the swarm such as tilt
+or speed etc.
+"""
+
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
-from particle import Particle, Swarm
 from helper_tools import parallel_evaluate
+from particle import Particle, Swarm
 from storage_ring_modeler import StorageRingModel
 from type_hints import RealNum
 

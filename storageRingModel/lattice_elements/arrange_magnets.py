@@ -1,5 +1,5 @@
 """
-These methods deal with alinging and arranging magnets in the lattice to properly account for magnet-magnet magnetic
+These methods deal with aligning and arranging magnets in the lattice to properly account for element-element magnetic
 field interactions. It's an abomination because of how I wasn't consistent early on with element layouts.
 """
 
@@ -13,17 +13,13 @@ from helper_tools import *
 from lattice_elements.base_element import BaseElement
 from lattice_elements.elements import HalbachLensSim, Element, CombinerLensSim, Drift, BenderSim
 
-INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift ,BenderSim)  # elements that can include magnetic fields
+INTERP_ELS = (HalbachLensSim, CombinerLensSim, Drift, BenderSim)  # elements that can include magnetic fields
 # produced by neighboring magnets into their own interpolation
-FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim , BenderSim)  # elements that can be used to
-# generate  magnetic fields
-# that act on another elements
+FIELD_GENERATOR_ELS = (HalbachLensSim, CombinerLensSim, BenderSim)  # elements that can be used to
+# generate  magnetic fields that act on other elements
 
 DISTANCE_BORE_RADIUS_FACT = 3.0
 
-
-# I should have thought more clearly about what i was doing. Then I wouldn't have had any of these problems. I wouldn't
-# have wasted so much time
 
 def is_valid_interperable_el(el) -> bool:
     """Is 'el' and element which can use the magnetic fields of external elements to interpolate forces over?"""
@@ -148,7 +144,7 @@ def move_lens_to_target_el_frame(el_to_move: Element, el_target: Element, magnet
 
 def move_bender_to_target_el_frame(el_to_move, el_target, magnet_options):
     assert type(el_to_move) is BenderSim
-    magnet_errors, _=magnet_options
+    magnet_errors, _ = magnet_options
     if type(el_target) not in (Drift, HalbachLensSim):
         raise NotImplementedError
 

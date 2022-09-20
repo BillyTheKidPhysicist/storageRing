@@ -1,3 +1,6 @@
+"""
+Contains simulated hexapole lens model. A permanent magnet halbach array
+"""
 import warnings
 from math import sqrt, inf
 from typing import Optional
@@ -131,8 +134,8 @@ class HalbachLensSim(LensIdeal):
     def round_lens_points_to_max_spacing(self, x_min, x_max, y_min, y_max, num_points_x, num_points_r) -> tuple[
         int, int]:
         """Return number of points in x and r that respect a maximum allowed spacing in points"""
-        #IMPROVEMENT: MAKE THIS A FUNCTION THAT IS CALLED OPTIONALLY
-        #IMPROVEMENT: IMPLEMENT BASED ON SOME CRITERA?
+        # IMPROVEMENT: MAKE THIS A FUNCTION THAT IS CALLED OPTIONALLY
+        # IMPROVEMENT: IMPLEMENT BASED ON SOME CRITERA?
         delta_x = (x_max - x_min) / num_points_x
         delta_r = np.sqrt(2) * (y_max - y_min) / num_points_r
         num_points_x_space = round_and_make_odd(num_points_x * delta_x / self.max_spacing)
@@ -212,9 +215,10 @@ class HalbachLensSim(LensIdeal):
     def make_interp_data(self, use_symmetry, extra_magnets) -> tuple[tuple, tuple]:
         exploit_very_long_lens = self.effective_material_length() < self.Lm and use_symmetry
 
-        interp_data_3D = shape_field_data_3D(self.make_unshaped_interp_data_3D(use_symmetry, self.PTL.include_mag_errors,
-                                                                               extra_magnets,
-                                                                               self.PTL.include_misalignments))
+        interp_data_3D = shape_field_data_3D(
+            self.make_unshaped_interp_data_3D(use_symmetry, self.PTL.include_mag_errors,
+                                              extra_magnets,
+                                              self.PTL.include_misalignments))
 
         if exploit_very_long_lens:
             interp_data_2D = shape_field_data_2D(self.make_unshaped_interp_data_2D())

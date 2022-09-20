@@ -1,19 +1,21 @@
+"""
+Contains Numba functions for use with corresponding element. These are called by attributes of the element, and used in
+the fast time stepping method in particle_tracer.py
+"""
 import numba
 import numpy as np
 
 from constants import FLAT_WALL_VACUUM_THICKNESS
-from numba_functions_and_objects.interpFunctions import magnetic_potential_interp_3D,force_interp_3D
-from numba_functions_and_objects.utilities import eps
+from numba_functions_and_objects.interpFunctions import magnetic_potential_interp_3D, force_interp_3D
+from numba_functions_and_objects.utilities import eps, eps_fact
+
 
 @numba.njit()
 def force(x0, y0, z0, params, field_data):
-    # this function uses the symmetry of the combiner to extract the force everywhere.
-    # I believe there are some redundancies here that could be trimmed to save time.
-    # x, y, z = baseClass.misalign_Coords(x0, y0, z0)
     if not is_coord_in_vacuum(x0, y0, z0, params):
         return np.nan, np.nan, np.nan
     ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry = params
-    field_data_internal, field_data_external, field_data_full  = field_data
+    field_data_internal, field_data_external, field_data_full = field_data
     x, y, z = x0, y0, z0
     symmetry_plane_x = Lm / 2 + space  # field symmetry plane location
     if use_symmetry:
@@ -52,9 +54,8 @@ def force(x0, y0, z0, params, field_data):
 def magnetic_potential(x, y, z, params, field_data):
     if not is_coord_in_vacuum(x, y, z, params):
         return np.nan
-    # x, y, z = baseClass.misalign_Coords(x, y, z)
     ap, Lm, La, Lb, space, ang, acceptance_width, field_fact, use_symmetry = params
-    field_data_internal, field_data_external, field_data_full  = field_data
+    field_data_internal, field_data_external, field_data_full = field_data
 
     if use_symmetry:
         symmetry_plane_x = Lm / 2 + space  # field symmetry plane location
@@ -87,7 +88,8 @@ def is_coord_in_vacuum(x, y, z, params):
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)
         return False
-    elif -eps <= x <= Lb + FLAT_WALL_VACUUM_THICKNESS+eps:  # particle is in the horizontal section (in element frame) that passes
+    elif -eps <= x <= (
+            Lb + FLAT_WALL_VACUUM_THICKNESS) * eps_fact:  # particle is in the horizontal section (in element frame) that passes
         # through the combiner.
         if np.sqrt(y ** 2 + z ** 2) < ap:
             return True

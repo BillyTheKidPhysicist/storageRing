@@ -1,3 +1,6 @@
+"""
+Contains idea hexapole lens model.
+"""
 import numpy as np
 
 from constants import SIMULATION_MAGNETON

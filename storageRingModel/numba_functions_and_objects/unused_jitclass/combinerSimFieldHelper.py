@@ -55,9 +55,9 @@ class CombinerSimFieldHelper_Numba:
         if not self.is_Coord_Inside_Vacuum(x, y, z):
             return np.nan, np.nan, np.nan
         else:
-            return self.force_Without_isInside_Check(x, y, z)
+            return self.force_without_isinside_check(x, y, z)
 
-    def force_Without_isInside_Check(self, x, y, z):
+    def force_without_isinside_check(self, x, y, z):
         # this function uses the symmetry of the combiner to extract the force everywhere.
         # I believe there are some redundancies here that could be trimmed to save time.
         xFact = 1  # value to modify the force based on symmetry

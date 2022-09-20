@@ -1,3 +1,7 @@
+"""
+Contains bender using simulated fields. Bender is segmented and composed of multiple square footprint
+hexapole lens slices.
+"""
 import warnings
 from math import isclose, tan, cos, sin, sqrt, atan, pi
 from typing import Optional
@@ -7,10 +11,10 @@ import scipy.optimize as spo
 from scipy.spatial.transform import Rotation as Rot
 
 from constants import MIN_MAGNET_MOUNT_THICKNESS, SIMULATION_MAGNETON, TUBE_WALL_THICKNESS
-from helper_tools import arr_product, round_and_make_odd
+from helper_tools import arr_product, round_and_make_odd, is_odd, is_odd_length
 from lattice_elements.bender_ideal import BenderIdeal
 from lattice_elements.element_magnets import MagnetBender
-from lattice_elements.utilities import TINY_OFFSET, is_even, mirror_across_angle, full_arctan2, \
+from lattice_elements.utilities import TINY_OFFSET, mirror_across_angle, full_arctan2, \
     max_tube_IR_in_segmented_bend, halbach_magnet_width, calc_unit_cell_angle, B_GRAD_STEP_SIZE, \
     INTERP_MAGNET_MATERIAL_OFFSET, TINY_INTERP_STEP, shape_field_data_3D
 from numba_functions_and_objects import bender_sim_numba_functions
@@ -125,7 +129,7 @@ class BenderSim(BenderIdeal):
         return calc_unit_cell_angle(self.Lm, self.rb, self.rp + self.magnet_width)
 
     def fill_post_constrained_parameters(self) -> None:
-        #IMPROVEMENT: improvement resolve the angle number of magnets  bug
+        # IMPROVEMENT: improvement resolve the angle number of magnets  bug
         self.ap = self.ap if self.ap is not None else self.compute_maximum_aperture()
         assert self.ap <= self.compute_maximum_aperture()
         self.ucAng = self.unit_cell_angle()
@@ -138,7 +142,7 @@ class BenderSim(BenderIdeal):
         self.outer_half_width = self.rp + self.magnet_width + MIN_MAGNET_MOUNT_THICKNESS
         self.make_orbit()
 
-        num_lenses_magnet_model = self.num_lenses+1   # half lens cause an additiona lens
+        num_lenses_magnet_model = self.num_lenses + 1  # half lens cause an additiona lens
         self.magnet = MagnetBender(self.rp, self.rb, self.ucAng, self.Lm, self.magnet_width, self.PTL.magnet_grade,
                                    num_lenses_magnet_model, self.PTL.use_solenoid_field)
 
@@ -175,7 +179,7 @@ class BenderSim(BenderIdeal):
     def make_Grid_Coords(self, x_min: float, x_max: float, y_min: float, y_max: float) -> ndarray:
         """Make Array of points that the field will be evaluted at for fast interpolation. only x and s values change.
         """
-        assert not is_even(self.interp_points_per_ap_symmetry)  # points should be odd to there is a point
+        assert is_odd(self.interp_points_per_ap_symmetry)  # points should be odd to there is a point
         # at zero field, if possible
         longitudinal_coord_spacing: float = (.8 * self.rp / 10.0) / self.PTL.field_dens_mult  # Spacing
         # through unit cell. .8 was carefully chosen
@@ -187,7 +191,7 @@ class BenderSim(BenderIdeal):
         coord_arrs = []
         for (start, stop, num) in ((x_min, x_max, num_x), (y_min, y_max, num_y), (z_min, z_max, num_z)):
             coord_arrs.append(np.linspace(start, stop, num))
-        grid_coords = np.asarray(np.meshgrid(*coord_arrs)).T.reshape(-1, 3)
+        grid_coords = arr_product(*coord_arrs)
         return grid_coords
 
     def convert_center_to_cartesian_coords(self, s: float, xc: float,
@@ -236,7 +240,7 @@ class BenderSim(BenderIdeal):
         yc_arr = np.linspace(-self.ap - TINY_OFFSET, self.ap + TINY_OFFSET,
                              num_yc)  # deviation in vertical from center of
         # bender, along y in cartesian
-        assert not is_even(len(s_arr)) and not is_even(len(xc_arr)) and not is_even(len(yc_arr))
+        assert all(is_odd_length(values) for values in (s_arr, xc_arr, yc_arr))
         coords_center = arr_product(s_arr, xc_arr, yc_arr)
         coords = np.asarray([self.convert_center_to_cartesian_coords(*coordCenter) for coordCenter in coords_center])
         return coords_center, coords

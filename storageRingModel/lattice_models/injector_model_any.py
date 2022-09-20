@@ -1,3 +1,25 @@
+"""
+Module contains functions and parameters to produce an injector model. There is only 1 injector model currently. Also
+contains optimal parameters found so far. Also contains functions for automatic vacuum system analysis, but this has
+not been implemented fully.
+
+Sequence of elements:
+
+- Optional if bumper is included
+    - Shifted lens
+    - Drift
+    - lens
+    - Drift
+- Drift
+- Lens
+- Drift
+- Lens
+- Drift
+- Combiner
+
+
+"""
+
 import numpy as np
 
 import kevin_bumper as bumper
@@ -11,8 +33,8 @@ from lattice_models.lattice_model_parameters import system_constants, atom_chara
 from lattice_models.utilities import LockedDict, InjectorGeometryError
 from particle_tracer_lattice import ParticleTracerLattice
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
-from vacuum_modeling.vacuum_constants import turbo_pump_speed, diffusion_pump_speed, big_chamber_pressure, \
-    big_ion_pump_speed
+from vacuum_modeling.vacuum_constants import (turbo_pump_speed, diffusion_pump_speed, big_chamber_pressure,
+                                              big_ion_pump_speed)
 
 injector_constants = LockedDict({
     "pre_combiner_gap": inch_to_meter(3.5),  # from lens to combiner
@@ -84,7 +106,7 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
     lattice.add_drift(gap3, ap=injector_params["rp2"])
     lattice.add_combiner_sim_lens(injector_params["Lm_combiner"], system_constants["rp_combiner"],
                                   load_beam_offset=injector_params["load_beam_offset"], layers=1,
-                                  seed=options['combiner_seed'],atom_state='HIGH_SEEK')
+                                  seed=options['combiner_seed'], atom_state='HIGH_SEEK')
 
     lattice.end_lattice(constrain=False, build_field_helpers=options['build_field_helpers'])
 

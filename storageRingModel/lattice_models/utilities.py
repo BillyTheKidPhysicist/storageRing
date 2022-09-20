@@ -1,3 +1,7 @@
+"""
+Contains misc functions and objects used for making ring and injector models
+"""
+
 from particle_tracer_lattice import ParticleTracerLattice
 
 real_numer = (int, float)

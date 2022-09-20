@@ -1,3 +1,6 @@
+"""
+Constants such as pump speed and outgassing for use with vacuum modeling.
+"""
 from lattice_models.utilities import LockedDict
 
 # outgassing rates, in units of torr L /s, from stainless steel with high temperature heat treating procedure
