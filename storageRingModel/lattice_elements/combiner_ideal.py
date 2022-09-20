@@ -1,22 +1,18 @@
 import numpy as np
 
 from lattice_elements.base_element import BaseElement
+from lattice_elements.utilities import STATE_FIELD_FACT
 from numba_functions_and_objects import combiner_ideal_numba_function
 
 
-# from latticeElements.class_CombinerHalbachLensSim import CombinerLensSim
-
 class CombinerIdeal(BaseElement):
-    # combiner: This is is the element that bends the two beams together. The logic is a bit tricky. It's geometry is
-    # modeled as a straight section, a simple square, with a segment coming of at the particle in put at an angle. The
-    # angle is decided by tracing particles through the combiner and finding the bending angle.
 
     def __init__(self, PTL, Lm: float, c1: float, c2: float, ap_left: float, ap_right: float, ap_z: float,
-                 size_scale: float):
+                 size_scale: float, atom_state: str):
         super().__init__(PTL)
-        self.field_fact = -1.0 if self.PTL.lattice_type == 'injector' else 1.0
-        self.size_scale = size_scale  # the fraction that the combiner is scaled up or down to. A combiner twice the size would
-        # use size_scale=2.0
+        self.field_fact = STATE_FIELD_FACT[atom_state]
+        self.size_scale = size_scale  # the fraction that the combiner is scaled up or down to. A combiner
+        # twice the size would use size_scale=2.0
         self.ap_right = ap_right
         self.ap_left = ap_left
         self.apz = ap_z

@@ -53,11 +53,10 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
         raise InjectorGeometryError
     if gap1 < injector_constants["sourceToLens1_Inject_Gap"]:
         raise InjectorGeometryError
-    lattice = ParticleTracerLattice(atom_characteristics["nominalDesignSpeed"], lattice_type='injector',
+    lattice = ParticleTracerLattice(atom_characteristics["nominalDesignSpeed"],
                                     include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    use_standard_mag_size=options['use_standard_mag_size'],
                                     include_misalignments=options['include_misalignments'], )
     if options['has_bumper']:
         add_Kevin_Bumper_Elements(lattice)
@@ -85,7 +84,7 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
     lattice.add_drift(gap3, ap=injector_params["rp2"])
     lattice.add_combiner_sim_lens(injector_params["Lm_combiner"], system_constants["rp_combiner"],
                                   load_beam_offset=injector_params["load_beam_offset"], layers=1,
-                                  seed=options['combiner_seed'])
+                                  seed=options['combiner_seed'],atom_state='HIGH_SEEK')
 
     lattice.end_lattice(constrain=False, build_field_helpers=options['build_field_helpers'])
 

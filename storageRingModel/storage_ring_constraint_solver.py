@@ -49,7 +49,6 @@ def _cappedSlicedBend_From_HalbachBender(bender: BenderSim) -> CappedSlicedBend:
 def solve_Floor_Plan(PTL, constrain: bool) -> StorageRingGeometry:
     """Use a ParticleTracerLattice to construct a geometric representation of the storage ring. The geometric
     representation is of the ideal orbit of a particle loosely speaking, not the centerline of elements."""
-    assert not (constrain and PTL.lattice_type == 'injector')
     elements = []
     first_el = None
     for i, el_PTL in enumerate(PTL):

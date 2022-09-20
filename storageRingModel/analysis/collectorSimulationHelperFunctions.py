@@ -176,6 +176,10 @@ class CollectorSwarmAnalyzer:
         self.end_drift_length = abs(self.lattice.el_list[-1].r2[0] - self.lattice.el_list[-1].r1[0])
         self.x_min, self.x_max = self.end_drift_x_min_max()
 
+    def linspace(self,num_points):
+        assert self.x_max-self.x_min>2e-6
+        return np.linspace(self.x_min+1e-6,self.x_max-1e-6,num_points)
+
     def end_drift_x_min_max(self):
         return self.lattice.el_list[-1].r1[0], self.lattice.el_list[-1].r2[0]
 
@@ -191,7 +195,7 @@ class CollectorSwarmAnalyzer:
     def interpolate(self, x_interp: float, max_radius_mm: float = np.inf, laser_scan_range_volts: float = None,vtrans_max: float=None,
                     return_p: bool = False, return_valid_indices: bool=False, enforce_location: bool=True) -> list[np.ndarray, ...]:
         if enforce_location:
-            assert self.x_min < x_interp < self.x_max
+            assert self.x_min <= x_interp <= self.x_max
         assert not ( laser_scan_range_volts is not None and vtrans_max is not None)
         if laser_scan_range_volts is not None:
             vTMax = self._get_Sweep_Range_Trans_Vel_Max(laser_scan_range_volts)

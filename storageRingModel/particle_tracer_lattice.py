@@ -25,37 +25,31 @@ number = (int, float)
 
 class ParticleTracerLattice:
 
-    def __init__(self, design_speed: RealNum = DEFAULT_ATOM_SPEED, lattice_type: str = 'storage_ring',
+    def __init__(self, design_speed: RealNum = DEFAULT_ATOM_SPEED,
                  field_dens_mult: RealNum = 1.0, include_mag_errors: bool = False,
                  use_solenoid_field: bool = False, initial_location: tuple[RealNum, RealNum] = None,
-                 initial_ang: RealNum = -pi, magnet_grade: str = 'N52', use_standard_mag_size: bool = False,
-                 use_standard_tube_OD: bool = False, use_long_range_fields: bool = False,
-                 include_misalignments: bool = False):
+                 initial_ang: RealNum = -pi, magnet_grade: str = 'N52', use_standard_tube_OD: bool = False,
+                 use_long_range_fields: bool = False, include_misalignments: bool = False):
         """
 
 
 
-        :param design_speed:
-        :param lattice_type:
+        :param design_speed: Speed of the ideal particle traveling through the lattice
         :param field_dens_mult: Multiplier to modulate density of interpolation in elements. Carefull, computation time
             will scale as third power
-        :param include_mag_errors:
-        :param use_solenoid_field:
-        :param initial_location:
-        :param initial_ang:
-        :param magnet_grade:
-        :param use_standard_mag_size:
-        :param use_standard_tube_OD:
-        :param use_long_range_fields:
-        :param include_misalignments:
+        :param include_mag_errors: Whether to include the affects of magnet errors. See constants.py for the magnitude
+        :param use_solenoid_field: Whether to apply a solenoid field through the center of each magnetic component
+            to account for Majorana spin flips
+        :param initial_location: The initial location of the input of the lattice, (x,y), m.
+        :param initial_ang: Initial angle of the first element relative to the x axis, radians.
+        :param magnet_grade: Grade of magnets in the lattice. See constants.py for options
+        :param use_standard_tube_OD: Whether to only use off the shel tubing outside diameters
+        :param use_long_range_fields: Whether to allow magnetic fields to reach into neighboring elements, including
+            drift regions, and be included in interpolation. Can significantly increase computation time
+        :param include_misalignments: Wether to allow magnets to be misaligned in the form of tilts and translations
+            based on tolerances from constants.py .
         """
         assert field_dens_mult > 0.0
-        if lattice_type != 'storage_ring' and lattice_type != 'injector':
-            raise Exception('invalid lattice type provided')
-        self.lattice_type = lattice_type  # options are 'storage_ring' or 'injector'. If storage_ring,
-        # the geometry is the the first element's input at the origin and succeeding elements in a counterclockwise
-        # fashion. If injector, then first element's input is also at the origin, but seceeding elements follow along
-        # the positive x axis
         self.design_speed = design_speed  # Design particle speed
         self.bender_indices: list[int] = []  # list that holds index values of benders. First bender is the
         # first one that the particle sees
@@ -66,7 +60,6 @@ class ParticleTracerLattice:
         self.field_dens_mult = field_dens_mult
         self.include_mag_errors = include_mag_errors
         self.use_standard_tube_OD = use_standard_tube_OD
-        self.use_standard_mag_size = use_standard_mag_size
         self.use_long_range_fields = use_long_range_fields
         self.include_misalignments = include_misalignments
         self.are_fast_field_helpers_built = False
@@ -163,7 +156,7 @@ class ParticleTracerLattice:
         :param rp: Bore radius, m.
         :param L: Length of element, m. This includes fringe fields, actual magnet length will be smaller
         :param ap: Size of aperture
-        :param constrain: Wether element is being used as part of a constraint. If so, fields construction will be
+        :param constrain: Whether element is being used as part of a constraint. If so, fields construction will be
             deferred
         :param magnet_width: Width of cuboid magnets in polar plane of lens, m. Magnets length is L minus
             fringe fields.
@@ -174,11 +167,11 @@ class ParticleTracerLattice:
         self.add_element(HalbachLensSim(self, rp_layers, L, ap, magnet_width), constrain=constrain)
 
     def add_combiner_ideal(self, Lm: RealNum = .2, c1: RealNum = 1, c2: RealNum = 20, ap: RealNum = .015,
-                           size_scale: RealNum = 1.0) -> None:
+                           size_scale: RealNum = 1.0, atom_state='LOW_SEEK') -> None:
 
-        self.add_element(CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, size_scale))
+        self.add_element(CombinerIdeal(self, Lm, c1, c2, ap, ap, ap / 2, size_scale, atom_state))
 
-    def add_combiner_sim(self, size_scale: RealNum = 1.0, file: str = None) -> None:
+    def add_combiner_sim(self, size_scale: RealNum = 1.0, file: str = None, atom_state='LOW_SEEK') -> None:
         """
         Add model of our combiner from COMSOL. rarely used
 
@@ -187,10 +180,10 @@ class ParticleTracerLattice:
         """
 
         file = 'combinerV3.txt' if file is None else file
-        self.add_element(CombinerSim(self, file, self.lattice_type, size_scale=size_scale))
+        self.add_element(CombinerSim(self, file, size_scale, atom_state))
 
     def add_combiner_sim_lens(self, Lm: RealNum, rp: RealNum, load_beam_offset: RealNum = 5e-3, layers: int = 1,
-                              ap: RealNum = None, seed: int = None) -> None:
+                              ap: RealNum = None, seed: int = None, atom_state='LOW_SEEK') -> None:
 
         """
         Add halbach hexapole lens combiner element to lattice.
@@ -207,7 +200,7 @@ class ParticleTracerLattice:
         :return: None
         """
 
-        self.add_element(CombinerLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed))
+        self.add_element(CombinerLensSim(self, Lm, rp, load_beam_offset, layers, ap, seed, atom_state))
 
     def add_bender_ideal(self, ang: RealNum, Bp: RealNum, rb: RealNum, rp: RealNum, ap: RealNum = None) -> None:
         """
@@ -260,8 +253,6 @@ class ParticleTracerLattice:
 
         self.is_closed = is_particle_tracer_lattice_closed(self)  # lattice may not have been constrained, but could
         # still be closed
-        if self.lattice_type == 'storage_ring' and constrain:  # double check
-            assert is_particle_tracer_lattice_closed(self)
         build_shapely_objects(self.el_list)
         self.total_length = 0
         for el in self.el_list:  # total length of particle's orbit in an element
@@ -319,8 +310,6 @@ class ParticleTracerLattice:
                 if not type(bender1) is type(self.el_list[i]):
                     raise Exception('BOTH BENDERS MUST BE THE SAME KIND')
         if constrain:
-            if self.lattice_type != 'storage_ring':
-                raise Exception('Constrained lattice must be storage ring type')
             if not len(self.bender_indices) >= 2:
                 raise Exception('THERE MUST BE AT LEAST TWO BENDERS')
             for i in self.bender_indices:
@@ -331,7 +320,7 @@ class ParticleTracerLattice:
                     raise Exception('SEGMENT LENGTHS AND MAGNET WIDTHS MUST BE EQUAL BETWEEN BENDERS')
 
     def get_element_before_and_after(self, el_center: Element) -> tuple[Element, Element]:
-        if (el_center.index == len(self.el_list) - 1 or el_center.index == 0) and self.lattice_type == 'injector':
+        if (el_center.index == len(self.el_list) - 1 or el_center.index == 0) and not self.is_closed:
             raise Exception('Element cannot be first or last if lattice is injector type')
         el_before_index = el_center.index - 1 if el_center.index != 0 else len(self.el_list) - 1
         el_after_index = el_center.index + 1 if el_center.index < len(self.el_list) - 1 else 0

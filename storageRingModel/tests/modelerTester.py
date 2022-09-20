@@ -15,7 +15,7 @@ def test_Modeler():
     lattice_ring.add_drift(.1)
     lattice_ring.end_lattice(constrain=False)
 
-    lattice_injector = ParticleTracerLattice(lattice_type='injector')
+    lattice_injector = ParticleTracerLattice()
     lattice_injector.add_drift(.1)
     lattice_injector.add_halbach_lens_sim(.01, .1)
     lattice_injector.add_drift(.1)

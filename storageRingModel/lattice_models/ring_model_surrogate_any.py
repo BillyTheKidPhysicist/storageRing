@@ -1,5 +1,5 @@
 from particle_tracer_lattice import ParticleTracerLattice
-from lattice_models.lattice_model_functions import check_and_add_default_values, add_combiner_and_OP
+from lattice_models.lattice_model_functions import check_and_add_default_values, add_combiner_and_OP_ring
 from lattice_models.lattice_model_parameters import system_constants, atom_characteristics
 from lattice_models.utilities import LockedDict
 from lattice_models.ring_model_1 import ring_constants
@@ -20,16 +20,14 @@ def make_ring_surrogate_for_injector(injector_params: dict,
     options = check_and_add_default_values(options)
 
     lattice = ParticleTracerLattice(design_speed=atom_characteristics["nominalDesignSpeed"],
-                                    lattice_type='storage_ring',
                                     use_solenoid_field=options['use_solenoid_field'],
-                                    use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    use_standard_mag_size=options['use_standard_mag_size'])
+                                    use_standard_tube_OD=options['use_standard_tube_OD'])
 
     # ----lens before combiner
     lattice.add_halbach_lens_sim(surrogate_params['rp_lens1'], surrogate_params['L_Lens1'])
 
     # ---combiner + OP magnet-----
-    add_combiner_and_OP(lattice, system_constants['rp_combiner'], injector_params['Lm_combiner'],
+    add_combiner_and_OP_ring(lattice, system_constants['rp_combiner'], injector_params['Lm_combiner'],
                         injector_params['load_beam_offset'],ring_constants['rp_lens2'], options,'Injection')
 
     # ---lens after combiner---

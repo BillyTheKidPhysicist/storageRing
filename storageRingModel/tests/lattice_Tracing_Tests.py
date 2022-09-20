@@ -79,7 +79,7 @@ def TEST_Lattice_Tracing(PTL, testSwarm, TESTDataFileName, use_fast_mode, parall
 def generate_Lattice(configuration):
     # a variety of lattice configurations are tested
     if configuration == '1':
-        PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='storage_ring')
+        PTL = ParticleTracerLattice(design_speed=200.0)
         PTL.add_drift(.25)
         PTL.add_segmented_halbach_bender(.0254, .01, 150, 1.0)
         PTL.add_lens_ideal(1.0, 1.0, .01)
@@ -87,25 +87,25 @@ def generate_Lattice(configuration):
         PTL.add_drift(.1)
         PTL.end_lattice(constrain=False)
     elif configuration in ('2', '5'):
-        PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='injector')
+        PTL = ParticleTracerLattice(design_speed=200.0)
         PTL.add_drift(.25)
         PTL.add_halbach_lens_sim(.01, .5)
         PTL.add_drift(.1)
         if configuration == '2':
-            PTL.add_combiner_sim()
+            PTL.add_combiner_sim(atom_state='HIGH_SEEK')
         else:
-            PTL.add_combiner_sim_lens(.1, .02, layers=2)
+            PTL.add_combiner_sim_lens(.1, .02, layers=2,atom_state='HIGH_SEEK')
         PTL.add_halbach_lens_sim(.01, .5)
         PTL.end_lattice()
     elif configuration == '3':
-        PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='storage_ring')
+        PTL = ParticleTracerLattice(design_speed=200.0)
         PTL.add_lens_ideal(1.0, 1.0, .01)
         PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
         PTL.add_lens_ideal(1.0, 1.0, .01)
         PTL.add_bender_ideal(np.pi, 1.0, 1.0, .01)
         PTL.end_lattice()
     elif configuration in ('4', '6'):
-        PTL = ParticleTracerLattice(design_speed=200.0, lattice_type='storage_ring')
+        PTL = ParticleTracerLattice(design_speed=200.0)
         PTL.add_halbach_lens_sim(.01, .5)
         if configuration == '4':
             PTL.add_combiner_sim()

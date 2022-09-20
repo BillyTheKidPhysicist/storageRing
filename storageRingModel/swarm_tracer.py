@@ -214,17 +214,17 @@ class SwarmTracer:
 
         return swarm
 
-    def point_source_swarm(self, source_angle: float, num_particles: int, same_seed: bool = False) -> Swarm:
+    def point_source_swarm(self, half_angle: float, num_particles: int, same_seed: bool = False) -> Swarm:
         """
         Return a pseudo-random swarm originating from a point at the origin
 
-        :param source_angle: Half angle of swarm, radians.
+        :param half_angle: Half angle of swarm, radians.
         :param num_particles: Number of particles in swarm.
         :param same_seed: Whether to use the same seed for repeatability.
         :return: A new swarm.
         """
         p0 = self.lattice.design_speed  # the momentum of each particle
-        p_trans_bounds = np.tan(source_angle) * p0
+        p_trans_bounds = np.tan(half_angle) * p0
         swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
                                                       num_particles=num_particles)
         for particle in swarm_pseudo_random:

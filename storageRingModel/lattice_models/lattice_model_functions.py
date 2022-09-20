@@ -68,14 +68,12 @@ def initialize_ring_lattice(ring_params: dict, options: dict,
     ring_params = LockedDict(ring_params)
 
     lattice = ParticleTracerLattice(design_speed=atom_characteristics["nominalDesignSpeed"],
-                                    lattice_type='storage_ring',
                                     include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    use_standard_mag_size=options['use_standard_mag_size'],
                                     use_long_range_fields=options['include_mag_cross_talk_in_ring'],
                                     include_misalignments=options['include_misalignments'])
-    return lattice, ring_params, options
+    return lattice, ring_params, options #IMPROVEMENT: what is this business?
 
 
 def finish_ring_lattice(lattice: ParticleTracerLattice, ring_params: LockedDict,
@@ -109,14 +107,14 @@ def add_split_bend_with_lens(lattice: ParticleTracerLattice, rp_bend, rp_lens, L
     lattice.add_segmented_halbach_bender(system_constants['Lm'], rp_bend, None, system_constants['rbTarget'])
 
 
-def add_combiner_and_OP(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_lens_after,
+def add_combiner_and_OP_ring(lattice, rp_combiner, Lm_combiner, load_beam_offset, rp_lens_after,
                         options: Optional[dict], which_OP_ap: str) -> None:
     """Add combiner + gap for optical pumping. Element after must be a lens. """
 
     # -------combiner-------
 
     lattice.add_combiner_sim_lens(Lm_combiner, rp_combiner, load_beam_offset=load_beam_offset, layers=1,
-                                  seed=options['combiner_seed'])
+                                  seed=options['combiner_seed'],atom_state='LOW_SEEK')
 
     # ------gap 3--------- combiner-> lens, Optical Pumping (OP) region
     # there must be a drift here to account for the optical pumping aperture limit. It must also be at least as long

@@ -52,7 +52,7 @@ class BenderSim(BenderIdeal):
         self.Lm = Lm
         self.rp = rp
         self.ap = ap
-        self.magnet_width = halbach_magnet_width(rp, use_standard_sizes=PTL.use_standard_mag_size)
+        self.magnet_width = halbach_magnet_width(rp)
         self.ucAng: Optional[float] = None
         self.L_cap = self.fringe_frac_outer * self.rp
         self.num_lenses = num_lenses

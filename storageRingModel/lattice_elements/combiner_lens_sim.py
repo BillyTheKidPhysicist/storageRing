@@ -11,6 +11,7 @@ from lattice_elements.element_magnets import MagneticLens
 from lattice_elements.utilities import CombinerDimensionError, \
     CombinerIterExceededError, is_even, get_halbach_layers_radii_and_magnet_widths, round_down_to_nearest_tube_OD, \
     TINY_INTERP_STEP, B_GRAD_STEP_SIZE, INTERP_MAGNET_MATERIAL_OFFSET, shape_field_data_3D
+from lattice_elements.utilities import STATE_FIELD_FACT
 from numba_functions_and_objects import combiner_lens_sim_numba_functions
 from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
 from type_hints import ndarray
@@ -36,7 +37,8 @@ class CombinerLensSim(CombinerIdeal):
     num_grid_points_r: int = 30
     num_points_per_rad_in_x: int = 15
 
-    def __init__(self, PTL, Lm: float, rp: float, load_beam_offset: float, num_layers: int, ap: Optional[float], seed):
+    def __init__(self, PTL, Lm: float, rp: float, load_beam_offset: float, num_layers: int, ap: Optional[float],
+                 seed,atom_state):
         # PTL: object of ParticleTracerLatticeClass
         # Lm: hardedge length of magnet.
         # load_beam_offset: Expected diameter of loading beam. Used to set the maximum combiner bending
@@ -45,7 +47,7 @@ class CombinerLensSim(CombinerIdeal):
 
         assert all(val > 0 for val in (Lm, rp, load_beam_offset, num_layers))
         assert ap < rp if ap is not None else True
-        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0)
+        CombinerIdeal.__init__(self, PTL, Lm, None, None, None, None, None, 1.0,atom_state)
 
         # ----num points depends on a few paremters to be the same as when I determined the optimal values
 
@@ -56,7 +58,7 @@ class CombinerLensSim(CombinerIdeal):
         self.load_beam_offset = load_beam_offset
         self.PTL = PTL
         self.magnet_widths = None
-        self.field_fact: float = -1.0 if PTL.lattice_type == 'injector' else 1.0
+        self.field_fact: float = STATE_FIELD_FACT[atom_state]
         self.space = None
         self.magnet: MagneticLens = None
 
@@ -72,8 +74,7 @@ class CombinerLensSim(CombinerIdeal):
         self.seed = seed
 
     def fill_pre_constrained_parameters(self) -> None:
-        rp_layers, magnet_widths = get_halbach_layers_radii_and_magnet_widths(self.rp, self.num_layers,
-                                                                              use_standard_sizes=self.PTL.use_standard_mag_size)
+        rp_layers, magnet_widths = get_halbach_layers_radii_and_magnet_widths(self.rp, self.num_layers)
         self.magnet_widths = magnet_widths
         self.space = max(rp_layers) * self.fringe_frac_outer
         self.ap = self.max_valid_aperture() if self.ap is None else self.ap

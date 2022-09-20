@@ -8,21 +8,13 @@ from numba_functions_and_objects import combiner_quad_sim_numba_function
 
 class CombinerSim(CombinerIdeal):
 
-    def __init__(self, PTL, combiner_file_name: str, mode: str, size_scale: float = 1.0):
-        # PTL: particle tracing lattice object
-        # combinerFile: File with data with dimensions (n,6) where n is the number of points and each row is
-        # (x,y,z,gradxB,gradyB,gradzB,B). Data must have come from a grid. Data must only be from the upper quarter
-        # quadrant, ie the portion with z>0 and x< length/2
-        # mode: wether the combiner is functioning as a loader, or a circulator.
-        # sizescale: factor to scale up or down all dimensions. This modifies the field strength accordingly, ie
-        # doubling dimensions halves the gradient
-        assert mode in ('injector', 'storage_ring')
+    def __init__(self, PTL, combiner_file_name: str, size_scale: float,atom_state: str):
         assert size_scale > 0 and isinstance(combiner_file_name, str)
         Lm = .187
         ap_left = .015
         ap_right = .025
         ap_z = 6e-3
-        super().__init__(PTL, Lm, np.nan, np.nan, ap_left, ap_right, ap_z, size_scale)
+        super().__init__(PTL, Lm, np.nan, np.nan, ap_left, ap_right, ap_z, size_scale,atom_state)
         self.fringeSpace = 5 * 1.1e-2
         self.combiner_file_name = combiner_file_name
 

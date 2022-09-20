@@ -1,7 +1,14 @@
+import warnings
+from math import sqrt, isnan
+
 import numba
-from constants import GRAVITATIONAL_ACCELERATION
-from math import sqrt,isnan
 import numpy as np
+from numba.core.errors import NumbaPerformanceWarning
+
+from constants import GRAVITATIONAL_ACCELERATION
+
+warnings.filterwarnings("ignore", category=numba.core.errors.NumbaPerformanceWarning)
+
 
 @numba.njit()
 def norm_3D(vec):
@@ -35,6 +42,7 @@ def _transform_To_Next_Element(q, p, r01, r02, ROutEl1, RInEl2):
     p[:2] = ROutEl1 @ p[:2]
     p[:2] = RInEl2 @ p[:2]
     return q, p
+
 
 @numba.njit()
 def multi_step_verlet(qEln, pEln, T, T_max, h, force_func):
@@ -74,8 +82,8 @@ def multi_step_verlet(qEln, pEln, T, T_max, h, force_func):
         T += h
         # if collisionRate!=0.0 and np.random.rand() < h * collisionRate:
         #     px, py, pz = post_collision_momentum((px, py, pz), (x, y, z), collision_params)
-        
-        
+
+
 @numba.njit()
 def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
     # pylint: disable = E, W, R, C
@@ -84,20 +92,19 @@ def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
     px, py, pz = pEln
     Fx, Fy, Fz = force_func(x, y, z)
     Fz = Fz - GRAVITATIONAL_ACCELERATION  # simulated mass is 1kg always
-    q_vals,p_vals=[[x,y,z]],[[px,py,pz]]
+    q_vals, p_vals = [[x, y, z]], [[px, py, pz]]
     if isnan(Fx) or T >= T_max:
         is_particle_clipped = True
         qEln, pEln = (x, y, z), (px, py, pz)
-        return qEln, qEln, pEln, T, is_particle_clipped,q_vals,p_vals
+        return qEln, qEln, pEln, T, is_particle_clipped, q_vals, p_vals
     is_particle_clipped = False
     while True:
         if T >= T_max:
             p_el, q_el = (px, py, pz), (x, y, z)
-            return q_el, q_el, p_el, T, is_particle_clipped,q_vals,p_vals
+            return q_el, q_el, p_el, T, is_particle_clipped, q_vals, p_vals
         x = x + px * h + .5 * Fx * h ** 2
         y = y + py * h + .5 * Fy * h ** 2
         z = z + pz * h + .5 * Fz * h ** 2
-
 
         Fx_n, Fy_n, Fz_n = force_func(x, y, z)
         Fz_n = Fz_n - GRAVITATIONAL_ACCELERATION  # simulated mass is 1kg always
@@ -108,12 +115,12 @@ def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
             zo = z - (pz * h + .5 * Fz * h ** 2)
             p_el, q_el, qEl_o = (px, py, pz), (x, y, z), (xo, yo, zo)
             is_particle_clipped = True
-            return q_el, qEl_o, p_el, T, is_particle_clipped,q_vals,p_vals
+            return q_el, qEl_o, p_el, T, is_particle_clipped, q_vals, p_vals
         px = px + .5 * (Fx_n + Fx) * h
         py = py + .5 * (Fy_n + Fy) * h
         pz = pz + .5 * (Fz_n + Fz) * h
-        q_vals.append([x,y,z])
-        p_vals.append([px,py,pz])
+        q_vals.append([x, y, z])
+        p_vals.append([px, py, pz])
         Fx, Fy, Fz = Fx_n, Fy_n, Fz_n
         T += h
         # if collisionRate!=0.0 and np.random.rand() < h * collisionRate:
@@ -121,7 +128,7 @@ def multi_step_verlet_with_logging(qEln, pEln, T, T_max, h, force_func):
 
 
 @numba.njit()
-def momentum_correction_at_bounday(E0, q_el, p_el, magnetic_potential, force,direction):
+def momentum_correction_at_bounday(E0, q_el, p_el, magnetic_potential, force, direction):
     # a small momentum correction because the potential doesn't go to zero, nor do i model overlapping potentials
     assert direction in ('entering', 'leaving')
     Fx, Fy, Fz = force(q_el[0], q_el[1], q_el[2])

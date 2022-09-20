@@ -101,7 +101,7 @@ class HalbachLensSim(LensIdeal):
         :return: tuple of transverse widths of magnets
         """
         if magnet_widths_proposed is None:
-            magnet_widths = tuple(halbach_magnet_width(rp, use_standard_sizes=self.PTL.use_standard_mag_size) for
+            magnet_widths = tuple(halbach_magnet_width(rp) for
                                   rp in rp_layers)
         else:
             assert len(magnet_widths_proposed) == len(rp_layers)

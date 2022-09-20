@@ -12,7 +12,7 @@ def test_sim_and_matrix_similiarity():
     rp = .01
     L = .2
     L_drift = .025
-    PTL = ParticleTracerLattice(lattice_type='storage_ring')
+    PTL = ParticleTracerLattice()
     PTL.add_drift(L_drift)
     PTL.add_halbach_lens_sim(rp, L)
     # PTL.add_segmented_halbach_bender(.0254 / 2.0, rp, 30, 1.0)

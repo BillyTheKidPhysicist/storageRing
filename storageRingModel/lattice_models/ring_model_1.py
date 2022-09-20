@@ -5,7 +5,7 @@ from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import meter_to_cm
 from lattice_models.lattice_model_functions import add_drift_if_needed, add_split_bend, \
-    add_combiner_and_OP, initialize_ring_lattice, finish_ring_lattice
+    add_combiner_and_OP_ring, initialize_ring_lattice, finish_ring_lattice
 from lattice_models.lattice_model_parameters import system_constants
 from lattice_models.utilities import LockedDict
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
@@ -68,7 +68,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
                         system_constants['rp_combiner'])
 
     # ---combiner + OP magnet-----
-    add_combiner_and_OP(lattice, system_constants['rp_combiner'], ring_params['Lm_combiner'],
+    add_combiner_and_OP_ring(lattice, system_constants['rp_combiner'], ring_params['Lm_combiner'],
                         ring_params['load_beam_offset'], rp_lens2, options, 'Circulating')
 
     # ---lens after combiner---

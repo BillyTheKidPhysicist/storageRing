@@ -65,7 +65,6 @@ class StorageRingModel:
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False,
                  use_bumper: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
-        assert lattice_ring.lattice_type == 'storage_ring' and lattice_injector.lattice_type == 'injector'
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
         self.lattice_injector = lattice_injector
