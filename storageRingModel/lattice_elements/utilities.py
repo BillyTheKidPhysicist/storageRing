@@ -179,19 +179,26 @@ def shape_field_data_2D(data: ndarray) -> tuple[ndarray, ...]:
 
 
 class ElementDimensionError(Exception):
-    """Some dimension of an element is causing an unphysical configuration. Rather general error"""
+    def __init__(self):
+        message = """A dimension of an element is causing an unphysical configuration. Rather general error"""
+        super().__init__(message)
 
 
 class ElementTooShortError(Exception):
-    """An element is too short. Because space is required for fringe fields this can result in negative material
-    lengths, or nullify my approximation that fields drop to 1% when the element ends."""
+    def __init__(self):
+        message = """An element is too short. Because space is required for fringe fields this can result in negative
+            material lengths, or nullify the approximation that fields drop to 1% when the element ends."""
+        super().__init__(message)
 
 
 class CombinerIterExceededError(Exception):
-    """When solving for the geometry of the combiner, Newton's method is used to set the offset. Throw this if
-    iterations are exceeded"""
+    def __init__(self):
+        message = """An excessive number of iterations have used with by the solver for
+         determining combiner parameters"""
+        super().__init__(message)
 
 
 class CombinerDimensionError(Exception):
-    """Not all configurations of combiner parameters are valid. For one thing, the beam needs to fit into the
-    combiner."""
+    def __init__(self):
+        message = """A dimension of the combiner has an invalid value"""
+        super().__init__(message)

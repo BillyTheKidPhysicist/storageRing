@@ -22,6 +22,7 @@ from math import pi
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import meter_to_cm
+from lattice_elements.lens_sim import HalbachLensSim
 from lattice_models.lattice_model_functions import (add_drift_if_needed, check_and_format_params,
                                                     add_split_bend_with_lens, add_combiner_and_OP_ring,
                                                     initialize_ring_lattice, finish_ring_lattice)
@@ -36,7 +37,7 @@ ring_param_bounds: LockedDict = LockedDict({
     'rp_bend': (.005, .012),
     'rp_apex_lens': (.005, .012),
     'L_apex_lens': (.001, .1),
-    'L_Lens1': (.1, .6),
+    'L_Lens1': (1e-6, .3),
     'L_Lens2': (.1, .7)
 })
 
@@ -55,7 +56,7 @@ injector_params_optimal = LockedDict({
     "L1": .298,  # length of first lens
     "rp1": 0.01824404317562657,  # bore radius of first lens
     "L2": 0.23788459956313238,  # length of first lens
-    "rp2": 0.03,  # bore radius of first lens
+    "rp2": 0.03,  # bore radius of second lens
     "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
     "load_beam_offset": 0.009704452870607685,  # offset of incoming beam into combiner
     "gap1": 0.10615316973237765,  # separation between source and first lens
@@ -73,6 +74,7 @@ num_ring_params = 8
 
 def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> ParticleTracerLattice:
     ring_params = check_and_format_params(ring_params, num_ring_params)
+    ring_params.super_special_change_item('L_Lens1', 1e-6)
     lattice = initialize_ring_lattice(options)
     rp_lens2 = ring_constants['rp_lens2']
     rp_lens1 = ring_constants['rp_lens1']
@@ -87,7 +89,8 @@ def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> Particle
     # add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens1, rp_bend)
 
     # ----lens before combiner
-    lattice.add_halbach_lens_sim(rp_lens1, L_lens1)
+    if not HalbachLensSim.is_lens_too_short(L_lens1, rp_lens1):
+        lattice.add_halbach_lens_sim(rp_lens1, L_lens1)
 
     # ----gap before combiner
     add_drift_if_needed(lattice, system_constants["pre_combiner_gap"], 'lens', 'combiner', rp_lens1,

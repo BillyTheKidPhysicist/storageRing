@@ -24,7 +24,7 @@ def force(x0, y0, z0, params, field_data):
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
 
-        if 0.0 <= x <= space:
+        if -eps <= x <= space:
             # print(x,y,z,Lm,space)
             Fx, Fy, Fz = force_interp_3D(x, y, z, field_data_external)
         elif space < x <= symmetry_plane_x:
@@ -61,7 +61,7 @@ def magnetic_potential(x, y, z, params, field_data):
         symmetry_plane_x = Lm / 2 + space  # field symmetry plane location
         y = abs(y)  # confine to upper right quadrant
         z = abs(z)
-        if 0.0 <= x <= space:
+        if -eps <= x <= space:
             V = magnetic_potential_interp_3D(x, y, z, field_data_external)
         elif space < x <= symmetry_plane_x:
             V = magnetic_potential_interp_3D(x, y, z, field_data_internal)
@@ -88,7 +88,7 @@ def is_coord_in_vacuum(x, y, z, params):
     assert FLAT_WALL_VACUUM_THICKNESS > standOff
     if not -ap <= z <= ap:  # if outside the z apeture (vertical)
         return False
-    elif -eps <= x <= (
+    elif 0 <= x <= (
             Lb + FLAT_WALL_VACUUM_THICKNESS) * eps_fact:  # particle is in the horizontal section (in element frame) that passes
         # through the combiner.
         if np.sqrt(y ** 2 + z ** 2) < ap:

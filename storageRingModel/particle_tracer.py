@@ -1,4 +1,3 @@
-import warnings
 from math import isnan
 from typing import Optional
 
@@ -8,12 +7,12 @@ from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from helper_tools import is_close_all
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
-    CombinerSim, CombinerLensSim
+    CombinerSim, CombinerLensSim,Drift
 from particle import Particle
 from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
     fast_qNew
-
 from type_hints import ndarray
+
 
 class ElementTooShortError(Exception):
     pass
@@ -136,20 +135,17 @@ class ParticleTracer:
 
         return self.particle
 
-    def does_particle_survive_to_end(self):
-        """
-        Check if a particle survived to the end of a lattice. This is only intended for lattices that aren't closed.
-        This isn't straight forward because the particle tracing stops when the particle is outside the lattice, then
-        the previous position is the final position. Thus, it takes a little extra logic to find out wether a particle
-        actually survived to the end in an unclosed lattice
-
-        :return: True if particle survived to end, False if not
-        """
-
-        assert not self.PTL.is_closed
+    def time_step_to_end_of_last_el(self):
+        """Return the time required to a particle to travel to the end of the last element assuming inside the last
+        element"""
+        #IMPROVEMENT: CLEAN THIS UP
         el_last = self.el_list[-1]
+        assert self.current_el is el_last
         if isinstance(el_last, LensIdeal):
-            time_step_to_end = (el_last.L - self.q_el[0]) / self.p_el[0]
+            if type(el_last) is Drift and (el_last.input_tilt_angle!=0 or el_last.output_tilt_angle!=0):
+                raise NotImplementedError
+            else:
+                time_step_to_end = (el_last.L - self.q_el[0]) / self.p_el[0]
         elif isinstance(el_last, CombinerIdeal):
             time_step_to_end = self.q_el[0] / -self.p_el[0]
         elif type(el_last) is BenderIdeal:
@@ -157,15 +153,14 @@ class ParticleTracer:
         elif type(el_last) is BenderSim:
             time_step_to_end = (-el_last.L_cap - self.q_el[1]) / self.p_el[1]
         else:
-            warnings.warn('not implemented, falling back to previous behaviour')
-            return self.particle.clipped
+            raise NotImplementedError
+        return time_step_to_end
 
-        if not 0 <= time_step_to_end <= self.h:
-            clipped = True
-        else:
-            qElEnd = self.q_el + .99 * time_step_to_end * self.p_el
-            clipped = not el_last.is_coord_inside(qElEnd)
-        return clipped
+    def log_params_if_enabled(self):
+        if self.use_fast_mode is False and self.logTracker % self.steps_per_logging == 0:
+            if not self.particle.clipped:  # nothing to update if particle clipped
+                self.particle.log_params(self.current_el, self.q_el, self.p_el)
+        self.logTracker += 1
 
     def time_step_loop(self) -> None:
         while True:
@@ -175,25 +170,35 @@ class ParticleTracer:
             if self.use_fast_mode is False:  # either recording data at each step
                 # or the element does not have the capability to be evaluated with the much faster multi_step_verlet
                 self.time_step_verlet()
-                if self.use_fast_mode is False and self.logTracker % self.steps_per_logging == 0:
-                    if not self.particle.clipped:  # nothing to update if particle clipped
-                        self.particle.log_params(self.current_el, self.q_el, self.p_el)
-                self.logTracker += 1
+                self.log_params_if_enabled()
             else:
                 self.multi_step_verlet()
             if self.particle.clipped:
                 break
             self.T += self.h
             self.particle.T = self.T
+        self.handle_lattice_end()
 
-        if not self.PTL.is_closed:
-            if self.current_el is self.el_list[-1] and self.particle.clipped:  # only bother if particle is
-                # in last element
-                self.particle.clipped = self.does_particle_survive_to_end()
+    def handle_lattice_end(self) -> None:
+        """
+        Walk a particle up to the end of the lattice. This is only intended for lattices that aren't closed.
+        This isn't straight forward because the particle tracing stops when the particle is outside the lattice, then
+        the previous position is the final position. Thus, it takes a little extra logic to find out wether a particle
+        actually survived to the end in an unclosed lattice, then move it to the end
+        """
+        time_step_fact = 1.0 - 1e-9  # IMPROVEMENT: REMOVE THIS, BUT HAVE TO MAKE SURE THAT FUNCTIONS CAN HANDLE COORDINATES
+        # RIGHT ON OR JUST OVER BOUNDARIES
+        if self.particle.clipped and not self.PTL.is_closed and self.current_el is self.el_list[-1]:
+            dt = self.time_step_to_end_of_last_el()
+            if 0 <= dt <= self.h and self.T + dt <= self.T0:
+                q_new = self.q_el + dt * self.p_el * time_step_fact
+                if self.current_el.is_coord_inside(q_new):
+                    self.q_el = q_new
+                    self.T += dt
+                    self.particle.clipped = False
+                    self.log_params_if_enabled()
 
     def multi_step_verlet(self) -> None:
-        # collision_params = get_Collision_Params(self.current_el, self.PTL.design_speed) if \
-        #     self.use_collisions else (np.nan,np.nan,np.nan,np.nan,np.nan,np.nan)
         results = multi_step_verlet(self.q_el, self.p_el, self.T, self.T0, self.h,
                                     self.current_el.numba_functions['force'])
         q_el_new, self.q_el[:], self.p_el[:], self.T, particleOutside = results

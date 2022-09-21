@@ -116,12 +116,17 @@ class HalbachLensSim(LensIdeal):
             magnet_widths = magnet_widths_proposed
         return magnet_widths
 
+    @classmethod
+    def is_lens_too_short(cls, L, rp):
+        """If a lens is shorter than half the bore radius, this makes my physical model dubious"""
+        Lm = L - 2 * cls.fringe_frac_outer * rp
+        return Lm < .5 * rp
+
     def fill_geometric_params(self) -> None:
         """Compute dependent geometric values"""
         assert self.L is not None  # must be initialized at this point
         self.Lm = self.L - 2 * self.fringe_frac_outer * max(self.rp_layers)  # hard edge length of magnet
-        if self.Lm < .5 * self.rp:  # If less than zero, unphysical. If less than .5rp, this can screw up my assumption
-            # about fringe fields
+        if self.is_lens_too_short(self.L, self.rp):
             raise ElementTooShortError
         self.individualMagnetLength = min(
             [(MAGNET_ASPECT_RATIO * min(self.magnet_widths)), self.Lm])  # this may get rounded
@@ -169,8 +174,8 @@ class HalbachLensSim(LensIdeal):
             num_points_x = np.clip(num_points_x, 0, num_points_x_max)
             num_points_r = round_and_make_odd(self.num_points_r * 2)
 
-        num_points_x, num_points_r = self.round_lens_points_to_max_spacing(x_min, x_max, y_min, y_max,
-                                                                           num_points_x, num_points_r)
+            num_points_x, num_points_r = self.round_lens_points_to_max_spacing(x_min, x_max, y_min, y_max,
+                                                                               num_points_x, num_points_r)
         x_arr = np.linspace(x_min, x_max, num_points_x)
         y_arr_quadrant = np.linspace(y_min, y_max, num_points_r)
         z_arr_quadrant = y_arr_quadrant.copy()
@@ -249,9 +254,9 @@ class HalbachLensSim(LensIdeal):
         assert F_edge / F_center < .015
 
     def update_field_fact(self, field_strength_fact: float) -> None:
-        """Update value used to model magnet strength tunability. field_fact multiplies force and magnetic potential to
+        """Update value used to model magnet strength tuneability. field_fact multiplies force and magnetic potential to
         model increasing or reducing magnet strength """
-        warnings.warn("extra field sources are being ignore here. Funcitnality is currently broken")
+        warnings.warn("extra field sources are being ignore here. Functionality is currently broken")
         self.field_fact = field_strength_fact
-        warnings.warn("this method does not account for neigboring magnets!!")
+        warnings.warn("this method does not account for neighboring magnets!!")
         self.build_fast_field_helper()

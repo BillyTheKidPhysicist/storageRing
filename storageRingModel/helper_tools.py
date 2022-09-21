@@ -2,6 +2,7 @@ import copy
 import itertools
 import math
 import random
+import sys
 import time
 import warnings
 from contextlib import contextmanager
@@ -14,6 +15,8 @@ from scipy.stats.qmc import Sobol
 
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT
 from type_hints import RealNum, sequence, ndarray
+
+eps = sys.float_info.epsilon
 
 
 def parallel_evaluate(func: Callable, args: Any, results_as_arr: bool = False, processes: int = -1,

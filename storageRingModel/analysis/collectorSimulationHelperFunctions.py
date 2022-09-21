@@ -3,6 +3,7 @@ Functions and classes to aid in analysis of collector lens, the big 6 layer lens
 """
 
 import warnings
+from math import isclose
 from typing import Callable
 
 import matplotlib.pyplot as plt
@@ -144,7 +145,7 @@ class CollectorSwarmAnalyzer:
 
     def __init__(self, swarm: Swarm, lattice: ParticleTracerLattice):
         self.check_swarm(swarm)
-        assert lattice.initial_ang == 0.0
+        assert isclose(lattice.initial_ang, 0, abs_tol=1e-12)
         self.swarm = swarm
         self.pf_vals = np.array([particle.pf for particle in swarm])
         self.qf_vals = np.array([particle.qf for particle in swarm])
@@ -154,13 +155,14 @@ class CollectorSwarmAnalyzer:
 
     def linspace(self, num_points):
         """
-        Linespace (like np.linspace) over the valid region of interpolation
+        linespace (like np.linspace) over the valid region of interpolation
 
         :param num_points:
         :return:
         """
-        assert self.x_max - self.x_min > 2e-6
-        return np.linspace(self.x_min + 1e-6, self.x_max - 1e-6, num_points)
+        small_offset = 1e-9
+        assert self.x_max - self.x_min > 2 * small_offset
+        return np.linspace(self.x_min + small_offset, self.x_max - small_offset, num_points)
 
     def end_drift_x_min_max(self):
         return self.lattice.el_list[-1].r1[0], self.lattice.el_list[-1].r2[0]
