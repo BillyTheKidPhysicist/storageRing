@@ -1,3 +1,7 @@
+"""
+Contains objects and functions for producing magnetic fields from permanent magnets, lenses and benders.
+"""
+
 import copy
 from numbers import Number
 from demag_functions import mesh_cuboid

@@ -74,7 +74,6 @@ num_ring_params = 8
 
 def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> ParticleTracerLattice:
     ring_params = check_and_format_params(ring_params, num_ring_params)
-    ring_params.super_special_change_item('L_Lens1', 1e-6)
     lattice = initialize_ring_lattice(options)
     rp_lens2 = ring_constants['rp_lens2']
     rp_lens1 = ring_constants['rp_lens1']

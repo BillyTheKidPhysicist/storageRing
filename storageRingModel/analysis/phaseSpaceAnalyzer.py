@@ -134,15 +134,16 @@ class SwarmPoincare:
         stepFraction = (s_poincare - qo1[0]) / (qo2[0] - qo1[0])
         qoSnapShot = self._interpolate_Array(qo_arr, indexBefore, stepFraction)
         poSnapShot = self._interpolate_Array(po_arr, indexBefore, stepFraction)
-        if np.any(np.isnan(poSnapShot)):
-            print(qoSnapShot,poSnapShot)
-            print(particle.T,indexBefore,stepFraction)
-            print(po_arr[indexBefore-1],po_arr[indexBefore],po_arr[indexBefore+1])
-            print(qo_arr[indexBefore-1],qo_arr[indexBefore],qo_arr[indexBefore+1])
+        #IMPROVEMENT: FIX THE NO ORBIT COORDS IN COMBINER PROBLEM
+        # if np.any(np.isnan(poSnapShot)):
+        #     print(qoSnapShot,poSnapShot)
+        #     print(particle.T,indexBefore,stepFraction)
+        #     print(po_arr[indexBefore-1],po_arr[indexBefore],po_arr[indexBefore+1])
+        #     print(qo_arr[indexBefore-1],qo_arr[indexBefore],qo_arr[indexBefore+1])
         ESnapShot = self._interpolate_Array(E_arr, indexBefore, stepFraction)
         qLabSnapShot=self._interpolate_Array(particle.q_vals, indexBefore, stepFraction)
         pLabSnapShot=self._interpolate_Array(particle.p_vals, indexBefore, stepFraction)
-        assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot)) # this can occure because
+        # assert not np.any(np.isnan(poSnapShot)) and not np.any(np.isnan(pLabSnapShot)) # this can occure because
         # a particle is in the bender. IMPROVEMENT: fix this
         return ESnapShot, qoSnapShot, poSnapShot,qLabSnapShot,pLabSnapShot
 
