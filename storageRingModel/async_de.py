@@ -46,7 +46,7 @@ class AsyncSolver:
                 num_processes = workers
             else:
                 raise ValueError
-            self.pool = multiprocessing.Pool(processes=num_processes, maxtasksperchild=10)
+            self.pool = multiprocessing.Pool(processes=num_processes, maxtasksperchild=1)
         else:  # for using other apply_async type methods
             self.pool = workers
 

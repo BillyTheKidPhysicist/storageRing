@@ -188,9 +188,8 @@ class MagnetBender(MagneticOptic):
         self.magnet_width = magnet_width
 
     def make_magpylib_magnets(self, use_pos_mag_angs_only: bool, use_half_cap_end: tuple[bool, bool],
-                              num_lenses: int, include_mag_errors: bool, use_full_method_of_moments: bool = False):
+                              num_lenses: int, include_mag_errors: bool):
         """Return magpylib magnet model representing a portion or all of the bender"""
-        use_approx_method_of_moments = not use_full_method_of_moments
         with temporary_seed(self.seed):
             bender_field_generator = HalbachBender(self.rp, self.rb, self.uc_angle, self.Lm,
                                                    self.magnet_grade,
@@ -199,13 +198,12 @@ class MagnetBender(MagneticOptic):
                                                    use_solenoid_field=self.use_solenoid,
                                                    include_mag_errors=include_mag_errors,
                                                    magnet_width=self.magnet_width,
-                                                   use_approx_method_of_moments=use_approx_method_of_moments)
+                                                   use_approx_method_of_moments=True)
         return bender_field_generator
 
-    def magpylib_magnets_model(self, include_mag_errors, use_full_method_of_moments=False) -> Collection:
+    def magpylib_magnets_model(self, include_mag_errors) -> Collection:
         """Return full magpylib magnet model of bender"""
-        return self.make_magpylib_magnets(True, (True, True), self.num_lenses,
-                                          include_mag_errors, use_full_method_of_moments=use_full_method_of_moments)
+        return self.make_magpylib_magnets(True, (True, True), self.num_lenses,include_mag_errors)
 
     def magpylib_magnets_internal_model(self) -> Collection:
         """Return full magpylib magnet model representing repeating interior region of bender"""

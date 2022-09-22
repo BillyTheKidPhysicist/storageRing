@@ -203,10 +203,11 @@ class CombinerLensSim(CombinerIdeal):
         """Make x values (through axis) of interpolation grid for full combiner. Trick is that values must extend beyond
         the limits of the combiner interpolation region (x_interp_min,x_interp_max) and line up exactly at the hard 
         edges of the combiner (x_mag_min,x_mag_max)"""
-        full_interp_field_length = self.full_interpolation_length()
-        magnet_center_x = self.space + self.Lm / 2
-        x_interp_min = magnet_center_x - full_interp_field_length / 2.0 - TINY_INTERP_STEP
-        x_interp_max = magnet_center_x + full_interp_field_length / 2.0 + TINY_INTERP_STEP
+        x_interp_max = self.full_interpolation_length()+TINY_INTERP_STEP
+        x_interp_min=0.0-TINY_INTERP_STEP
+        # magnet_center_x = self.space + self.Lm / 2
+        # x_interp_min = magnet_center_x - full_interp_field_length / 2.0 - TINY_INTERP_STEP
+        # x_interp_max = magnet_center_x + full_interp_field_length / 2.0 + TINY_INTERP_STEP
         delta_nominal = self.rp / (self.PTL.field_dens_mult * self.num_points_per_rad_in_x)
         x_mag_min, x_mag_max = self.space, self.space + self.Lm
 
@@ -236,7 +237,7 @@ class CombinerLensSim(CombinerIdeal):
 
     def make_grid_coords_arrays_external_symmetry(self) -> tuple[ndarray, ndarray, ndarray]:
         # IMPROVEMENT: something is wrong here with the interp stuff. There is out of bounds error very rarely in tests
-        x_min = self.space + self.Lm / 2 - self.full_interpolation_length() / 2.0
+        x_min = 2*self.space + self.Lm - self.full_interpolation_length()
         x_max = self.space + TINY_INTERP_STEP
         num_x = self.num_points_x_interp(x_min, x_max)
         z_min = - TINY_INTERP_STEP

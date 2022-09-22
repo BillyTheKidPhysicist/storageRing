@@ -26,7 +26,7 @@ from lattice_elements.lens_sim import HalbachLensSim
 from lattice_models.lattice_model_functions import (add_drift_if_needed, check_and_format_params,
                                                     add_split_bend_with_lens, add_combiner_and_OP_ring,
                                                     initialize_ring_lattice, finish_ring_lattice)
-from lattice_models.lattice_model_parameters import system_constants
+from lattice_models.lattice_model_parameters import system_constants,DEFAULT_SYSTEM_OPTIONS
 from lattice_models.utilities import LockedDict
 from particle_tracer_lattice import ParticleTracerLattice
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
@@ -73,6 +73,8 @@ num_ring_params = 8
 
 
 def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> ParticleTracerLattice:
+    if options is None: #IMPROVEMENT: IMPLEMENT THIS BETTER AND ADD EVERYWHERE
+        options=DEFAULT_SYSTEM_OPTIONS
     ring_params = check_and_format_params(ring_params, num_ring_params)
     lattice = initialize_ring_lattice(options)
     rp_lens2 = ring_constants['rp_lens2']

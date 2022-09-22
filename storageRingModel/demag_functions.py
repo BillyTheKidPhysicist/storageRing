@@ -3,7 +3,8 @@
 import magpylib as magpy
 # pylint: disable=invalid-name, redefined-outer-name
 import numpy as np
-
+import copy
+from magpylib import Collection
 
 def mesh_cuboid(cuboid, nnn):
     """
@@ -28,7 +29,7 @@ def mesh_cuboid(cuboid, nnn):
     pos = cuboid.position
     rot = cuboid.orientation
     dim = cuboid.dimension
-    mag = cuboid.magnetization
+    mag = cuboid.magnetization0
 
     # secure input type
     nnn = np.array(nnn, dtype=int)
@@ -42,7 +43,14 @@ def mesh_cuboid(cuboid, nnn):
     grid = rot.apply(grid) + pos
 
     # create cells as magpylib objects and return Collection
-    cells = [magpy.magnet.Cuboid(mag, new_dim, pp, rot) for pp in grid]
+    cells=[]
+    for pp in grid:
+        cube=magpy.magnet.Cuboid(mag, new_dim, pp, rot)
+        cube.mur=copy.copy(cuboid.mur)
+        cube.magnetization0=cuboid.magnetization0.copy()
+        cells.append(cube)
+
+    # cells = [magpy.magnet.Cuboid(mag, new_dim, pp, rot) for pp in grid]
 
     return magpy.Collection(cells)
 
@@ -140,7 +148,7 @@ def invert(matrix, solver):
 
 
 def apply_demag(
-        collection,
+        collection_input,
         solver='np.linalg.inv',
         demag_store=False,
         demag_load=False,
@@ -169,14 +177,14 @@ def apply_demag(
     -------
     None
     '''
-
+    collection=Collection(collection_input)
     # in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
     # system
     xi = [src.mur - 1.0 for src in collection.sources_all]
     n = len(collection.sources_all)
 
     # set up mr
-    mag = [src.orientation.apply(src.magnetization) for src in collection.sources_all]  # ROTATION CHECK
+    mag = [src.orientation.apply(src.magnetization0) for src in collection.sources_all]  # ROTATION CHECK
     mag = np.reshape(mag, (3 * n, 1), order='F')  # shape ii = x1, ... xn, y1, ... yn, z1, ... zn
 
     # set up S
@@ -208,3 +216,4 @@ def apply_demag(
 
     for s, mag in zip(collection.sources_all, mag_new):
         s.magnetization = s.orientation.inv().apply(mag)  # ROTATION CHECK
+    collection_input.parent=None

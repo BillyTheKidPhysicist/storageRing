@@ -25,7 +25,8 @@ from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_2D
 class HalbachLensSim(LensIdeal):
     fringe_frac_outer: float = 1.5
     fringe_frac_inner_min = 4.0  # if the total hard edge magnet length is longer than this value * rp, then it can
-    num_points_per_rp_x = 25
+    num_points_per_rp_x_symmetry = 10
+    num_points_per_rp_x_full = 25
     num_points_r = 25
     max_spacing = 1e-3
 
@@ -159,13 +160,14 @@ class HalbachLensSim(LensIdeal):
         y_min, y_max = -TINY_INTERP_STEP, self.rp - INTERP_MAGNET_MATERIAL_OFFSET  # must be self.ap so that
         # misalingment stuff works
         x_min, x_max = -TINY_INTERP_STEP, self.L_cap + TINY_INTERP_STEP
-        points_per_length = self.num_points_per_rp_x / self.rp
+        points_per_length = self.num_points_per_rp_x_symmetry / self.rp
         num_points_x = round_and_make_odd(points_per_length * x_max)
         num_points_r = self.num_points_r
         if not use_symmetry:  # range will have to fully capture lens.
             y_min = -y_max
             x_max = self.L + TINY_INTERP_STEP
             x_min = -TINY_INTERP_STEP
+            points_per_length = self.num_points_per_rp_x_full / self.rp
             num_points_x = round_and_make_odd(self.L * points_per_length)
             num_points_x_max = 1001
             if num_points_x > num_points_x_max:

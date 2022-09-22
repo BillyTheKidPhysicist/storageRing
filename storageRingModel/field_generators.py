@@ -273,7 +273,7 @@ class Collection(_Collection):
 
 
 class Cuboid(_Cuboid):
-    def __init__(self, mur: float = 1.0, *args, **kwargs):  # todo: change default to 1.05
+    def __init__(self, mur: float = 1.05, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mur = mur
         self.magnetization0 = self.magnetization.copy()

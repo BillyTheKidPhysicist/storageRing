@@ -183,8 +183,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnet_width = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.1321432           ,  0.00516255155109532 ,-0.008145265872362703])
-        pf0 = np.array([-201.14880323739555 ,   -3.793505197250757,    4.931954481391578])
+        qf0 = np.array([-0.13214319999913782 ,  0.005162850354508727,-0.008145749937194772])
+        pf0 = np.array([-201.1493562250371   ,   -3.792850043802939 ,4.9308715521928095])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -383,8 +383,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5271509684648263e-01,  7.0909927481484477e-03,-1.8854995353329571e-04])
-        pf0 = np.array([-200.93616612463057  ,    1.3732481410737705,7.7133453110329455])
+        qf0 = np.array([-2.5271509618135329e-01,  7.0910031365820888e-03,-1.8857045668740362e-04])
+        pf0 = np.array([-200.936192083587    ,    1.3731872007862163,7.7133183731993   ])
         super().__init__(CombinerLensSim, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
