@@ -276,13 +276,15 @@ xi_DEFAULT = .05
 xi_TRAN_DEFAULT = .15
 
 
-def susceptibility_vector(magnetization: sequence) -> ndarray:
-    """Return the susceptibilty vector aligned according to the magnetization. Here it is assumed that the
+def susceptibility_tensor(magnetization: sequence) -> ndarray:
+    """Return the susceptibilty tensor aligned according to the magnetization. Here it is assumed that the
     magnetization easy axis is aligned along the maximum magnetization value"""
-    xi = np.zeros(3)
+    xi = np.zeros((3, 3))
     idx_direction = np.argmax(np.abs(magnetization))
-    xi[idx_direction] = xi_DEFAULT
-    xi[idx_direction - 1] = xi[idx_direction - 2] = xi_TRAN_DEFAULT
+    idx1 = idx_direction - 1
+    idx2 = idx_direction - 2
+    xi[idx_direction, idx_direction] = xi_DEFAULT
+    xi[idx1, idx1] = xi[idx2, idx2] = xi_TRAN_DEFAULT
     return xi
 
 
@@ -291,7 +293,7 @@ class Cuboid(_Cuboid):
         super().__init__(*args, **kwargs)
         self.magnetization0 = self.magnetization.copy()
         # self.mur=1.05
-        self.xi = susceptibility_vector(self.magnetization0)
+        self.xi = susceptibility_tensor(self.magnetization0)
 
 
 class Layer(Collection):

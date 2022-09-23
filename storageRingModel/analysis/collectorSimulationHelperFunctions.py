@@ -65,6 +65,11 @@ def make_Radial_Signal_Arr(y_arr: np.ndarray, z_arr: np.ndarray, vxArr: np.ndarr
         signalErrArr = np.append(signalErrArr, signalErrArrTemp)
     return r_arr, signalArr, signalErrArr
 
+def shift_to_COM(y_arr,z_arr):
+    y_arr-=np.mean(y_arr)
+    z_arr-=np.mean(z_arr)
+    return y_arr,z_arr
+
 
 def check_collector_lattice_is_expected(lattice: ParticleTracerLattice):
     assert len(lattice) == 3
@@ -73,7 +78,8 @@ def check_collector_lattice_is_expected(lattice: ParticleTracerLattice):
     assert type(middle_el) is HalbachLensSim
 
 
-def build_collector_lattice(interp_density_mult=2.0, ap=None, direction=0.0) -> ParticleTracerLattice:
+def build_collector_lattice(interp_density_mult=2.0, ap=None, direction=0.0,atom_speed=210.0,
+                            use_mag_errors=False) -> tuple[ParticleTracerLattice,float]:
     distance_nozzle = 72e-2
     magnet_widths = (.0254, 1.5 * .0254)
     rp_layers = (.05, .05 + magnet_widths[0])
@@ -84,12 +90,15 @@ def build_collector_lattice(interp_density_mult=2.0, ap=None, direction=0.0) -> 
     lens_element_length = magnet_length + 2 * fringe_field_length
 
     lattice = ParticleTracerLattice(initial_ang=direction, field_dens_mult=interp_density_mult,
-                                    magnet_grade='N40', use_long_range_fields=False)
+                                    magnet_grade='N40', use_long_range_fields=False,design_speed=atom_speed,
+                                    include_mag_errors=use_mag_errors)
     lattice.add_drift(pre_lens_drift_length, ap=rp_layers[1])
     lattice.add_halbach_lens_sim(rp_layers, lens_element_length, ap=ap, magnet_width=magnet_widths)
     lattice.add_drift(post_lens_drift_length, rp_layers[1])
     lattice.end_lattice()
-    return lattice
+    ap=lattice.el_list[1].ap
+    angle_max=1e2*ap/72
+    return lattice,angle_max
 
 
 def val_at_cumulative_fraction(values: np.ndarray, fraction: float) -> float:
@@ -204,12 +213,22 @@ class CollectorSwarmAnalyzer:
             return_args.append(valid_indices)
         return return_args
 
-    def D_90(self, x_position: float) -> float:
+    def D_90(self, x_position: float,use_COM=False) -> float:
         y_arr, z_arr = self.interpolate(x_position)
+        if use_COM:
+            y_arr,z_arr=shift_to_COM(y_arr,z_arr)
         r_arr = np.sqrt(y_arr ** 2 + z_arr ** 2)
         R90 = val_at_cumulative_fraction(r_arr, .9)
         D90 = 2 * R90
         return D90
+
+    def COLC(self,x_position: float, use_COM=False)-> float:
+        """Return the diameter of the circle that captures all particle. Results are in mm"""
+        y_arr, z_arr = self.interpolate(x_position)
+        if use_COM:
+            y_arr,z_arr=shift_to_COM(y_arr,z_arr)
+        r_arr = np.sqrt(y_arr ** 2 + z_arr ** 2)
+        return 2*np.max(r_arr)
 
     def S_90(self, x_position: float, speed_trans_max: float = np.inf, r_max: float = np.inf) -> float:
         speed_trans = self.transverse_speeds(x_position, speed_trans_max, r_max)

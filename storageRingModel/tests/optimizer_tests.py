@@ -14,8 +14,8 @@ def run_test_1():
     cost, flux, = model.mode_match(parallel=True)
     T_elapsed=time.time() - t
     print(cost, flux,T_elapsed)
-    cost0=0.880124957485288
-    flux0= 305.238918395218
+    cost0=0.8802566240034166
+    flux0= 304.9036547349885
     T_elapsed0=130
     assert isclose(cost,cost0,abs_tol=1e-6)
     assert isclose(flux,flux0,abs_tol=1e-6)

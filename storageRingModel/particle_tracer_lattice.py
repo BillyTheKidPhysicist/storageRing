@@ -103,7 +103,7 @@ class ParticleTracerLattice:
         if type(el) in (BenderIdeal, BenderSim):
             self.bender_indices.append(el.index)
 
-    def add_drift(self, L: RealNum, ap: RealNum = .03, input_tilt_angle: RealNum = 0.0,
+    def add_drift(self, L: RealNum, ap: RealNum = .05, input_tilt_angle: RealNum = 0.0,
                   output_tilt_angle: RealNum = 0.0, outer_half_width: RealNum = None) -> None:
         """
         Add drift region, which is field free region, to the lattice

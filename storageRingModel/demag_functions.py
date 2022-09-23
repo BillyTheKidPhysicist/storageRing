@@ -149,6 +149,38 @@ def invert(matrix, solver):
     raise ValueError('Bad solver input.')
 
 
+def map_index(k, n):
+    """Return the index that maps a matrix with row/col edge =[x1,y1,z1,...,xn,yn,zn]
+    to row/col edge= [x1,x2,...,xn,y1,y2,...yn,z1,z2,zn] form provided index k. n is number of xyz combos"""
+    dim = 3
+    if k < n:
+        k0 = k * dim
+    elif n <= k < 2 * n:
+        k0 = (k - n) * dim + 1
+    elif 2 * n <= k < 3 * n:
+        k0 = (k - 2 * n) * dim + 2
+    else:
+        raise ValueError
+    return k0
+
+
+def S_tensor(collection, n) -> np.ndarray:
+    """Return the S tensor for method of moments"""
+    S0 = np.zeros((3 * n, 3 * n))
+    for i, src in enumerate(collection.sources_all):
+        R = src.orientation.as_matrix()
+        R_inv = src.orientation.inv().as_matrix()
+        x = R @ (src.xi @ R_inv)
+        S0[3 * i:3 * i + 3, 3 * i:3 * i + 3] = x
+    S = np.zeros(S0.shape)
+    for i in range(S.shape[0]):
+        for j in range(S.shape[1]):
+            i0 = map_index(i, n)
+            j0 = map_index(j, n)
+            S[i, j] = S0[i0, j0]
+    return S
+
+
 def apply_demag(
         collection_input,
         solver='np.linalg.inv',
@@ -182,20 +214,12 @@ def apply_demag(
     collection = Collection(collection_input)
     # in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
     # system
-    xi = [src.xi for src in collection.sources_all]
     n = len(collection.sources_all)
-
+    S = S_tensor(collection, n)
     # set up mr
     mag = [src.orientation.apply(src.magnetization0) for src in collection.sources_all]  # ROTATION CHECK
     mag = np.reshape(mag, (3 * n, 1), order='F')  # shape ii = x1, ... xn, y1, ... yn, z1, ... zn
 
-    # set up S
-    xi = np.array(xi).ravel()
-    if len(xi) != 3 * n:
-        raise ValueError('Apply_demag input collection and xi must have same length.')
-    S = np.diag(xi)  # shape ii, jj
-
-    # set up T
     T = demag_tensor(
         collection,
         store=demag_store,
