@@ -1,10 +1,12 @@
 """Provided by Dr. Ortner from Austrian Silicon Labs"""
 
+import copy
+
 import magpylib as magpy
 # pylint: disable=invalid-name, redefined-outer-name
 import numpy as np
-import copy
 from magpylib import Collection
+
 
 def mesh_cuboid(cuboid, nnn):
     """
@@ -43,11 +45,11 @@ def mesh_cuboid(cuboid, nnn):
     grid = rot.apply(grid) + pos
 
     # create cells as magpylib objects and return Collection
-    cells=[]
+    cells = []
     for pp in grid:
-        cube=magpy.magnet.Cuboid(mag, new_dim, pp, rot)
-        cube.mur=copy.copy(cuboid.mur)
-        cube.magnetization0=cuboid.magnetization0.copy()
+        cube = magpy.magnet.Cuboid(mag, new_dim, pp, rot)
+        cube.mur = copy.copy(cuboid.mur)
+        cube.magnetization0 = cuboid.magnetization0.copy()
         cells.append(cube)
 
     # cells = [magpy.magnet.Cuboid(mag, new_dim, pp, rot) for pp in grid]
@@ -177,10 +179,10 @@ def apply_demag(
     -------
     None
     '''
-    collection=Collection(collection_input)
+    collection = Collection(collection_input)
     # in order for this to work with coils, I need to have the coils only apply a field, not be part of the matrix
     # system
-    xi = [src.mur - 1.0 for src in collection.sources_all]
+    xi = [src.xi for src in collection.sources_all]
     n = len(collection.sources_all)
 
     # set up mr
@@ -188,10 +190,10 @@ def apply_demag(
     mag = np.reshape(mag, (3 * n, 1), order='F')  # shape ii = x1, ... xn, y1, ... yn, z1, ... zn
 
     # set up S
-    xi = np.array(xi)
-    if len(xi) != n:
+    xi = np.array(xi).ravel()
+    if len(xi) != 3 * n:
         raise ValueError('Apply_demag input collection and xi must have same length.')
-    S = np.diag(np.tile(xi, 3))  # shape ii, jj
+    S = np.diag(xi)  # shape ii, jj
 
     # set up T
     T = demag_tensor(
@@ -216,4 +218,4 @@ def apply_demag(
 
     for s, mag in zip(collection.sources_all, mag_new):
         s.magnetization = s.orientation.inv().apply(mag)  # ROTATION CHECK
-    collection_input.parent=None
+    collection_input.parent = None

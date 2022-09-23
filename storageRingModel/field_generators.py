@@ -4,7 +4,7 @@ Contains objects and functions for producing magnetic fields from permanent magn
 
 import copy
 from numbers import Number
-from demag_functions import mesh_cuboid
+
 import magpylib.current
 import numba
 import numpy as np
@@ -272,11 +272,26 @@ class Collection(_Collection):
         apply_demag(self)
 
 
+xi_DEFAULT = .05
+xi_TRAN_DEFAULT = .15
+
+
+def susceptibility_vector(magnetization: sequence) -> ndarray:
+    """Return the susceptibilty vector aligned according to the magnetization. Here it is assumed that the
+    magnetization easy axis is aligned along the maximum magnetization value"""
+    xi = np.zeros(3)
+    idx_direction = np.argmax(np.abs(magnetization))
+    xi[idx_direction] = xi_DEFAULT
+    xi[idx_direction - 1] = xi[idx_direction - 2] = xi_TRAN_DEFAULT
+    return xi
+
+
 class Cuboid(_Cuboid):
-    def __init__(self, mur: float = 1.05, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.mur = mur
         self.magnetization0 = self.magnetization.copy()
+        # self.mur=1.05
+        self.xi = susceptibility_vector(self.magnetization0)
 
 
 class Layer(Collection):
@@ -284,9 +299,8 @@ class Layer(Collection):
     num_magnets_in_layer = 12
 
     def __init__(self, rp: float, magnet_width: float, length: float, magnet_grade: str, position: sequence = None,
-                 orientation: Rotation = None, mur: float = 1.05,
-                 r_magnet_shift=None, theta_shift=None, phi_shift=None, M_norm_shift_rel=None, dim_shift=None,
-                 R_angle_shift=None, use_method_of_moments=False):
+                 orientation: Rotation = None, r_magnet_shift=None, theta_shift=None, phi_shift=None,
+                 M_norm_shift_rel=None, dim_shift=None, R_angle_shift=None, use_method_of_moments=False):
         super().__init__()
         assert magnet_width > 0.0 and length > 0.0
         assert isinstance(orientation, (type(None), Rotation))
@@ -298,7 +312,6 @@ class Layer(Collection):
         self.dim_shift: ndarray = self.make_Arr_If_None_Else_Copy(dim_shift, num_params=3)
         self.R_angle_shift: ndarray = self.make_Arr_If_None_Else_Copy(R_angle_shift, num_params=2)
         self.rp: tuple = (rp,) * self.num_magnets_in_layer
-        self.mur = mur  # relative permeability
         self.position_to_set = position
         self.orientation_to_set = orientation  # orientation about body frame #todo: this "to set" stuff is pretty wonky
         self.magnet_width: float = magnet_width
@@ -325,7 +338,7 @@ class Layer(Collection):
         orientation_list = self.make_cuboid_orientation_magpy()
         for M_norm, dim, pos, orientation in zip(magnetization_arr, dimension_arr, position_arr, orientation_list):
             box = Cuboid(magnetization=M_norm, dimension=dim,
-                         position=pos, orientation=orientation, mur=self.mur)
+                         position=pos, orientation=orientation)
             self.add(box)
 
         if self.orientation_to_set is not None:
@@ -434,7 +447,6 @@ class HalbachLens(Collection):
         self.num_disks = num_disks
         self.num_layers = len(self.rp)
         self.use_solenoid_field = use_solenoid_field
-        self.mur = 1.05
 
         self.layer_list: list[Layer] = []
         with temporary_seed(seed):  # if None, then no special seeding happens
@@ -452,7 +464,7 @@ class HalbachLens(Collection):
                 layer = Layer(radius_layer, widthLayer, length, magnet_grade=self.magnet_grade,
                               position=(0, 0, z_layer),
                               R_angle_shift=mag_vec_angle_variation, dim_shift=dim_variation,
-                              M_norm_shift_rel=mag_norm_variation, mur=self.mur)
+                              M_norm_shift_rel=mag_norm_variation)
                 self.add(layer)
                 self.layer_list.append(layer)
         if self.use_method_of_moments:  # this must come before adding solenoids because the demag does not play nice with

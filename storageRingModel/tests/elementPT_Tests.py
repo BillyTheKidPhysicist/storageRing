@@ -183,8 +183,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnet_width = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.13214319999913782 ,  0.005162850354508727,-0.008145749937194772])
-        pf0 = np.array([-201.1493562250371   ,   -3.792850043802939 ,4.9308715521928095])
+        qf0 = np.array([-0.13214319999915014 ,  0.005262019360031507,-0.008278873710086787])
+        pf0 = np.array([-201.16340947512688 ,   -3.501144081319432,    4.530612193886393])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -329,8 +329,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.num_lenses * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2628958250906475e-01, 1.8262639201124953e+00,8.1798207878453573e-04])
-        pf0 = np.array([ 156.4668861635784 , -126.11406318501261,   -4.06292085256291])
+        qf0 = np.array([0.6267748812242905   , 1.8270700248598426   ,0.0020332599837510957])
+        pf0 = np.array([ 1.5729215770128400e+02, -1.2514261236039552e+02,-1.2311136952457820e-01])
         super().__init__(BenderSim, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -383,8 +383,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5271509618135329e-01,  7.0910031365820888e-03,-1.8857045668740362e-04])
-        pf0 = np.array([-200.936192083587    ,    1.3731872007862163,7.7133183731993   ])
+        qf0 = np.array([-0.25270712693656966  ,  0.007230078685688739 ,-0.0006729635080915077])
+        pf0 = np.array([-200.95779765990312 ,    1.778816068107785,    7.036925780824555])
         super().__init__(CombinerLensSim, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
