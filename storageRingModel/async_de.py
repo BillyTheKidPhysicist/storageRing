@@ -461,9 +461,9 @@ def load_previous_population(num_to_load, file) -> list[tuple]:
     lowest to highest cost, and num_to_load are returned"""
     data = np.loadtxt(file)
     X = data[:, :- 1]
-    vals = data[:, -1]
-    index_sort = np.argsort(vals)[:num_to_load]
-    population_vals = [(DNA, cost) for DNA, cost in zip(X[index_sort], vals[index_sort])]
+    costs = data[:, -1]
+    index_sort = np.argsort(costs)[:num_to_load]
+    population_vals = [(DNA, cost) for DNA, cost in zip(X[index_sort], costs[index_sort])]
     return population_vals
 
 

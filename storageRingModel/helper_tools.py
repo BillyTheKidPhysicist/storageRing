@@ -1,6 +1,7 @@
 import copy
 import itertools
 import math
+import os
 import random
 import sys
 import time
@@ -134,6 +135,14 @@ def grid_from_bounds(bounds: Iterable, num_points_edge: int) -> ndarray:
     return grid_points
 
 
+def newton_iteration(x1, x2, f1, f2, f0):
+    """A single instance of Newton's method"""
+    slope = (f2 - f1) / (x2 - x1)
+    delta_x = (f0 - f2) / slope
+    x3 = x2 + delta_x
+    return x3
+
+
 def random_num_for_seeding() -> int:
     """Return a random number appropriate to use as a seed with numpy or python"""
     MAX_32_BIT = int(2 ** 31) - 1  # biggest seed size for numpy random
@@ -149,6 +158,14 @@ def is_even(x: int) -> bool:
 def is_odd(x: int) -> bool:
     """Return True if a number is odd, False if it is even"""
     return not is_even(x)
+
+
+def say_done() -> None:
+    """For macos have the computer say the word done"""
+    if sys.platform == "darwin":
+        os.system('say Done')
+    else:
+        warnings.warn("Saying done is only supported on macos for this function")
 
 
 def is_odd_length(values: sequence) -> bool:

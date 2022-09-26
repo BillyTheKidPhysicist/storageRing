@@ -29,7 +29,65 @@ MM_TO_METER = 1e-3  # magpy takes distance in mm
 
 COILS_PER_RADIUS = 4  # number of longitudinal coils per length is this number divided by radius of element
 
-BORE_RADII_MAX_DISTANCE_FACTORS = 7.0
+BORE_RADII_MAX_DISTANCE_FACTOR = 7.0
+
+
+def slice_sheet_width(r, angle):
+    return 2 * np.tan(angle / 2) * r
+
+
+def multipole_magnetized_wedge(n, phi, depth, width_vals, r_vals, L, M0):
+    """Return a discrete wedge of a magnetized multipole material. Many wedges are used to build a model of a
+    continuously magnetized multipole"""
+    # IMPROVEMENT: replace wedges with 4 current sheets. This would be much faster
+    col = Collection()
+    R = Rotation.from_rotvec([0, 0, phi])
+    theta = phi * (n + 1) + np.pi
+    Mx = M0 * np.cos(theta)
+    My = M0 * np.sin(theta)
+    magnetization = (Mx, My, 0)
+    magnetization = R.inv().apply(magnetization)
+    for width, ri in zip(width_vals, r_vals):
+        dimension = np.array([depth, width, L]) * METER_TO_MM
+        position = np.array([ri, 0, 0]) * METER_TO_MM
+        cube = Cuboid(position=position, dimension=dimension, magnetization=magnetization)
+        cube.rotate(R, anchor=0)
+        col.add(cube)
+    return col
+
+
+def valid_indices_distance_cutoff(coords: ndarray, max_dist: float, x0: float, y0: float, z0: float) -> ndarray:
+    """Return the indices that correspond to 'coords' that are within max_dist of 'x0', 'y0' and 'z0'"""
+
+    def valid_indices_range(vals, delta, center):
+        return (vals > center - delta) & (vals < center + delta)
+
+    assert max_dist > 0
+    x_vals, y_vals, z_vals = coords.T
+    x_valid_indices = valid_indices_range(x_vals, max_dist, x0)
+    y_valid_indices = valid_indices_range(y_vals, max_dist, y0)
+    z_valid_indices = valid_indices_range(z_vals, max_dist, z0)
+    valid_indices = np.array(x_valid_indices & y_valid_indices & z_valid_indices)
+    return valid_indices
+
+
+def B_vec_approx(element, coords: ndarray, drop_off_factor: float = BORE_RADII_MAX_DISTANCE_FACTOR) -> ndarray:
+    """Return the approximate B vector. The result is approximate because distances that are very far are ignored."""
+    max_dist = element.length / 2 + max(element.rp) * drop_off_factor
+    x0, y0, z0 = np.array(element.position_meters())
+    valid_indices = valid_indices_distance_cutoff(coords, max_dist, x0, y0, z0)
+    _B_vec = np.zeros(coords.shape)
+    if np.sum(valid_indices) == 0:
+        return _B_vec
+    else:
+        _B_vec[valid_indices] = element.B_vec(coords[valid_indices])
+        return _B_vec
+
+
+def check_grade(magnet_grade: str) -> None:
+    """Check if the provided magnet grade is valid"""
+    if magnet_grade not in GRADE_MAGNETIZATION:
+        raise NotImplementedError("That magnetization grade is not implemented")
 
 
 @numba.njit()
@@ -304,6 +362,7 @@ class Layer(Collection):
                  orientation: Rotation = None, r_magnet_shift=None, theta_shift=None, phi_shift=None,
                  M_norm_shift_rel=None, dim_shift=None, R_angle_shift=None, use_method_of_moments=False):
         super().__init__()
+        check_grade(magnet_grade)
         assert magnet_width > 0.0 and length > 0.0
         assert isinstance(orientation, (type(None), Rotation))
         position = (0.0, 0.0, 0.0) if position is None else position
@@ -394,30 +453,11 @@ class Layer(Collection):
         assert magnetization_all.shape == (self.num_magnets_in_layer, 3)
         return magnetization_all
 
-    def valid_indices(self, coords: ndarray, max_dist: float, x0: float, y0: float, z0: float) -> ndarray:
-        def valid_indices_range(vals, delta, center):
-            return (vals > center - delta) & (vals < center + delta)
-
-        x_vals, y_vals, z_vals = coords.T
-        x_valid_indices = valid_indices_range(x_vals, max_dist, x0)
-        y_valid_indices = valid_indices_range(y_vals, max_dist, y0)
-        z_valid_indices = valid_indices_range(z_vals, max_dist, z0)
-        valid_indices = x_valid_indices & y_valid_indices & z_valid_indices
-        return valid_indices
-
     def B_vec(self, coords: ndarray, use_approx: bool = False) -> ndarray:
         """Return B field vector at each coordinate in 'coords'. If 'use_approx' is specified, then magnets that
         are further than a maximum distance from each coordinate in 'coords' are ignored"""
         if use_approx:
-            max_dist = self.length / 2 + max(self.rp) * BORE_RADII_MAX_DISTANCE_FACTORS
-            x0, y0, z0 = np.array(self.position_meters())
-            valid_indices = self.valid_indices(coords, max_dist, x0, y0, z0)
-            _B_vec = np.zeros(coords.shape)
-            if np.sum(valid_indices) == 0:
-                return _B_vec
-            else:
-                _B_vec[valid_indices] = super().B_vec(coords[valid_indices])
-                return _B_vec
+            return B_vec_approx(self, coords)
         else:
             return super().B_vec(coords)
 
@@ -430,6 +470,7 @@ class HalbachLens(Collection):
                  num_disks: int = 1, use_method_of_moments=False, use_standard_mag_errors=False,
                  use_solenoid_field: bool = False, seed=None):
         super().__init__()
+        check_grade(magnet_grade)
         assert length > 0.0
         assert (isinstance(num_disks, int) and num_disks >= 1)
         assert isinstance(orientation, (type(None), Rotation))
@@ -545,6 +586,7 @@ class HalbachBender(Collection):
                  use_approx_method_of_moments: bool = False):
         # todo: by default I think it should be positive angles only
         super().__init__()
+        check_grade(magnet_grade)
         assert all(isinstance(value, Number) for value in (rp, rb, UCAngle, Lm)) and isinstance(num_lenses, int)
         assert not (use_approx_method_of_moments and use_method_of_moments)
         self.use_half_cap_end = (False, False) if use_half_cap_end is None else use_half_cap_end
@@ -656,7 +698,62 @@ class HalbachBender(Collection):
             self.add(loop)
 
 
-element_magnets = (HalbachBender, HalbachLens)
+class WedgeHalbachLens(Collection):
+    """
+    A model of an ideally magnetized multipole. This is approximated as a series of wedges, which are themselves made
+    of a series of narrow cuboids
+    """
+
+    def __init__(self, rp, length, width, magnet_grade: str, num_wedges=48, num_sheets=30):
+        """
+
+        :param rp: Bore radius of the multipole, meter.
+        :param length: Length of the multipole, meter.
+        :param magnet_grade: Magnet grade of the multipole.
+        :param width: radial material width of the multipole, meter.
+        :param num_wedges: Number of wedges in theta. More wedges is more accurate
+        :param num_sheets: Number of cuboids in each wedge. More cuboids is more accurate
+        """
+        super().__init__()
+        check_grade(magnet_grade)
+        self.num_sheets = num_sheets
+        self.rp = rp
+        self.r2 = self.rp + width
+        self.num_wedges = num_wedges
+        self.length = length
+        self.magnet_grade = magnet_grade
+        self.build()
+
+    def build(self):
+        """Build the collection of magpylib Cuboids."""
+        order = 3
+        slice_angle = 2 * np.pi / self.num_wedges
+        depth = (self.r2 - self.rp) / self.num_sheets
+        r_vals = []
+        width_vals = []
+        for i in range(self.num_sheets):
+            r_edge = self.rp if len(r_vals) == 0 else r_vals[i - 1] + depth / 2
+            width_i = slice_sheet_width(r_edge, slice_angle)
+            ri = r_edge + depth / 2
+            r_vals.append(ri)
+            width_vals.append(width_i)
+
+        M0 = GRADE_MAGNETIZATION[self.magnet_grade] * SI_MagnetizationToMagpy
+        phi_vals = np.linspace(0, 2 * np.pi, self.num_wedges + 1)[:-1]
+        for phi in phi_vals:
+            wedge = multipole_magnetized_wedge(order, phi, depth, width_vals, r_vals, self.length, M0)
+            self.add(wedge)
+
+    def B_vec(self, coords: ndarray, use_approx: bool = False) -> ndarray:
+        """Return B field vector at each coordinate in 'coords'. If 'use_approx' is specified, then magnets that
+        are further than a maximum distance from each coordinate in 'coords' are ignored"""
+        if use_approx:
+            return B_vec_approx(self, coords)
+        else:
+            return super().B_vec(coords)
+
+
+element_magnets = (HalbachBender, HalbachLens, WedgeHalbachLens)
 
 
 def can_magnet_use_approx(magnet):

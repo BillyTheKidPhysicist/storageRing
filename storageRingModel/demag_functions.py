@@ -25,7 +25,6 @@ def mesh_cuboid(cuboid, nnn):
     discretization: magpylib.Collection
         Collection of Cuboid cells
     """
-    print(f'Meshing Cuboid with {nnn}')
 
     # load cuboid properties
     pos = cuboid.position
@@ -48,7 +47,7 @@ def mesh_cuboid(cuboid, nnn):
     cells = []
     for pp in grid:
         cube = magpy.magnet.Cuboid(mag, new_dim, pp, rot)
-        cube.mur = copy.copy(cuboid.mur)
+        cube.xi = copy.copy(cuboid.xi)
         cube.magnetization0 = cuboid.magnetization0.copy()
         cells.append(cube)
 

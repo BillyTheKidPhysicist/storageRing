@@ -18,6 +18,7 @@ from storage_ring_modeler import StorageRingModel, DEFAULT_SIMULATION_TIME
 from type_hints import sequence
 
 
+# IMPROVEMENT: THIS IS REALLY FRAGILE. SHOULD BE MADE MORE GENERAL
 class Solution:
     """class to hold onto results of each solution"""
 
@@ -70,17 +71,14 @@ def build_lattice_params_dict(params, which: str, ring_version: str) -> dict:
 
 class Solver:
     def __init__(self, which_system, ring_version: str, ring_params=None, injector_params=None,
-                 use_solenoid_field=False,
-                 use_collisions=False,
-                 use_energy_correction=False, num_particles=1024, use_bumper=False, use_standard_tube_OD=False,
-                 sim_time_max=DEFAULT_SIMULATION_TIME, use_long_range_fields=False):
-        assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+                 use_solenoid_field=False, use_collisions=False, num_particles=1024, use_bumper=False,
+                 use_standard_tube_OD=False, sim_time_max=DEFAULT_SIMULATION_TIME, use_long_range_fields=False):
+        assert which_system in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
         self.which_system = which_system
         self.ring_version = ring_version
         self.ring_params = ring_params
         self.injector_params = injector_params
         self.use_collisions = use_collisions
-        self.use_energy_correction = use_energy_correction
         self.num_particles = num_particles
         self.sim_time_max = sim_time_max
         self.storage_ring_system_options = {
@@ -97,9 +95,9 @@ class Solver:
         if self.which_system == 'ring':
             ring_params = params
             injector_params = self.injector_params
-        elif self.which_system == 'injector_Surrogate_Ring':
+        elif self.which_system == 'injector_with_surrogate_ring':
             injector_params = params
-        elif self.which_system == 'injector_Actual_Ring':
+        elif self.which_system == 'injector_with_ring':
             ring_params = self.ring_params
             injector_params = params
         else:
@@ -116,7 +114,7 @@ class Solver:
 
     def build_lattices(self, params):
         ring_params, injector_params = self.unpack_params(params)
-        if self.which_system == 'injector_Surrogate_Ring':
+        if self.which_system == 'injector_with_surrogate_ring':
             lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params, self.ring_version,
                                                                            self.storage_ring_system_options)
         else:
@@ -135,7 +133,7 @@ class Solver:
     def _solve(self, params: tuple[float, ...]) -> Solution:
         model = self.make_system_model(params)
         floor_plan_cost_cutoff = .1
-        if self.which_system == 'injector_Surrogate_Ring':
+        if self.which_system == 'injector_with_surrogate_ring':
             floor_plan_cost = model.floor_plan_cost_with_tunability()
             if floor_plan_cost > floor_plan_cost_cutoff:
                 cost = model.max_swarm_cost + floor_plan_cost
@@ -168,7 +166,7 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
     """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
     Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
     default list of values to ignore"""
-    assert which_bounds in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+    assert which_bounds in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
     ring_param_bounds = get_ring_bounds(ring_version)
     injector_param_bounds = get_injector_bounds()
     bounds_ring = np.array(list(ring_param_bounds.values()))
@@ -177,7 +175,7 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
     keys_injector = list(injector_param_bounds.keys())
     if which_bounds == 'ring':
         bounds, keys = bounds_ring, keys_ring
-    elif which_bounds in ('injector_Surrogate_Ring', 'injector_Actual_Ring'):
+    elif which_bounds in ('injector_with_surrogate_ring', 'injector_with_ring'):
         bounds, keys = bounds_injector, keys_injector
     else:
         bounds, keys = np.array([*bounds_ring, *bounds_injector]), [*keys_ring, *keys_injector]
@@ -198,14 +196,12 @@ def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_facto
 
 def get_cost_function(which_system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
                       use_solenoid_field, use_bumper, num_particles, use_standard_tube_OD,
-                      use_energy_correction, use_long_range_fields) -> Callable[[tuple], float]:
+                      use_long_range_fields) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
     solver = Solver(which_system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
-                    use_bumper=use_bumper,
-                    num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
-                     injector_params=injector_params, use_energy_correction=use_energy_correction,
-                    use_long_range_fields=use_long_range_fields)
+                    use_bumper=use_bumper, num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
+                    injector_params=injector_params, use_long_range_fields=use_long_range_fields)
 
     def cost(params: tuple[float, ...]) -> float:
         sol = solver.solve(params)
@@ -238,7 +234,7 @@ def initial_params_from_optimal(which_system, ring_version) -> tuple[float, ...]
                                 *list(get_optimal_injector_params(ring_version).values())])
     elif which_system == 'ring':
         params_optimal = tuple(ring_params_optimal_without_combiner(ring_version).values())
-    elif which_system in ('injector_Surrogate_Ring', 'injector_Actual_Ring'):
+    elif which_system in ('injector_with_surrogate_ring', 'injector_with_ring'):
         params_optimal = tuple(get_optimal_injector_params(ring_version).values())
     else:
         raise NotImplementedError
@@ -271,25 +267,22 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
 
 
 def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, ring_params: tuple = None,
-             shrink_bounds_range_factor=np.inf,
-             time_out_seconds=np.inf,
-             disp=True, processes=-1, local_optimizer='simple_line', use_solenoid_field: bool = False,
-             use_bumper: bool = False, local_search_region=.01, num_particles=1024,
-             use_standard_tube_OD=False, injector_params=None,
-             use_energy_correction=False, progress_file: str = None, initial_vals: sequence = None,
-             save_population: str = None, use_long_range_fields=False, init_pop_file=None):
+             shrink_bounds_range_factor=np.inf, time_out_seconds=np.inf, disp=True, processes=-1,
+             local_optimizer='simple_line', use_solenoid_field: bool = False, use_bumper: bool = False,
+             local_search_region=.01, num_particles=1024, use_standard_tube_OD=False, injector_params=None,
+             progress_file: str = None, initial_vals: sequence = None, save_population: str = None,
+             use_long_range_fields=False, init_pop_file=None):
     """Optimize a model of the ring and injector"""
-    assert which_system in ('ring', 'injector_Surrogate_Ring', 'injector_Actual_Ring', 'both')
+    assert which_system in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
-    assert ring_params is not None if which_system == 'injector_Actual_Ring' else True
+    assert ring_params is not None if which_system == 'injector_with_ring' else True
     assert injector_params is not None if which_system == 'ring' else True
     assert xi == 'optimal' if isinstance(xi, str) else True
     xi = initial_params_from_optimal(which_system, ring_version) if xi == 'optimal' else xi
     bounds = make_bounds(which_system, ring_version)
     cost_func = get_cost_function(which_system, ring_version, ring_params, injector_params, use_solenoid_field,
-                                  use_bumper, num_particles, use_standard_tube_OD,
-                                  use_energy_correction, use_long_range_fields)
+                                  use_bumper, num_particles, use_standard_tube_OD, use_long_range_fields)
     if method == 'global':
         bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else bounds
         x_optimal, cost_min = _global_optimize(cost_func, bounds, time_out_seconds, processes, disp,

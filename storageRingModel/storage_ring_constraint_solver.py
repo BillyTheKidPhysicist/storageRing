@@ -3,8 +3,8 @@ from typing import Union
 import numpy as np
 
 from helper_tools import is_close_all
-from lattice_elements.elements import Drift, BenderSim, CombinerLensSim, HalbachLensSim, \
-    LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim
+from lattice_elements.elements import (Drift, BenderSim, CombinerLensSim, HalbachLensSim,
+                                       LensIdeal, BenderIdeal, CombinerIdeal, CombinerSim)
 from storage_ring_placement.shapes import Line, Kink, CappedSlicedBend, Bend, LineWithAngledEnds
 from storage_ring_placement.storage_ring_geometry import StorageRingGeometry
 from storage_ring_placement.storage_ring_geometry_solver import StorageRingGeometryConstraintsSolver
@@ -18,7 +18,7 @@ def _get_Target_Radii(PTL) -> float:
 
     radii = []
     for element in PTL:
-        if type(element) is BenderSim:
+        if isinstance(element, BenderIdeal):
             radii.append(element.ro)
     for radius in radii[1:]:
         assert radius == radii[0]  # different target radii is not supported now

@@ -42,6 +42,10 @@ class HalbachLensSim(LensIdeal):
         # self.numGridPointsX = round_and_make_odd(21 * PTL.field_dens_mult)
         self.fringe_field_length = max(rp_layers) * self.fringe_frac_outer
         super().__init__(PTL, L, None, self.rp, None)
+        self.num_points_r = round_and_make_odd(self.num_points_r * self.PTL.field_dens_mult)
+        self.num_points_per_rp_x_full = self.num_points_per_rp_x_full * self.PTL.field_dens_mult
+        self.num_points_per_rp_x_symmetry = self.num_points_per_rp_x_symmetry * self.PTL.field_dens_mult
+        self.max_spacing = self.max_spacing / self.PTL.field_dens_mult
         self.magnet_widths = self.make_or_check_magnet_widths(rp_layers, magnet_widths)
         self.ap = self.max_valid_aperture() if ap is None else ap
         assert self.ap <= self.max_interp_radius()
