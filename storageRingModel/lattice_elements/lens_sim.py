@@ -122,7 +122,7 @@ class HalbachLensSim(LensIdeal):
         return magnet_widths
 
     @classmethod
-    def is_lens_too_short(cls, L, rp):
+    def is_lens_too_short(cls, rp, L):
         """If a lens is shorter than half the bore radius, this makes my physical model dubious"""
         Lm = L - 2 * cls.fringe_frac_outer * rp
         return Lm < .5 * rp
@@ -131,7 +131,7 @@ class HalbachLensSim(LensIdeal):
         """Compute dependent geometric values"""
         assert self.L is not None  # must be initialized at this point
         self.Lm = self.L - 2 * self.fringe_frac_outer * max(self.rp_layers)  # hard edge length of magnet
-        if self.is_lens_too_short(self.L, self.rp):
+        if self.is_lens_too_short(self.rp, self.L):
             raise ElementTooShortError
         self.individualMagnetLength = min(
             [(MAGNET_ASPECT_RATIO * min(self.magnet_widths)), self.Lm])  # this may get rounded
@@ -180,8 +180,8 @@ class HalbachLensSim(LensIdeal):
             num_points_x = np.clip(num_points_x, 0, num_points_x_max)
             num_points_r = round_and_make_odd(self.num_points_r * 2)
 
-            num_points_x, num_points_r = self.round_lens_points_to_max_spacing(x_min, x_max, y_min, y_max,
-                                                                               num_points_x, num_points_r)
+            # num_points_x, num_points_r = self.round_lens_points_to_max_spacing(x_min, x_max, y_min, y_max,
+            #                                                                    num_points_x, num_points_r)
         x_arr = np.linspace(x_min, x_max, num_points_x)
         y_arr_quadrant = np.linspace(y_min, y_max, num_points_r)
         z_arr_quadrant = y_arr_quadrant.copy()

@@ -10,9 +10,17 @@ from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SY
 from lattice_models.utilities import LockedDict
 from particle_tracer import ParticleTracer
 from particle_tracer_lattice import ParticleTracerLattice
+from type_hints import RealNum
 
+# improvement: do this timestep stuff better
 h: float = 1e-5  # timestep, s. Assumed to be no larger than this
 min_time_step_gap = 1.1 * h * DEFAULT_ATOM_SPEED * ParticleTracer.minTimeStepsPerElement
+
+
+def add_lens_if_long_enough(lattice: ParticleTracerLattice, rp: RealNum, L: RealNum) -> None:
+    """Add a lens to the lattice if long enough to satisfy fringe field requirements"""
+    if not HalbachLensSim.is_lens_too_short(rp, L):
+        lattice.add_halbach_lens_sim(rp, L)
 
 
 def set_cominer_seed_if_unset(options: LockedDict):
@@ -42,8 +50,7 @@ def add_drift_if_needed(lattice: ParticleTracerLattice, gap_length: float, el_be
     """Sometimes the fringe field gap is enough to accomodate the minimum desired separation between elements.
     Otherwise a gap needs to be added. The drift will have a minimum length, so the total gap may be larger in some
     cases"""
-
-    assert gap_length >= 0 and el_after_rp > 0 and el_before_rp > 0
+    assert gap_length >= 0 and el_after_rp >= 0 and el_before_rp >= 0
     extra_space = gap_length - (
             el_fringe_space(el_before_name, el_before_rp) + el_fringe_space(el_after_name, el_after_rp))
     if extra_space > 0:

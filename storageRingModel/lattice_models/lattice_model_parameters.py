@@ -8,6 +8,7 @@ from constants import DEFAULT_ATOM_SPEED
 from helper_tools import inch_to_meter
 from lattice_models.utilities import LockedDict
 
+# IMPROVEMENT: rename to system
 realNumber = (float, int, np.float64, np.int64)
 
 INJECTOR_TUNABILITY_LENGTH = 2e-2
@@ -16,6 +17,11 @@ DEFAULT_SYSTEM_OPTIONS = LockedDict({'include_mag_errors': False, 'combiner_seed
                                      'has_bumper': False, 'use_standard_tube_OD': False,
                                      'include_mag_cross_talk_in_ring': False,
                                      'include_misalignments': False, 'build_field_helpers': True})
+
+combiner_param_bounds: LockedDict = LockedDict({
+    "Lm_combiner": (.05, .25),  # hard edge length of combiner
+    "load_beam_offset": (1e-3, 30e-3),  # assumed diameter of incoming beam
+})
 
 # flange outside diameters
 flange_OD: LockedDict = LockedDict({

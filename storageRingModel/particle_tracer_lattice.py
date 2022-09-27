@@ -22,6 +22,9 @@ from type_hints import ndarray, RealNum
 benderTypes = Union[BenderIdeal, BenderSim]
 number = (int, float)
 
+class FirstElementCombinerError(Exception):
+    def __init__(self,message):
+        super().__init__(message)
 
 class ParticleTracerLattice:
 
@@ -303,7 +306,7 @@ class ParticleTracerLattice:
         # catch any preliminary errors. Alot of error handling happens in other methods. This is a catch all for other
         # kinds. This class is not meant to have tons of error handling, so user must be cautious
         if isinstance(self.el_list[0], CombinerIdeal):  # first element can't be a combiner element
-            raise Exception('FIRST ELEMENT CANT BE A COMBINER')
+            raise FirstElementCombinerError('FIRST ELEMENT CANT BE A COMBINER')
         if len(self.bender_indices) >= 2:  # if there are two benders they must be the same.
             bender1 = self.el_list[self.bender_indices[0]]
             for i in self.bender_indices:

@@ -173,6 +173,11 @@ def is_odd_length(values: sequence) -> bool:
     return is_odd(len(values))
 
 
+def unpack_dictionary(a) -> tuple[list, list]:
+    """Return the keys and items in separate list of dictionary 'a'"""
+    return list(a.keys()), list(a.values())
+
+
 def radians(value_in_degrees: RealNum) -> float:
     return (value_in_degrees / 180) * np.pi
 

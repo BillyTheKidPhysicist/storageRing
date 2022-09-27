@@ -22,24 +22,24 @@ With drift regions in between as needed for spacing requirements
 
 from lattice_models.lattice_model_functions import (add_drift_if_needed, check_and_format_params,
                                                     add_split_bend_with_lens, add_combiner_and_OP_ring,
-                                                    initialize_ring_lattice)
+                                                    initialize_ring_lattice, add_lens_if_long_enough)
 from lattice_models.lattice_model_parameters import system_constants
 from lattice_models.utilities import LockedDict
 from particle_tracer_lattice import ParticleTracerLattice
 
 ring_param_bounds: LockedDict = LockedDict({
-    'rp_lens1': (.005, .04),
-    'rp_lens2': (.005, .04),
-    'rp_lens3': (.005, .04),
-    'rp_lens4': (.005, .04),
+    'rp_lens1': (.005, .03),
+    'rp_lens2': (.005, .03),
+    'rp_lens3': (.005, .03),
+    'rp_lens4': (.005, .03),
     'rp_lens5_6': (.005, .03),
     'rp_bend': (.005, .012),
     'rp_apex_lens': (.005, .012),
     'L_apex_lens': (.001, .2),
-    'L_Lens1': (.1, .6),
-    'L_Lens2': (.1, .6),
-    'L_Lens3': (.1, .6),
-    'L_Lens4': (.1, .6)
+    'L_Lens1': (0, .5),
+    'L_Lens2': (0, .5),
+    'L_Lens3': (.1, .5),
+    'L_Lens4': (.1, .5)
 })
 
 num_ring_params = 14
@@ -65,11 +65,14 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
     # add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens1, rp_bend)
 
     # ----two lensese before combiner
-    lattice.add_halbach_lens_sim(rp_lens1, L_lens1)
-    lattice.add_halbach_lens_sim(rp_lens2, L_lens2)
+    add_lens_if_long_enough(lattice, rp_lens1, L_lens1)
+    add_lens_if_long_enough(lattice, rp_lens2, L_lens2)
+
+    el_before_name = 'bender' if len(lattice) == 0 else 'lens'
+    el_before_rp = rp_bend if len(lattice) == 0 else lattice[-1].rp
 
     # ----gap before combiner
-    add_drift_if_needed(lattice, system_constants["pre_combiner_gap"], 'lens', 'combiner', rp_lens1,
+    add_drift_if_needed(lattice, system_constants["pre_combiner_gap"], el_before_name, 'combiner', el_before_rp,
                         system_constants['rp_combiner'])
 
     # ---combiner + OP magnet-----
@@ -83,7 +86,7 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
 
     # -----gap between lens and bender input
 
-    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens2, rp_bend)
+    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens4, rp_bend)
 
     # -----first split bender---------
 

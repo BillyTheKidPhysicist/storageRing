@@ -45,9 +45,10 @@ injector_constants = LockedDict({
     # "bendTubeODMax": inch_to_meter(3 / 4) ,
     "sourceToLens1_Inject_Gap": .05,  # gap between source and first lens. Shouldn't have first lens on top of source
     "lens1ToLens2_Inject_Gap": inch_to_meter(5.9),  # pumps and valve
-    "lens1ToLens2_Valve_Ap": inch_to_meter(.75),  # aperture (ID/2) for valve #2 3/4
-    "lens1ToLens2_Valve_Length": inch_to_meter(3.25),  # includes flanges and screws
-    "lens1ToLens2_Inject_Valve_OD": flange_OD['2-3/4']  # outside diameter of valve
+    "lens1ToLens2_Valve_Ap": inch_to_meter(2.5)/2.0,  # aperture (ID/2) for valve with 63 CF flange
+    "lens1ToLens2_Valve_Length": inch_to_meter(4.05),  # includes flanges and valve body width. For copper
+    # sealed valve from lesker
+    "lens1ToLens2_Inject_Valve_OD": flange_OD['4-1/2']  # outside diameter of valve
 })
 
 injector_param_bounds: LockedDict = LockedDict({
@@ -55,8 +56,6 @@ injector_param_bounds: LockedDict = LockedDict({
     "rp1": (.01, .03),  # bore radius of first lens
     "L2": (.15, .3),  # length of second lens
     "rp2": (.01, .03),  # bore radius of second lens
-    "Lm_combiner": (.05, .25),  # hard edge length of combiner
-    "load_beam_offset": (1e-3, 30e-3),  # assumed diameter of incoming beam
     "gap1": (.05, .4),  # separation between source and first lens
     "gap2": (.05, .4),  # separation between two lenses
     "gap3": (.05, .4)  ##separation between final lens and input to combnier

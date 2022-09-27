@@ -22,11 +22,11 @@ from math import pi
 from constants import TUBE_WALL_THICKNESS
 from constants import gas_masses
 from helper_tools import meter_to_cm
-from lattice_elements.lens_sim import HalbachLensSim
 from lattice_models.lattice_model_functions import (add_drift_if_needed, check_and_format_params,
                                                     add_split_bend_with_lens, add_combiner_and_OP_ring,
-                                                    initialize_ring_lattice, finish_ring_lattice)
-from lattice_models.lattice_model_parameters import system_constants,DEFAULT_SYSTEM_OPTIONS
+                                                    initialize_ring_lattice, finish_ring_lattice,
+                                                    add_lens_if_long_enough)
+from lattice_models.lattice_model_parameters import system_constants, DEFAULT_SYSTEM_OPTIONS
 from lattice_models.utilities import LockedDict
 from particle_tracer_lattice import ParticleTracerLattice
 from vacuum_modeling.vacuum_analyzer import VacuumSystem, solve_vac_system
@@ -57,12 +57,36 @@ injector_params_optimal = LockedDict({
     "rp1": 0.01824404317562657,  # bore radius of first lens
     "L2": 0.23788459956313238,  # length of first lens
     "rp2": 0.03,  # bore radius of second lens
-    "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
-    "load_beam_offset": 0.009704452870607685,  # offset of incoming beam into combiner
     "gap1": 0.10615316973237765,  # separation between source and first lens
     "gap2": 0.22492222955994753,  # separation between two lenses
-    "gap3": 0.22148833301792942  ##separation between final lens and input to combiner
+    "gap3": 0.22148833301792942,  ##separation between final lens and input to combiner
+    "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
+    "load_beam_offset": 0.009704452870607685  # offset of incoming beam into combiner
 })
+
+## other opitimized results. Gives better results, but one of the inejector lenses are really short
+# ring_params_optimal = {
+#     'rp_lens3_4': 0.02993927,
+#     'rp_bend': 0.00936603,
+#     'rp_apex_lens': 0.00739481,
+#     'L_apex_lens': 0.05746266,
+#     'L_Lens1': 0.25936528,  # length of lens before combiner
+#     'L_Lens2': 0.47411631,  # length of lens after combiner
+#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
+#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
+# }
+#
+# injector_params_optimal = LockedDict({
+#     "L1": 0.09590905,  # length of first lens
+#     "rp1": 0.02739994,  # bore radius of first lens
+#     "L2": 0.17497488,  # length of first lens
+#     "rp2": 0.02931619,  # bore radius of second lens
+#     "gap1": 0.18274109,  # separation between source and first lens
+#     "gap2": 0.30202736,  # separation between two lenses
+#     "gap3": 0.38947434,  ##separation between final lens and input to combiner
+#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
+#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
+# })
 
 ring_constants = LockedDict({
     'rp_lens2': .04,
@@ -73,8 +97,8 @@ num_ring_params = 8
 
 
 def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> ParticleTracerLattice:
-    if options is None: #IMPROVEMENT: IMPLEMENT THIS BETTER AND ADD EVERYWHERE
-        options=DEFAULT_SYSTEM_OPTIONS
+    if options is None:  # IMPROVEMENT: IMPLEMENT THIS BETTER AND ADD EVERYWHERE
+        options = DEFAULT_SYSTEM_OPTIONS
     ring_params = check_and_format_params(ring_params, num_ring_params)
     lattice = initialize_ring_lattice(options)
     rp_lens2 = ring_constants['rp_lens2']
@@ -90,8 +114,7 @@ def make_ring_lattice(ring_params: dict, options: LockedDict = None) -> Particle
     # add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens1, rp_bend)
 
     # ----lens before combiner
-    if not HalbachLensSim.is_lens_too_short(L_lens1, rp_lens1):
-        lattice.add_halbach_lens_sim(rp_lens1, L_lens1)
+    add_lens_if_long_enough(lattice, rp_lens1, L_lens1)
 
     # ----gap before combiner
     add_drift_if_needed(lattice, system_constants["pre_combiner_gap"], 'lens', 'combiner', rp_lens1,

@@ -6,6 +6,7 @@ from async_de import solve_async
 from helper_tools import shrink_bounds_around_vals
 from lattice_elements.utilities import CombinerDimensionError
 from lattice_elements.utilities import ElementTooShortError as ElementTooShortErrorFields
+from lattice_models.lattice_model_parameters import combiner_param_bounds
 from lattice_models.system_model import get_optimal_ring_params, get_optimal_injector_params
 from lattice_models.system_model import make_system_model, get_ring_bounds, get_injector_bounds, \
     make_surrogate_ring_for_injector, make_injector_lattice
@@ -69,12 +70,114 @@ def build_lattice_params_dict(params, which: str, ring_version: str) -> dict:
     return dict(zip(keys, params))
 
 
+def bounds_and_keys(scheme, ring_version):
+    """Return the total bounds for ring,injector,combiner and corresponding keys. Bounds is a list  like
+    [(lower,upp),..] and keys is a tuple of 3 lists corresponding to ring,injector,combiner. These keys are used to
+     construct the dictionaries for bulding injector and ring from the raw paremeters from optimization"""
+    ring_param_bounds = get_ring_bounds(ring_version)
+    injector_param_bounds = get_injector_bounds()
+    ring_param_keys = list(ring_param_bounds.keys())
+    injector_param_keys = list(injector_param_bounds.keys())
+    combiner_param_keys = list(combiner_param_bounds.keys())
+    if scheme == 'ring':
+        injector_param_keys = []
+        bounds = [*ring_param_bounds.values(), *combiner_param_bounds.values()]
+    elif scheme == 'both':
+        bounds = [*ring_param_bounds.values(), *injector_param_bounds.values(), *combiner_param_bounds.values()]
+    elif scheme == 'injector_with_surrogate_ring':
+        ring_param_keys = []
+        raise NotImplementedError
+    elif scheme == 'injector_with_ring':
+        ring_param_keys = []
+        combiner_param_keys = []
+        bounds = [*injector_param_bounds.values()]
+    else:
+        raise NotImplementedError
+    return bounds, (ring_param_keys, injector_param_keys, combiner_param_keys)
+
+
+def length_params(params):
+    """Return the length of sequence 'params', return 0 if 'params' is None"""
+    return 0 if params is None else len(params)
+
+
+def split_param_values(param_values: sequence, scheme: str, ring_version: str) -> tuple[list, ...]:
+    """Return three lists, ring params, injector params and combiner params, corresponding to the entries
+    in 'param_values'"""
+
+    _, (ring_param_keys, injector_param_keys, combiner_param_keys) = bounds_and_keys(scheme, ring_version)
+    split_values = []
+    idxa = 0
+    for keys in (ring_param_keys, injector_param_keys, combiner_param_keys):
+        num_params = len(keys)
+        idxb = idxa + num_params
+        values = param_values[idxa:idxb]
+        idxa += len(values)
+        split_values.append(values)
+    return tuple(split_values)
+
+
+def add_combiner_values(ring_params, injector_params, combiner_param_keys, combiner_params_values):
+    """Add combiner values to ring_params and injector_params. They both must share the same combiner values"""
+    for params in (ring_params, injector_params):
+        for key, value in zip(combiner_param_keys, combiner_params_values):
+            params[key] = value
+
+
+def ring_system_params(param_values, scheme, ring_version) -> tuple[dict, dict]:
+    """Return system parameters for 'ring' optimization scheme in which injector parameters are the stored optimal
+    values"""
+    _, (ring_param_keys, _, combiner_param_keys) = bounds_and_keys(scheme, ring_version)
+    ring_params_values, _, combiner_params_values = split_param_values(param_values, scheme, ring_version)
+    ring_params = dict(zip(ring_param_keys, ring_params_values))
+    injector_params = dict(get_optimal_injector_params(ring_version))
+    add_combiner_values(ring_params, injector_params, combiner_param_keys, combiner_params_values)
+    return ring_params, injector_params
+
+
+def injector_with_ring_system_params(param_values, scheme, ring_version) -> tuple[dict, dict]:
+    """Return system parameters for 'injector_with_ring' optimization scheme in which
+     ring parameters are the stored optimal values and injector parameters are optimized. """
+    _, (_, injector_param_keys, combiner_params_keys) = bounds_and_keys(scheme, ring_version)
+    _, inj_params_values, _ = split_param_values(param_values, scheme, ring_version)
+    inj_params = dict(zip(injector_param_keys, inj_params_values))
+    ring_params = get_optimal_ring_params(ring_version)
+    for key in combiner_param_bounds.keys():
+        inj_params[key] = ring_params[key]
+    return ring_params, inj_params
+
+
+def both_system_params(param_values, scheme, ring_version) -> tuple[dict, dict]:
+    """Return system parameters for 'both' optimization scheme in which parameters for lens and ring are both
+     optimized"""
+    _, (ring_param_keys, inj_param_keys, combiner_param_keys) = bounds_and_keys(scheme, ring_version)
+    ring_param_values, inj_params_values, combiner_params_values = split_param_values(param_values, scheme,
+                                                                                      ring_version)
+    ring_params = dict(zip(ring_param_keys, ring_param_values))
+    inj_params = dict(zip(inj_param_keys, inj_params_values))
+    add_combiner_values(ring_params, inj_params, combiner_param_keys, combiner_params_values)
+    return ring_params, inj_params
+
+
+def system_parameters(param_values: sequence, scheme: str, ring_version: str) -> tuple[dict, dict]:
+    """Return the system parameters for ring and injector from the parameter values 'param_values' from the
+    optimizer. ring and injector params needs to be a dict, while the 'param_values' is a 1D sequence"""
+    if scheme == 'ring':
+        return ring_system_params(param_values, scheme, ring_version)
+    elif scheme == 'injector_with_ring':
+        return injector_with_ring_system_params(param_values, scheme, ring_version)
+    elif scheme == 'both':
+        return both_system_params(param_values, scheme, ring_version)
+    else:
+        raise NotImplementedError
+
+
 class Solver:
-    def __init__(self, which_system, ring_version: str, ring_params=None, injector_params=None,
+    def __init__(self, scheme, ring_version: str, ring_params=None, injector_params=None,
                  use_solenoid_field=False, use_collisions=False, num_particles=1024, use_bumper=False,
                  use_standard_tube_OD=False, sim_time_max=DEFAULT_SIMULATION_TIME, use_long_range_fields=False):
-        assert which_system in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
-        self.which_system = which_system
+        assert scheme in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
+        self.scheme = scheme
         self.ring_version = ring_version
         self.ring_params = ring_params
         self.injector_params = injector_params
@@ -91,30 +194,11 @@ class Solver:
         }
 
     def unpack_params(self, params):
-        ring_params, injector_params = None, None
-        if self.which_system == 'ring':
-            ring_params = params
-            injector_params = self.injector_params
-        elif self.which_system == 'injector_with_surrogate_ring':
-            injector_params = params
-        elif self.which_system == 'injector_with_ring':
-            ring_params = self.ring_params
-            injector_params = params
-        else:
-            ring_params = params[:len(get_ring_bounds(self.ring_version))]
-            injector_params = params[-len(get_injector_bounds()):]
-            assert len(ring_params) + len(injector_params) == len(params)
-        ring_params = None if ring_params is None else build_lattice_params_dict(ring_params, 'ring', self.ring_version)
-        injector_params = None if injector_params is None else build_lattice_params_dict(injector_params, 'injector',
-                                                                                         self.ring_version)
-        if ring_params is not None and injector_params is not None:
-            ring_params['Lm_combiner'] = injector_params['Lm_combiner']
-            ring_params['load_beam_offset'] = injector_params['load_beam_offset']
-        return ring_params, injector_params
+        return system_parameters(params, self.scheme, self.ring_version)
 
     def build_lattices(self, params):
         ring_params, injector_params = self.unpack_params(params)
-        if self.which_system == 'injector_with_surrogate_ring':
+        if self.scheme == 'injector_with_surrogate_ring':
             lattice_ring, lattice_injector = build_injector_and_surrrogate(injector_params, self.ring_version,
                                                                            self.storage_ring_system_options)
         else:
@@ -133,7 +217,7 @@ class Solver:
     def _solve(self, params: tuple[float, ...]) -> Solution:
         model = self.make_system_model(params)
         floor_plan_cost_cutoff = .1
-        if self.which_system == 'injector_with_surrogate_ring':
+        if self.scheme == 'injector_with_surrogate_ring':
             floor_plan_cost = model.floor_plan_cost_with_tunability()
             if floor_plan_cost > floor_plan_cost_cutoff:
                 cost = model.max_swarm_cost + floor_plan_cost
@@ -162,44 +246,12 @@ class Solver:
         return sol
 
 
-def make_bounds(which_bounds, ring_version, keys_to_not_change=None, range_factor=1.0) -> tuple:
-    """Take bounds for ring and injector and combine into new bounds list. Order is ring bounds then injector bounds.
-    Optionally expand the range of bounds by 10%, but not those specified to ignore. If none specified, use a
-    default list of values to ignore"""
-    assert which_bounds in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
-    ring_param_bounds = get_ring_bounds(ring_version)
-    injector_param_bounds = get_injector_bounds()
-    bounds_ring = np.array(list(ring_param_bounds.values()))
-    bounds_injector = np.array(list(injector_param_bounds.values()))
-    keys_ring = list(ring_param_bounds.keys())
-    keys_injector = list(injector_param_bounds.keys())
-    if which_bounds == 'ring':
-        bounds, keys = bounds_ring, keys_ring
-    elif which_bounds in ('injector_with_surrogate_ring', 'injector_with_ring'):
-        bounds, keys = bounds_injector, keys_injector
-    else:
-        bounds, keys = np.array([*bounds_ring, *bounds_injector]), [*keys_ring, *keys_injector]
-    if range_factor != 1.0:
-        assert range_factor > 0.0
-        keys_to_not_change = () if keys_to_not_change is None else keys_to_not_change
-        for key in keys_to_not_change:
-            assert key in keys
-        for bound, key in zip(bounds, keys):
-            if key not in keys_to_not_change:
-                delta = (bound[1] - bound[0]) * range_factor
-                bound[0] -= delta
-                bound[1] += delta
-                bound[0] = 0.0 if bound[0] < 0.0 else bound[0]
-                assert bound[0] >= 0.0
-    return tuple(bounds)
-
-
-def get_cost_function(which_system: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
+def get_cost_function(scheme: str, ring_version, ring_params: Optional[tuple], injector_params: Optional[tuple],
                       use_solenoid_field, use_bumper, num_particles, use_standard_tube_OD,
                       use_long_range_fields) -> Callable[[tuple], float]:
     """Return a function that gives the cost when given solution parameters such as ring and or injector parameters.
     Wraps Solver class."""
-    solver = Solver(which_system, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
+    solver = Solver(scheme, ring_version, ring_params=ring_params, use_solenoid_field=use_solenoid_field,
                     use_bumper=use_bumper, num_particles=num_particles, use_standard_tube_OD=use_standard_tube_OD,
                     injector_params=injector_params, use_long_range_fields=use_long_range_fields)
 
@@ -227,14 +279,14 @@ def ring_params_optimal_without_combiner(ring_version) -> LockedDict:
     return strip_combiner_params(ring_params_optimal_with_combiner)
 
 
-def initial_params_from_optimal(which_system, ring_version) -> tuple[float, ...]:
+def initial_params_from_optimal(scheme, ring_version) -> tuple[float, ...]:
     """Return tuple of initial parameters from optimal parameters of lattice system"""
-    if which_system == 'both':
+    if scheme == 'both':
         params_optimal = tuple([*list(ring_params_optimal_without_combiner(ring_version).values()),
                                 *list(get_optimal_injector_params(ring_version).values())])
-    elif which_system == 'ring':
+    elif scheme == 'ring':
         params_optimal = tuple(ring_params_optimal_without_combiner(ring_version).values())
-    elif which_system in ('injector_with_surrogate_ring', 'injector_with_ring'):
+    elif scheme in ('injector_with_surrogate_ring', 'injector_with_ring'):
         params_optimal = tuple(get_optimal_injector_params(ring_version).values())
     else:
         raise NotImplementedError
@@ -266,22 +318,22 @@ def _local_optimize(cost_func, bounds: sequence, xi: sequence, disp: bool, proce
     return x_optimal, cost_min
 
 
-def optimize(which_system, method, ring_version, xi: Union[tuple, str] = None, ring_params: tuple = None,
+def optimize(scheme, method, ring_version, xi: Union[tuple, str] = None, ring_params: tuple = None,
              shrink_bounds_range_factor=np.inf, time_out_seconds=np.inf, disp=True, processes=-1,
              local_optimizer='simple_line', use_solenoid_field: bool = False, use_bumper: bool = False,
              local_search_region=.01, num_particles=1024, use_standard_tube_OD=False, injector_params=None,
              progress_file: str = None, initial_vals: sequence = None, save_population: str = None,
              use_long_range_fields=False, init_pop_file=None):
     """Optimize a model of the ring and injector"""
-    assert which_system in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
+    assert scheme in ('ring', 'injector_with_surrogate_ring', 'injector_with_ring', 'both')
     assert method in ('global', 'local')
     assert xi is not None if method == 'local' else True
-    assert ring_params is not None if which_system == 'injector_with_ring' else True
-    assert injector_params is not None if which_system == 'ring' else True
+    if injector_params is not None or ring_params is not None:
+        raise NotImplementedError("These values are replaced with the optimal values for now")
     assert xi == 'optimal' if isinstance(xi, str) else True
-    xi = initial_params_from_optimal(which_system, ring_version) if xi == 'optimal' else xi
-    bounds = make_bounds(which_system, ring_version)
-    cost_func = get_cost_function(which_system, ring_version, ring_params, injector_params, use_solenoid_field,
+    xi = initial_params_from_optimal(scheme, ring_version) if xi == 'optimal' else xi
+    bounds, _ = bounds_and_keys(scheme, ring_version)
+    cost_func = get_cost_function(scheme, ring_version, ring_params, injector_params, use_solenoid_field,
                                   use_bumper, num_particles, use_standard_tube_OD, use_long_range_fields)
     if method == 'global':
         bounds = shrink_bounds_around_vals(bounds, xi, shrink_bounds_range_factor) if xi is not None else bounds

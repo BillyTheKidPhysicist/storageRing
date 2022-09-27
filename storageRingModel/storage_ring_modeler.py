@@ -144,6 +144,12 @@ class StorageRingModel:
         shapes_trajectories = self.move_injector_shapes_to_lab_frame(shapes_trajectories)
         return shapes_inner, shapes_outer, shapes_trajectories
 
+    def injector_shape_for_overlap(self):
+        _, injector_shapes_outer, _ = self.injector_shapes_in_lab_frame()
+        last_lens_index=self.injector_lens_indices[-1]
+        shapes_to_last_lens = injector_shapes_outer[:last_lens_index + 1]
+        return shapes_to_last_lens
+
     def move_injector_shapes_to_lab_frame(self, shapes: list[Shape]) -> list[Shape]:
         ne_Inj, ne_Ring = self.lattice_injector.combiner.ne, self.lattice_ring.combiner.ne
         angle_injector = full_arctan2(ne_Inj[1], ne_Inj[0])
@@ -172,12 +178,11 @@ class StorageRingModel:
         handled later by clipping particles on it
         """
         overlap_elements = self.non_drift_elements_in_ring()
-        _, injector_shapes_outer, _ = self.injector_shapes_in_lab_frame()
-        injector_shapes_to_compare = injector_shapes_outer[:self.injector_lens_indices[-1] + 1]
+        injector_shapes=self.injector_shape_for_overlap()
         m_to_mm_area = 1e3 ** 2
         area_mm = 0.0
         for el in overlap_elements:  # count up all the area overlap
-            for shape in injector_shapes_to_compare:  # don't forget to add 1
+            for shape in injector_shapes:  # don't forget to add 1
                 area_mm += el.SO_outer.intersection(shape).area * m_to_mm_area
         return area_mm
 
