@@ -88,8 +88,6 @@ class ParticleTracerLattice:
 
     def set_constrained_linear_element(self, el: Element) -> None:
         self.linear_elements_to_constrain.append(el)
-        if len(self.linear_elements_to_constrain) > 2:
-            raise NotImplementedError("there can only be 2 constrained linear elements")  # Possibly not needed
 
     def add_element(self, el: Element, constrain=False):
         """Add an element to the lattice"""

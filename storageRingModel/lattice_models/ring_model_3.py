@@ -32,7 +32,8 @@ ring_param_bounds: LockedDict = LockedDict({
     'rp_lens2': (.005, .03),
     'rp_lens3': (.005, .03),
     'rp_lens4': (.005, .03),
-    'rp_lens5_6': (.005, .03),
+    'rp_lens5_8': (.005, .03),
+    'rp_lens6_7': (.005, .03),
     'rp_bend': (.005, .012),
     'rp_apex_lens': (.005, .012),
     'L_apex_lens': (.001, .2),
@@ -42,7 +43,7 @@ ring_param_bounds: LockedDict = LockedDict({
     'L_Lens4': (.1, .5)
 })
 
-num_ring_params = 14
+num_ring_params = 15
 
 
 def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracerLattice:
@@ -52,7 +53,8 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
     rp_lens2 = ring_params['rp_lens2']
     rp_lens3 = ring_params['rp_lens3']
     rp_lens4 = ring_params['rp_lens4']
-    rp_lens5_6 = ring_params['rp_lens5_6']
+    rp_lens5_8 = ring_params['rp_lens5_8']
+    rp_lens6_7 = ring_params['rp_lens6_7']
     rp_bend = ring_params['rp_bend']
     rp_apex_lens = ring_params['rp_apex_lens']
     L_apex_lens = ring_params['L_apex_lens']
@@ -93,18 +95,20 @@ def make_ring_lattice(ring_params: dict, options: dict = None) -> ParticleTracer
     add_split_bend_with_lens(lattice, rp_bend, rp_apex_lens, L_apex_lens)
 
     # ------gap between bender output and lens-----
-    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens5_6, rp_bend)
+    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens5_8, rp_bend)
 
     # -------lens after bender-----------
-    lattice.add_halbach_lens_sim(rp_lens5_6, None, constrain=True)
+    lattice.add_halbach_lens_sim(rp_lens5_8, None, constrain=True)
+    lattice.add_halbach_lens_sim(rp_lens6_7, None, constrain=True)
 
     # ---------observation gap----------
-    add_drift_if_needed(lattice, system_constants["observationGap"], 'lens', 'lens', rp_lens5_6, rp_lens5_6)
+    add_drift_if_needed(lattice, system_constants["observationGap"], 'lens', 'lens', rp_lens6_7, rp_lens6_7)
 
     # -------lens before bender-------
-    lattice.add_halbach_lens_sim(rp_lens5_6, None, constrain=True)
+    lattice.add_halbach_lens_sim(rp_lens6_7, None, constrain=True)
+    lattice.add_halbach_lens_sim(rp_lens5_8, None, constrain=True)
     # ---------gap between lens and bender input-------
-    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens5_6, rp_bend)
+    add_drift_if_needed(lattice, system_constants["lensToBendGap"], 'lens', 'bender', rp_lens5_8, rp_bend)
 
     # --------last split bender--------------
 
