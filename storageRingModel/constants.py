@@ -51,7 +51,7 @@ GRADE_MAGNETIZATION = {'N52': 1.465 / MAGNETIC_PERMEABILITY, 'N50': 1.43 / MAGNE
                        'N42': 1.31 / MAGNETIC_PERMEABILITY, 'N40': 1.275 / MAGNETIC_PERMEABILITY,
                        'legacy': 1.018E6}
 
-MAGNET_DIMENSIONAL_TOLERANCE = _inch_To_Meter(.004)  # +/- dimensional tolerance
+MAGNET_DIMENSIONAL_TOLERANCE = _inch_To_Meter(.002)  # +/- dimensional tolerance
 MAGNET_MAGNETIZATION_ANGLE_TOLERANCE = radians(2)  # maximum tilt from axis
 MAGNET_MAGNETIZATION_NORM_TOLERANCE = .0125  # +/- fractional variation
 

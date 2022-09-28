@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
-from constants import DEFAULT_ATOM_SPEED, SIMULATION_MASS, MASS_LITHIUM_7, BOLTZMANN_CONSTANT
+from constants import DEFAULT_ATOM_SPEED, MASS_LITHIUM_7, BOLTZMANN_CONSTANT
 from helper_tools import low_discrepancy_sample, parallel_evaluate, temporary_seed, arr_product
 from particle import Swarm, Particle
 from particle_tracer import ParticleTracer, trace_particle_periodic_linear_lattice
@@ -25,12 +25,12 @@ def lorentz_function(x, gamma):
     return (gamma / 2) ** 2 / (x ** 2 + (gamma / 2) ** 2)
 
 
-def momentum_vector_from_temperature(T: RealNum, num_vectors: int) -> ndarray:
+def momentum_vector_from_temperature(T: RealNum, num_vectors: int, mass: RealNum) -> ndarray:
     """Return the momentum velocity vectors for a given temperture. Shape is (num_vectors,n)"""
     if T < 0:
         raise ValueError("Cannot have negative temperature")
-    sigma = np.sqrt(BOLTZMANN_CONSTANT * T / MASS_LITHIUM_7)
-    return SIMULATION_MASS * np.random.normal(scale=sigma, size=(num_vectors, 3))
+    sigma = np.sqrt(BOLTZMANN_CONSTANT * T / mass)
+    return np.random.normal(scale=sigma, size=(num_vectors, 3))
 
 
 def tiny_offset_swarm(swarm: Swarm) -> None:
@@ -223,7 +223,7 @@ class SwarmTracer:
         return swarm
 
     def point_source_swarm(self, half_angle: float, num_particles: int, same_seed: bool = False,
-                           speed=None, temperature=0.0, use_design_speed_for_px=False) -> Swarm:
+                           speed=None, temperature=0.0, use_same_px=False, mass=MASS_LITHIUM_7) -> Swarm:
         """
         Return a pseudo-random swarm originating from a point at the origin. All particle have the same speed
 
@@ -231,17 +231,17 @@ class SwarmTracer:
         :param num_particles: Number of particles in swarm.
         :param same_seed: Whether to use the same seed for repeatability.
         :param temperature: Temperature of the swarm, kelvin:
-        :param use_design_speed_for_px: If True, make the longitudinal momentum vector equal to the design vector
+        :param use_same_px: If True, make the longitudinal momentum vector equal to the design vector
         :return: A new swarm.
         """
         p0 = self.lattice.design_speed if speed is None else speed  # the momentum of each particle
         p_trans_bounds = np.tan(half_angle) * p0
         swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
                                                       num_particles=num_particles)
-        delta_p = momentum_vector_from_temperature(temperature, len(swarm_pseudo_random))
+        delta_p = momentum_vector_from_temperature(temperature, len(swarm_pseudo_random), mass)
         for dp, particle in zip(delta_p, swarm_pseudo_random):
             px, py, pz = particle.pi
-            if use_design_speed_for_px:
+            if use_same_px:
                 px = p0 * np.sign(px)
             else:
                 px = np.sqrt(p0 ** 2 - (py ** 2 + pz ** 2)) * np.sign(px)
@@ -274,6 +274,14 @@ class SwarmTracer:
             qi[index] = pos
             pi[index] = p
             swarm.add_new_particle(qi=qi, pi=pi)
+        return swarm
+
+    def px_spread_swarm(self, px_min, px_max, num=100):
+        """Return a swarm with even velocity spread in px similiar to linspace"""
+        px_vals = np.linspace(px_min, px_max, num)
+        swarm = Swarm()
+        swarm.particles = [Particle(pi=[px, 0, 0]) for px in px_vals]
+        position_swarm_at_lattice_start(swarm, self.lattice, True)
         return swarm
 
     def two_dim_swarm(self, dim1_max: RealNum, dim2_max: RealNum, num_points_per_dim: int,

@@ -196,6 +196,7 @@ def collision(p1_vx, p1_vy, p1_vz, p2_vx, p2_vy, p2_vz):
     """ Elastic collision of two particles with random scattering angle phi and theta. Inputs are the two particles
         x,y,z components of their velocity. Output is the particles final velocity components. Output coordinate
         system matches whatever is used as the input so long as it's cartesian."""
+    raise NotImplementedError("SIMULATION MAGNETON CAN BE CHANGED AND NOT REFLECTED HERE")
     vx_cm = 0.5 * (p1_vx + p2_vx)
     vy_cm = 0.5 * (p1_vy + p2_vy)
     vz_cm = 0.5 * (p1_vz + p2_vz)
