@@ -42,14 +42,14 @@ ring_param_bounds: LockedDict = LockedDict({
 })
 
 ring_params_optimal = {
-    'rp_lens3_4': 0.012593597021671735,
-    'rp_bend': 0.010115712864579277,
-    'rp_apex_lens': 0.007415429587324836,
-    'L_apex_lens': 0.04513305464223805,
-    'L_Lens1': .1,  # length of lens before combiner
-    'L_Lens2': 0.49472608069737817,  # length of lens after combiner
-    "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
-    "load_beam_offset": 0.009704452870607685,  # offset of incoming beam into combiner
+    'rp_lens3_4': 0.022500224517367686,
+    'rp_bend': 0.008117768630733628,
+    'rp_apex_lens': 0.006832197343617028,
+    'L_apex_lens': 0.05925393916247418,
+    'L_Lens1': 0.09114864461501695,  # length of lens before combiner
+    'L_Lens2': 0.32199199877979584,  # length of lens after combiner
+    "Lm_combiner": 0.23455699465995786,  # hard edge length of combiner
+    "load_beam_offset": 0.017278209991154495,  # offset of incoming beam into combiner
 }
 
 injector_params_optimal = LockedDict({
@@ -60,36 +60,12 @@ injector_params_optimal = LockedDict({
     "gap1": 0.10615316973237765,  # separation between source and first lens
     "gap2": 0.22492222955994753,  # separation between two lenses
     "gap3": 0.22148833301792942,  ##separation between final lens and input to combiner
-    "Lm_combiner": 0.17709193919623706,  # hard edge length of combiner
-    "load_beam_offset": 0.009704452870607685  # offset of incoming beam into combiner
+    "Lm_combiner": 0.23455699465995786,  # hard edge length of combiner
+    "load_beam_offset": 0.017278209991154495,  # offset of incoming beam into combiner
 })
 
-## other opitimized results. Gives better results, but one of the inejector lenses are really short
-# ring_params_optimal = {
-#     'rp_lens3_4': 0.02993927,
-#     'rp_bend': 0.00936603,
-#     'rp_apex_lens': 0.00739481,
-#     'L_apex_lens': 0.05746266,
-#     'L_Lens1': 0.25936528,  # length of lens before combiner
-#     'L_Lens2': 0.47411631,  # length of lens after combiner
-#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
-#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
-# }
-#
-# injector_params_optimal = LockedDict({
-#     "L1": 0.09590905,  # length of first lens
-#     "rp1": 0.02739994,  # bore radius of first lens
-#     "L2": 0.17497488,  # length of first lens
-#     "rp2": 0.02931619,  # bore radius of second lens
-#     "gap1": 0.18274109,  # separation between source and first lens
-#     "gap2": 0.30202736,  # separation between two lenses
-#     "gap3": 0.38947434,  ##separation between final lens and input to combiner
-#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
-#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
-# })
-
 ring_constants = LockedDict({
-    'rp_lens2': .04,
+    'rp_lens2': .03,
     'rp_lens1': .01
 })
 
@@ -207,3 +183,68 @@ def make_vacuum_model(ring_params: dict) -> VacuumSystem:
 
     solve_vac_system(vac_sys)
     return vac_sys
+
+# alternative model
+
+#------------------------------------------
+#results from 9_26_2022 TACC run
+#better flux mult, but injector lens is too short. Could fix
+# ring_params_optimal = {
+#     'rp_lens3_4': 0.02993927,
+#     'rp_bend': 0.00936603,
+#     'rp_apex_lens': 0.00739481,
+#     'L_apex_lens': 0.05746266,
+#     'L_Lens1': 0.25936528,  # length of lens before combiner
+#     'L_Lens2': 0.47411631,  # length of lens after combiner
+#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
+#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
+# }
+#
+# injector_params_optimal = LockedDict({
+#     "L1": 0.09590905,  # length of first lens
+#     "rp1": 0.02739994,  # bore radius of first lens
+#     "L2": 0.17497488,  # length of first lens
+#     "rp2": 0.02931619,  # bore radius of second lens
+#     "gap1": 0.18274109,  # separation between source and first lens
+#     "gap2": 0.30202736,  # separation between two lenses
+#     "gap3": 0.38947434,  ##separation between final lens and input to combiner
+#     "Lm_combiner": 0.19235826,  # hard edge length of combiner
+#     "load_beam_offset": 0.01710684,  # offset of incoming beam into combiner
+# })
+# ring_constants = LockedDict({
+#     'rp_lens2': .04,
+#     'rp_lens1': .01
+# })
+#------------------------------------------
+
+
+#----------------------------------------
+# Using smaller lens after combiner to help with errors.
+# ring_params_optimal = {
+#     'rp_lens3_4': 0.022500224517367686,
+#     'rp_bend': 0.008117768630733628,
+#     'rp_apex_lens': 0.006832197343617028,
+#     'L_apex_lens': 0.05925393916247418,
+#     'L_Lens1': 0.09114864461501695,  # length of lens before combiner
+#     'L_Lens2': 0.32199199877979584,  # length of lens after combiner
+#     "Lm_combiner": 0.23455699465995786,  # hard edge length of combiner
+#     "load_beam_offset": 0.017278209991154495,  # offset of incoming beam into combiner
+# }
+#
+# injector_params_optimal = LockedDict({
+#     "L1": .298,  # length of first lens
+#     "rp1": 0.01824404317562657,  # bore radius of first lens
+#     "L2": 0.23788459956313238,  # length of first lens
+#     "rp2": 0.03,  # bore radius of second lens
+#     "gap1": 0.10615316973237765,  # separation between source and first lens
+#     "gap2": 0.22492222955994753,  # separation between two lenses
+#     "gap3": 0.22148833301792942,  ##separation between final lens and input to combiner
+#     "Lm_combiner": 0.23455699465995786,  # hard edge length of combiner
+#     "load_beam_offset": 0.017278209991154495,  # offset of incoming beam into combiner
+# })
+#
+# ring_constants = LockedDict({
+#     'rp_lens2': .03,
+#     'rp_lens1': .01
+# })
+#----------------------------------------

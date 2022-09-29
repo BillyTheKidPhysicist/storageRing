@@ -38,7 +38,7 @@ def make_arrays_read_only(*arrays) -> None:
         arr.flags.writeable = False
 
 
-#-@numba.njit
+@numba.njit
 def Mu_exit(Mu_total, Mu_entrance) -> ndarray:
     """Return transfer matrix for remaining portion of element given the first portion of the transfer matrix"""
     return Mu_total @ inv(Mu_entrance)
@@ -151,13 +151,13 @@ def Bp_effective_bender(el: SimElement) -> float:
     return Bp_effective
 
 
-#-@numba.njit
+@numba.njit
 def index_in_increasing_arr(x: RealNum, arr: ndarray) -> int:
     """Return index of first value in array that is greater than 'x'"""
     return int(np.argmax(x < arr))
 
 
-#-@numba.njit
+@numba.njit
 def update_Mu_and_Mu_cum(Mu_previous, Mu_cum, Ku, L, R=None):
     """Update cumulative transfer matrix IN PLACE, and append a copy to a list"""
     Mu_slice = transfer_matrix(Ku, L, R=R)
@@ -167,7 +167,7 @@ def update_Mu_and_Mu_cum(Mu_previous, Mu_cum, Ku, L, R=None):
     Mu_cum.append(Mu_current)  # must come last
 
 
-#-@numba.njit
+@numba.njit
 def arr_float64_list():
     """Because numba is type sensitive, the type of empty lists must be known. It can often be inferred, but if not a
     contrived solution must be used"""
@@ -422,7 +422,7 @@ def transfer_matrix_func_from_lens(el: HalbachLensSim) -> Callable:
     s_vals = np.cumsum(slice_lengths)
 
     @functools.lru_cache
-    #-@numba.njit
+    @numba.njit
     def cumulatice_transfer_matrices(atom_speed: RealNum):
         """Return cumulative transfer matrices for x,y and dispersion"""
         Mx, My, Md = np.eye(2), np.eye(2), np.eye(3)
@@ -542,7 +542,7 @@ def transfer_matrix_func_from_combiner(el: CombinerLensSim) -> Callable:
     s_max = el.Lo
 
     @functools.lru_cache
-    #-@numba.njit
+    @numba.njit
     def cumulatice_transfer_matrices(atom_speed: RealNum):
         """Return cumulative transfer matrices for x,y and dispersion"""
         Mx, My, Md = np.eye(2), np.eye(2), np.eye(3)
@@ -681,7 +681,7 @@ def transfer_matrix_func_from_bender(el: BenderSim) -> Callable:
     s_max, ro, rb, L_cap, ang = el.Lo, el.ro, el.rb, el.L_cap, el.ang
 
     @functools.lru_cache
-    #-@numba.njit
+    @numba.njit
     def cumulatice_transfer_matrices(atom_speed: RealNum):
         """Return cumulative transfer matrices for x,y and dispersion"""
         Mx, My, Md = np.eye(2), np.eye(2), np.eye(3)

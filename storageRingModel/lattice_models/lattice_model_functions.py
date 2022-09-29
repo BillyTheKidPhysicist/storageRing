@@ -84,7 +84,8 @@ def initialize_ring_lattice(options: dict) -> ParticleTracerLattice:
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
                                     use_long_range_fields=options['include_mag_cross_talk_in_ring'],
-                                    include_misalignments=options['include_misalignments'])
+                                    include_misalignments=options['include_misalignments'],
+                                    field_dens_mult=options['field_dens_mult'])
     return lattice
 
 

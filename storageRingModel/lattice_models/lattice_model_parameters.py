@@ -16,7 +16,8 @@ INJECTOR_TUNABILITY_LENGTH = 2e-2
 DEFAULT_SYSTEM_OPTIONS = LockedDict({'include_mag_errors': False, 'combiner_seed': None, 'use_solenoid_field': False,
                                      'has_bumper': False, 'use_standard_tube_OD': False,
                                      'include_mag_cross_talk_in_ring': False,
-                                     'include_misalignments': False, 'build_field_helpers': True})
+                                     'include_misalignments': False, 'build_field_helpers': True,
+                                     'field_dens_mult':1.0})
 
 combiner_param_bounds: LockedDict = LockedDict({
     "Lm_combiner": (.05, .25),  # hard edge length of combiner

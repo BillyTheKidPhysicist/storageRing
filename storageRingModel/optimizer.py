@@ -96,6 +96,12 @@ def bounds_and_keys(scheme, ring_version):
     return bounds, (ring_param_keys, injector_param_keys, combiner_param_keys)
 
 
+def scheme_bounds(scheme, ring_version):
+    """Return bounds for the scheme and ring_version"""
+    bounds, _ = bounds_and_keys(scheme, ring_version)
+    return bounds
+
+
 def length_params(params):
     """Return the length of sequence 'params', return 0 if 'params' is None"""
     return 0 if params is None else len(params)
@@ -268,7 +274,7 @@ def strip_combiner_params(params) -> LockedDict:
     """Given params, remove Lm_combiner and load_beam_offset params. Used to ring params"""
     new_params = {}
     for key, value in params.items():
-        if key not in ('Lm_combiner', 'load_beam_offset'):
+        if key not in combiner_param_bounds.keys():
             new_params[key] = value
     return LockedDict(new_params)
 
@@ -285,9 +291,13 @@ def initial_params_from_optimal(scheme, ring_version) -> tuple[float, ...]:
         params_optimal = tuple([*list(ring_params_optimal_without_combiner(ring_version).values()),
                                 *list(get_optimal_injector_params(ring_version).values())])
     elif scheme == 'ring':
-        params_optimal = tuple(ring_params_optimal_without_combiner(ring_version).values())
-    elif scheme in ('injector_with_surrogate_ring', 'injector_with_ring'):
-        params_optimal = tuple(get_optimal_injector_params(ring_version).values())
+        params_optimal = tuple(get_optimal_ring_params(ring_version).values())
+    elif scheme == 'injector_with_ring':
+        params_optimal = get_optimal_injector_params(ring_version)
+        params_optimal = strip_combiner_params(params_optimal)
+        params_optimal = tuple(params_optimal.values())
+    elif scheme == 'injector_with_surrogate_ring':
+        raise NotImplementedError
     else:
         raise NotImplementedError
     return params_optimal
@@ -331,6 +341,8 @@ def optimize(scheme, method, ring_version, xi: Union[tuple, str] = None, ring_pa
     if injector_params is not None or ring_params is not None:
         raise NotImplementedError("These values are replaced with the optimal values for now")
     assert xi == 'optimal' if isinstance(xi, str) else True
+    if xi is not None and scheme == 'injector':
+        raise NotImplementedError
     xi = initial_params_from_optimal(scheme, ring_version) if xi == 'optimal' else xi
     bounds, _ = bounds_and_keys(scheme, ring_version)
     cost_func = get_cost_function(scheme, ring_version, ring_params, injector_params, use_solenoid_field,

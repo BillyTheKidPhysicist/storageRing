@@ -45,7 +45,7 @@ injector_constants = LockedDict({
     # "bendTubeODMax": inch_to_meter(3 / 4) ,
     "sourceToLens1_Inject_Gap": .05,  # gap between source and first lens. Shouldn't have first lens on top of source
     "lens1ToLens2_Inject_Gap": inch_to_meter(5.9),  # pumps and valve
-    "lens1ToLens2_Valve_Ap": inch_to_meter(2.5)/2.0,  # aperture (ID/2) for valve with 63 CF flange
+    "lens1ToLens2_Valve_Ap": inch_to_meter(2.5) / 2.0,  # aperture (ID/2) for valve with 63 CF flange
     "lens1ToLens2_Valve_Length": inch_to_meter(4.05),  # includes flanges and valve body width. For copper
     # sealed valve from lesker
     "lens1ToLens2_Inject_Valve_OD": flange_OD['4-1/2']  # outside diameter of valve
@@ -78,7 +78,8 @@ def make_injector_lattice(injector_params: dict, options: dict = None) -> Partic
                                     include_mag_errors=options['include_mag_errors'],
                                     use_solenoid_field=options['use_solenoid_field'],
                                     use_standard_tube_OD=options['use_standard_tube_OD'],
-                                    include_misalignments=options['include_misalignments'], )
+                                    include_misalignments=options['include_misalignments'],
+                                    field_dens_mult=options['field_dens_mult'])
     if options['has_bumper']:
         add_Kevin_Bumper_Elements(lattice)
 

@@ -60,6 +60,7 @@ class StorageRingModel:
     max_cost = 2.0
     max_swarm_cost = 1.0
     max_floor_plan_cost = 1.0
+    h = 7.5e-6
 
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False,
@@ -69,7 +70,6 @@ class StorageRingModel:
         self.lattice_injector = lattice_injector
         self.injector_lens_indices = [i for i, el in enumerate(self.lattice_injector) if type(el) is HalbachLensSim]
         self.swarm_tracer_injector = SwarmTracer(self.lattice_injector)
-        self.h = 7.5e-6  # timestep size
         self.T = sim_time_max
         self.swarm_tracer_ring = SwarmTracer(self.lattice_ring)
         self.has_bumper = use_bumper
@@ -83,7 +83,7 @@ class StorageRingModel:
             swarm = self.swarm_tracer_injector.time_step_swarm_distance_along_x(swarm, swarmShift_x,
                                                                                 hold_position_in_x=True)
             for particle in swarm:  # shift the swarm
-                particle.qi[1] -= swarmShift_y
+                particle.qi[1] += swarmShift_y
         return swarm
 
     def convert_position_injector_to_ring_frame(self, q_lab_inject: np.ndarray) -> np.ndarray:
@@ -146,7 +146,7 @@ class StorageRingModel:
 
     def injector_shape_for_overlap(self):
         _, injector_shapes_outer, _ = self.injector_shapes_in_lab_frame()
-        last_lens_index=self.injector_lens_indices[-1]
+        last_lens_index = self.injector_lens_indices[-1]
         shapes_to_last_lens = injector_shapes_outer[:last_lens_index + 1]
         return shapes_to_last_lens
 
@@ -178,7 +178,7 @@ class StorageRingModel:
         handled later by clipping particles on it
         """
         overlap_elements = self.non_drift_elements_in_ring()
-        injector_shapes=self.injector_shape_for_overlap()
+        injector_shapes = self.injector_shape_for_overlap()
         m_to_mm_area = 1e3 ** 2
         area_mm = 0.0
         for el in overlap_elements:  # count up all the area overlap
@@ -370,12 +370,13 @@ def build_storage_ring_model(ring_params, injector_params, ring_version, num_par
                              include_mag_errors: bool = False,
                              use_solenoid_field: bool = True, use_bumper: bool = False,
                              include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME,
-                             build_field_helpers: bool = True):
+                             build_field_helpers: bool = True,field_dens_mult=1.0):
     """Convenience function for building a StorageRingModel"""
     options = {'include_mag_errors': include_mag_errors, 'use_solenoid_field': use_solenoid_field,
                'has_bumper': use_bumper,
                'include_mag_cross_talk_in_ring': use_long_range_fields,
-               'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers}
+               'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers,
+               'field_dens_mult':field_dens_mult}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector,
                              num_particles=num_particles, use_collisions=use_collisions,
@@ -388,7 +389,8 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                 use_long_range_fields: bool = False,
                                 include_misalignments: bool = False,
                                 sim_time_max=DEFAULT_SIMULATION_TIME,
-                                build_field_helpers: bool = True) -> StorageRingModel:
+                                build_field_helpers: bool = True,
+                                field_dens_mult=1.0) -> StorageRingModel:
     """Convenience function for building the current optimal model"""
     ring_params_optimal = get_optimal_ring_params(ring_version)
     injector_params_optimal = get_optimal_injector_params(ring_version)
@@ -396,5 +398,6 @@ def make_optimal_solution_model(ring_version, use_bumper: bool = True,
                                      use_solenoid_field=use_solenoid_field, include_mag_errors=include_mag_errors,
                                      use_long_range_fields=use_long_range_fields,
                                      include_misalignments=include_misalignments,
-                                     sim_time_max=sim_time_max, build_field_helpers=build_field_helpers)
+                                     sim_time_max=sim_time_max, build_field_helpers=build_field_helpers,
+                                     field_dens_mult=field_dens_mult)
     return model

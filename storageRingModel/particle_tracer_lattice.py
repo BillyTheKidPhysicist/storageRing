@@ -22,9 +22,11 @@ from type_hints import ndarray, RealNum
 benderTypes = Union[BenderIdeal, BenderSim]
 number = (int, float)
 
+
 class FirstElementCombinerError(Exception):
-    def __init__(self,message):
+    def __init__(self, message):
         super().__init__(message)
+
 
 class ParticleTracerLattice:
 
@@ -34,9 +36,6 @@ class ParticleTracerLattice:
                  initial_ang: RealNum = -pi, magnet_grade: str = 'N52', use_standard_tube_OD: bool = False,
                  use_long_range_fields: bool = False, include_misalignments: bool = False):
         """
-
-
-
         :param design_speed: Speed of the ideal particle traveling through the lattice
         :param field_dens_mult: Multiplier to modulate density of interpolation in elements. Carefull, computation time
             will scale as third power
@@ -139,7 +138,8 @@ class ParticleTracerLattice:
         self.add_element(LensIdeal(self, L, Bp, rp, ap), constrain=constrain)
 
     def add_halbach_lens_sim(self, rp: Union[RealNum, tuple], L: Optional[RealNum], ap: RealNum = None,
-                             constrain: bool = False, magnet_width: Union[RealNum, tuple] = None) -> None:
+                             constrain: bool = False, magnet_width: Union[RealNum, tuple] = None,
+                             magnet_grade=None) -> None:
         """
         Add simulated halbach sextupole element to lattice.
 
@@ -161,11 +161,14 @@ class ParticleTracerLattice:
             deferred
         :param magnet_width: Width of cuboid magnets in polar plane of lens, m. Magnets length is L minus
             fringe fields.
+        :param magnet_grade: Material grade of the mangets. If none use the default of the lattice
         :return: None
         """
+        # IMPROVEMENT: IMPLEMENT magnet_grade uniformly
+        magnet_grade = self.magnet_grade if magnet_grade is None else magnet_grade
         rp_layers = rp if isinstance(rp, tuple) else (rp,)
         magnet_width = (magnet_width,) if isinstance(magnet_width, number) else magnet_width
-        self.add_element(HalbachLensSim(self, rp_layers, L, ap, magnet_width), constrain=constrain)
+        self.add_element(HalbachLensSim(self, rp_layers, L, ap, magnet_width, magnet_grade), constrain=constrain)
 
     def add_combiner_ideal(self, Lm: RealNum = .2, c1: RealNum = 1, c2: RealNum = 20, ap: RealNum = .015,
                            size_scale: RealNum = 1.0, atom_state='LOW_SEEK') -> None:

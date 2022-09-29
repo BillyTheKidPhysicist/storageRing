@@ -33,7 +33,7 @@ class HalbachLensSim(LensIdeal):
     # can safely be modeled as a magnet "cap" with a 2D model of the interior
 
     def __init__(self, PTL, rp_layers: tuple, L: Optional[float], ap: Optional[float],
-                 magnet_widths: Optional[tuple]):
+                 magnet_widths: Optional[tuple], magnet_grade):
         assert all(rp > 0 for rp in rp_layers)
         # if rp is set to None, then the class sets rp to whatever the comsol data is. Otherwise, it scales values
         # to accomdate the new rp such as force values and positions
@@ -54,7 +54,7 @@ class HalbachLensSim(LensIdeal):
         self.L_cap: Optional[float] = None  # todo: ridiculous and confusing name
         self.individualMagnetLength = None
         self.magnet = None
-        # or down
+        self.magnet_grade = magnet_grade
 
     def max_interp_radius(self) -> float:
         """ from geometric arguments of grid inside circle.
@@ -69,7 +69,7 @@ class HalbachLensSim(LensIdeal):
 
     def fill_post_constrained_parameters(self):
         self.fill_geometric_params()
-        self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.PTL.magnet_grade,
+        self.magnet = MagneticLens(self.Lm, self.rp_layers, self.magnet_widths, self.magnet_grade,
                                    self.PTL.use_solenoid_field, self.fringe_field_length)
         self.make_orbit()
 

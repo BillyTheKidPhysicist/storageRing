@@ -1,27 +1,17 @@
-import itertools
-import os
-import sys
-import time
 from math import isclose, isnan
-from typing import Optional
 
-import numpy as np
 import pytest
 from hypothesis import given, settings, strategies as st
-from scipy.spatial.transform import Rotation as Rot
 from shapely.geometry import Point
 
 from constants import SIMULATION_MAGNETON, DEFAULT_ATOM_SPEED, GRAVITATIONAL_ACCELERATION
-from field_generators import HalbachBender as HalbachBender_FieldGenerator
 from field_generators import HalbachLens
-from helper_tools import is_close_all
+from helper_tools import *
 from lattice_elements.elements import BenderIdeal, Drift, LensIdeal, CombinerIdeal, CombinerLensSim, \
     BenderSim, HalbachLensSim, Element
-from lattice_elements.utilities import halbach_magnet_width
 from particle import Particle
 from particle_tracer import ParticleTracer
 from particle_tracer_lattice import ParticleTracerLattice
-from helper_tools import *
 
 
 def absDif(x1, x2):
@@ -104,8 +94,8 @@ class DriftTestHelper(ElementTestHelper):
     def __init__(self):
         self.L, self.ap = .15432, .0392
         particle0 = Particle(qi=np.asarray([-1e-14, 1e-3, -2e-3]), pi=np.asarray([-201.0, 5.2, -3.8]))
-        qf0 = np.array([-0.15432             ,  0.004992358208954969,-0.004920380840484889])
-        pf0 = np.array([-201.                ,    5.2               ,-3.8074970000000286])
+        qf0 = np.array([-0.15432, 0.004992358208954969, -0.004920380840484889])
+        pf0 = np.array([-201., 5.2, -3.8074970000000286])
         super().__init__(Drift, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
@@ -183,8 +173,8 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         self.rp = .01874832
         self.magnet_width = .0254 * self.rp / .05
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -7.43e-3]), pi=np.asarray([-201.0, 5.0, -8.2343]))
-        qf0 = np.array([-0.13214319999913782 ,  0.005162850354510416,-0.00814574993719497 ])
-        pf0 = np.array([-201.14935622502725  ,   -3.7928500437962454,4.930871552191228 ])
+        qf0 = np.array([-0.13214319999913782, 0.005162850354510416, -0.00814574993719497])
+        pf0 = np.array([-201.14935622502725, -3.7928500437962454, 4.930871552191228])
         super().__init__(HalbachLensSim, particle0, qf0, pf0, True, True, True)
 
     def run_Tests(self):
@@ -202,7 +192,7 @@ class HexapoleLensSimTestHelper(ElementTestHelper):
         tol = .025  # tolerance on the maximum value
         np.random.seed(seed)
         lensElement = HalbachLensSim(PTL_Dummy(field_dens_mult=2.0, include_mag_errors=True), (self.rp,), L,
-                                     None, (self.magnet_width,))
+                                     None, (self.magnet_width,), 'N52')
         lensElement.fill_pre_constrained_parameters()
         lensElement.r1 = lensElement.r2 = lensElement.nb = lensElement.ne = np.zeros(3)
         lensElement.fill_post_constrained_parameters()
@@ -258,8 +248,8 @@ class LensIdealTestHelper(ElementTestHelper):
     def __init__(self):
         self.L, self.rp, self.Bp = .51824792317429, .024382758923, 1.832484234
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 8.2, -6.8]))
-        qf0 = np.array([-5.1824792317429003e-01, -1.5562719212226688e-03,3.8106134485716954e-04])
-        pf0 = np.array([-201.               ,    7.735215296352372,   -8.061999426907333])
+        qf0 = np.array([-5.1824792317429003e-01, -1.5562719212226688e-03, 3.8106134485716954e-04])
+        pf0 = np.array([-201., 7.735215296352372, -8.061999426907333])
         super().__init__(LensIdeal, particle0, qf0, pf0, True, True, False)
 
     def make_coordTestRules(self):
@@ -301,8 +291,8 @@ class BenderIdealTestHelper(ElementTestHelper):
         self.rb = .94830284532
         self.rp = .01853423
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 5.2, -6.8]))
-        qf0 = np.array([-9.6395455811612474e-01,  9.5838211725044664e-01,1.0892568279169546e-04])
-        pf0 = np.array([ -4.741346774754576, 200.69752413026583 ,   7.920531222158079])
+        qf0 = np.array([-9.6395455811612474e-01, 9.5838211725044664e-01, 1.0892568279169546e-04])
+        pf0 = np.array([-4.741346774754576, 200.69752413026583, 7.920531222158079])
         super().__init__(BenderIdeal, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -329,8 +319,8 @@ class HexapoleSegmentedBenderTestHelper(ElementTestHelper):
         self.rb = 1.02324
         self.ang = self.num_lenses * self.Lm / self.rb
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 1.0, -.5]))
-        qf0 = np.array([6.2628958250825406e-01, 1.8262639201129038e+00,8.1798207907603270e-04])
-        pf0 = np.array([ 156.46688616348078 , -126.11406318513218 ,   -4.062920852118953])
+        qf0 = np.array([6.2628958250825406e-01, 1.8262639201129038e+00, 8.1798207907603270e-04])
+        pf0 = np.array([156.46688616348078, -126.11406318513218, -4.062920852118953])
         super().__init__(BenderSim, particle0, qf0, pf0, False, False, False)
 
     def make_coordTestRules(self):
@@ -358,8 +348,8 @@ class CombinerIdealTestHelper(ElementTestHelper):
         self.Lm = .218734921
         self.ap = .014832794
         particle0 = Particle(qi=np.asarray([-.01, 1e-3, -2e-3]), pi=np.asarray([-201.0, 0.0, 0.0]))
-        qf0 = np.array([-0.22414663309169838  ,  0.01006157838432204  ,-0.0023442270235614253])
-        pf0 = np.array([-199.53548090705544  ,   16.878732582305176 ,-0.6778345463513105])
+        qf0 = np.array([-0.22414663309169838, 0.01006157838432204, -0.0023442270235614253])
+        pf0 = np.array([-199.53548090705544, 16.878732582305176, -0.6778345463513105])
         super().__init__(CombinerIdeal, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
@@ -383,8 +373,8 @@ class CombinerHalbachTestHelper(ElementTestHelper):
         self.Lm = .1453423
         self.rp = .0223749
         particle0 = Particle(qi=np.asarray([-.01, 5e-3, -3.43e-3]), pi=np.asarray([-201.0, 5.0, -3.2343]))
-        qf0 = np.array([-2.5271509618137977e-01,  7.0910031362172495e-03,-1.8857045660080514e-04])
-        pf0 = np.array([-200.9361920832396  ,    1.373187199826973,    7.713318372758595])
+        qf0 = np.array([-2.5271509618137977e-01, 7.0910031362172495e-03, -1.8857045660080514e-04])
+        pf0 = np.array([-200.9361920832396, 1.373187199826973, 7.713318372758595])
         super().__init__(CombinerLensSim, particle0, qf0, pf0, True, False, False)
 
     def make_coordTestRules(self):
