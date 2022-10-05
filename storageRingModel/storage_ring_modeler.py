@@ -56,6 +56,12 @@ def make_shapes(lattice: ParticleTracerLattice) -> tuple[list[Shape], list[Shape
     return shapes_inner, shapes_outer, shapes_trajectories
 
 
+def shift_swarm_for_bumper(swarm, st):
+    st.time_step_swarm_distance_along_x(swarm, swarmShift_x, hold_position_in_x=True)
+    for particle in swarm:  # shift the swarm
+        particle.qi[1] += swarmShift_y
+
+
 class StorageRingModel:
     max_cost = 2.0
     max_swarm_cost = 1.0
@@ -80,10 +86,7 @@ class StorageRingModel:
         """Generate injector swarm. optionally shift the particles in the swarm for the bumper"""
         swarm = self.swarm_tracer_injector.simulated_collector_focus_swarm(num_particlesSwarm)
         if self.has_bumper:
-            swarm = self.swarm_tracer_injector.time_step_swarm_distance_along_x(swarm, swarmShift_x,
-                                                                                hold_position_in_x=True)
-            for particle in swarm:  # shift the swarm
-                particle.qi[1] += swarmShift_y
+            shift_swarm_for_bumper(swarm, self.swarm_tracer_injector)
         return swarm
 
     def convert_position_injector_to_ring_frame(self, q_lab_inject: np.ndarray) -> np.ndarray:
@@ -108,7 +111,7 @@ class StorageRingModel:
             return None
         else:
             q_list = []
-            for q, _ in particle.el_phase_space_log:
+            for _, q, _, _, _ in particle.el_phase_space_log:
                 q_ring_frame_xy = self.convert_position_injector_to_ring_frame(q)[:2]
                 q_list.append(q_ring_frame_xy)
             line = LineString(q_list)
@@ -223,7 +226,8 @@ class StorageRingModel:
 
     def show_floor_plan_with_trajectories(self, true_aspect_ratio: bool = True, T_max=1.0, save_fig=None,
                                           dpi=300, fig_size=None, show_trace_lines=True, num_particles=100,
-                                          parallel=True) -> None:
+                                          parallel=True, defer_show=False, marker_size=5, marker_alpha=1,
+                                          trace_alpha=.3) -> None:
         """Trace particles through the lattices, and plot the results. Interior and exterior of element is shown"""
         self.build_field_helpers_if_unbuilt()
         self.show_floor_plan(defer_show=True, true_aspect_ratio=true_aspect_ratio, fig_size=fig_size)
@@ -250,20 +254,23 @@ class StorageRingModel:
                 np.array([particle_injector.qi])
             q_arr_ring = np.array([self.convert_position_injector_to_ring_frame(q) for q in q_arr_injector])
             if show_trace_lines:
-                plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=.3)
+                plt.plot(q_arr_ring[:, 0], q_arr_ring[:, 1], c=color, alpha=trace_alpha)
             if particle_injector.clipped:  # if clipped in injector, plot last location
-                plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color)
+                plt.scatter(q_arr_ring[-1, 0], q_arr_ring[-1, 1], marker='x', zorder=100, c=color, s=marker_size,
+                            alpha=marker_alpha)
             if particle_ring.q_vals is not None and len(particle_ring.q_vals) > 1:  # if made to ring
                 if show_trace_lines:
-                    plt.plot(particle_ring.q_vals[:, 0], particle_ring.q_vals[:, 1], c=color, alpha=.3)
+                    plt.plot(particle_ring.q_vals[:, 0], particle_ring.q_vals[:, 1], c=color, alpha=trace_alpha)
                 if not particle_injector.clipped:  # if not clipped in injector plot last ring location
                     plt.scatter(particle_ring.q_vals[-1, 0], particle_ring.q_vals[-1, 1], marker='x', zorder=100,
-                                c=color)
+                                c=color, s=marker_size, alpha=marker_alpha)
         if save_fig is not None:
             plt.savefig(save_fig, dpi=dpi)
-        plt.show()
+        if defer_show:
+            plt.show()
 
-    def mode_match(self, floor_plan_cost_cutoff: float = np.inf, parallel: bool = False) -> tuple[float, float]:
+    def mode_match(self, floor_plan_cost_cutoff: float = np.inf, parallel: bool = False, processes=-1) -> tuple[
+        float, float]:
         # project a swarm through the lattice. Return the average number of revolutions, or return None if an unstable
         # configuration
         assert floor_plan_cost_cutoff >= 0
@@ -272,30 +279,33 @@ class StorageRingModel:
             cost = self.max_swarm_cost + floor_plan_cost
             flux_mult = None
         else:
-            swarm_traced = self.inject_swarm(parallel)
+            swarm_traced = self.inject_swarm(parallel=parallel, processes=processes)
             flux_mult = swarm_traced.weighted_flux_mult()
             swarm_cost = self.swarm_cost(swarm_traced)
             cost = swarm_cost + floor_plan_cost
         assert 0.0 <= cost <= self.max_cost
         return cost, flux_mult
 
-    def build_field_helpers_if_unbuilt(self, parallel: bool = False) -> None:
+    def build_field_helpers_if_unbuilt(self, parallel: bool = False, processes=-1) -> None:
         for lattice in [self.lattice_ring, self.lattice_injector]:
             if not lattice.are_fast_field_helpers_built:
-                lattice.build_fast_field_helpers(parallel)
+                lattice.build_fast_field_helpers(parallel, processes=processes)
 
-    def inject_swarm(self, parallel: bool = False) -> Swarm:
-        self.build_field_helpers_if_unbuilt(parallel=parallel)
+    def inject_swarm(self, parallel: bool = False, show_progress=False, processes=-1) -> Swarm:
+        self.build_field_helpers_if_unbuilt(parallel=parallel, processes=processes)
         swarm_initial = self.trace_through_injector_and_transform_to_ring()
         swarm_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_initial, self.h, self.T,
                                                                           use_fast_mode=True,
                                                                           copy_swarm=False,
                                                                           use_collisions=self.use_collisions,
-                                                                          parallel=parallel)
+                                                                          parallel=parallel,
+                                                                          show_progress=show_progress,
+                                                                          processes=processes)
         return swarm_traced
 
     def transform_swarm_from_injector_to_ring_frame(self, swarm_injector_traced: Swarm,
                                                     copy_particles: bool = False) -> Swarm:
+        # IMPROVEMENT: This makes it a little unclear exactly about what is surviving through the injector
         swarm_ring_frame = Swarm()
         for particle in swarm_injector_traced:
             clipped = particle.clipped or self.does_ring_clip_injector_particle(particle)
@@ -368,15 +378,15 @@ class StorageRingModel:
 def build_storage_ring_model(ring_params, injector_params, ring_version, num_particles: int = 1024,
                              use_collisions: bool = False, use_long_range_fields: bool = False,
                              include_mag_errors: bool = False,
-                             use_solenoid_field: bool = True, use_bumper: bool = False,
+                             use_solenoid_field: bool = True, use_bumper: bool = True,
                              include_misalignments: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME,
-                             build_field_helpers: bool = True,field_dens_mult=1.0):
+                             build_field_helpers: bool = True, field_dens_mult=1.0):
     """Convenience function for building a StorageRingModel"""
     options = {'include_mag_errors': include_mag_errors, 'use_solenoid_field': use_solenoid_field,
                'has_bumper': use_bumper,
                'include_mag_cross_talk_in_ring': use_long_range_fields,
                'include_misalignments': include_misalignments, 'build_field_helpers': build_field_helpers,
-               'field_dens_mult':field_dens_mult}
+               'field_dens_mult': field_dens_mult}
     lattice_ring, lattice_injector = make_system_model(ring_params, injector_params, ring_version, options)
     model = StorageRingModel(lattice_ring, lattice_injector,
                              num_particles=num_particles, use_collisions=use_collisions,

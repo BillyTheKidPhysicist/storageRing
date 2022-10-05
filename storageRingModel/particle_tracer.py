@@ -7,7 +7,7 @@ from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from helper_tools import is_close_all
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
-    CombinerSim, CombinerLensSim,Drift
+    CombinerSim, CombinerLensSim, Drift
 from particle import Particle
 from particle_tracer_numba_functions import multi_step_verlet, _transform_To_Next_Element, norm_3D, fast_pNew, \
     fast_qNew
@@ -87,8 +87,6 @@ class ParticleTracer:
         self.particle.current_el = self.current_el
         self.particle.data_logging = not self.use_fast_mode  # if using fast mode, there will NOT be logging
         self.logTracker = 0
-        if self.log_el_phase_space_coords:
-            self.particle.el_phase_space_log.append((self.particle.qi.copy(), self.particle.pi.copy()))
         if self.current_el is None:
             self.particle.clipped = True
         else:
@@ -97,6 +95,8 @@ class ParticleTracer:
             self.p_el = self.current_el.transform_lab_frame_vector_into_element_frame(self.particle.pi)
         if self.use_fast_mode is False and self.particle.clipped is False:
             self.particle.log_params(self.current_el, self.q_el, self.p_el)
+        if self.log_el_phase_space_coords:
+            self._log_el_phase_space_coords()
 
     def trace(self, particle: Optional[Particle], h: float, T0: float, fast_mode: bool = False,
               steps_between_logging: int = 1, use_collisions: bool = False,
@@ -131,18 +131,19 @@ class ParticleTracer:
         self.particle.finished(self.current_el, self.q_el, self.p_el, total_lattice_length=self.total_lattice_length)
 
         if self.log_el_phase_space_coords:
-            self.particle.el_phase_space_log.append((self.particle.qf, self.particle.pf))
+            self._log_el_phase_space_coords()
+            self.particle.el_phase_space_log = tuple(self.particle.el_phase_space_log)
 
         return self.particle
 
     def time_step_to_end_of_last_el(self):
         """Return the time required to a particle to travel to the end of the last element assuming inside the last
         element"""
-        #IMPROVEMENT: CLEAN THIS UP
+        # IMPROVEMENT: CLEAN THIS UP
         el_last = self.el_list[-1]
         assert self.current_el is el_last
         if isinstance(el_last, LensIdeal):
-            if type(el_last) is Drift and (el_last.input_tilt_angle!=0 or el_last.output_tilt_angle!=0):
+            if type(el_last) is Drift and (el_last.input_tilt_angle != 0 or el_last.output_tilt_angle != 0):
                 raise NotImplementedError
             else:
                 time_step_to_end = (el_last.L - self.q_el[0]) / self.p_el[0]
@@ -242,12 +243,6 @@ class ParticleTracer:
 
     def check_if_particle_is_outside_and_handle_edge_event(self, q_el_next: ndarray, p_el: ndarray) -> None:
 
-        if self.log_el_phase_space_coords:
-            qElLab = self.current_el.transform_element_coords_into_lab_frame(
-                q_el_next)  # use the old  element for transform
-            pElLab = self.current_el.transform_element_frame_vector_into_lab_frame(
-                p_el)  # use the old  element for transform
-            self.particle.el_phase_space_log.append((qElLab, pElLab))
         next_el = self.get_next_element()
         q_next_el, p_nextEl = self.transform_To_Next_Element(q_el_next, p_el, next_el)
         if not next_el.is_coord_inside(q_next_el):
@@ -259,6 +254,18 @@ class ParticleTracer:
             self.q_el = q_next_el
             self.p_el = p_nextEl
             self.el_has_changed = True
+            if self.log_el_phase_space_coords:
+                self._log_el_phase_space_coords()
+
+    def _log_el_phase_space_coords(self):
+        """Log coordinate to particle that come right after an element"""
+
+        q_lab = self.current_el.transform_element_coords_into_lab_frame(self.q_el)
+        p_lab = self.current_el.transform_element_frame_vector_into_lab_frame(self.p_el)
+        qo = self.current_el.transform_element_coords_into_global_orbit_frame(self.q_el,
+                                                                              self.particle.cumulative_length)
+        po = self.current_el.transform_element_momentum_into_global_orbit_frame(self.q_el, self.p_el)
+        self.particle.el_phase_space_log.append((self.current_el, q_lab, p_lab, qo, po))
 
     def which_element_lab_coords(self, q_lab: ndarray) -> Optional[Element]:
         for el in self.el_list:

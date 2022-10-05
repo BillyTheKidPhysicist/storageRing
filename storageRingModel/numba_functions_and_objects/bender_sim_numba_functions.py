@@ -10,6 +10,19 @@ from numba_functions_and_objects.utilities import full_arctan2, eps, eps_fact
 
 
 @numba.njit()
+def convert(theta):
+    """Temporary fix"""
+    # IMPROVEMENT: FIX THIS
+    if theta < np.pi:
+        theta_perp = np.pi - np.arctan(-1 / np.tan(theta))
+    elif theta == np.pi:
+        theta_perp = np.pi
+    else:
+        theta_perp = -np.arctan(-1 / np.tan(theta))
+    return theta_perp
+
+
+@numba.njit()
 def cartesian_To_Center(x, y, z, params):
     """Convert from cartesian coords to HalbachLensClass.BenderSim coored, ie "center coords" for
     evaluation by interpolator"""
@@ -25,9 +38,9 @@ def cartesian_To_Center(x, y, z, params):
             s = theta * rb + L_cap
             xc = np.sqrt(x ** 2 + y ** 2) - rb
             yc = z
-        elif ang < theta <= 2 * np.pi:  # i'm being lazy here and not limiting the real end
+        elif ang < theta <= 2 * np.pi:  #IMPROVEMENT:  i'm being lazy here and not limiting the real end
             x0, y0 = np.cos(ang) * rb, np.sin(ang) * rb
-            theta_end_perp = np.pi - np.arctan(-1 / np.tan(ang))
+            theta_end_perp = convert(ang)
             x, y = x - x0, y - y0
             deltaS, xc = np.cos(theta_end_perp) * x + np.sin(-theta_end_perp) * y, np.sin(theta_end_perp) * x + np.cos(
                 theta_end_perp) * y

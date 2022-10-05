@@ -82,12 +82,13 @@ class CombinerIdeal(BaseElement):
         """Overrides abstract method from Element"""
         # NOTE: THIS NOT GOING TO BE CORRECT IN GENERALY BECAUSE THE TRAJECTORY IS NOT SMOOTH AND I HAVE NOT WORKED IT OUT
         # YET
-        #IMPROVEMENT: make this work for everyone and be less crude
+        # IMPROVEMENT: make this work for everyone and be less crude
         if self.orbit_trajectory is not None:
-            x_orbit_traj=self.orbit_trajectory[:,0]
+            x_orbit_traj = self.orbit_trajectory[:, 0]
             idx = np.argmin(np.abs(q_el[0] - x_orbit_traj))
-            qo=q_el.copy()
-            qo[:2]=self.orbit_trajectory[idx].copy()
+            qo = q_el.copy()
+            qo[:2] = self.orbit_trajectory[idx].copy()
+            qo[0] = self.Lo - qo[0]
         else:
             qo = q_el.copy()
             qo[0] = self.Lo - qo[0]
@@ -95,7 +96,7 @@ class CombinerIdeal(BaseElement):
 
     def transform_element_momentum_into_local_orbit_frame(self, q_el: np.ndarray, p_el: np.ndarray) -> np.ndarray:
         """Overrides abstract method from Element class. Not supported at the moment, so returns np.nan array instead"""
-        #IMPROVEMENT: THIS IS ONLY APPROXIMATELY CORRECT
+        # IMPROVEMENT: THIS IS ONLY APPROXIMATELY CORRECT
         return p_el.copy()
 
     def transform_element_coords_into_lab_frame(self, q_el: np.ndarray) -> np.ndarray:

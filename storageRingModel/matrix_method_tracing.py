@@ -918,11 +918,11 @@ def phi_twiss(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: RealNum) -> 
         return np.arccos(arg)
 
 
-def alpha_from_components(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: RealNum) -> float:
+def alpha_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
     """Return alpha twiss parameter assuming periodicity"""
-    value = (m22 - m11) / np.sqrt(4 - (m11 + m22) ** 2)
-    sign = 1 if m12 < 0 else -1
-    return value * sign
+    beta = beta_from_components(m11, m12, m21, m22)
+    term1 = (m11 - m22) / (2 * m12)
+    return term1 * beta
 
 
 def beta_from_components(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: RealNum) -> float:
@@ -934,9 +934,9 @@ def beta_from_components(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: R
 
 def gamma_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
     """Value of gamma twiss parameter assuming periodicity"""
-    value = 2 * m21 / np.sqrt(4 - (m11 + m22) ** 2)
-    sign = 1 if m12 < 0 else -1
-    return value * sign
+    alpha = alpha_from_components(m11, m12, m21, m22)
+    beta = beta_from_components(m11, m12, m21, m22)
+    return (1 + alpha ** 2) / beta
 
 
 def dispersion_slope_from_components(m11, unused_m12, m13, m21, m22, m23, unused_m31, unused_m32, unused_m33):
@@ -960,7 +960,6 @@ def twiss_parameters(M: ndarray) -> tuple[float, float, float]:
     """Return twiss parameters (phi, alpha, beta, gamma)"""
     matrix_vals = matrix_components(M)
     assert is_wronskian_valid(M)
-    # phi = phi_twiss(*matrix_vals)
     alpha = alpha_from_components(*matrix_vals)
     beta = beta_from_components(*matrix_vals)
     gamma = gamma_from_components(*matrix_vals)
@@ -970,6 +969,16 @@ def twiss_parameters(M: ndarray) -> tuple[float, float, float]:
 def beta(M: ndarray) -> float:
     """Return beta twiss parameter assuming periodicity"""
     return beta_from_components(*matrix_components(M))
+
+
+def alpha(M: ndarray) -> float:
+    """Return alpha twiss parameter assuming periodicity"""
+    return alpha_from_components(*matrix_components(M))
+
+
+def gamma(M: ndarray) -> float:
+    """Return gamma twiss parameter assuming periodicity"""
+    return gamma_from_components(*matrix_components(M))
 
 
 def dispersion_slope(M: ndarray) -> float:
@@ -987,6 +996,22 @@ def betas_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum) -> t
     beta_x = beta(Mx)
     beta_y = beta(My)
     return beta_x, beta_y
+
+
+def alphas_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum) -> tuple[float, float]:
+    """Return the (x,y) alpha function value at position s. Assumes periodicity"""
+    Mx, My, _ = lattice_transfer_matrix_at_s(s, elements, atom_speed)
+    alpha_x = alpha(Mx)
+    alpha_y = alpha(My)
+    return alpha_x, alpha_y
+
+
+def gamma_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum) -> tuple[float, float]:
+    """Return the (x,y) gamma function value at position s. Assumes periodicity"""
+    Mx, My, _ = lattice_transfer_matrix_at_s(s, elements, atom_speed)
+    gamma_x = gamma(Mx)
+    gamma_y = gamma(My)
+    return gamma_x, gamma_y
 
 
 def dispersion_at_s(s: RealNum, elements: HashableElements, atom_speed: RealNum) -> float:
@@ -1022,10 +1047,17 @@ def beta_profile(elements, atom_speed, num_points):
 def alpha_profile(elements: HashableElements, atom_speed: float,
                   num_points: int) -> tuple[ndarray, tuple[ndarray, ndarray]]:
     """Return gamma profile through periodic lattice of elements"""
-    s_vals, (beta_x, beta_y) = beta_profile(elements, atom_speed, num_points)
-    alphas_x = np.gradient(beta_x, s_vals)
-    alphas_y = np.gradient(beta_y, s_vals)
-    return s_vals, (alphas_x, alphas_y)
+    L = total_length(elements)
+    s_vals = np.linspace(0, L, num_points)
+    if not is_stable_both_xy(elements, atom_speed):
+        nan_arr = np.nan * np.ones(len(s_vals))
+        make_arrays_read_only(s_vals, nan_arr)
+        return s_vals, (nan_arr, nan_arr)
+    else:
+        alphas = np.array([alphas_at_s(s, elements, atom_speed) for s in s_vals])
+        alphas_x, alphas_y = np.abs(alphas.T)
+        make_arrays_read_only(s_vals, alphas_x, alphas_y)
+        return s_vals, (alphas_x, alphas_y)
 
 
 def gamma_profiles(elements: HashableElements, atom_speed: float,
@@ -1039,17 +1071,16 @@ def gamma_profiles(elements: HashableElements, atom_speed: float,
 
 
 @functools.lru_cache
-def dispersion_profile(elements: HashableElements, atom_speed: RealNum,
-                       num_points: int) -> tuple[ndarray, ndarray]:
+def dispersion_profile(elements: HashableElements, num_points: int) -> tuple[ndarray, ndarray]:
     """Return profile of dispersion function along lattice, assuming periodicity"""
     L = total_length(elements)
     s_vals = np.linspace(0, L, num_points)
-    if not is_stable_both_xy(elements, atom_speed):
+    if not is_stable_both_xy(elements, DEFAULT_ATOM_SPEED):
         nan_arr = np.nan * np.ones(len(s_vals))
         make_arrays_read_only(s_vals, nan_arr)
         return s_vals, nan_arr
     else:
-        dispersions = np.array([dispersion_at_s(s, elements, atom_speed) for s in s_vals])
+        dispersions = np.array([dispersion_at_s(s, elements, DEFAULT_ATOM_SPEED) for s in s_vals])
         make_arrays_read_only(s_vals, dispersions)
         return s_vals, dispersions
 
@@ -1153,7 +1184,7 @@ def acceptance_profile(elements: HashableElements,
     lattice. This is the maximum emittance that would survive at each point in the lattice."""
     s_vals, (beta_x, beta_y) = beta_profile(elements, atom_speed, num_points)
     aps_x, aps_y = lattice_apertures_arr(elements, num_points)
-    _, dispersions = dispersion_profile(elements, atom_speed, num_points)
+    _, dispersions = dispersion_profile(elements, num_points)
     dispersion_shift = dispersions * delta(atom_speed)
     aps_x = aps_x - dispersion_shift
     acceptances_x = aps_x ** 2 / beta_x
@@ -1243,8 +1274,6 @@ def orbit_phase_space_coords_initial(particle: Particle) -> tuple[float, tuple, 
     for a linear lattice"""
     x_lab, y_lab, z_lab = particle.qi
     px_lab, py_lab, pz_lab = particle.pi
-    assert px_lab < 0.0
-    assert isclose(x_lab, -1e-10, abs_tol=1e-12)
     orbit_velocity = abs(px_lab)
     xi, yi = -y_lab, z_lab
     xi_slope, yi_slope = -py_lab / orbit_velocity, pz_lab / orbit_velocity
@@ -1265,7 +1294,7 @@ def will_particle_clip_on_aperture(particle: Particle, elements: HashableElement
         return True
     else:
         emittance_x, emittance_y = emittance_from_particle(particle, elements)
-        _, d = dispersion_profile(elements, atom_speed, num_envelope_points)
+        _, d = dispersion_profile(elements, num_envelope_points)
         s_vals, (betas_x, betas_y) = beta_profile(elements, atom_speed, num_envelope_points)
         x_envelope, y_envelope = np.sqrt(betas_x * emittance_x), np.sqrt(betas_y * emittance_y)
         dispersion_shift = d * delta(atom_speed)
@@ -1337,7 +1366,7 @@ def plot_swarm_survival_against_emittance(elements: HashableElements, swarm_trac
 
 
 def ellipse_profile(x: float, eps: float, twiss_params: tuple[float, ...]) -> tuple[float, float]:
-    """Return the y values (positive and negative) in the ellipse equation gamma*x^2+2*alpha*x*y+beta*y^2=eps"""
+    """Return the y values (positive and negative) in the ellipse equation gamma*y^2+2*alpha*x*y+beta*x^2=eps"""
     alpha, beta, gamma = twiss_params
     term = np.sqrt((alpha * x) ** 2 + beta * eps - beta * gamma * x ** 2)
     val1 = (-alpha * x + term) / beta
@@ -1345,13 +1374,14 @@ def ellipse_profile(x: float, eps: float, twiss_params: tuple[float, ...]) -> tu
     return val1, val2
 
 
-def phase_space_ellipse(emittance: RealNum, twiss_params: tuple[float, ...]) -> tuple[list[float], list[float]]:
+def phase_space_ellipse(emittance: RealNum, twiss_params: tuple[float, ...], num_points=10_000) -> tuple[
+    list[float], list[float]]:
     """Return x and y values of path on curve of phase space ellipse. Easily used for plotting"""
     _, beta, _ = twiss_params
     offset_to_prevent_nan = 1e-12
     x_max = np.sqrt(emittance * beta) - offset_to_prevent_nan
     x_min = -x_max
-    x_vals = np.linspace(x_min, x_max, 10000)
+    x_vals = np.linspace(x_min, x_max, num_points)
     y_vals = np.array([ellipse_profile(x, emittance, twiss_params) for x in x_vals])
     x_vals_path = [*x_vals, *np.flip(x_vals), x_vals[0]]
     y_vals_path = [*y_vals[:, 0], *np.flip(y_vals[:, 1]), y_vals[0, 0]]
@@ -1481,8 +1511,8 @@ class Lattice(Sequence):
     def acceptance_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points: int = 300):
         return acceptance_profile(self.elements, atom_speed, num_points)
 
-    def dispersion_profile(self, atom_speed=DEFAULT_ATOM_SPEED, num_points: int = 300):
-        return dispersion_profile(self.elements, atom_speed, num_points)
+    def dispersion_profile(self, num_points: int = 300):
+        return dispersion_profile(self.elements, num_points)
 
     def minimum_acceptance(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
         return minimum_acceptance(self.elements, atom_speed, num_points)
@@ -1509,7 +1539,8 @@ class Lattice(Sequence):
     def add_matrix_elements_from_sim_lattice(self, simulated_lattice: ParticleTracerLattice,
                                              use_effective_elements=False) -> None:
         """Build the lattice from an existing ParticleTracerLattice object"""
-
+        if not isclose(simulated_lattice.design_speed, DEFAULT_ATOM_SPEED):
+            raise NotImplementedError
         assert isclose(abs(simulated_lattice.initial_ang), np.pi, abs_tol=1e-9)  # must be pointing along -x
         # in polar coordinates
         assert not simulated_lattice.include_mag_errors
@@ -1528,6 +1559,8 @@ class Lattice(Sequence):
                 raise NotImplementedError
 
     def add_matrix_elements_from_ideal_lattice(self, ideal_lattice: ParticleTracerLattice):
+        if not isclose(ideal_lattice.design_speed, DEFAULT_ATOM_SPEED):
+            raise NotImplementedError
         for el in ideal_lattice:
             if type(el) is LensIdeal:
                 self.add_lens(el.L, el.Bp, el.rp, ap=el.ap)

@@ -267,12 +267,12 @@ class ParticleTracerLattice:
         el.build_fast_field_helper(extra_magnets=magnets)
         return el
 
-    def build_fast_field_helpers(self, parallel: bool) -> None:
+    def build_fast_field_helpers(self, parallel: bool, processes=-1) -> None:
         if self.include_mag_errors and parallel:
             warnings.warn(
                 "Using parallel==True with magnet errors will not produce the same results as with parallel==False")
         built_els = parallel_evaluate(self._build_fast_field_helper, self.el_list,
-                                      parallel=parallel, re_randomize=False)
+                                      parallel=parallel, re_randomize=False, processes=processes)
         for i, el in enumerate(built_els):
             self.el_list[i] = el
         self.are_fast_field_helpers_built = True
@@ -351,18 +351,19 @@ class ParticleTracerLattice:
     def show(self, particle_coords=None, particle=None, swarm=None, show_Rel_Survival=True,
              show_trace_lines=True, show_immediately=True,
              show_markers=True, trace_line_alpha=1.0, true_aspect_ratio=True, extra_objects=None,
-             final_coords=True,
+             final_coords=True, fig_size=None,
              save_title=None, dpi=150, default_marker_size=1000, plot_outer: bool = False,
              plot_inner: bool = True, show_grid=True):
-        plt.close('all')
+        if fig_size is not None:
+            plt.figure(figsize=fig_size)
 
         def plot_particle(particle, xMarkerSize=default_marker_size):
             color = 'red' if particle.clipped else 'green'
             if show_markers:
                 if particle.qf is not None:
                     xy = particle.qf[:2] if final_coords else particle.qi[:2]
-                    plt.scatter(*xy, marker='x', s=xMarkerSize, c=color)
-                    plt.scatter(*xy, marker='o', s=10, c=color)
+                    plt.scatter(*xy, marker='x', s=xMarkerSize, c=color, zorder=100)
+                    plt.scatter(*xy, marker='o', s=10, c=color, zorder=100)
                 else:  # no final coords, then plot initial coords with different marker
                     xy = particle.qi[:2]
                     plt.scatter(*xy, marker='^', s=30, c='blue')
@@ -409,8 +410,8 @@ class ParticleTracerLattice:
             plt.grid()
         if true_aspect_ratio:
             plt.gca().set_aspect('equal')
-        plt.xlabel('y dimension, meters')
-        plt.ylabel('x dimension, meters')
+        plt.xlabel('meters')
+        plt.ylabel('meters')
         plt.tight_layout()
         if save_title is not None:
             plt.savefig(save_title, dpi=dpi)

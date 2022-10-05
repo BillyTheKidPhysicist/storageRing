@@ -13,6 +13,7 @@ import multiprocess as mp
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.stats.qmc import Sobol
+from tqdm.notebook import tqdm
 
 from constants import MASS_LITHIUM_7, BOLTZMANN_CONSTANT
 from type_hints import RealNum, sequence, ndarray
@@ -23,7 +24,7 @@ eps = sys.float_info.epsilon
 def parallel_evaluate(func: Callable, args: Any, results_as_arr: bool = False, processes: int = -1,
                       re_randomize: bool = True, reapply_args: Optional[int] = None,
                       extra_positional_args: sequence = None, parallel: bool = True,
-                      extra_keyword_args: Optional[dict] = None) -> Union[list, np.ndarray]:
+                      extra_keyword_args: Optional[dict] = None, show_progress=False) -> Union[list, np.ndarray]:
     extra_args_constant = tuple() if extra_positional_args is None else extra_positional_args
     extra_key_word_args_constant = dict() if extra_keyword_args is None else extra_keyword_args
     no_positional_args = True if args is None else False
@@ -49,7 +50,8 @@ def parallel_evaluate(func: Callable, args: Any, results_as_arr: bool = False, p
         with mp.Pool(processes, maxtasksperchild=10) as pool:
             results = pool.starmap(wrapper, pool_iter)
     else:
-        results = [func(arg, *extra_args_constant, **extra_key_word_args_constant) for arg in args_iter]
+        progress = tqdm if show_progress else lambda x: x
+        results = [func(arg, *extra_args_constant, **extra_key_word_args_constant) for arg in progress(args_iter)]
     results = np.array(results) if results_as_arr else results
     return results
 
@@ -158,6 +160,11 @@ def is_even(x: int) -> bool:
 def is_odd(x: int) -> bool:
     """Return True if a number is odd, False if it is even"""
     return not is_even(x)
+
+
+def remove_me_warning():
+    """Warning message to remind me to remove something"""
+    warnings.warn("REMOVE")
 
 
 def say_done() -> None:

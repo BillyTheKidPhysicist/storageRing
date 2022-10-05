@@ -3,7 +3,7 @@ Contains bender using simulated fields. Bender is segmented and composed of mult
 hexapole lens slices.
 """
 import warnings
-from math import isclose, tan, cos, sin, sqrt, atan, pi
+from math import isclose, tan, cos, sin, sqrt
 from typing import Optional
 
 import numpy as np
@@ -20,6 +20,18 @@ from lattice_elements.utilities import TINY_OFFSET, mirror_across_angle, full_ar
 from numba_functions_and_objects import bender_sim_numba_functions
 from numba_functions_and_objects.utilities import DUMMY_FIELD_DATA_3D
 from type_hints import ndarray, RealNum
+
+
+def convert(theta):
+    """Temporary fix"""
+    # IMPROVEMENT: FIX THIS
+    if theta < np.pi:
+        theta_perp = np.pi + np.arctan(-1 / np.tan(theta))
+    elif theta == np.pi:
+        theta_perp = np.pi
+    else:
+        theta_perp = np.arctan(-1 / np.tan(theta)) + np.pi * 2
+    return theta_perp
 
 
 def speed_with_energy_correction(U_longitudinal: RealNum, atom_speed: RealNum) -> float:
@@ -209,7 +221,7 @@ class BenderSim(BenderIdeal):
             r = r_center + xc
             x0, y0 = cos(theta) * r, sin(theta) * r
             delta_s = s - (self.ang * r_center + self.L_cap)
-            theta_perp = pi + atan(-1 / tan(theta))
+            theta_perp = convert(theta)
             x, y, z = x0 + cos(theta_perp) * delta_s, y0 + sin(theta_perp) * delta_s, yc
         else:
             raise ValueError

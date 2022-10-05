@@ -25,12 +25,15 @@ def lorentz_function(x, gamma):
     return (gamma / 2) ** 2 / (x ** 2 + (gamma / 2) ** 2)
 
 
-def momentum_vector_from_temperature(T: RealNum, num_vectors: int, mass: RealNum) -> ndarray:
+def momentum_vector_from_temperature(T: RealNum, num_vectors: int, mass: RealNum, same_seed=False) -> ndarray:
     """Return the momentum velocity vectors for a given temperture. Shape is (num_vectors,n)"""
     if T < 0:
         raise ValueError("Cannot have negative temperature")
     sigma = np.sqrt(BOLTZMANN_CONSTANT * T / mass)
-    return np.random.normal(scale=sigma, size=(num_vectors, 3))
+    seed = 42 if same_seed else None
+    with temporary_seed(seed):
+        dp = np.random.normal(scale=sigma, size=(num_vectors, 3))
+    return dp
 
 
 def tiny_offset_swarm(swarm: Swarm) -> None:
@@ -238,7 +241,7 @@ class SwarmTracer:
         p_trans_bounds = np.tan(half_angle) * p0
         swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
                                                       num_particles=num_particles)
-        delta_p = momentum_vector_from_temperature(temperature, len(swarm_pseudo_random), mass)
+        delta_p = momentum_vector_from_temperature(temperature, len(swarm_pseudo_random), mass, same_seed=same_seed)
         for dp, particle in zip(delta_p, swarm_pseudo_random):
             px, py, pz = particle.pi
             if use_same_px:
@@ -333,7 +336,8 @@ class SwarmTracer:
 
     def trace_swarm_through_lattice(self, swarm: Swarm, h: float, T_max: float, parallel: bool = False,
                                     use_fast_mode: bool = False, copy_swarm: bool = True, steps_per_logging: int = 1,
-                                    use_collisions: bool = False, log_el_phase_space_coords: bool = False) -> Swarm:
+                                    use_collisions: bool = False, log_el_phase_space_coords: bool = False,
+                                    processes=-1, show_progress=False) -> Swarm:
 
         def trace_particle(particle):
             particle_new = self.particle_tracer.trace(particle, h, T_max, fast_mode=use_fast_mode,
@@ -343,7 +347,8 @@ class SwarmTracer:
             return particle_new
 
         swarm_traced = swarm.copy() if copy_swarm else swarm
-        swarm_traced.particles = parallel_evaluate(trace_particle, swarm_traced.particles, parallel=parallel)
+        swarm_traced.particles = parallel_evaluate(trace_particle, swarm_traced.particles, parallel=parallel,
+                                                   processes=processes, show_progress=show_progress)
         return swarm_traced
 
 
