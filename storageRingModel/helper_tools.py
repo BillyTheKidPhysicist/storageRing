@@ -52,7 +52,11 @@ def parallel_evaluate(func: Callable, args: Any, results_as_arr: bool = False, p
     else:
         progress = tqdm if show_progress else lambda x: x
         results = [func(arg, *extra_args_constant, **extra_key_word_args_constant) for arg in progress(args_iter)]
-    results = np.array(results) if results_as_arr else results
+    if results_as_arr:
+        try:
+            results = np.array(results)
+        except:
+            warnings.warn("Could not cast results to numpy array")
     return results
 
 

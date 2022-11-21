@@ -3,7 +3,6 @@ from typing import Optional
 
 import numpy as np
 
-from collision_physics import post_collision_momentum, make_collision_params
 from constants import GRAVITATIONAL_ACCELERATION
 from helper_tools import is_close_all
 from lattice_elements.elements import LensIdeal, CombinerIdeal, Element, BenderIdeal, BenderSim, \
@@ -34,8 +33,6 @@ class ParticleTracer:
         self.total_lattice_length = PTL.total_length
 
         self.PTL = PTL
-
-        self.use_collisions = None
 
         self.T = None  # total time elapsed
         self.h = None  # step size
@@ -99,12 +96,8 @@ class ParticleTracer:
             self._log_el_phase_space_coords()
 
     def trace(self, particle: Optional[Particle], h: float, T0: float, fast_mode: bool = False,
-              steps_between_logging: int = 1, use_collisions: bool = False,
-              log_el_phase_space_coords: bool = False) -> Particle:
-        if use_collisions:
-            raise NotImplementedError  # the heterogenous tuple was killing performance. Need a new method
+              steps_between_logging: int = 1,log_el_phase_space_coords: bool = False) -> Particle:
         assert 0 < h < 1e-4 and T0 > 0.0  # reasonable ranges
-        self.use_collisions = use_collisions
         self.steps_per_logging = steps_between_logging
         self.log_el_phase_space_coords = log_el_phase_space_coords
 
@@ -230,11 +223,6 @@ class ParticleTracer:
             return
         # a_n = F_new  # acceleration new or acceleration sub n+1
         p_el_new = fast_pNew(p_el, F, F_new, self.h)
-        if self.use_collisions:
-            collision_params = make_collision_params(self.current_el, self.PTL.design_speed)
-            if collision_params[0] != 'NONE':
-                if np.random.rand() < self.h * collision_params[1]:
-                    p_el_new[:] = post_collision_momentum(tuple(p_el_new), tuple(q_el_new), collision_params)
 
         self.q_el = q_el_new
         self.p_el = p_el_new

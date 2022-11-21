@@ -87,7 +87,7 @@ class CombinerIdeal(BaseElement):
             x_orbit_traj = self.orbit_trajectory[:, 0]
             idx = np.argmin(np.abs(q_el[0] - x_orbit_traj))
             qo = q_el.copy()
-            qo[:2] = self.orbit_trajectory[idx].copy()
+            qo[1] = self.orbit_trajectory[idx,1]-qo[1]
             qo[0] = self.Lo - qo[0]
         else:
             qo = q_el.copy()

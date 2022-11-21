@@ -5,7 +5,6 @@ from elementPT_Tests import test_Elements
 # from fastNumbaMethodsAndClass_Tests import test
 from storageRingConstraint_Tests import test_Storage_Ring_Constraints
 from modelerTester import test_Modeler
-from collisionPhysics_Tests import *
 from vacuumanalyzer_tests import *
 from testMatrixTracingMethod import *
 

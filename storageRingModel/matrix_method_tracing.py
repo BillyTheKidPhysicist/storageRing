@@ -22,7 +22,7 @@ from swarm_tracer import histogram_particle_survival
 from type_hints import ndarray, RealNum, sequence
 
 SMALL_ROUNDING_NUM: float = 1e-14
-NUM_FRINGE_MAGNETS_MIN: int = 5  # number of fringe magnets to accurately model internal behaviour of bender
+NUM_FRINGE_MAGNETS_MIN: int = 10  # number of fringe magnets to accurately model internal behaviour of bender
 ORBIT_DIM_INDEX = {'x': 0, 'y': 1}
 
 ThreeNumpyMatrices = tuple[ndarray, ndarray, ndarray]
@@ -921,8 +921,8 @@ def phi_twiss(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: RealNum) -> 
 def alpha_from_components(m11: RealNum, m12: RealNum, m21: RealNum, m22: RealNum) -> float:
     """Return alpha twiss parameter assuming periodicity"""
     beta = beta_from_components(m11, m12, m21, m22)
-    term1 = (m11 - m22) / (2 * m12)
-    return term1 * beta
+    term = (m11 - m22) / (2 * m12)
+    return term * beta
 
 
 def beta_from_components(m11: RealNum, m12: RealNum, unused_m21: RealNum, m22: RealNum) -> float:
@@ -1055,7 +1055,7 @@ def alpha_profile(elements: HashableElements, atom_speed: float,
         return s_vals, (nan_arr, nan_arr)
     else:
         alphas = np.array([alphas_at_s(s, elements, atom_speed) for s in s_vals])
-        alphas_x, alphas_y = np.abs(alphas.T)
+        alphas_x, alphas_y = alphas.T
         make_arrays_read_only(s_vals, alphas_x, alphas_y)
         return s_vals, (alphas_x, alphas_y)
 
@@ -1388,10 +1388,10 @@ def phase_space_ellipse(emittance: RealNum, twiss_params: tuple[float, ...], num
     return x_vals_path, y_vals_path
 
 
-def acceptance_ellipses(elements: HashableElements, atom_speed: RealNum, num_points: int) -> list[tuple, tuple]:
+def acceptance_ellipses(elements: HashableElements, atom_speed: RealNum, num_points: int,s=0) -> list[tuple, tuple]:
     """Return phase ellipses for x and y dimensions of minimum acceptance at the input of the first element, assuming
     periodicity. Each ellipse is a list of values for plotting  as (x_plot_vals, y_plot_vals)"""
-    Mx, My, Md = total_lattice_transfer_matrix(elements, atom_speed)
+    Mx, My, Md = lattice_transfer_matrix_at_s(s,elements, atom_speed)
     max_emittances = minimum_acceptance(elements, atom_speed, num_points)
     ellipses = []
     for eps, M in zip(max_emittances, [Mx, My]):
@@ -1493,8 +1493,8 @@ class Lattice(Sequence):
         d_components = matrix_components(Md)
         return x_components, y_components, d_components
 
-    def acceptance_ellipses(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300):
-        return acceptance_ellipses(self.elements, atom_speed, num_points)
+    def acceptance_ellipses(self, atom_speed=DEFAULT_ATOM_SPEED, num_points=300,s=0):
+        return acceptance_ellipses(self.elements, atom_speed, num_points,s=s)
 
     def beta_profiles(self, atom_speed: RealNum = DEFAULT_ATOM_SPEED, num_points: int = 300):
         s_vals, (beta_x, beta_y) = beta_profile(self.elements, atom_speed, num_points)

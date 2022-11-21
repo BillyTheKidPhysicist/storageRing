@@ -268,11 +268,8 @@ class ParticleTracerLattice:
         return el
 
     def build_fast_field_helpers(self, parallel: bool, processes=-1) -> None:
-        if self.include_mag_errors and parallel:
-            warnings.warn(
-                "Using parallel==True with magnet errors will not produce the same results as with parallel==False")
         built_els = parallel_evaluate(self._build_fast_field_helper, self.el_list,
-                                      parallel=parallel, re_randomize=False, processes=processes)
+                                      parallel=parallel, processes=processes)
         for i, el in enumerate(built_els):
             self.el_list[i] = el
         self.are_fast_field_helpers_built = True

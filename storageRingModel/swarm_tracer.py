@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Union
 
 import matplotlib.pyplot as plt
@@ -29,10 +30,13 @@ def momentum_vector_from_temperature(T: RealNum, num_vectors: int, mass: RealNum
     """Return the momentum velocity vectors for a given temperture. Shape is (num_vectors,n)"""
     if T < 0:
         raise ValueError("Cannot have negative temperature")
+    if mass>1e-12:
+        warnings.warn("An unreasonably large mass has been specified.")
     sigma = np.sqrt(BOLTZMANN_CONSTANT * T / mass)
     seed = 42 if same_seed else None
     with temporary_seed(seed):
-        dp = np.random.normal(scale=sigma, size=(num_vectors, 3))
+        size=(num_vectors, 3) if num_vectors>1 else 3
+        dp = np.random.normal(scale=sigma, size=size)
     return dp
 
 
@@ -188,7 +192,7 @@ class SwarmTracer:
 
     def pseudorandom_swarm(self, q_trans_bounds: TupleOrNum = 0, p_trans_bounds: TupleOrNum = 0,
                            delta_px_bounds: TupleOrNum = 0, num_particles: int = 100,
-                           use_z_symmetry: bool = False,
+                           use_z_symmetry: bool = False,temperature=0.0,mass=MASS_LITHIUM_7,
                            same_seed: bool = False, circular: bool = True, tiny_offset: bool = True) -> Swarm:
         if circular:
             for _bounds in (q_trans_bounds, p_trans_bounds):
@@ -226,7 +230,7 @@ class SwarmTracer:
         return swarm
 
     def point_source_swarm(self, half_angle: float, num_particles: int, same_seed: bool = False,
-                           speed=None, temperature=0.0, use_same_px=False, mass=MASS_LITHIUM_7) -> Swarm:
+                           speed=None, temperature=0.0, use_same_px=False, mass=MASS_LITHIUM_7,point_radius=0) -> Swarm:
         """
         Return a pseudo-random swarm originating from a point at the origin. All particle have the same speed
 
@@ -235,12 +239,15 @@ class SwarmTracer:
         :param same_seed: Whether to use the same seed for repeatability.
         :param temperature: Temperature of the swarm, kelvin:
         :param use_same_px: If True, make the longitudinal momentum vector equal to the design vector
+        :param point_radius: The radius of the point from which the particles originate. Particles are distributed
+            over this area
         :return: A new swarm.
         """
         p0 = self.lattice.design_speed if speed is None else speed  # the momentum of each particle
         p_trans_bounds = np.tan(half_angle) * p0
         swarm_pseudo_random = self.pseudorandom_swarm(p_trans_bounds=p_trans_bounds, same_seed=same_seed,
-                                                      num_particles=num_particles)
+                                                      num_particles=num_particles,circular=True,
+                                                      q_trans_bounds=point_radius)
         delta_p = momentum_vector_from_temperature(temperature, len(swarm_pseudo_random), mass, same_seed=same_seed)
         for dp, particle in zip(delta_p, swarm_pseudo_random):
             px, py, pz = particle.pi
@@ -336,14 +343,13 @@ class SwarmTracer:
 
     def trace_swarm_through_lattice(self, swarm: Swarm, h: float, T_max: float, parallel: bool = False,
                                     use_fast_mode: bool = False, copy_swarm: bool = True, steps_per_logging: int = 1,
-                                    use_collisions: bool = False, log_el_phase_space_coords: bool = False,
+                                    log_el_phase_space_coords: bool = False,
                                     processes=-1, show_progress=False) -> Swarm:
 
         def trace_particle(particle):
             particle_new = self.particle_tracer.trace(particle, h, T_max, fast_mode=use_fast_mode,
                                                       steps_between_logging=steps_per_logging,
-                                                      log_el_phase_space_coords=log_el_phase_space_coords,
-                                                      use_collisions=use_collisions)
+                                                      log_el_phase_space_coords=log_el_phase_space_coords)
             return particle_new
 
         swarm_traced = swarm.copy() if copy_swarm else swarm

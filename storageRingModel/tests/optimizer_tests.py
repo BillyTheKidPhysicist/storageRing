@@ -11,12 +11,12 @@ def run_test_1():
     model = make_optimal_solution_model('2', use_long_range_fields=False, include_misalignments=False
                                         ,build_field_helpers=False)
     model.build_field_helpers_if_unbuilt(parallel=True)
-    cost, flux, = model.mode_match(parallel=True)
+    cost, flux = model.mode_match(parallel=True)
     T_elapsed=time.time() - t
     print(cost, flux,T_elapsed)
     cost0=0.8215861458050228
     flux0= 465.77796715459897
-    T_elapsed0=180
+    T_elapsed0=190
     assert isclose(cost,cost0,abs_tol=1e-6)
     assert isclose(flux,flux0,abs_tol=1e-6)
     assert isclose(T_elapsed,T_elapsed0,abs_tol=10.0)

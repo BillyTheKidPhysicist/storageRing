@@ -71,6 +71,8 @@ class StorageRingModel:
     def __init__(self, lattice_ring: ParticleTracerLattice, lattice_injector: ParticleTracerLattice,
                  num_particles: int = 1024, use_collisions: bool = False,
                  use_bumper: bool = False, sim_time_max=DEFAULT_SIMULATION_TIME):
+        if use_collisions:
+            raise NotImplementedError
         assert injector_is_expected_design(lattice_injector, use_bumper)
         self.lattice_ring = lattice_ring
         self.lattice_injector = lattice_injector
@@ -235,8 +237,7 @@ class StorageRingModel:
         swarm.particles = self.swarm_injector_initial.particles[:num_particles]
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             swarm, self.h, 1.0, parallel=False,
-            use_fast_mode=False, copy_swarm=True, log_el_phase_space_coords=True,
-            use_collisions=self.use_collisions)
+            use_fast_mode=False, copy_swarm=True, log_el_phase_space_coords=True)
         for particle in swarm_injector_traced:
             particle.clipped = True if self.does_ring_clip_injector_particle(particle) else particle.clipped
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
@@ -244,8 +245,7 @@ class StorageRingModel:
         swarm_ring_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_ring_initial, self.h, T_max,
                                                                                use_fast_mode=False,
                                                                                parallel=parallel,
-                                                                               steps_per_logging=4,
-                                                                               use_collisions=self.use_collisions)
+                                                                               steps_per_logging=4)
 
         for particle_injector, particle_ring in zip(swarm_injector_traced, swarm_ring_traced):
             assert not (particle_injector.clipped and not particle_ring.clipped)  # this wouldn't make sense
@@ -297,7 +297,6 @@ class StorageRingModel:
         swarm_traced = self.swarm_tracer_ring.trace_swarm_through_lattice(swarm_initial, self.h, self.T,
                                                                           use_fast_mode=True,
                                                                           copy_swarm=False,
-                                                                          use_collisions=self.use_collisions,
                                                                           parallel=parallel,
                                                                           show_progress=show_progress,
                                                                           processes=processes)
@@ -321,7 +320,7 @@ class StorageRingModel:
     def trace_through_injector_and_transform_to_ring(self) -> Swarm:
         swarm_injector_traced = self.swarm_tracer_injector.trace_swarm_through_lattice(
             self.swarm_injector_initial.copy(), self.h, 1.0, use_fast_mode=True, copy_swarm=False,
-            log_el_phase_space_coords=True, use_collisions=self.use_collisions)
+            log_el_phase_space_coords=True)
         swarm_ring_initial = self.transform_swarm_from_injector_to_ring_frame(swarm_injector_traced,
                                                                               copy_particles=True)
         return swarm_ring_initial
